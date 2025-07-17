@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/auth.dart' as backend_auth;
 
 /// Bridge class to sync authentication and app state with macOS overlay
 class MacOSOverlayBridge {
@@ -8,6 +10,10 @@ class MacOSOverlayBridge {
   static const _userIdKey = 'flutter.userId';
   static const _selectedAppKey = 'flutter.selectedChatAppId';
   static const _messagesKey = 'flutter_to_swift_messages';
+  static const _tokenRefreshRequestKey = 'swift_overlay_needs_token_refresh';
+  static const _tokenTimestampKey = 'flutter.authTokenTimestamp';
+  
+  static Timer? _refreshCheckTimer;
   
   /// Sync current authentication state to macOS overlay
   static Future<void> syncAuthToOverlay() async {
@@ -18,6 +24,7 @@ class MacOSOverlayBridge {
       final authToken = prefs.authToken;
       if (authToken.isNotEmpty) {
         await _setUserDefault(_userTokenKey, authToken);
+        await _setUserDefault(_tokenTimestampKey, DateTime.now().millisecondsSinceEpoch.toDouble());
         debugPrint('✅ Synced auth token to overlay');
       }
       
@@ -107,7 +114,47 @@ class MacOSOverlayBridge {
     final selectedApp = SharedPreferencesUtil().selectedChatAppId;
     await syncSelectedApp(selectedApp);
     
+    // Start listening for token refresh requests from Swift overlay
+    _startTokenRefreshListener();
+    
     debugPrint('✅ macOS overlay initialization completed');
+  }
+  
+  /// Start listening for token refresh requests from Swift overlay
+  static void _startTokenRefreshListener() {
+    _refreshCheckTimer?.cancel();
+    _refreshCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      try {
+        final needsRefresh = await _getUserDefault(_tokenRefreshRequestKey);
+        if (needsRefresh == true) {
+          debugPrint('🔄 Swift overlay requested token refresh');
+          
+          // Clear the request flag
+          await _setUserDefault(_tokenRefreshRequestKey, false);
+          
+          // Get fresh token
+          final freshToken = await backend_auth.getIdToken();
+          if (freshToken != null && freshToken.isNotEmpty) {
+            // Update local preferences
+            SharedPreferencesUtil().authToken = freshToken;
+            
+            // Sync fresh token to overlay
+            await syncAuthToOverlay();
+            debugPrint('✅ Fresh token synced to overlay');
+          } else {
+            debugPrint('❌ Failed to get fresh token for overlay');
+          }
+        }
+      } catch (e) {
+        debugPrint('❌ Error in token refresh listener: $e');
+      }
+    });
+  }
+  
+  /// Stop token refresh listener
+  static void stopTokenRefreshListener() {
+    _refreshCheckTimer?.cancel();
+    _refreshCheckTimer = null;
   }
   
   // Platform-specific UserDefaults access

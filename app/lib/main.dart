@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -55,6 +56,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/debugging/instabug_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:omi/services/macos_overlay_bridge.dart';
 
 Future<bool> _init() async {
   // Service manager
@@ -370,6 +372,16 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
+        
+        // Initialize macOS overlay bridge if on macOS
+        if (Platform.isMacOS) {
+          try {
+            await MacOSOverlayBridge.initializeOverlay();
+            debugPrint('✅ macOS overlay bridge initialized successfully');
+          } catch (e) {
+            debugPrint('❌ Failed to initialize macOS overlay bridge: $e');
+          }
+        }
       } else {
         if (!PlatformManager.instance.isAnalyticsSupported) {
           await PlatformManager.instance.intercom.loginUnidentifiedUser();

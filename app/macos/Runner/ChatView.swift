@@ -44,6 +44,37 @@ struct ChatView: View {
                 .animation(.easeInOut(duration: 0.3), value: showWelcomeMessage)
             }
             
+            // Error message display
+            if let error = errorMessage {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 20))
+                        .foregroundColor(.orange)
+                    
+                    Text(error)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                    
+                    Button("Retry Connection") {
+                        checkOmiConnection()
+                        if OmiConfig.isConfigured() {
+                            loadInitialMessages()
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.blue.opacity(0.6))
+                    .foregroundColor(.white)
+                    .font(.system(size: 12, weight: .medium))
+                    .cornerRadius(8)
+                }
+                .padding(.vertical, 16)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .animation(.easeInOut(duration: 0.3), value: errorMessage)
+            }
+            
             // Chat messages when conversation has started
             if !messages.isEmpty {
                 ScrollView {
@@ -165,7 +196,6 @@ struct ChatView: View {
                 AuthBridge.shared.syncFromFlutterApp()
                 isInitialized = true
                 checkOmiConnection()
-                loadInitialMessages()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -196,7 +226,10 @@ struct ChatView: View {
     }
     
     private func loadInitialMessages() {
-        guard OmiConfig.isConfigured() else { return }
+        guard OmiConfig.isConfigured() else { 
+            errorMessage = "Authentication required. Please sign in to Omi."
+            return 
+        }
         
         Task {
             do {
@@ -216,10 +249,20 @@ struct ChatView: View {
                     } else {
                         showWelcomeMessage = false
                     }
+                    
+                    // Clear any previous error messages on success
+                    errorMessage = nil
+                }
+            } catch APIError.authenticationRequired {
+                await MainActor.run {
+                    print("Authentication required for loading messages")
+                    errorMessage = "Please sign in to Omi to view messages"
+                    showWelcomeMessage = true
                 }
             } catch {
                 await MainActor.run {
                     print("Failed to load messages: \(error)")
+                    errorMessage = "Failed to load messages. Please check your connection."
                     // Show welcome message as fallback
                     showWelcomeMessage = true
                 }
@@ -329,6 +372,18 @@ struct ChatView: View {
                     isLoading = false
                 }
                 
+            } catch APIError.authenticationRequired {
+                await MainActor.run {
+                    // Update the last message with auth error
+                    if let lastIndex = messages.indices.last {
+                        messages[lastIndex] = ChatMessage(
+                            content: "Authentication required. Please sign in to Omi to send messages.", 
+                            isUser: false
+                        )
+                    }
+                    isLoading = false
+                    errorMessage = "Please sign in to Omi to send messages"
+                }
             } catch {
                 await MainActor.run {
                     // Update the last message with error

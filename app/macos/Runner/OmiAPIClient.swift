@@ -67,17 +67,21 @@ class OmiAPIClient: ObservableObject {
     private init() {}
     
     // MARK: - Authentication
-    private func createAuthenticatedRequest(url: URL, method: String = "GET") -> URLRequest? {
+    private func createAuthenticatedRequest(url: URL, method: String) -> URLRequest? {
         guard let authHeader = OmiConfig.authHeader() else {
-            print("No authentication token available")
+            print("❌ No auth token available")
             return nil
         }
         
+        // Log token for debugging (first/last 10 chars only)
+        let tokenPrefix = String(authHeader.dropFirst(7).prefix(10))
+        let tokenSuffix = String(authHeader.dropFirst(7).suffix(10))
+        print("🔑 Using auth token: \(tokenPrefix)...\(tokenSuffix)")
+        
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-        
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return request
     }
     
@@ -90,8 +94,13 @@ class OmiAPIClient: ObservableObject {
                         "\(OmiConfig.fullMessagesURL())?plugin_id=\(appId!)" : 
                         OmiConfig.fullMessagesURL()
                     
+                    print("🌐 Sending request to: \(urlString)")
+                    print("🔑 Auth token: \(OmiConfig.userToken?.prefix(20) ?? "nil")...")
+                    print("👤 User ID: \(OmiConfig.userId ?? "nil")")
+                    
                     guard let url = URL(string: urlString),
                           var request = createAuthenticatedRequest(url: url, method: "POST") else {
+                        print("❌ Failed to create authenticated request")
                         continuation.finish(throwing: APIError.authenticationRequired)
                         return
                     }
@@ -99,10 +108,72 @@ class OmiAPIClient: ObservableObject {
                     let messageRequest = MessageRequest(text: text, fileIds: fileIds.isEmpty ? nil : fileIds)
                     request.httpBody = try JSONEncoder().encode(messageRequest)
                     
+                    print("📤 Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "nil")")
+                    print("📋 Request headers: \(request.allHTTPHeaderFields ?? [:])")
+                    
                     let (data, response) = try await session.data(for: request)
+                    
+                    print("📥 Response status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+                    print("📥 Response data: \(String(data: data, encoding: .utf8) ?? "nil")")
                     
                     guard let httpResponse = response as? HTTPURLResponse,
                           httpResponse.statusCode == 200 else {
+                        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                        let responseText = String(data: data, encoding: .utf8) ?? "Unknown error"
+                        print("❌ Server error - Status: \(statusCode), Response: \(responseText)")
+                        
+                        // Handle 401 Unauthorized - try to refresh token
+                        if statusCode == 401 {
+                            print("🔄 401 Unauthorized - requesting token refresh...")
+                            AuthBridge.shared.requestTokenRefresh()
+                            
+                            // Wait for fresh token and retry once
+                            let refreshSuccess = await AuthBridge.shared.waitForFreshToken()
+                            if refreshSuccess {
+                                print("🔄 Retrying request with fresh token...")
+                                
+                                // Retry the request with fresh token
+                                guard let retryUrl = URL(string: urlString),
+                                      var retryRequest = createAuthenticatedRequest(url: retryUrl, method: "POST") else {
+                                    print("❌ Failed to create retry request")
+                                    continuation.finish(throwing: APIError.authenticationRequired)
+                                    return
+                                }
+                                
+                                retryRequest.httpBody = try JSONEncoder().encode(messageRequest)
+                                let (retryData, retryResponse) = try await session.data(for: retryRequest)
+                                
+                                guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                                      retryHttpResponse.statusCode == 200 else {
+                                    let retryStatusCode = (retryResponse as? HTTPURLResponse)?.statusCode ?? 0
+                                    let retryResponseText = String(data: retryData, encoding: .utf8) ?? "Unknown error"
+                                    print("❌ Retry failed - Status: \(retryStatusCode), Response: \(retryResponseText)")
+                                    continuation.finish(throwing: APIError.serverError("Failed to send message after token refresh"))
+                                    return
+                                }
+                                
+                                // Process successful retry response
+                                let retryResponseString = String(data: retryData, encoding: .utf8) ?? ""
+                                let retryLines = retryResponseString.components(separatedBy: "\n\n")
+                                
+                                for line in retryLines {
+                                    if line.isEmpty { continue }
+                                    
+                                    if let chunk = parseMessageChunk(line) {
+                                        continuation.yield(chunk)
+                                        
+                                        if chunk.type == "done" || chunk.type == "error" {
+                                            continuation.finish()
+                                            return
+                                        }
+                                    }
+                                }
+                                
+                                continuation.finish()
+                                return
+                            }
+                        }
+                        
                         continuation.finish(throwing: APIError.serverError("Failed to send message"))
                         return
                     }
@@ -139,19 +210,53 @@ class OmiAPIClient: ObservableObject {
             "\(OmiConfig.fullMessagesURL())?limit=\(limit)"
         
         guard let url = URL(string: urlString),
-              let request = createAuthenticatedRequest(url: url) else {
+              let request = createAuthenticatedRequest(url: url, method: "GET") else {
             throw APIError.authenticationRequired
         }
         
         let (data, response) = try await session.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw APIError.serverError("Failed to get messages")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError
         }
         
-        let messages = try JSONDecoder().decode([ServerMessage].self, from: data)
-        return messages
+        if httpResponse.statusCode == 401 {
+            print("🔄 401 Unauthorized in getMessages - requesting token refresh...")
+            AuthBridge.shared.requestTokenRefresh()
+            
+            let refreshSuccess = await AuthBridge.shared.waitForFreshToken()
+            if refreshSuccess {
+                print("🔄 Retrying getMessages with fresh token...")
+                
+                // Retry with fresh token
+                guard let retryUrl = URL(string: urlString),
+                      let retryRequest = createAuthenticatedRequest(url: retryUrl, method: "GET") else {
+                    throw APIError.authenticationRequired
+                }
+                
+                let (retryData, retryResponse) = try await session.data(for: retryRequest)
+                
+                guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                      retryHttpResponse.statusCode == 200 else {
+                    let retryStatusCode = (retryResponse as? HTTPURLResponse)?.statusCode ?? 0
+                    let retryResponseText = String(data: retryData, encoding: .utf8) ?? "Unknown error"
+                    print("❌ Retry getMessages failed - Status: \(retryStatusCode), Response: \(retryResponseText)")
+                    throw APIError.serverError("Failed to get messages after token refresh")
+                }
+                
+                let messages = try JSONDecoder().decode([ServerMessage].self, from: retryData)
+                return messages
+            } else {
+                throw APIError.serverError("Failed to refresh token for getMessages")
+            }
+        } else if httpResponse.statusCode == 200 {
+            let messages = try JSONDecoder().decode([ServerMessage].self, from: data)
+            return messages
+        } else {
+            let responseText = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ getMessages failed - Status: \(httpResponse.statusCode), Response: \(responseText)")
+            throw APIError.serverError("Failed to get messages")
+        }
     }
     
     // MARK: - Get Initial Message

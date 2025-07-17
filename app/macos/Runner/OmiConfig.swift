@@ -1,8 +1,8 @@
 import Foundation
 
 struct OmiConfig {
-    // API Configuration - Updated to match Flutter app endpoints
-    static let baseURL = "https://api.omi.me"
+    // API Configuration - Updated to match the actual backend endpoint
+    static let baseURL = "https://backend-dt5lrfkkoa-uc.a.run.app"
     static let messagesEndpoint = "/v2/messages"
     static let initialMessageEndpoint = "/v2/initial-message"
     static let filesEndpoint = "/v2/files"
