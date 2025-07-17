@@ -153,6 +153,7 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
+    title: Optional[str] = None
 
     @model_validator(mode='before')
     @classmethod
@@ -177,3 +178,7 @@ class ChatSession(BaseModel):
     def retrieve_new_file(self, file_ids) -> List:
         existing_files = set(self.file_ids or [])
         return list(set(file_ids) - existing_files)
+
+
+class UpdateChatSessionTitleRequest(BaseModel):
+    title: str
