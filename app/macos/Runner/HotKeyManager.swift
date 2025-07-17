@@ -12,10 +12,8 @@ class HotKeyManager: NSObject {
     
     private override init() {
         super.init()
-        print("🔥 HotKeyManager: init() called")
-        checkAccessibilityPermissions()
-        setupHotKey()
-        print("🔥 HotKeyManager: initialization complete")
+        print("🔥 HotKeyManager: singleton init() called")
+        // Don't setup hotkey in init - wait for explicit initialize() call
     }
     
     private func checkAccessibilityPermissions() {
@@ -61,8 +59,13 @@ class HotKeyManager: NSObject {
             return
         }
         
+        print("🔥 Setting up hotkey with Option+Space...")
+        
         // Option + Space hotkey
         hotKey = HotKey(key: .space, modifiers: [.option])
+        
+        print("🔥 HotKey object created: \(String(describing: hotKey))")
+        
         hotKey?.keyDownHandler = { [weak self] in
             print("🔥 HotKey triggered: Option+Space")
             DispatchQueue.main.async {
@@ -70,6 +73,7 @@ class HotKeyManager: NSObject {
             }
         }
         print("✅ HotKey manager initialized with Option+Space")
+        print("🔥 HotKey keyCombo: \(String(describing: hotKey?.keyCombo))")
     }
     
     func toggleChatWindow() {

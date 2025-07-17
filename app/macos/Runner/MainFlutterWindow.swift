@@ -71,6 +71,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Add a small delay to ensure Flutter engine is fully ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.setupMenuBar()
+            
+            // MARK: - Setup HotKey Manager
+            print("🚀 MainFlutterWindow: About to initialize HotKeyManager")
+            HotKeyManager.shared.initialize()
+            print("🚀 MainFlutterWindow: HotKeyManager initialization completed")
         }
 
         // Setup audio manager with Flutter channel

@@ -4,17 +4,21 @@ import FlutterMacOS
 @main
 class AppDelegate: FlutterAppDelegate {
     
+    // Keep a strong reference to HotKeyManager to prevent deallocation
+    private var hotKeyManager: HotKeyManager?
+    
     override func applicationDidFinishLaunching(_ notification: Notification) {
         super.applicationDidFinishLaunching(notification)
         
-        print("🚀 AppDelegate: applicationDidFinishLaunching called")
+        print("🚀 AppDelegate: applicationDidFinishLaunching called - STARTING HOTKEY SETUP")
         
         // Force a slight delay to ensure everything is loaded
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             print("🚀 AppDelegate: About to initialize HotKeyManager")
             
-            // Initialize the HotKey manager for global shortcuts
-            HotKeyManager.shared.initialize()
+            // Initialize the HotKey manager for global shortcuts and keep a strong reference
+            self.hotKeyManager = HotKeyManager.shared
+            self.hotKeyManager?.initialize()
             
             print("🚀 AppDelegate: HotKeyManager initialization completed")
         }
@@ -24,7 +28,7 @@ class AppDelegate: FlutterAppDelegate {
         super.applicationDidBecomeActive(notification)
         
         // Recheck accessibility permissions when app becomes active
-        HotKeyManager.shared.recheckPermissions()
+        hotKeyManager?.recheckPermissions()
     }
     
     override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -37,7 +41,8 @@ class AppDelegate: FlutterAppDelegate {
     
     override func applicationWillTerminate(_ notification: Notification) {
         // Clean up HotKey manager
-        HotKeyManager.shared.cleanup()
+        hotKeyManager?.cleanup()
+        hotKeyManager = nil
         super.applicationWillTerminate(notification)
     }
 }
