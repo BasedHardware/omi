@@ -34,6 +34,7 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
+import database.users as users_db
 from database.memories import get_memories, get_user_public_memories
 from database.redis_db import (
     get_enabled_apps,
@@ -61,6 +62,7 @@ from database.redis_db import (
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.conversation import Conversation
+from models.other import Person
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
@@ -452,7 +454,15 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     # Get and condense recent conversations
     conversations = get_conversations(uid, limit=100)
-    conversation_history = Conversation.conversations_to_string(conversations)
+    all_person_ids = []
+    for c in conversations:
+        all_person_ids.extend([s.get('person_id') for s in c.get('transcript_segments', []) if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+    conversation_history = Conversation.conversations_to_string(conversations, people=people)
     conversation_history = condense_conversations([conversation_history])
 
     tweets = None
@@ -570,7 +580,15 @@ async def update_persona_prompt(persona: dict):
 
     # Get and condense recent conversations
     conversations = get_conversations(persona['uid'], limit=100)
-    conversation_history = Conversation.conversations_to_string(conversations)
+    all_person_ids = []
+    for c in conversations:
+        all_person_ids.extend([s.get('person_id') for s in c.get('transcript_segments', []) if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(persona['uid'], list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+    conversation_history = Conversation.conversations_to_string(conversations, people=people)
     conversation_history = condense_conversations([conversation_history])
 
     condensed_tweets = None
