@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -17,6 +18,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -130,8 +132,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
+      var sessionProvider = context.read<ChatSessionProvider>();
+      
+      // Load sessions first
+      await sessionProvider.loadSessions();
+      
       if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+        provider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
       }
 
       _fadeController.forward();
@@ -156,8 +163,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
-      builder: (context, provider, connectivityProvider, appProvider, child) {
+    return Consumer4<MessageProvider, ConnectivityProvider, AppProvider, ChatSessionProvider>(
+      builder: (context, provider, connectivityProvider, appProvider, sessionProvider, child) {
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -172,33 +179,58 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: Stack(
+            child: Row(
               children: [
-                // Animated background pattern
-                _buildAnimatedBackground(),
-
-                // Main content with glassmorphism
+                // Sessions sidebar
                 Container(
+                  width: 300,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildModernHeader(appProvider),
-                      if (provider.isLoadingMessages) _buildLoadingBar(),
-                      Expanded(
-                        child: _animationsInitialized
-                            ? FadeTransition(
-                                opacity: _fadeAnimation,
-                                child: SlideTransition(
-                                  position: _slideAnimation,
-                                  child: _buildChatContent(provider, connectivityProvider),
-                                ),
-                              )
-                            : _buildChatContent(provider, connectivityProvider),
+                    color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
+                    border: Border(
+                      right: BorderSide(
+                        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                        width: 1,
                       ),
-                      _buildFloatingInputArea(provider, connectivityProvider),
+                    ),
+                  ),
+                  child: _buildSessionsSidebar(sessionProvider, appProvider),
+                ),
+                
+                // Main chat area
+                Expanded(
+                  child: Stack(
+                    children: [
+                      // Animated background pattern
+                      _buildAnimatedBackground(),
+
+                      // Main content with glassmorphism
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.02),
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(20),
+                            bottomRight: Radius.circular(20),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildModernHeader(appProvider),
+                            if (provider.isLoadingMessages) _buildLoadingBar(),
+                            Expanded(
+                              child: _animationsInitialized
+                                  ? FadeTransition(
+                                      opacity: _fadeAnimation,
+                                      child: SlideTransition(
+                                        position: _slideAnimation,
+                                        child: _buildChatContent(provider, connectivityProvider),
+                                      ),
+                                    )
+                                  : _buildChatContent(provider, connectivityProvider),
+                            ),
+                            _buildFloatingInputArea(provider, connectivityProvider),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1415,11 +1447,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   void _sendMessageUtil(String text) {
     var provider = context.read<MessageProvider>();
+    var sessionProvider = context.read<ChatSessionProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     scrollToBottom();
     textController.clear();
-    provider.sendMessageStreamToServer(text);
+    provider.sendMessageStreamToServer(text, chatSessionId: sessionProvider.currentSessionId, context: context);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }
@@ -1671,7 +1704,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       appProvider.setSelectedChatAppId(app?.id);
 
       final messageProvider = context.read<MessageProvider>();
-      await messageProvider.refreshMessages(dropdownSelected: true);
+      final sessionProvider = context.read<ChatSessionProvider>();
+      
+      // Refresh sessions for the new app
+      await sessionProvider.refreshOnAppChange();
+      
+      await messageProvider.refreshMessages(dropdownSelected: true, chatSessionId: sessionProvider.currentSessionId);
 
       if (messageProvider.messages.isEmpty) {
         messageProvider.sendInitialAppMessage(app);
@@ -1699,7 +1737,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         context,
         () => Navigator.of(context).pop(),
         () {
-          context.read<MessageProvider>().clearChat();
+          final sessionProvider = context.read<ChatSessionProvider>();
+          context.read<MessageProvider>().clearChat(chatSessionId: sessionProvider.currentSessionId);
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1715,5 +1754,180 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         'Are you sure you want to clear the chat? This action cannot be undone.',
       ),
     );
+  }
+
+  Widget _buildSessionsSidebar(ChatSessionProvider sessionProvider, AppProvider appProvider) {
+    return Column(
+      children: [
+        // Header with new session button
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Text(
+                'Chat Sessions',
+                style: TextStyle(
+                  color: ResponsiveHelper.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () async {
+                    await sessionProvider.createNewSession();
+                    // Refresh messages for the new session
+                    final messageProvider = context.read<MessageProvider>();
+                    await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+                    scrollToBottom();
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.add,
+                      color: ResponsiveHelper.purplePrimary,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Sessions list
+        Expanded(
+          child: sessionProvider.isLoadingSessions
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: sessionProvider.sessions.length,
+                  itemBuilder: (context, index) {
+                    final session = sessionProvider.sessions[index];
+                    final isActive = session.id == sessionProvider.currentSessionId;
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _handleSessionSwitch(sessionProvider, session),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
+                                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isActive
+                                    ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
+                                    : Colors.transparent,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  color: ResponsiveHelper.textSecondary,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        session.displayTitle,
+                                        style: TextStyle(
+                                          color: isActive
+                                              ? ResponsiveHelper.purplePrimary
+                                              : ResponsiveHelper.textPrimary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _formatSessionTime(session.createdAt),
+                                        style: const TextStyle(
+                                          color: ResponsiveHelper.textTertiary,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (sessionProvider.sessions.length > 1) ...[
+                                  const SizedBox(width: 8),
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: () => sessionProvider.deleteSession(session),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        child: const Icon(
+                                          Icons.delete_outline,
+                                          color: ResponsiveHelper.textTertiary,
+                                          size: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  String _formatSessionTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  void _handleSessionSwitch(ChatSessionProvider sessionProvider, ChatSession session) async {
+    if (sessionProvider.currentSessionId == session.id) return;
+    
+    await sessionProvider.switchToSession(session);
+    
+    // Refresh messages for the new session
+    final messageProvider = context.read<MessageProvider>();
+    await messageProvider.refreshMessages(chatSessionId: session.id);
+    
+    scrollToBottom();
   }
 }
