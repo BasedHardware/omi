@@ -12,6 +12,18 @@ import 'package:provider/provider.dart';
 class BatteryInfoWidget extends StatelessWidget {
   const BatteryInfoWidget({super.key});
 
+  String _getDeviceImagePath(String? deviceName) {
+    if (deviceName != null && deviceName.contains('Glass')) {
+      return 'assets/images/omi-glass.png';
+    }
+
+    if (deviceName != null && deviceName.contains('Omi DevKit')) {
+      return 'assets/images/omi-devkit-without-rope.png';
+    }
+
+    return 'assets/images/omi-without-rope.png';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Selector<HomeProvider, bool>(
@@ -52,6 +64,16 @@ class BatteryInfoWidget extends StatelessWidget {
                                         ? Colors.red
                                         : Colors.grey,
                             shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        // Add device icon
+                        Container(
+                          width: 20,
+                          height: 20,
+                          child: Image.asset(
+                            _getDeviceImagePath(deviceProvider.connectedDevice?.name),
+                            fit: BoxFit.contain,
                           ),
                         ),
                         const SizedBox(width: 8.0),

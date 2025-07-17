@@ -18,6 +18,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/widgets/recording_waveform.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
@@ -32,9 +33,7 @@ class SpeechProfileCardWidget extends StatelessWidget {
         return provider.hasSpeakerProfile
             ? const SizedBox()
             : Consumer<DeviceProvider>(builder: (context, device, child) {
-                if (device.pairedDevice == null ||
-                    !device.isConnected ||
-                    device.pairedDevice?.firmwareRevision == '1.0.2') {
+                if (device.pairedDevice == null || !device.isConnected || device.pairedDevice?.firmwareRevision == '1.0.2') {
                   return const SizedBox();
                 }
                 return Stack(
@@ -284,14 +283,10 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) 
                           color: Colors.white,
                         ),
                       )
-                    : (state == RecordingState.record
-                        ? const Icon(Icons.stop, color: Colors.red, size: 24)
-                        : const Icon(Icons.mic)),
+                    : (state == RecordingState.record ? const Icon(Icons.stop, color: Colors.red, size: 24) : const Icon(Icons.mic)),
                 const SizedBox(width: 8),
                 Text(
-                  state == RecordingState.initialising
-                      ? 'Initialising Recorder'
-                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+                  state == RecordingState.initialising ? 'Initialising Recorder' : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
                   style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(width: 4),

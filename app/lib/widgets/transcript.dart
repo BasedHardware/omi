@@ -44,6 +44,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // ScrollController to enable proper scrolling
   final ScrollController _scrollController = ScrollController();
 
+  // Auto-scroll state management
+  bool _userHasScrolled = false;
+  bool _isAutoScrolling = false;
+  int _previousSegmentCount = 0;
+
   // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
     Color(0xFF3A2E26), // Dark warm brown
@@ -74,9 +79,72 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _previousSegmentCount = widget.segments.length;
+
+    // Add scroll listener to detect manual scrolling
+    _scrollController.addListener(_onScroll);
+
+    // Auto-scroll to bottom after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+  }
+
+  @override
+  void didUpdateWidget(TranscriptWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Check if new segments were added
+    if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
+      _previousSegmentCount = widget.segments.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    } else {
+      _previousSegmentCount = widget.segments.length;
+    }
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_isAutoScrolling) return;
+
+    // Check if user manually scrolled up from the bottom
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.offset;
+      final threshold = 100.0; // pixels from bottom
+
+      if (maxScroll - currentScroll > threshold) {
+        _userHasScrolled = true;
+      } else {
+        // User scrolled back to bottom, resume auto-scrolling
+        _userHasScrolled = false;
+      }
+    }
+  }
+
+  void _scrollToBottom() {
+    if (!_scrollController.hasClients || _userHasScrolled) return;
+
+    _isAutoScrolling = true;
+    _scrollController
+        .animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    )
+        .then((_) {
+      _isAutoScrolling = false;
+    });
   }
 
   String _getDecodedText(String text) {

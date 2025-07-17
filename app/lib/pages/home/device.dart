@@ -60,7 +60,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         body: Column(
           children: [
             const SizedBox(height: 32),
-            const DeviceAnimationWidget(),
+            DeviceAnimationWidget(
+              isConnected: provider.connectedDevice != null,
+              deviceName: provider.connectedDevice?.name ?? provider.pairedDevice?.name,
+            ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.start,
@@ -151,12 +154,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
               decoration: BoxDecoration(
                 border: const GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
+                  gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                   width: 2,
                 ),
                 borderRadius: BorderRadius.circular(12),
