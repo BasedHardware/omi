@@ -678,33 +678,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // Already initializing, do nothing
       debugPrint('initialising, have to wait');
     } else {
-      // Start recording with dialog first
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () async {
-            Navigator.pop(context);
-            await captureProvider.streamRecording();
-            MixpanelManager().phoneMicRecordingStarted();
+      // Start recording directly without dialog
+      await captureProvider.streamRecording();
+      MixpanelManager().phoneMicRecordingStarted();
 
-            // Navigate to conversation capturing page
-            if (context.mounted) {
-              var topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty ? captureProvider.conversationProvider!.conversations.first.id : null;
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ConversationCapturingPage(topConversationId: topConvoId),
-                ),
-              );
-            }
-          },
-          'Limited Capabilities',
-          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
-          okButtonText: 'Ok, I understand',
-        ),
-      );
+      // Navigate to conversation capturing page
+      if (context.mounted) {
+        var topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty ? captureProvider.conversationProvider!.conversations.first.id : null;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ConversationCapturingPage(topConversationId: topConvoId),
+          ),
+        );
+      }
     }
   }
 
