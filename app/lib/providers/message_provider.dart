@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/services/macos_overlay_bridge.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:omi/utils/file.dart';
@@ -39,6 +40,30 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+    
+    // Sync authentication and app state to macOS overlay when app provider updates
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      _syncToMacOSOverlay();
+    }
+  }
+  
+  // Sync current state to macOS overlay
+  void _syncToMacOSOverlay() async {
+    try {
+      await MacOSOverlayBridge.syncAuthToOverlay();
+      
+      // Sync selected app
+      final selectedApp = appProvider?.selectedChatAppId;
+      await MacOSOverlayBridge.syncSelectedApp(selectedApp);
+      
+      // Sync recent messages for continuity
+      final recentMessages = messages.take(10).map((msg) => msg.toJson()).toList();
+      await MacOSOverlayBridge.syncMessagesToOverlay(recentMessages);
+      
+      debugPrint('✅ Synced app state to macOS overlay');
+    } catch (e) {
+      debugPrint('❌ Failed to sync to macOS overlay: $e');
+    }
   }
 
   void setNextMessageOriginIsVoice(bool isVoice) {
@@ -354,6 +379,11 @@ class MessageProvider extends ChangeNotifier {
     }
     messages.insert(0, message);
     notifyListeners();
+    
+    // Sync to macOS overlay when new message is added
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      _syncToMacOSOverlay();
+    }
   }
 
   Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,

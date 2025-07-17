@@ -3,6 +3,21 @@ import SwiftUI
 import HotKey
 import ApplicationServices
 
+// Custom NSWindow that can become key window to accept input
+class KeyableWindow: NSWindow {
+    override var canBecomeKey: Bool {
+        return true
+    }
+    
+    override var canBecomeMain: Bool {
+        return false  // Don't become main to avoid stealing focus from other apps
+    }
+    
+    func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+}
+
 class HotKeyManager: NSObject {
     static let shared = HotKeyManager()
     
@@ -68,8 +83,12 @@ class HotKeyManager: NSObject {
         
         hotKey?.keyDownHandler = { [weak self] in
             print("🔥 HotKey triggered: Option+Space")
+            guard let self = self else {
+                print("❌ HotKeyManager instance is nil")
+                return
+            }
             DispatchQueue.main.async {
-                self?.toggleChatWindow()
+                self.toggleChatWindow()
             }
         }
         print("✅ HotKey manager initialized with Option+Space")
@@ -77,64 +96,125 @@ class HotKeyManager: NSObject {
     }
     
     func toggleChatWindow() {
-        if chatWindow?.isVisible == true {
+        print("🔥 toggleChatWindow() called")
+        
+        if let window = chatWindow, window.isVisible {
+            print("🔥 Window is visible, hiding it")
             hideChatWindow()
         } else {
+            print("🔥 Window is not visible, showing it")
             showChatWindow()
         }
     }
     
     private func showChatWindow() {
-        // Create the SwiftUI view
-        let chatView = ChatView()
-        hostingController = NSHostingController(rootView: chatView)
-        
-        // Calculate window position (center of main screen)
-        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
-        let initialWindowSize = CGSize(width: 420, height: 100)
-        let windowRect = NSRect(
-            x: (screenSize.width - initialWindowSize.width) / 2,
-            y: (screenSize.height - initialWindowSize.height) / 2,
-            width: initialWindowSize.width,
-            height: initialWindowSize.height
-        )
-        
-        // Create window with floating style
-        chatWindow = NSWindow(
-            contentRect: windowRect,
-            styleMask: [.titled, .fullSizeContentView, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        
-        // Configure window appearance
-        chatWindow?.isOpaque = false
-        chatWindow?.backgroundColor = .clear
-        chatWindow?.level = .floating
-        chatWindow?.titleVisibility = .hidden
-        chatWindow?.titlebarAppearsTransparent = true
-        chatWindow?.isMovableByWindowBackground = true
-        chatWindow?.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        
-        // Set minimum and maximum sizes
-        chatWindow?.minSize = CGSize(width: 320, height: 80)
-        chatWindow?.maxSize = CGSize(width: 600, height: 400)
-        
-        // Set content
-        chatWindow?.contentView = hostingController?.view
-        
-        // Show window
-        chatWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        
-        print("Chat window shown")
+    print("🔥 showChatWindow() called")
+    
+    // If window already exists and is visible, just bring it to front
+    if let window = chatWindow, window.isVisible {
+        window.makeKeyAndOrderFront(nil)
+        // Focus on the text field
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            window.makeFirstResponder(nil)
+        }
+        return
     }
     
+    // Create the SwiftUI view
+    let chatView = ChatView()
+    hostingController = NSHostingController(rootView: chatView)
+
+    // Window size and position
+    let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+    let initialWindowSize = CGSize(width: 420, height: 160)
+    let windowRect = NSRect(
+        x: (screenSize.width - initialWindowSize.width) / 2,
+        y: (screenSize.height - initialWindowSize.height) / 2,
+        width: initialWindowSize.width,
+        height: initialWindowSize.height
+    )
+
+    // Create the floating window with proper style mask
+    chatWindow = KeyableWindow(
+        contentRect: windowRect,
+        styleMask: [.borderless],
+        backing: .buffered,
+        defer: false
+    )
+
+    guard let chatWindow = chatWindow,
+          let hostingView = hostingController?.view else { 
+        print("❌ Failed to create chat window or hosting view")
+        return 
+    }
+
+    // Configure window properties for overlay
+    chatWindow.isOpaque = false
+    chatWindow.backgroundColor = .clear
+    chatWindow.level = .floating
+    chatWindow.isMovableByWindowBackground = true
+    chatWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+    chatWindow.hasShadow = true
+    chatWindow.isReleasedWhenClosed = false // Important: prevent window from being deallocated
+    
+    // Make window accept mouse events
+    chatWindow.acceptsMouseMovedEvents = true
+
+    // Create a NSVisualEffectView (glass background)
+    let visualEffectView = NSVisualEffectView()
+    visualEffectView.material = .hudWindow
+    visualEffectView.blendingMode = .behindWindow
+    visualEffectView.state = .active
+    visualEffectView.translatesAutoresizingMaskIntoConstraints = false
+
+    // SwiftUI hosting view
+    hostingView.translatesAutoresizingMaskIntoConstraints = false
+
+    // Container view with rounded corners
+    let containerView = NSView()
+    containerView.wantsLayer = true
+    containerView.layer?.cornerRadius = 24
+    containerView.layer?.masksToBounds = true
+    containerView.translatesAutoresizingMaskIntoConstraints = false
+
+    containerView.addSubview(visualEffectView)
+    containerView.addSubview(hostingView)
+
+    // Constraints for both subviews to fill the container
+    NSLayoutConstraint.activate([
+        visualEffectView.topAnchor.constraint(equalTo: containerView.topAnchor),
+        visualEffectView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+        visualEffectView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+        visualEffectView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+
+        hostingView.topAnchor.constraint(equalTo: containerView.topAnchor),
+        hostingView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+        hostingView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+        hostingView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+    ])
+
+    // Set container as the window's content view
+    chatWindow.contentView = containerView
+
+    // Show the window and make it key to accept input
+    chatWindow.makeKeyAndOrderFront(nil)
+    
+    // Focus on the text field (if possible)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        chatWindow.makeFirstResponder(nil)
+    }
+    
+    print("✅ Chat window shown with glass style")
+}
+
+    
     private func hideChatWindow() {
-        chatWindow?.orderOut(nil)
-        chatWindow = nil
-        hostingController = nil
-        print("Chat window hidden")
+        print("🔥 hideChatWindow() called")
+        if let window = chatWindow {
+            window.orderOut(nil)
+            // Don't set chatWindow to nil immediately - keep it for reuse
+            print("✅ Chat window hidden")
+        }
     }
     
     func cleanup() {
