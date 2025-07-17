@@ -49,7 +49,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,28 +102,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // MixpanelManager().track("System Audio Recording Started");
       }
     } else {
-      // Existing phone mic logic
+      // Phone mic logic - start recording directly
       if (recordingState == RecordingState.record) {
         await provider.stopStreamRecording();
         MixpanelManager().phoneMicRecordingStopped();
       } else if (recordingState == RecordingState.initialising) {
         debugPrint('initialising, have to wait');
       } else {
-        showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.pop(context),
-            () async {
-              Navigator.pop(context);
-              await provider.streamRecording();
-              MixpanelManager().phoneMicRecordingStarted();
-            },
-            'Limited Capabilities',
-            'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
-            okButtonText: 'Ok, I understand',
-          ),
-        );
+        await provider.streamRecording();
+        MixpanelManager().phoneMicRecordingStarted();
       }
     }
   }
@@ -338,10 +325,21 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (currentActualState == RecordingState.record) {
-      text = 'Stop Recording';
-      icon = const Icon(Icons.stop, color: Colors.red, size: 12);
+      text = 'Pause Recording';
+      icon = Container(
+        margin: const EdgeInsets.only(right: 4),
+        width: 24,
+        height: 24,
+        decoration: const BoxDecoration(
+          color: Color(0xFF7C3AED), // Deep purple
+          shape: BoxShape.circle,
+        ),
+        child: const Center(
+          child: Icon(Icons.pause, color: Colors.white, size: 14),
+        ),
+      );
     } else {
-      text = 'Try With Phone Mic';
+      text = 'Start Recording';
       icon = const Icon(Icons.mic, size: 18);
     }
   }
