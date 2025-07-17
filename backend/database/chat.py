@@ -380,21 +380,21 @@ def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[dict]:
     return None
 
 
-def create_new_chat_session(uid: str, plugin_id: Optional[str] = None, title: Optional[str] = None) -> dict:
+def create_new_chat_session(uid: str, app_id: Optional[str] = None, title: Optional[str] = None) -> dict:
     """Create a new chat session"""
     from datetime import datetime, timezone
     import uuid
     
     # Generate a temporary title if not provided
     if not title:
-        session_count = len(get_chat_sessions(uid, plugin_id)) + 1
+        session_count = len(get_chat_sessions(uid, app_id)) + 1
         title = f"New Chat {session_count}"
     
     session_data = {
         'id': str(uuid.uuid4()),
         'created_at': datetime.now(timezone.utc),
-        'plugin_id': plugin_id,
-        'app_id': plugin_id,  # For backward compatibility
+        'plugin_id': app_id,
+        'app_id': app_id,
         'message_ids': [],
         'file_ids': [],
         'title': title
