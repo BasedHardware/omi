@@ -3,13 +3,21 @@ import Combine
 import AVFoundation
 import Speech
 
-// Voice popup state for managing different UI states
+// MARK: - Shared Chat Models
+struct ChatMessage: Identifiable, Equatable {
+    let id = UUID()
+    let content: String
+    let isUser: Bool
+    let timestamp = Date()
+}
+
+// Enhanced voice popup state for managing different UI states including chat mode
 enum VoicePopupState: Equatable {
     case idle
     case recording
     case transcribing
     case transcribed(String)
-    case success(String)
+    case chatMode  // New state for chat interface
     case error(String)
 }
 
@@ -209,58 +217,118 @@ extension SimpleVoiceRecorder: AVAudioRecorderDelegate {
     }
 }
 
+// MARK: - Chat Message View
+struct ChatMessageView: View {
+    let message: ChatMessage
+
+    var body: some View {
+        HStack {
+            if message.isUser {
+                Spacer()
+                Text(message.content)
+                    .font(.system(size: 14))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.6)], 
+                                    startPoint: .topLeading, 
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .foregroundColor(.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+            } else {
+                Text(message.content)
+                    .font(.system(size: 14))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.gray.opacity(0.2))
+                    )
+                    .foregroundColor(.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
 struct VoiceAssistantPopup: View {
-    @State private var isChatVisible = false
     @StateObject private var voiceRecorder = SimpleVoiceRecorder()
     @State private var popupState: VoicePopupState = .idle
     @State private var transcribedText = ""
     @State private var editableText = ""
     @State private var isLoading = false
-    @State private var apiResponse = ""
     @State private var isViewActive = true
+    
+    // Chat functionality
+    @State private var messages: [ChatMessage] = []
+    @State private var inputText = ""
+    @State private var isRecording = false
+    @State private var showWelcomeMessage = true
+    @State private var errorMessage: String?
+    @State private var isInitialized = false
+    
+    // Use lazy initialization to avoid crashes during view creation
+    private var apiClient: OmiAPIClient {
+        OmiAPIClient.shared
+    }
+    
+    private var messageSyncManager: MessageSyncManager {
+        MessageSyncManager.shared
+    }
 
     var body: some View {
         ZStack {
             Color(.windowBackgroundColor)
                 .ignoresSafeArea()
 
-            if isChatVisible {
-                SafeChatView()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.3), value: isChatVisible)
-            } else {
-                VStack(spacing: 20) {
-                    Text(titleText)
-                        .font(.title2)
-                        .bold()
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .transition(.opacity)
+            VStack(spacing: 20) {
+                Text(titleText)
+                    .font(.title2)
+                    .bold()
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .transition(.opacity)
 
-                    // Main content based on state
-                    Group {
-                        switch popupState {
-                        case .idle:
-                            idleView
-                        case .recording:
-                            recordingView
-                        case .transcribing:
-                            transcribingView
-                        case .transcribed(let text):
-                            transcribedView(text: text)
-                        case .success(let text):
-                            successView(text: text)
-                        case .error(let message):
-                            errorView(message: message)
-                        }
+                // Main content based on state
+                Group {
+                    switch popupState {
+                    case .idle:
+                        idleView
+                    case .recording:
+                        recordingView
+                    case .transcribing:
+                        transcribingView
+                    case .transcribed(let text):
+                        transcribedView(text: text)
+                    case .chatMode:
+                        chatView
+                    case .error(let message):
+                        errorView(message: message)
                     }
-                    .transition(.opacity.combined(with: .scale))
-                    .animation(.easeInOut(duration: 0.3), value: popupState)
+                }
+                .transition(.opacity.combined(with: .scale))
+                .animation(.easeInOut(duration: 0.3), value: popupState)
 
-                    // "Type Instead" Button
+                // "Type Instead" Button - only show in non-chat modes
+                if popupState != .chatMode {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) {
-                            isChatVisible = true
+                            popupState = .chatMode
+                            initializeChatMode()
                         }
                     }) {
                         Text("Type Instead")
@@ -277,30 +345,36 @@ struct VoiceAssistantPopup: View {
                     )
                     .padding(.horizontal)
                 }
-                .padding(24)
-                .background(
-                    RoundedRectangle(cornerRadius: 30)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 30)
-                                .stroke(
-                                    LinearGradient(colors: [.white.opacity(0.2), .purple.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    lineWidth: 1
-                                )
-                        )
-                )
-                .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .animation(.easeInOut(duration: 0.3), value: isChatVisible)
             }
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 30)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 30)
+                            .stroke(
+                                LinearGradient(colors: [.white.opacity(0.2), .purple.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                lineWidth: 1
+                            )
+                    )
+            )
+            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
         }
         .onAppear {
             isViewActive = true
             popupState = .idle
+            initializeAuthentication()
         }
         .onDisappear {
             isViewActive = false
             voiceRecorder.cancelRecording()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Sync auth when app becomes active
+            DispatchQueue.main.async {
+                AuthBridge.shared.forceSync()
+                checkOmiConnection()
+            }
         }
     }
 
@@ -434,7 +508,7 @@ struct VoiceAssistantPopup: View {
                         .lineLimit(3...6)
                     
                     Button(action: {
-                        sendToAPI()
+                        sendToAPIAndEnterChatMode()
                     }) {
                         if isLoading {
                             ProgressView()
@@ -456,6 +530,89 @@ struct VoiceAssistantPopup: View {
                 }
             }
             .padding(.horizontal, 4)
+        }
+    }
+    
+    // MARK: - New Chat View
+    
+    private var chatView: some View {
+        VStack(spacing: 0) {
+            // Chat messages
+            if !messages.isEmpty {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(messages) { message in
+                            ChatMessageView(message: message)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+                .frame(maxHeight: 200)
+                .transition(.move(edge: .top))
+                .animation(.easeInOut(duration: 0.3), value: messages.count)
+            } else if showWelcomeMessage {
+                VStack(spacing: 16) {
+                    Text("Ready to chat! 😊")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 20)
+                }
+            }
+
+            // Input field - simplified without unnecessary buttons
+            HStack(spacing: 12) {
+                TextField("Ask anything", text: $inputText)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .foregroundColor(.white)
+                    .font(.system(size: 14))
+                    .onSubmit {
+                        handleSendMessage()
+                    }
+
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    // Voice recording button
+                    Button(action: toggleVoiceRecording) {
+                        Image(systemName: isRecording ? "waveform" : "mic")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(isRecording ? .red : .white)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Send button
+                    Button(action: {
+                        if !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            handleSendMessage()
+                        }
+                    }) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(.white))
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1.0)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(
+                                LinearGradient(colors: [.white.opacity(0.2), .purple.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                lineWidth: 1
+                            )
+                    )
+            )
         }
     }
     
@@ -523,14 +680,113 @@ struct VoiceAssistantPopup: View {
             return "Processing..."
         case .transcribed:
             return "Review & Send"
-        case .success:
-            return "Got it!"
+        case .chatMode:
+            return "Chat with Omi"
         case .error:
             return "Oops!"
         }
     }
 
     // MARK: - Methods
+    
+    private func initializeAuthentication() {
+        DispatchQueue.main.async {
+            AuthBridge.shared.syncFromFlutterApp()
+            self.isInitialized = true
+            self.checkOmiConnection()
+        }
+    }
+    
+    private func checkOmiConnection() {
+        // Force sync authentication data from Flutter app
+        AuthBridge.shared.forceSync()
+        
+        if !OmiConfig.isConfigured() {
+            let status = AuthBridge.shared.getAuthStatus()
+            print("Omi not configured. Missing: \(status.missingData.joined(separator: ", "))")
+            errorMessage = "Please sign in to Omi to use chat functionality"
+            
+            // Debug: Print available keys to help with integration
+            AuthBridge.shared.printAvailableKeys()
+        } else {
+            print("✅ Omi configuration successful")
+            OmiConfig.printConfiguration()
+            errorMessage = nil
+        }
+    }
+    
+    private func initializeChatMode() {
+        showWelcomeMessage = true
+        // Load initial messages if any exist
+        loadInitialMessages()
+    }
+    
+    private func loadInitialMessages() {
+        guard OmiConfig.isConfigured() else { 
+            errorMessage = "Authentication required. Please sign in to Omi."
+            return 
+        }
+        
+        Task {
+            do {
+                let serverMessages = try await apiClient.getMessages(appId: OmiConfig.selectedAppId)
+                await MainActor.run {
+                    // Convert server messages to local chat messages
+                    messages = serverMessages.reversed().map { serverMessage in
+                        ChatMessage(
+                            content: serverMessage.text,
+                            isUser: serverMessage.sender == "human"
+                        )
+                    }
+                    
+                    // If no messages, get initial message
+                    if messages.isEmpty {
+                        loadInitialMessage()
+                    } else {
+                        showWelcomeMessage = false
+                    }
+                    
+                    // Clear any previous error messages on success
+                    errorMessage = nil
+                }
+            } catch APIError.authenticationRequired {
+                await MainActor.run {
+                    print("Authentication required for loading messages")
+                    errorMessage = "Please sign in to Omi to view messages"
+                    showWelcomeMessage = true
+                }
+            } catch {
+                await MainActor.run {
+                    print("Failed to load messages: \(error)")
+                    errorMessage = "Failed to load messages. Please check your connection."
+                    // Show welcome message as fallback
+                    showWelcomeMessage = true
+                }
+            }
+        }
+    }
+    
+    private func loadInitialMessage() {
+        guard OmiConfig.isConfigured() else { return }
+        
+        Task {
+            do {
+                let initialMessage = try await apiClient.getInitialMessage(appId: OmiConfig.selectedAppId)
+                await MainActor.run {
+                    let chatMessage = ChatMessage(content: initialMessage.text, isUser: false)
+                    messages.append(chatMessage)
+                    showWelcomeMessage = false
+                }
+            } catch {
+                await MainActor.run {
+                    print("Failed to get initial message: \(error)")
+                    // Keep welcome message
+                }
+            }
+        }
+    }
+    
+    // MARK: - Voice Recording Methods
     
     private func startRecording() {
         Task {
@@ -647,33 +903,37 @@ struct VoiceAssistantPopup: View {
         }
     }
     
-    private func sendToAPI() {
+    // Modified to transition to chat mode after first message
+    private func sendToAPIAndEnterChatMode() {
         guard !editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
         isLoading = true
         
+        // Add user message to chat
+        let userMessage = ChatMessage(content: editableText, isUser: true)
+        messages.append(userMessage)
+        messageSyncManager.syncMessageToFlutter(userMessage)
+        
+        let messageToSend = editableText
+        editableText = ""
+        
         Task {
             do {
-                let response = try await sendMessageToAPI(text: editableText)
+                let response = try await sendMessageToAPI(text: messageToSend)
                 
                 await MainActor.run {
-                    // Check if view is still active before updating UI
-                    guard isViewActive else {
-                        print("⚠️ API response ignored - view is no longer active")
-                        return
-                    }
+                    guard isViewActive else { return }
                     
                     isLoading = false
-                    apiResponse = response
-                    popupState = .success(response)
                     
-                    // Show success for 2 seconds then navigate to chat
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        // Ensure we're still in a valid state before navigating
-                        if popupState == .success(response) && isViewActive {
-                            navigateToChatWithResponse(originalMessage: editableText, response: response)
-                        }
-                    }
+                    // Add AI response to chat
+                    let aiMessage = ChatMessage(content: response, isUser: false)
+                    messages.append(aiMessage)
+                    messageSyncManager.syncMessageToFlutter(aiMessage)
+                    
+                    // Transition to chat mode
+                    showWelcomeMessage = false
+                    popupState = .chatMode
                 }
             } catch {
                 await MainActor.run {
@@ -683,6 +943,167 @@ struct VoiceAssistantPopup: View {
             }
         }
     }
+    
+    // Chat mode message handling
+    private func handleSendMessage() {
+        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard OmiConfig.isConfigured() else {
+            popupState = .error("Please sign in to Omi to send messages")
+            return
+        }
+
+        if showWelcomeMessage {
+            showWelcomeMessage = false
+        }
+
+        let userMessage = ChatMessage(content: inputText, isUser: true)
+        messages.append(userMessage)
+        messageSyncManager.syncMessageToFlutter(userMessage)
+
+        let messageToSend = inputText
+        inputText = ""
+        isLoading = true
+
+        sendToOmiChat(message: messageToSend)
+    }
+    
+    private func sendToOmiChat(message: String) {
+        print("Sending to Omi: \(message)")
+        
+        Task {
+            do {
+                var responseText = ""
+                
+                // Create a placeholder AI message
+                let aiMessage = ChatMessage(content: "", isUser: false)
+                await MainActor.run {
+                    messages.append(aiMessage)
+                }
+                
+                // Stream the response
+                for try await chunk in apiClient.sendMessage(
+                    text: message, 
+                    appId: OmiConfig.selectedAppId
+                ) {
+                    await MainActor.run {
+                        switch chunk.type {
+                        case "think":
+                            // Handle thinking chunks (optional: show typing indicator)
+                            break
+                        case "data":
+                            // Update the AI message with streaming text
+                            responseText += chunk.text
+                            if let lastIndex = messages.indices.last {
+                                messages[lastIndex] = ChatMessage(content: responseText, isUser: false)
+                            }
+                        case "done":
+                            // Final message received
+                            if let serverMessage = chunk.message {
+                                if let lastIndex = messages.indices.last {
+                                    let aiMessage = ChatMessage(content: serverMessage.text, isUser: false)
+                                    messages[lastIndex] = aiMessage
+                                    // Sync AI response to Flutter app
+                                    messageSyncManager.syncMessageToFlutter(aiMessage)
+                                }
+                            }
+                        case "error":
+                            // Handle error
+                            if let lastIndex = messages.indices.last {
+                                messages[lastIndex] = ChatMessage(content: "Error: \(chunk.text)", isUser: false)
+                            }
+                        default:
+                            break
+                        }
+                    }
+                }
+                
+                await MainActor.run {
+                    isLoading = false
+                }
+                
+            } catch APIError.authenticationRequired {
+                await MainActor.run {
+                    // Update the last message with auth error
+                    if let lastIndex = messages.indices.last {
+                        messages[lastIndex] = ChatMessage(
+                            content: "Authentication required. Please sign in to Omi to send messages.", 
+                            isUser: false
+                        )
+                    }
+                    isLoading = false
+                    errorMessage = "Please sign in to Omi to send messages"
+                }
+            } catch {
+                await MainActor.run {
+                    // Update the last message with error
+                    if let lastIndex = messages.indices.last {
+                        messages[lastIndex] = ChatMessage(
+                            content: "Failed to send message: \(error.localizedDescription)", 
+                            isUser: false
+                        )
+                    }
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+    
+    private func toggleVoiceRecording() {
+        isRecording.toggle()
+        if isRecording {
+            startVoiceRecordingInChatMode()
+        } else {
+            stopVoiceRecordingInChatMode()
+        }
+    }
+
+    private func startVoiceRecordingInChatMode() {
+        print("Voice recording started in chat mode")
+        // TODO: Implement voice recording for chat mode using the same voiceRecorder
+        // This would use the same voice recording logic but directly add to chat
+        Task {
+            let success = await voiceRecorder.startRecording()
+            
+            await MainActor.run {
+                if !success {
+                    isRecording = false
+                    // Could show a temporary error state
+                }
+            }
+        }
+    }
+
+    private func stopVoiceRecordingInChatMode() {
+        print("Voice recording stopped in chat mode")
+        isRecording = false
+        
+        guard let audioURL = voiceRecorder.stopRecording() else {
+            print("Failed to get audio recording")
+            return
+        }
+        
+        // Transcribe and add to input text
+        Task {
+            do {
+                let transcript = try await performSpeechRecognition(audioURL: audioURL)
+                
+                await MainActor.run {
+                    if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        inputText = transcript
+                    }
+                }
+                
+                try? FileManager.default.removeItem(at: audioURL)
+                
+            } catch {
+                print("Failed to transcribe audio in chat mode: \(error)")
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+        }
+    }
+    
+    // MARK: - API Communication
     
     private func sendMessageToAPI(text: String) async throws -> String {
         // Use the existing OmiAPIClient to send the message
@@ -700,7 +1121,7 @@ struct VoiceAssistantPopup: View {
             }
             
             // Create async stream to collect the response
-            let stream = OmiAPIClient.shared.sendMessage(text: text, appId: nil, fileIds: [])
+            let stream = OmiAPIClient.shared.sendMessage(text: text, appId: OmiConfig.selectedAppId, fileIds: [])
             
             // Collect response chunks with timeout
             let timeoutDuration: TimeInterval = 30.0 // 30 second timeout
@@ -729,52 +1150,7 @@ struct VoiceAssistantPopup: View {
         }
     }
     
-    private func navigateToChatWithResponse(originalMessage: String, response: String) {
-        // Ensure we're on the main thread
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async {
-                self.navigateToChatWithResponse(originalMessage: originalMessage, response: response)
-            }
-            return
-        }
-        
-        // Check if view is still active
-        guard isViewActive else {
-            print("⚠️ Navigation cancelled - view is no longer active")
-            return
-        }
-        
-        // Double-check that we're still in a valid state
-        guard case .success = popupState else {
-            print("⚠️ Navigation cancelled - popup state changed")
-            return
-        }
-        
-        print("🔄 Preparing to navigate to chat with message: \(originalMessage)")
-        
-        // Instead of immediate navigation, let's delay and be more cautious
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // Final safety check before navigation
-            guard self.isViewActive else {
-                print("⚠️ Late navigation cancelled - view not active")
-                return
-            }
-            
-            if case .success = self.popupState {
-                print("🔄 Actually navigating to chat now")
-                
-                // Use the most gentle animation possible
-                withAnimation(.easeInOut(duration: 0.8)) {
-                    self.isChatVisible = true
-                }
-            } else {
-                print("⚠️ Late navigation cancelled - state changed")
-            }
-        }
-        
-        // TODO: Pass both the original message and response to ChatView
-        // This will need proper implementation when we integrate message passing
-    }
+    // MARK: - Helper Methods
     
     private func formatDuration(_ duration: TimeInterval) -> String {
         let minutes = Int(duration) / 60
@@ -783,99 +1159,11 @@ struct VoiceAssistantPopup: View {
     }
 }
 
-// Safe wrapper for ChatView to prevent crashes during initialization
-struct SafeChatView: View {
-    @State private var isReady = false
-    @State private var hasError = false
-    @State private var errorMessage = ""
-    
-    var body: some View {
-        ZStack {
-            Color(.windowBackgroundColor)
-                .ignoresSafeArea()
-            
-            if hasError {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 40)
-                        .foregroundColor(.orange)
-                    
-                    Text("Chat Loading Error")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                    
-                    Button("Retry") {
-                        attemptChatLoad()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.purple)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                }
-                .padding(24)
-            } else if isReady {
-                ChatView()
-                    .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.3), value: isReady)
-            } else {
-                VStack(spacing: 16) {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
-                        .scaleEffect(1.5)
-                    
-                    Text("Loading chat...")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                }
-                .padding(24)
-            }
-        }
-        .onAppear {
-            attemptChatLoad()
-        }
-    }
-    
-    private func attemptChatLoad() {
-        hasError = false
-        isReady = false
-        
-        // Add a small delay to ensure the popup animation completes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            do {
-                // Try to safely initialize required components
-                let _ = OmiConfig.isConfigured()
-                let _ = AuthBridge.shared.getAuthStatus()
-                
-                // If we get here without crashing, we can safely show ChatView
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isReady = true
-                }
-                
-                print("✅ SafeChatView: Successfully loaded ChatView")
-                
-            } catch {
-                print("❌ SafeChatView: Failed to load ChatView - \(error.localizedDescription)")
-                hasError = true
-                errorMessage = "Failed to initialize chat: \(error.localizedDescription)"
-            }
-        }
-    }
-}
-
 #if DEBUG
 struct VoiceAssistantPopup_Previews: PreviewProvider {
     static var previews: some View {
         VoiceAssistantPopup()
-            .frame(width: 420, height: 300)
+            .frame(width: 420, height: 400)
             .preferredColorScheme(.dark)
     }
 }
