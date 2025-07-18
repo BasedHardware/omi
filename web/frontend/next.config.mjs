@@ -54,6 +54,10 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'abs.twimg.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'static.vecteezy.com',
+      },
     ],
   },
   async headers() {
