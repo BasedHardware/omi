@@ -18,7 +18,7 @@ class TranscriptWidget extends StatefulWidget {
   final bool canDisplaySeconds;
   final bool isConversationDetail;
   final double bottomMargin;
-  final Function(int, int)? editSegment;
+  final Function(String, int)? editSegment;
   final Map<String, SpeakerLabelSuggestionEvent> suggestions;
   final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
 
@@ -111,7 +111,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         children: [
           GestureDetector(
             onTap: () {
-              widget.editSegment?.call(segmentIdx, data.speakerId);
+              widget.editSegment?.call(data.id, data.speakerId);
               MixpanelManager().tagSheetOpened();
             },
             child: Row(

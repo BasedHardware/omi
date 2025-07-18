@@ -200,165 +200,39 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/segments/{segment_idx}/assign',
+    '/v1/conversations/{conversation_id}/segments/assign-bulk',
     response_model=Conversation,
     tags=['conversations'],
 )
-def set_assignee_conversation_segment(
+def assign_segments_bulk(
     conversation_id: str,
-    segment_idx: int,
-    assign_type: str,
-    value: Optional[str] = None,
-    use_for_speech_training: bool = True,
+    data: BulkAssignSegmentsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of a segment in the transcript of a conversation.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file shuold be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    print(
-        'set_assignee_conversation_segment',
-        conversation_id,
-        segment_idx,
-        assign_type,
-        value,
-        use_for_speech_training,
-        uid,
-    )
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
 
+    value = data.value
     if value == 'null':
         value = None
 
-    is_unassigning = value is None or value is False
+    segment_map = {segment.id: segment for segment in conversation.transcript_segments}
 
-    if assign_type == 'is_user':
-        conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
-        conversation.transcript_segments[segment_idx].person_id = None
-    elif assign_type == 'person_id':
-        conversation.transcript_segments[segment_idx].is_user = False
-        conversation.transcript_segments[segment_idx].person_id = value
-    else:
-        print(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
-    )
-    # thinh's note: disabled for now
-    # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
-    # # TODO: can do this async
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
-    return conversation
-
-
-@router.patch(
-    '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
-    response_model=Conversation,
-    tags=['conversations'],
-)
-def set_assignee_conversation_segment(
-    conversation_id: str,
-    speaker_id: int,
-    assign_type: str,
-    value: Optional[str] = None,
-    use_for_speech_training: bool = True,
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of all segments in the transcript of a conversation with the given speaker_id.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file should be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    print(
-        'set_assignee_conversation_segment',
-        conversation_id,
-        speaker_id,
-        assign_type,
-        value,
-        use_for_speech_training,
-        uid,
-    )
-    conversation = _get_conversation_by_id(uid, conversation_id)
-    conversation = Conversation(**conversation)
-
-    if value == 'null':
-        value = None
-
-    is_unassigning = value is None or value is False
-
-    if assign_type == 'is_user':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
+    for segment_id in data.segment_ids:
+        if segment_id in segment_map:
+            segment = segment_map[segment_id]
+            if data.assign_type == 'is_user':
                 segment.is_user = bool(value) if value is not None else False
                 segment.person_id = None
-    elif assign_type == 'person_id':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
-                print(segment.speaker_id, speaker_id, value)
+            elif data.assign_type == 'person_id':
                 segment.is_user = False
                 segment.person_id = value
-    else:
-        print(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
+            else:
+                raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
     )
-    # This will be used when we setup recording for conversations, not used for now
-    # get the segment with the most words with the speaker_id
-    # segment_idx = 0
-    # segment_words = 0
-    # for segment in conversation.transcript_segments:
-    #     if segment.speaker == speaker_id:
-    #         if len(segment.text.split(' ')) > segment_words:
-    #             segment_words = len(segment.text.split(' '))
-    #             if segment_words > 5:
-    #                 segment_idx = segment.idx
-    #
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
     return conversation
 
 

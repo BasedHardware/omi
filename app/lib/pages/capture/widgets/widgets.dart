@@ -184,7 +184,7 @@ getTranscriptWidget(
   bool canDisplaySeconds = true,
   bool isConversationDetail = false,
   double bottomMargin = 100.0,
-  Function(int, int)? editSegment,
+  Function(String, int)? editSegment,
   Map<String, SpeakerLabelSuggestionEvent> suggestions = const {},
   Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
 }) {

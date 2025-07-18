@@ -121,6 +121,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   BtDevice? _recordingDevice;
+  ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
@@ -183,6 +184,7 @@ class CaptureProvider extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
+    _conversation = null;
     notifyListeners();
   }
 
@@ -835,10 +837,10 @@ class CaptureProvider extends ChangeNotifier
 
   Future _loadInProgressConversation() async {
     var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    var convo = convos.isNotEmpty ? convos.first : null;
-    if (convo != null) {
-      segments = convo.transcriptSegments;
-      photos = convo.photos;
+    _conversation = convos.isNotEmpty ? convos.first : null;
+    if (_conversation != null) {
+      segments = _conversation!.transcriptSegments;
+      photos = _conversation!.photos;
     } else {
       segments = [];
       photos = [];
@@ -976,7 +978,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Auto-accept if enabled for new person suggestions
     if (event.personId.isEmpty && SharedPreferencesUtil().autoCreateSpeakersEnabled) {
-      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, autoAccepted: true);
+      final segmentIdsToTag = segments
+          .where((s) => s.speakerId == event.speakerId && s.personId == null && !s.isUser)
+          .map((s) => s.id)
+          .toList();
+      if (segmentIdsToTag.isEmpty) segmentIdsToTag.add(event.segmentId);
+      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, segmentIdsToTag.toSet().toList(),
+          autoAccepted: true);
     } else {
       // Otherwise, store suggestion to be displayed.
       suggestionsBySegmentId[event.segmentId] = event;
@@ -984,7 +992,7 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> assignSpeakerToConversation(int speakerId, String personId, String personName,
+  Future<void> assignSpeakerToConversation(int speakerId, String personId, String personName, List<String> segmentIds,
       {bool autoAccepted = false}) async {
     if (autoAccepted && !SharedPreferencesUtil().autoCreateSpeakersEnabled) return;
 
@@ -1006,24 +1014,24 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // Find conversation id
-    var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    var convo = convos.isNotEmpty ? convos.first : null;
-    if (convo == null) return;
+    if (_conversation == null) return;
+
+    final isAssigningToUser = finalPersonId == 'user';
 
     // Update local state for all segments with this speakerId
     for (var segment in segments) {
-      if (segment.speakerId == speakerId) {
-        segment.personId = finalPersonId;
-        segment.isUser = false;
+      if (segmentIds.contains(segment.id)) {
+        segment.isUser = isAssigningToUser;
+        segment.personId = isAssigningToUser ? null : finalPersonId;
       }
     }
 
     // Persist change
-    await assignConversationSpeaker(
-      convo.id,
-      speakerId,
-      false, // isUser is false for assigned speakers
-      personId: finalPersonId,
+    await assignBulkConversationTranscriptSegments(
+      _conversation!.id,
+      segmentIds,
+      isUser: isAssigningToUser,
+      personId: isAssigningToUser ? null : finalPersonId,
     );
 
     // Notify backend session

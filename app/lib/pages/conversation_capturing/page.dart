@@ -120,10 +120,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 deviceProvider.connectedDevice,
                                 suggestions: provider.suggestionsBySegmentId,
                                 onAcceptSuggestion: (suggestion) {
-                                  provider.assignSpeakerToConversation(
-                                      suggestion.speakerId, suggestion.personId, suggestion.personName);
+                                  provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
+                                      suggestion.personName, [suggestion.segmentId]);
                                 },
-                                editSegment: (i, j) {
+                                editSegment: (segmentId, speakerId) {
                                   final connectivityProvider =
                                       Provider.of<ConnectivityProvider>(context, listen: false);
                                   if (!connectivityProvider.isConnected) {
@@ -139,18 +139,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     ),
                                     builder: (context) {
                                       final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                          (s) => s.speakerId == j,
+                                          (s) => s.speakerId == speakerId,
                                           orElse: () => SpeakerLabelSuggestionEvent.empty());
                                       return NameSpeakerBottomSheet(
-                                        speakerId: j,
-                                        segmentId: provider.segments[i].id,
+                                        speakerId: speakerId,
+                                        segmentId: segmentId,
                                         segments: provider.segments,
                                         suggestion: suggestion,
                                         isCapturing: true,
                                         people: context.read<PeopleProvider>().people,
                                         userName: SharedPreferencesUtil().givenName,
                                         onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                          await provider.assignSpeakerToConversation(speakerId, personId, personName);
+                                          await provider.assignSpeakerToConversation(
+                                              speakerId, personId, personName, segmentIds);
                                         },
                                       );
                                     },
