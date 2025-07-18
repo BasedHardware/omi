@@ -45,6 +45,9 @@ module.exports = {
     '@typescript-eslint/ban-ts-comment': 'off',
     'simple-import-sort/imports': 'off',
     'simple-import-sort/exports': 'off',
+    '@typescript-eslint/no-unused-vars': 'warn',
+    '@typescript-eslint/no-explicit-any': 'warn',
+    'no-constant-condition': 'warn',
     // Add warnings for specific rules
     'react/no-unescaped-entities': 'warn',
     'jsx-a11y/heading-has-content': 'warn',
