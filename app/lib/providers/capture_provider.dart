@@ -127,6 +127,7 @@ class CaptureProvider extends ChangeNotifier
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
 
   bool hasTranscripts = false;
+  bool isSpeakerSuggestionReady = false;
 
   StreamSubscription? _bleBytesStream;
   StreamSubscription? _blePhotoStream;
@@ -185,6 +186,7 @@ class CaptureProvider extends ChangeNotifier
     hasTranscripts = false;
     suggestionsBySegmentId = {};
     _conversation = null;
+    isSpeakerSuggestionReady = false;
     notifyListeners();
   }
 
@@ -871,6 +873,12 @@ class CaptureProvider extends ChangeNotifier
 
     if (event is SpeakerLabelSuggestionEvent) {
       _handleSpeakerLabelSuggestionEvent(event);
+      return;
+    }
+
+    if (event is SpeakerSuggestionReadyEvent) {
+      isSpeakerSuggestionReady = event.ready;
+      notifyListeners();
       return;
     }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
@@ -7,6 +8,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -29,13 +31,25 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
+  late AnimationController _animationController;
 
   @override
   void initState() {
     _controller = TabController(length: 2, vsync: this, initialIndex: 0);
     _controller!.addListener(() => setState(() {}));
     showSummarizeConfirmation = SharedPreferencesUtil().showSummarizeConfirmation;
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    _animationController.dispose();
+    super.dispose();
   }
 
   int convertDateTimeToSeconds(DateTime dateTime) {
@@ -92,7 +106,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   const SizedBox(width: 4),
                   Text(provider.photos.isNotEmpty ? "📸" : "🎙️"),
                   const SizedBox(width: 4),
-                  const Expanded(child: Text("In progress")),
+                  const Expanded(child: Text("Listening")),
+                  !provider.isSpeakerSuggestionReady
+                      ? Tooltip(
+                          message: 'Calibrating speaker identification...',
+                          child: FadeTransition(
+                              opacity: _animationController,
+                              child: Image.asset(
+                                Assets.images.speaker0Icon.path,
+                                width: 24,
+                                height: 24,
+                              )),
+                        )
+                      : const SizedBox.shrink(),
                 ],
               ),
             ),

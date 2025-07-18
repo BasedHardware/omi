@@ -154,3 +154,14 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+
+class SpeakerSuggestionReadyEvent(MessageEvent):
+    event_type: str = "speaker_suggestion_ready"
+    ready: bool
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j

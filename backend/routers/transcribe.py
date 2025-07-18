@@ -37,6 +37,7 @@ from models.message_event import (
     PhotoProcessingEvent,
     PhotoDescribedEvent,
     SpeakerLabelSuggestionEvent,
+    SpeakerSuggestionReadyEvent,
 )
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
@@ -417,6 +418,7 @@ async def _listen(
         nonlocal deepgram_socket
         nonlocal deepgram_socket2
         nonlocal speech_profile_duration
+        nonlocal speech_profile_processed
         try:
             file_path, speech_profile_duration = None, 0
             # Thougts: how bee does for recognizing other languages speech profile?
@@ -427,6 +429,10 @@ async def _listen(
             ):
                 file_path = get_profile_audio_if_exists(uid)
                 speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
+
+            speech_profile_processed = not (speech_profile_duration > 0)
+            if not speech_profile_processed:
+                _send_message_event(SpeakerSuggestionReadyEvent(ready=speech_profile_processed))
 
             # DEEPGRAM
             if stt_service == STTService.deepgram:
@@ -847,6 +853,7 @@ async def _listen(
                                 await soniox_socket2.close()
                                 soniox_socket2 = None
                                 speech_profile_processed = True
+                                _send_message_event(SpeakerSuggestionReadyEvent(ready=True))
                         else:
                             await soniox_socket2.send(data)
 
@@ -862,6 +869,7 @@ async def _listen(
                                 dg_socket2.finish()
                                 dg_socket2 = None
                                 speech_profile_processed = True
+                                _send_message_event(SpeakerSuggestionReadyEvent(ready=True))
                         else:
                             dg_socket2.send(data)
 
@@ -876,12 +884,17 @@ async def _listen(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
                         elif json_data.get('type') == 'speaker_assigned':
-                            speaker_id = json_data.get('speaker_id')
-                            person_id = json_data.get('person_id')
-                            person_name = json_data.get('person_name')
-                            if speaker_id is not None and person_id is not None and person_name is not None:
-                                speaker_to_person_map[speaker_id] = (person_id, person_name)
-                                print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid)
+                            if speech_profile_processed:
+                                speaker_id = json_data.get('speaker_id')
+                                person_id = json_data.get('person_id')
+                                person_name = json_data.get('person_name')
+                                if speaker_id is not None and person_id is not None and person_name is not None:
+                                    speaker_to_person_map[speaker_id] = (person_id, person_name)
+                                    print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid)
+                            else:
+                                print(
+                                    "Speaker assignment received, but speech profile not processed yet. Ignoring.", uid
+                                )
                     except json.JSONDecodeError:
                         print(f"Received non-json text message: {message.get('text')}", uid)
 

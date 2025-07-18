@@ -24,6 +24,8 @@ abstract class MessageEvent {
         return PhotoDescribedEvent.fromJson(json);
       case 'speaker_label_suggestion':
         return SpeakerLabelSuggestionEvent.fromJson(json);
+      case 'speaker_suggestion_ready':
+        return SpeakerSuggestionReadyEvent.fromJson(json);
       default:
         // Return a generic event or throw an error if the type is unknown
         return UnknownEvent(eventType: json['type'] ?? 'unknown');
@@ -161,6 +163,18 @@ class SpeakerLabelSuggestionEvent extends MessageEvent {
       personId: '',
       personName: '',
       segmentId: '',
+    );
+  }
+}
+
+class SpeakerSuggestionReadyEvent extends MessageEvent {
+  final bool ready;
+
+  SpeakerSuggestionReadyEvent({required this.ready}) : super(eventType: 'speaker_suggestion_ready');
+
+  factory SpeakerSuggestionReadyEvent.fromJson(Map<String, dynamic> json) {
+    return SpeakerSuggestionReadyEvent(
+      ready: json['ready'],
     );
   }
 }
