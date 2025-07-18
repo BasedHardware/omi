@@ -42,6 +42,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                 return DeviceAnimationWidget(
                   isConnected: onboardingProvider.isConnected,
                   deviceName: onboardingProvider.deviceName,
+                  animatedBackground: onboardingProvider.isConnected,
                 );
               },
             ),
