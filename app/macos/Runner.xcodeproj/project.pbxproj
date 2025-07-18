@@ -33,6 +33,7 @@
 		33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC111B2044BFA00003C045 /* AudioManager.swift */; };
 		A1B2C3D42E567F890012345A /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D32E567F890012345B /* HotKeyManager.swift */; };
 		A1B2C3D62E567F890012345C /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D52E567F890012345D /* ChatView.swift */; };
+		A1B2C3E02E567F8900123466 /* VoiceAssistantPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3DF2E567F8900123467 /* VoiceAssistantPopup.swift */; };
 		A1B2C3D82E567F890012345E /* OmiConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D72E567F890012345F /* OmiConfig.swift */; };
 		A1B2C3DA2E567F8900123460 /* OmiAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D92E567F8900123461 /* OmiAPIClient.swift */; };
 		A1B2C3DC2E567F8900123462 /* MessageSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3DB2E567F8900123463 /* MessageSyncManager.swift */; };
@@ -87,6 +88,7 @@
 		33CC111B2044BFA00003C045 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
 		A1B2C3D32E567F890012345B /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
 		A1B2C3D52E567F890012345D /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		A1B2C3DF2E567F8900123467 /* VoiceAssistantPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAssistantPopup.swift; sourceTree = "<group>"; };
 		A1B2C3D72E567F890012345F /* OmiConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiConfig.swift; sourceTree = "<group>"; };
 		A1B2C3D92E567F8900123461 /* OmiAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAPIClient.swift; sourceTree = "<group>"; };
 		A1B2C3DB2E567F8900123463 /* MessageSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSyncManager.swift; sourceTree = "<group>"; };
@@ -193,6 +195,7 @@
 				33CC111B2044BFA00003C045 /* AudioManager.swift */,
 				A1B2C3D32E567F890012345B /* HotKeyManager.swift */,
 				A1B2C3D52E567F890012345D /* ChatView.swift */,
+				A1B2C3DF2E567F8900123467 /* VoiceAssistantPopup.swift */,
 				A1B2C3D72E567F890012345F /* OmiConfig.swift */,
 				A1B2C3D92E567F8900123461 /* OmiAPIClient.swift */,
 				A1B2C3DB2E567F8900123463 /* MessageSyncManager.swift */,
@@ -442,6 +445,7 @@
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 				A1B2C3D42E567F890012345A /* HotKeyManager.swift in Sources */,
 				A1B2C3D62E567F890012345C /* ChatView.swift in Sources */,
+				A1B2C3E02E567F8900123466 /* VoiceAssistantPopup.swift in Sources */,
 				A1B2C3D82E567F890012345E /* OmiConfig.swift in Sources */,
 				A1B2C3DA2E567F8900123460 /* OmiAPIClient.swift in Sources */,
 				A1B2C3DC2E567F8900123462 /* MessageSyncManager.swift in Sources */,

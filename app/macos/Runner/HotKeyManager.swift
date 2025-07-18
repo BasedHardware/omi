@@ -23,7 +23,7 @@ class HotKeyManager: NSObject {
     
     private var hotKey: HotKey?
     private var chatWindow: NSWindow?
-    private var hostingController: NSHostingController<ChatView>?
+    private var hostingController: NSHostingController<VoiceAssistantPopup>?
     
     private override init() {
         super.init()
@@ -120,13 +120,13 @@ class HotKeyManager: NSObject {
         return
     }
     
-    // Create the SwiftUI view
-    let chatView = ChatView()
-    hostingController = NSHostingController(rootView: chatView)
+    // Create the SwiftUI view - now using VoiceAssistantPopup
+    let voiceAssistantPopup = VoiceAssistantPopup()
+    hostingController = NSHostingController(rootView: voiceAssistantPopup)
 
     // Window size and position
     let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
-    let initialWindowSize = CGSize(width: 420, height: 160)
+    let initialWindowSize = CGSize(width: 420, height: 300) // Slightly larger for voice popup
     let windowRect = NSRect(
         x: (screenSize.width - initialWindowSize.width) / 2,
         y: (screenSize.height - initialWindowSize.height) / 2,
