@@ -13,9 +13,7 @@ export default function Tabs({ currentTab, setCurrentTab }: TabsProps) {
       <button
         onClick={() => setCurrentTab('trs')}
         className={`group relative flex items-center gap-2 px-4 py-3 text-sm transition md:text-base ${
-          currentTab === 'trs'
-            ? 'text-white'
-            : 'text-zinc-400 hover:text-zinc-300'
+          currentTab === 'trs' ? 'text-white' : 'text-zinc-400 hover:text-zinc-300'
         }`}
       >
         <Page className="h-4 w-4" />
@@ -27,9 +25,7 @@ export default function Tabs({ currentTab, setCurrentTab }: TabsProps) {
       <button
         onClick={() => setCurrentTab('sum')}
         className={`group relative flex items-center gap-2 px-4 py-3 text-sm transition md:text-base ${
-          currentTab === 'sum'
-            ? 'text-white'
-            : 'text-zinc-400 hover:text-zinc-300'
+          currentTab === 'sum' ? 'text-white' : 'text-zinc-400 hover:text-zinc-300'
         }`}
       >
         <List className="h-4 w-4" />

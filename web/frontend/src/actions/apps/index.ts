@@ -10,21 +10,19 @@ export type {
   NotificationScope,
   AppCapability,
   PaymentPlan,
-  AppInitializationData
+  AppInitializationData,
 } from './get-app-initialization-data';
 
 export type {
   GenerateDescriptionRequest,
-  GenerateDescriptionResponse
+  GenerateDescriptionResponse,
 } from './generate-description';
 
-export type {
-  UploadThumbnailResponse
-} from './upload-thumbnail';
+export type { UploadThumbnailResponse } from './upload-thumbnail';
 
 export type {
   ExternalIntegration,
   ProactiveNotification,
   AppSubmissionData,
-  SubmitAppResponse
-} from './submit-app'; 
+  SubmitAppResponse,
+} from './submit-app';

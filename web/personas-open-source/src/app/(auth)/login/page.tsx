@@ -35,35 +35,50 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Back Button */}
-      <div className="absolute top-4 left-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white hover:text-gray-300">
+      <div className="absolute left-4 top-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => router.back()}
+          className="text-white hover:text-gray-300"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-col items-center justify-center min-h-screen px-4">
+      <div className="flex min-h-screen flex-col items-center justify-center px-4">
         {/* Logo/Text */}
-        <div className="text-center mb-12">
-          <h1 className="text-6xl font-serif mb-8 text-white">omi</h1>
+        <div className="mb-12 text-center">
+          <h1 className="mb-8 font-serif text-6xl text-white">omi</h1>
           <p className="text-gray-400">Improve yourself with your new AI mentor</p>
         </div>
 
         {/* Continue Button */}
         <Button
-          className="w-full max-w-sm flex items-center justify-center gap-2 rounded-full bg-white text-black hover:bg-gray-200"
+          className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-white text-black hover:bg-gray-200"
           onClick={handleGoogleSignIn}
         >
           Continue with Google
         </Button>
 
         {/* Footer */}
-        <div className="fixed bottom-4 w-full max-w-4xl mx-auto px-4">
+        <div className="fixed bottom-4 mx-auto w-full max-w-4xl px-4">
           <div className="flex justify-between text-xs text-gray-500">
             <span>Omi Chat © 2025</span>
             <div className="flex gap-4">
-              <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Terms & Conditions</Button>
-              <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Privacy Policy</Button>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-xs text-gray-500 hover:text-white"
+              >
+                Terms & Conditions
+              </Button>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-xs text-gray-500 hover:text-white"
+              >
+                Privacy Policy
+              </Button>
             </div>
           </div>
         </div>

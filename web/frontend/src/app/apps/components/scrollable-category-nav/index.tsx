@@ -18,12 +18,12 @@ export function ScrollableCategoryNav({ currentCategory }: ScrollableCategoryNav
   useEffect(() => {
     const container = scrollContainerRef.current;
     const activeItem = container?.querySelector('[data-active="true"]');
-    
+
     if (container && activeItem) {
       const containerWidth = container.offsetWidth;
       const itemLeft = (activeItem as HTMLElement).offsetLeft;
       const itemWidth = (activeItem as HTMLElement).offsetWidth;
-      
+
       // Center the active item
       container.scrollLeft = itemLeft - containerWidth / 2 + itemWidth / 2;
     }
@@ -34,11 +34,12 @@ export function ScrollableCategoryNav({ currentCategory }: ScrollableCategoryNav
     if (!container) return;
 
     const scrollAmount = container.offsetWidth * 0.8;
-    const targetScroll = container.scrollLeft + (direction === 'left' ? -scrollAmount : scrollAmount);
-    
+    const targetScroll =
+      container.scrollLeft + (direction === 'left' ? -scrollAmount : scrollAmount);
+
     container.scrollTo({
       left: targetScroll,
-      behavior: 'smooth'
+      behavior: 'smooth',
     });
   };
 
@@ -88,4 +89,4 @@ export function ScrollableCategoryNav({ currentCategory }: ScrollableCategoryNav
       </button>
     </div>
   );
-} 
+}
