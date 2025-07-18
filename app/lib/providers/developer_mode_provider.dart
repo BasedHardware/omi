@@ -28,6 +28,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool localSyncEnabled = false;
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
+  bool autoCreateSpeakersEnabled = false;
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -98,6 +99,7 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
+    autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -192,6 +194,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.localSyncEnabled = localSyncEnabled;
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
+    prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
 
     MixpanelManager().settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
@@ -219,6 +222,11 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onTranscriptionDiagnosticChanged(var value) {
     transcriptionDiagnosticEnabled = value;
+    notifyListeners();
+  }
+
+  void onAutoCreateSpeakersChanged(var value) {
+    autoCreateSpeakersEnabled = value;
     notifyListeners();
   }
 }

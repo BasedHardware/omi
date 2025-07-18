@@ -116,6 +116,10 @@ class SharedPreferencesUtil {
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled') ?? false;
 
+  set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
+
+  bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled') ?? false;
+
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
   bool get conversationEventsToggled => getBool('conversationEventsToggled') ?? false;

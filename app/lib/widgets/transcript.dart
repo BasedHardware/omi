@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -18,6 +19,8 @@ class TranscriptWidget extends StatefulWidget {
   final bool isConversationDetail;
   final double bottomMargin;
   final Function(int, int)? editSegment;
+  final Map<String, SpeakerLabelSuggestionEvent> suggestions;
+  final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
 
   const TranscriptWidget({
     super.key,
@@ -29,6 +32,8 @@ class TranscriptWidget extends StatefulWidget {
     this.isConversationDetail = false,
     this.bottomMargin = 200,
     this.editSegment,
+    this.suggestions = const {},
+    this.onAcceptSuggestion,
   });
 
   @override
@@ -96,6 +101,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
+    final suggestion = widget.suggestions[data.id];
 
     return Padding(
       padding:
@@ -106,7 +112,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           GestureDetector(
             onTap: () {
               widget.editSegment?.call(segmentIdx, data.speakerId);
-              MixpanelManager().assignSheetOpened();
+              MixpanelManager().tagSheetOpened();
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -117,7 +123,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ? Assets.images.speaker0Icon.path
                       : person != null
                           ? speakerImagePath[person.colorIdx!]
-                          : Assets.images.speaker1Icon.path,
+                          : speakerImagePath[data.speakerId % speakerImagePath.length],
                   width: 26,
                   height: 26,
                 ),
@@ -127,11 +133,36 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ? SharedPreferencesUtil().givenName.isNotEmpty
                           ? SharedPreferencesUtil().givenName
                           : 'You'
-                      : data.personId != null
-                          ? person?.name ?? 'Deleted Person'
-                          : 'Speaker ${data.speakerId}',
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                      : suggestion != null && person == null && !data.isUser
+                          ? '${suggestion.personName}?'
+                          : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
+                  style: TextStyle(
+                    color: person == null && !data.isUser ? Colors.grey.shade400 : Colors.white,
+                    fontSize: 18,
+                    fontStyle: person == null && !data.isUser ? FontStyle.italic : FontStyle.normal,
+                  ),
                 ),
+                if (suggestion != null && person == null && !data.isUser) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => widget.onAcceptSuggestion?.call(suggestion),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      alignment: Alignment.centerLeft,
+                    ),
+                    child: const Text(
+                      'Tag',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white,
+                      ),
+                    ),
+                  )
+                ],
                 if (widget.canDisplaySeconds) ...[
                   const SizedBox(width: 12),
                   Text(

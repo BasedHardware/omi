@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:provider/provider.dart';
 
@@ -114,6 +118,44 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 provider.segments,
                                 provider.photos,
                                 deviceProvider.connectedDevice,
+                                suggestions: provider.suggestionsBySegmentId,
+                                onAcceptSuggestion: (suggestion) {
+                                  provider.assignSpeakerToConversation(
+                                      suggestion.speakerId, suggestion.personId, suggestion.personName);
+                                },
+                                editSegment: (i, j) {
+                                  final connectivityProvider =
+                                      Provider.of<ConnectivityProvider>(context, listen: false);
+                                  if (!connectivityProvider.isConnected) {
+                                    ConnectivityProvider.showNoInternetDialog(context);
+                                    return;
+                                  }
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.black,
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                    ),
+                                    builder: (context) {
+                                      final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                          (s) => s.speakerId == j,
+                                          orElse: () => SpeakerLabelSuggestionEvent.empty());
+                                      return NameSpeakerBottomSheet(
+                                        speakerId: j,
+                                        segmentId: provider.segments[i].id,
+                                        segments: provider.segments,
+                                        suggestion: suggestion,
+                                        isCapturing: true,
+                                        people: context.read<PeopleProvider>().people,
+                                        userName: SharedPreferencesUtil().givenName,
+                                        onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                          await provider.assignSpeakerToConversation(speakerId, personId, personName);
+                                        },
+                                      );
+                                    },
+                                  );
+                                },
                               ),
                         // Summary Tab
                         Center(

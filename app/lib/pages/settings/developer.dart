@@ -504,6 +504,20 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   CheckboxListTile(
                     contentPadding: const EdgeInsets.all(0),
                     title: const Text(
+                      'Auto-create and tag new speakers',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'Automatically create a new person when a name is detected in the transcript.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    value: provider.autoCreateSpeakersEnabled,
+                    onChanged: provider.onAutoCreateSpeakersChanged,
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
                       'Local Sync',
                       style: TextStyle(color: Colors.white, fontSize: 16),
                     ),

@@ -62,37 +62,46 @@ class PeopleProvider extends BaseProvider {
     }
   }
 
-  void addOrUpdatePersonProvider(Person? person, TextEditingController nameController) async {
-    if (loading) return;
-    String name = nameController.text.toString()[0].toUpperCase() + nameController.text.toString().substring(1);
-    if (person == null) {
-      loading = true;
+  Future<Person?> createPersonProvider(String name) async {
+    if (loading) return null;
+    loading = true;
+    notifyListeners();
+
+    Person? newPerson = await createPerson(name);
+    if (newPerson == null) {
+      loading = false;
       notifyListeners();
-      Person? person = await createPerson(name);
-      if (person == null) {
-        loading = false;
-        notifyListeners();
-        return;
-      }
-      people.add(person);
+      return null;
+    }
+
+    people.add(newPerson);
+    people.sort((a, b) => a.name.compareTo(b.name));
+    SharedPreferencesUtil().cachedPeople = people;
+
+    loading = false;
+    notifyListeners();
+    return newPerson;
+  }
+
+  void updatePersonProvider(Person person, String name) async {
+    if (loading) return;
+    loading = true;
+    notifyListeners();
+
+    await updatePersonName(person.id, name);
+    final index = people.indexWhere((p) => p.id == person.id);
+    if (index != -1) {
+      people[index] = Person(
+        id: person.id,
+        name: name,
+        createdAt: person.createdAt,
+        updatedAt: DateTime.now(),
+        speechSamples: person.speechSamples,
+      );
       people.sort((a, b) => a.name.compareTo(b.name));
       SharedPreferencesUtil().cachedPeople = people;
-    } else {
-      loading = true;
-      await updatePersonName(person.id, name);
-      final index = people.indexWhere((p) => p.id == person.id);
-      if (index != -1) {
-        people[index] = Person(
-          id: person.id,
-          name: name,
-          createdAt: person.createdAt,
-          updatedAt: DateTime.now(),
-          speechSamples: person.speechSamples,
-        );
-        people.sort((a, b) => a.name.compareTo(b.name));
-        SharedPreferencesUtil().cachedPeople = people;
-      }
     }
+
     loading = false;
     notifyListeners();
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -11,12 +12,15 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/photos_grid.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
@@ -435,9 +439,49 @@ class TranscriptWidgets extends StatelessWidget {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               builder: (context) {
+                final suggestion = context
+                    .read<CaptureProvider>()
+                    .suggestionsBySegmentId
+                    .values
+                    .firstWhere((s) => s.speakerId == j, orElse: () => SpeakerLabelSuggestionEvent.empty());
                 return NameSpeakerBottomSheet(
                   speakerId: j,
-                  segmentIdx: i,
+                  segmentId: provider.conversation.transcriptSegments[i].id,
+                  segments: provider.conversation.transcriptSegments,
+                  suggestion: suggestion,
+                  people: context.read<PeopleProvider>().people,
+                  userName: SharedPreferencesUtil().givenName,
+                  onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                    provider.toggleEditSegmentLoading(true);
+                    String finalPersonId = personId;
+                    if (personId.isEmpty) {
+                      Person? newPerson = await context.read<PeopleProvider>().createPersonProvider(personName);
+                      if (newPerson != null) {
+                        finalPersonId = newPerson.id;
+                      } else {
+                        provider.toggleEditSegmentLoading(false);
+                        return; // Failed to create person
+                      }
+                    }
+
+                    MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+
+                    final tasks = <Future>[];
+                    for (final segmentId in segmentIds) {
+                      final segmentIndex =
+                          provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+                      if (segmentIndex == -1) continue;
+
+                      provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
+                      provider.conversation.transcriptSegments[segmentIndex].personId =
+                          finalPersonId == 'user' ? null : finalPersonId;
+                      tasks.add(assignConversationTranscriptSegment(provider.conversation.id, segmentIndex,
+                          personId: finalPersonId == 'user' ? null : finalPersonId));
+                    }
+                    await Future.wait(tasks);
+
+                    provider.toggleEditSegmentLoading(false);
+                  },
                 );
               },
             );
@@ -478,12 +522,12 @@ class EditSegmentWidget extends StatelessWidget {
                         const Spacer(),
                         TextButton(
                           onPressed: () {
-                            MixpanelManager().unassignedSegment();
+                            MixpanelManager().untaggedSegment();
                             provider.unassignConversationTranscriptSegment(provider.conversation.id, segmentIdx);
                             Navigator.pop(context);
                           },
                           child: const Text(
-                            'Un-assign',
+                            'Un-tag',
                             style: TextStyle(
                               color: Colors.grey,
                               decoration: TextDecoration.underline,
@@ -502,7 +546,7 @@ class EditSegmentWidget extends StatelessWidget {
                       if (provider.editSegmentLoading) return;
                       // setModalState(() => loading = true);
                       provider.toggleEditSegmentLoading(true);
-                      MixpanelManager().assignedSegment('User');
+                      MixpanelManager().taggedSegment('User');
                       provider.conversation.transcriptSegments[segmentIdx].isUser = true;
                       provider.conversation.transcriptSegments[segmentIdx].personId = null;
                       bool result = await assignConversationTranscriptSegment(
@@ -518,8 +562,8 @@ class EditSegmentWidget extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(result
-                                  ? 'Segment assigned, and speech profile updated!'
-                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                                  ? 'Segment tagged, and speech profile updated!'
+                                  : 'Segment tagged, but speech profile failed to update. Please try again later.'),
                             ),
                           );
                         }
@@ -534,7 +578,7 @@ class EditSegmentWidget extends StatelessWidget {
                       onChanged: (bool? value) async {
                         if (provider.editSegmentLoading) return;
                         provider.toggleEditSegmentLoading(true);
-                        MixpanelManager().assignedSegment('User Person');
+                        MixpanelManager().taggedSegment('User Person');
                         provider.conversation.transcriptSegments[segmentIdx].isUser = false;
                         provider.conversation.transcriptSegments[segmentIdx].personId = person.id;
                         bool result = await assignConversationTranscriptSegment(provider.conversation.id, segmentIdx,
@@ -546,8 +590,8 @@ class EditSegmentWidget extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(result
-                                  ? 'Segment assigned, and ${person.name}\'s speech profile updated!'
-                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                                  ? 'Segment tagged, and ${person.name}\'s speech profile updated!'
+                                  : 'Segment tagged, but speech profile failed to update. Please try again later.'),
                             ),
                           );
                         } catch (e) {}
