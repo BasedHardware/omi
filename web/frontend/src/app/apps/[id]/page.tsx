@@ -1,12 +1,11 @@
 import { Plugin, PluginStat } from '../components/types';
 import { headers } from 'next/headers';
 import { CompactPluginCard } from '../components/plugin-card/compact';
-import { ScrollableCategoryNav } from '../components/scrollable-category-nav';
 import { CategoryBreadcrumb } from '../components/category-breadcrumb';
-import { AppStats } from '../components/app-stats';
 import { AppActionButton } from '../components/app-action-button';
 import { Calendar, User, FolderOpen, Puzzle } from 'lucide-react';
-import { Metadata, ResolvingMetadata } from 'next';
+import { Metadata } from 'next';
+import Image from 'next/image';
 import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
 import envConfig from '@/src/constants/envConfig';
@@ -15,10 +14,7 @@ type Props = {
   params: { id: string };
 };
 
-export async function generateMetadata(
-  { params }: Props,
-  parent: ResolvingMetadata,
-): Promise<Metadata> {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const plugin = await getAppById(params.id);
 
   if (!plugin) {
@@ -183,7 +179,6 @@ export default async function PluginDetailView({ params }: { params: { id: strin
     'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
   );
   const stats = (await statsResponse.json()) as PluginStat[];
-  const stat = stats.find((p) => p.id === params.id);
 
   const userAgent = headers().get('user-agent') || '';
   const link = getPlatformLink(userAgent);
@@ -218,10 +213,12 @@ export default async function PluginDetailView({ params }: { params: { id: strin
             {/* Image Column - 3 columns */}
             <div className="lg:col-span-2">
               <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-[#1A1F2E]">
-                <img
+                <Image
                   src={plugin.image}
                   alt={plugin.name}
                   className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                  width={500}
+                  height={500}
                 />
               </div>
             </div>
@@ -269,10 +266,12 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"
                       >
-                        <img
+                        <Image
                           src="/app-store-badge.svg"
                           alt="Download on the App Store"
                           className="h-[40px]"
+                          width={120}
+                          height={40}
                         />
                       </a>
                       <a
@@ -281,10 +280,12 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"
                       >
-                        <img
+                        <Image
                           src="/google-play-badge.png"
                           alt="Get it on Google Play"
                           className="h-[40px]"
+                          width={135}
+                          height={40}
                         />
                       </a>
                     </div>

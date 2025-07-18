@@ -21,7 +21,7 @@ export interface AppCapability {
   id: string;
   triggers?: TriggerEvent[];
   scopes?: NotificationScope[];
-  actions?: any[];
+  actions?: unknown[];
 }
 
 export interface PaymentPlan {

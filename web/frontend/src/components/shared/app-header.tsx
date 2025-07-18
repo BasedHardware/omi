@@ -3,7 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 
 interface NavItem {
@@ -113,10 +113,9 @@ export default function AppHeader({
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
-  const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading, signIn, signOut, isAuthenticated } = useAuth();
+  const { loading, signIn, isAuthenticated } = useAuth();
 
   const dreamforcePage = pathname.includes('dreamforce');
 
@@ -154,14 +153,15 @@ export default function AppHeader({
         } else {
           console.log('❌ Sign-in cancelled or failed');
         }
-      } catch (error: any) {
+      } catch (error) {
+        const authError = error as { code?: string; message?: string };
         console.error('❌ Authentication failed:', error);
-        if (error?.code === 'auth/popup-closed-by-user') {
+        if (authError?.code === 'auth/popup-closed-by-user') {
           console.log('🚪 User cancelled sign-in');
-        } else if (error?.code === 'auth/popup-blocked') {
+        } else if (authError?.code === 'auth/popup-blocked') {
           console.error('🚫 Popup blocked - please allow popups for this site');
         } else {
-          console.error('⚠️ Unexpected error during sign-in:', error.message);
+          console.error('⚠️ Unexpected error during sign-in:', authError.message);
         }
       } finally {
         setIsProcessingAuth(false);
