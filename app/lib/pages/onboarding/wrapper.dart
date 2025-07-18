@@ -264,7 +264,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               Consumer<OnboardingProvider>(
                                 builder: (context, onboardingProvider, child) {
                                   return DeviceAnimationWidget(
-                                    animatedBackground: _controller!.index != -1,
+                                    animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
                                     isConnected: onboardingProvider.isConnected,
                                     deviceName: onboardingProvider.deviceName,
                                   );
