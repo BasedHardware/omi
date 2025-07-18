@@ -347,6 +347,7 @@ struct VoiceAssistantPopup: View {
                 }
             }
             .padding(24)
+            .frame(width: 420)
             .background(
                 RoundedRectangle(cornerRadius: 30)
                     .fill(.ultraThinMaterial)
@@ -364,6 +365,13 @@ struct VoiceAssistantPopup: View {
             isViewActive = true
             popupState = .idle
             initializeAuthentication()
+            
+            // Auto-start recording when popup appears for seamless voice interaction
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                if popupState == .idle {
+                    startRecording()
+                }
+            }
         }
         .onDisappear {
             isViewActive = false
@@ -382,7 +390,7 @@ struct VoiceAssistantPopup: View {
     
     private var idleView: some View {
         VStack(spacing: 16) {
-            Text("Hold to speak or click to start recording")
+            Text("Starting recording... Click to start manually")
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -520,6 +528,7 @@ struct VoiceAssistantPopup: View {
                                 .foregroundColor(.white)
                         }
                     }
+                    .buttonStyle(PlainButtonStyle())
                     .frame(width: 36, height: 36)
                     .background(
                         Circle()
