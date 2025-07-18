@@ -40,7 +40,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     try {
       await Provider.of<AddAppProvider>(context, listen: false).loadApiKeys(widget.appId);
     } finally {
-      if(mounted){
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });

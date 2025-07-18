@@ -112,7 +112,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     current_device_firmware_tuple = _parse_firmware_version(firmware_revision)
 
     # Determine release prefix based on device model
-    release_prefix = "Friend" # Default for OMI_DEVKIT_1
+    release_prefix = "Friend"  # Default for OMI_DEVKIT_1
     if device == DeviceModel.OMI_DEVKIT_2:
         release_prefix = "Omi_DK2"
     elif device == DeviceModel.OPEN_GLASS:

@@ -1,5 +1,6 @@
 import asyncio
 
+
 def safe_create_task(t):
     task = asyncio.create_task(t)
     task.add_done_callback(

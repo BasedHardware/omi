@@ -44,9 +44,7 @@ def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> float:
         return 0
 
 
-def classify_segments(
-        audio_file_path: str, profile_path: str, people: List[dict], segments: List[TranscriptSegment]
-):
+def classify_segments(audio_file_path: str, profile_path: str, people: List[dict], segments: List[TranscriptSegment]):
     matches = [{'is_user': False, 'person_id': None}] * len(segments)
     if not profile_path:
         return matches
@@ -67,7 +65,7 @@ def classify_segments(
             end = min(segment.end, start + 30)
 
             temporal_file = f"_temp/{file_name}_{start}_{end}.wav"
-            AudioSegment.from_wav(audio_file_path)[start * 1000:end * 1000].export(temporal_file, format="wav")
+            AudioSegment.from_wav(audio_file_path)[start * 1000 : end * 1000].export(temporal_file, format="wav")
 
             by_chunk_matches['user'] += sample_same_speaker_as_segment(temporal_file, profile_path)
             for person in people:

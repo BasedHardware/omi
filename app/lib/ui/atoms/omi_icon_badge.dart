@@ -38,4 +38,4 @@ class OmiIconBadge extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

@@ -28,7 +28,8 @@ class MemoriesProvider extends ChangeNotifier {
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
       // Apply search filter
-      final matchesSearch = _searchQuery.isEmpty || memory.content.decodeString.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesSearch =
+          _searchQuery.isEmpty || memory.content.decodeString.toLowerCase().contains(_searchQuery.toLowerCase());
 
       // Apply category filter or exclusion logic
       bool categoryMatch;
@@ -86,7 +87,10 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
 
     _memories = await getMemories();
-    _unreviewed = _memories.where((memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
+    _unreviewed = _memories
+        .where(
+            (memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
+        .toList();
 
     _loading = false;
     _setCategories();
@@ -110,7 +114,9 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  void createMemory(String content, [MemoryVisibility visibility = MemoryVisibility.public, MemoryCategory category = MemoryCategory.interesting]) async {
+  void createMemory(String content,
+      [MemoryVisibility visibility = MemoryVisibility.public,
+      MemoryCategory category = MemoryCategory.interesting]) async {
     final newMemory = Memory(
       id: const Uuid().v4(),
       uid: SharedPreferencesUtil().uid,

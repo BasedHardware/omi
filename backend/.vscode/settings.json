@@ -1,0 +1,8 @@
+{
+  "black-formatter.args": [
+    "--line-length",
+    "120",
+    "--skip-string-normalization"
+  ]
+}
+

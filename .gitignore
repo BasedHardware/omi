@@ -95,6 +95,7 @@ dist/
 # Miscellaneous
 !app/pubspec.lock
 !app/ios/Podfile.lock
+!mcp/uv.lock
 *.lock
 *.log
 *.swo

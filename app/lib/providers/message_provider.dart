@@ -116,12 +116,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-    void captureImage() async {
+  void captureImage() async {
     if (PlatformService.isDesktop) {
       AppSnackbar.showSnackbarError('Camera capture is not available on this platform');
       return;
     }
-    
+
     try {
       var res = await ImagePicker().pickImage(source: ImageSource.camera);
       if (res != null) {
@@ -147,10 +147,10 @@ class MessageProvider extends ChangeNotifier {
       AppSnackbar.showSnackbarError('You can only select up to 4 images');
       return;
     }
-    
+
     try {
       List<File> files = [];
-      
+
       if (PlatformService.isDesktop) {
         try {
           FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -189,7 +189,7 @@ class MessageProvider extends ChangeNotifier {
         } else {
           res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
         }
-        
+
         for (var r in res) {
           files.add(File(r.path));
         }
@@ -219,7 +219,7 @@ class MessageProvider extends ChangeNotifier {
       AppSnackbar.showSnackbarError('You can only select up to 4 files');
       return;
     }
-    
+
     try {
       var res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -229,7 +229,7 @@ class MessageProvider extends ChangeNotifier {
         withData: false,
         withReadStream: false,
       );
-      
+
       if (res != null && res.files.isNotEmpty) {
         List<File> files = [];
         for (var r in res.files) {
@@ -237,14 +237,14 @@ class MessageProvider extends ChangeNotifier {
             files.add(File(r.path!));
           }
         }
-        
+
         if (files.isNotEmpty) {
           selectedFiles.addAll(files);
           selectedFileTypes.addAll(files.map((e) => 'file'));
           await uploadFiles(files, appProvider?.selectedChatAppId);
         }
         notifyListeners();
-        }
+      }
     } on PlatformException catch (e) {
       AppSnackbar.showSnackbarError('Error selecting files: ${e.message ?? e.code}');
     } catch (e) {

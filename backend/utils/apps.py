@@ -6,35 +6,76 @@ from typing import List, Tuple, Dict, Any
 import hashlib
 import secrets
 
-from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
-    get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
-    get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
-    add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
-    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
-    update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, \
-    get_omi_personas_by_uid_db, get_api_key_by_hash_db, get_popular_apps_db
+from database.apps import (
+    get_private_apps_db,
+    get_public_unapproved_apps_db,
+    get_public_approved_apps_db,
+    get_app_by_id_db,
+    get_app_usage_history_db,
+    set_app_review_in_db,
+    get_app_usage_count_db,
+    get_app_memory_created_integration_usage_count_db,
+    get_app_memory_prompt_usage_count_db,
+    add_tester_db,
+    add_app_access_for_tester_db,
+    remove_app_access_for_tester_db,
+    remove_tester_db,
+    is_tester_db,
+    can_tester_access_app_db,
+    get_apps_for_tester_db,
+    get_app_chat_message_sent_usage_count_db,
+    update_app_in_db,
+    get_audio_apps_count,
+    get_persona_by_uid_db,
+    update_persona_in_db,
+    get_omi_personas_by_uid_db,
+    get_api_key_by_hash_db,
+    get_popular_apps_db,
+)
 from database.auth import get_user_name
 from database.conversations import get_conversations
+import database.users as users_db
 from database.memories import get_memories, get_user_public_memories
-from database.redis_db import get_enabled_apps, get_app_reviews, get_generic_cache, \
-    set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache, get_apps_installs_count, get_apps_reviews, get_app_cache_by_id, set_app_cache_by_id, \
-    set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
-    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, delete_app_cache_by_id, is_username_taken
+from database.redis_db import (
+    get_enabled_apps,
+    get_app_reviews,
+    get_generic_cache,
+    set_generic_cache,
+    set_app_usage_history_cache,
+    get_app_usage_history_cache,
+    get_app_money_made_cache,
+    set_app_money_made_cache,
+    get_apps_installs_count,
+    get_apps_reviews,
+    get_app_cache_by_id,
+    set_app_cache_by_id,
+    set_app_review_cache,
+    get_app_usage_count_cache,
+    set_app_money_made_amount_cache,
+    get_app_money_made_amount_cache,
+    set_app_usage_count_cache,
+    set_user_paid_app,
+    get_user_paid_app,
+    delete_app_cache_by_id,
+    is_username_taken,
+)
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.conversation import Conversation
+from models.other import Person
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
-MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
-    'MARKETPLACE_APP_REVIEWERS') else []
+MarketplaceAppReviewUIDs = (
+    os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv('MARKETPLACE_APP_REVIEWERS') else []
+)
 
 
 # ********************************
 # ************ TESTER ************
 # ********************************
+
 
 def is_tester(uid: str) -> bool:
     return is_tester_db(uid)
@@ -61,6 +102,7 @@ def remove_app_access_for_tester(app_id: str, uid: str):
 
 
 # ********************************
+
 
 def weighted_rating(app):
     C = 3.0  # Assume 3.0 is the mean rating across all apps
@@ -302,7 +344,7 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
         'money': round((type1 * t1multiplier) + (type2 * t2multiplier) + (type3 * t3multiplier), 2),
         'type1': type1,
         'type2': type2,
-        'type3': type3
+        'type3': type3,
     }
 
     set_app_money_made_cache(app_id, money)
@@ -310,8 +352,9 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     return money
 
 
-def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str, uid: str,
-                            previous_price: float | None = None):
+def upsert_app_payment_link(
+    app_id: str, is_paid_app: bool, price: float, payment_plan: str, uid: str, previous_price: float | None = None
+):
     if not is_paid_app:
         print(f"App is not a paid app, app_id: {app_id}")
         return None
@@ -382,7 +425,7 @@ def is_audio_bytes_app_enabled(uid: str):
     limit = 30
     enabled_apps = list(set(enabled_apps))
     for i in range(0, len(enabled_apps), limit):
-        audio_apps_count = get_audio_apps_count(enabled_apps[i:i + limit])
+        audio_apps_count = get_audio_apps_count(enabled_apps[i : i + limit])
         if audio_apps_count > 0:
             return True
     return False
@@ -405,14 +448,21 @@ def get_omi_personas_by_uid(uid: str):
 async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user memories and conversations."""
 
-
     # Get latest memories and user info
     memories = get_memories(uid, limit=250)
     user_name = get_user_name(uid)
 
     # Get and condense recent conversations
     conversations = get_conversations(uid, limit=100)
-    conversation_history = Conversation.conversations_to_string(conversations)
+    all_person_ids = []
+    for c in conversations:
+        all_person_ids.extend([s.get('person_id') for s in c.get('transcript_segments', []) if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+    conversation_history = Conversation.conversations_to_string(conversations, people=people)
     conversation_history = condense_conversations([conversation_history])
 
     tweets = None
@@ -436,7 +486,9 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     # Add condensed tweets if available
     if tweets:
-        persona_prompt += f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
+        persona_prompt += (
+            f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
+        )
 
     persona_prompt += f"""
     **Style:**
@@ -508,6 +560,7 @@ def update_personas_async(uid: str):
 def sync_update_persona_prompt(persona: dict):
     """Synchronous wrapper for update_persona_prompt"""
     import asyncio
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -527,7 +580,15 @@ async def update_persona_prompt(persona: dict):
 
     # Get and condense recent conversations
     conversations = get_conversations(persona['uid'], limit=100)
-    conversation_history = Conversation.conversations_to_string(conversations)
+    all_person_ids = []
+    for c in conversations:
+        all_person_ids.extend([s.get('person_id') for s in c.get('transcript_segments', []) if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(persona['uid'], list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+    conversation_history = Conversation.conversations_to_string(conversations, people=people)
     conversation_history = condense_conversations([conversation_history])
 
     condensed_tweets = None
@@ -552,7 +613,9 @@ You have:
 
     # Add condensed tweets if available
     if condensed_tweets:
-        persona_prompt += f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
+        persona_prompt += (
+            f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
+        )
 
     persona_prompt += f"""
 **Style:**

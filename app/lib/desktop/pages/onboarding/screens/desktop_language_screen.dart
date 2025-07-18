@@ -205,9 +205,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                       size: 28,
                     ),
                   ),
-
                   SizedBox(height: responsive.spacing(baseSpacing: 24)),
-
                   const Text(
                     'Choose your language',
                     style: TextStyle(
@@ -218,9 +216,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     ),
                     textAlign: TextAlign.center,
                   ),
-
                   SizedBox(height: responsive.spacing(baseSpacing: 8)),
-
                   const Text(
                     'Select your preferred language for the best Omi experience',
                     style: TextStyle(
@@ -330,9 +326,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 8),
-
                 OmiButton(
                   label: 'Back',
                   type: OmiButtonType.text,

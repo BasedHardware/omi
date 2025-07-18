@@ -50,4 +50,4 @@ class OmiSendButton extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

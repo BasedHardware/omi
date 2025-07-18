@@ -19,7 +19,7 @@ A Next.js web application for the Omi wearable device by Based Hardware. This fr
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm, yarn, or pnpm package manager
 - Firebase project setup
 - Redis instance (for caching)
@@ -28,12 +28,14 @@ A Next.js web application for the Omi wearable device by Based Hardware. This fr
 ### Installation
 
 1. **Clone the repository and navigate to the frontend directory**
+
    ```bash
    git clone <repository-url>
    cd omi/web/frontend
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    # or
@@ -43,12 +45,14 @@ A Next.js web application for the Omi wearable device by Based Hardware. This fr
    ```
 
 3. **Set up environment variables**
+
    ```bash
    cp .env.template .env.local
    # Edit .env.local with your actual values
    ```
 
 4. **Start the development server**
+
    ```bash
    npm run dev
    # or
@@ -129,6 +133,7 @@ src/
 ## API Integration
 
 The frontend connects to the Omi backend API for:
+
 - User authentication and management
 - Memory data synchronization
 - App marketplace functionality

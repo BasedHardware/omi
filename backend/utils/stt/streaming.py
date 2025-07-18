@@ -11,10 +11,8 @@ from deepgram.clients.live.v1 import LiveOptions
 
 from utils.stt.soniox_util import *
 
-headers = {
-    "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
-    "Content-Type": "audio/*"
-}
+headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-Type": "audio/*"}
+
 
 class STTService(str, Enum):
     deepgram = "deepgram"
@@ -32,16 +30,155 @@ class STTService(str, Enum):
 
 
 # Languages supported by Soniox
-soniox_supported_languages = ['multi','en', 'af', 'sq', 'ar', 'az', 'eu', 'be', 'bn', 'bs', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'gl', 'de', 'el', 'gu', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'ml', 'mr', 'no', 'fa', 'pl', 'pt', 'pa', 'ro', 'ru', 'sr', 'sk', 'sl', 'es', 'sw', 'sv', 'tl', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'cy']
+soniox_supported_languages = [
+    'multi',
+    'en',
+    'af',
+    'sq',
+    'ar',
+    'az',
+    'eu',
+    'be',
+    'bn',
+    'bs',
+    'bg',
+    'ca',
+    'zh',
+    'hr',
+    'cs',
+    'da',
+    'nl',
+    'et',
+    'fi',
+    'fr',
+    'gl',
+    'de',
+    'el',
+    'gu',
+    'he',
+    'hi',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'kk',
+    'ko',
+    'lv',
+    'lt',
+    'mk',
+    'ms',
+    'ml',
+    'mr',
+    'no',
+    'fa',
+    'pl',
+    'pt',
+    'pa',
+    'ro',
+    'ru',
+    'sr',
+    'sk',
+    'sl',
+    'es',
+    'sw',
+    'sv',
+    'tl',
+    'ta',
+    'te',
+    'th',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'cy',
+]
 soniox_multi_languages = soniox_supported_languages
 
 # Languages supported by Deepgram, nova-2/nova-3 model
-deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh-TW', 'zh-Hant', 'zh-HK', 'cs', 'da', 'da-DK', 'nl', 'en', 'en-US', 'en-AU', 'en-GB', 'en-NZ', 'en-IN', 'et', 'fi', 'nl-BE', 'fr', 'fr-CA', 'de', 'de-CH', 'el' 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'ko-KR', 'lv', 'lt', 'ms', 'no', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'es', 'es-419', 'sv', 'sv-SE', 'th', 'th-TH', 'tr', 'uk', 'vi'}
+deepgram_supported_languages = {
+    'multi',
+    'bg',
+    'ca',
+    'zh',
+    'zh-CN',
+    'zh-Hans',
+    'zh-TW',
+    'zh-Hant',
+    'zh-HK',
+    'cs',
+    'da',
+    'da-DK',
+    'nl',
+    'en',
+    'en-US',
+    'en-AU',
+    'en-GB',
+    'en-NZ',
+    'en-IN',
+    'et',
+    'fi',
+    'nl-BE',
+    'fr',
+    'fr-CA',
+    'de',
+    'de-CH',
+    'el' 'hi',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'ko',
+    'ko-KR',
+    'lv',
+    'lt',
+    'ms',
+    'no',
+    'pl',
+    'pt',
+    'pt-BR',
+    'pt-PT',
+    'ro',
+    'ru',
+    'sk',
+    'es',
+    'es-419',
+    'sv',
+    'sv-SE',
+    'th',
+    'th-TH',
+    'tr',
+    'uk',
+    'vi',
+}
 deepgram_nova2_multi_languages = ['multi', 'en', 'es']
-deepgram_nova3_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
+deepgram_nova3_multi_languages = [
+    "multi",
+    "en",
+    "en-US",
+    "en-AU",
+    "en-GB",
+    "en-NZ",
+    "en-IN",
+    "es",
+    "es-419",
+    "fr",
+    "fr-CA",
+    "de",
+    "hi",
+    "ru",
+    "pt",
+    "pt-BR",
+    "pt-PT",
+    "ja",
+    "it",
+    "nl",
+    "nl-BE",
+]
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
+
 
 def get_stt_service_for_language(language: str):
     # Picking STT service and STT language by following the order
@@ -116,8 +253,14 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
 # unused fn
 deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
 
+
 async def process_audio_dg(
-    stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0, model: str = 'nova-2-general',
+    stream_transcript,
+    language: str,
+    sample_rate: int,
+    channels: int,
+    preseconds: int = 0,
+    model: str = 'nova-2-general',
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -135,28 +278,32 @@ async def process_audio_dg(
                 # print('Skipping word', word.start)
                 continue
             if not segments:
-                segments.append({
-                    'speaker': f"SPEAKER_{word.speaker}",
-                    'start': word.start - preseconds,
-                    'end': word.end - preseconds,
-                    'text': word.punctuated_word,
-                    'is_user': is_user,
-                    'person_id': None,
-                })
+                segments.append(
+                    {
+                        'speaker': f"SPEAKER_{word.speaker}",
+                        'start': word.start - preseconds,
+                        'end': word.end - preseconds,
+                        'text': word.punctuated_word,
+                        'is_user': is_user,
+                        'person_id': None,
+                    }
+                )
             else:
                 last_segment = segments[-1]
                 if last_segment['speaker'] == f"SPEAKER_{word.speaker}":
                     last_segment['text'] += f" {word.punctuated_word}"
                     last_segment['end'] = word.end
                 else:
-                    segments.append({
-                        'speaker': f"SPEAKER_{word.speaker}",
-                        'start': word.start,
-                        'end': word.end,
-                        'text': word.punctuated_word,
-                        'is_user': is_user,
-                        'person_id': None,
-                    })
+                    segments.append(
+                        {
+                            'speaker': f"SPEAKER_{word.speaker}",
+                            'start': word.start,
+                            'end': word.end,
+                            'text': word.punctuated_word,
+                            'is_user': is_user,
+                            'person_id': None,
+                        }
+                    )
 
         # stream
         stream_transcript(segments)
@@ -171,11 +318,13 @@ async def process_audio_dg(
 # Calculate backoff with jitter
 def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
     jitter = random.random() * base_delay
-    backoff = min(((2 ** attempt) * base_delay) + jitter, max_delay)
+    backoff = min(((2**attempt) * base_delay) + jitter, max_delay)
     return backoff
 
 
-def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample_rate: int, channels: int, model: str, retries=3):
+def connect_to_deepgram_with_backoff(
+    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, retries=3
+):
     print("connect_to_deepgram_with_backoff")
     for attempt in range(retries):
         try:
@@ -235,7 +384,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             multichannel=channels > 1,
             model=model,
             sample_rate=sample_rate,
-            encoding='linear16'
+            encoding='linear16',
         )
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
@@ -245,7 +394,10 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
 
-async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str, preseconds: int = 0, language_hints: List[str] = []):
+
+async def process_audio_soniox(
+    stream_transcript, sample_rate: int, language: str, uid: str, preseconds: int = 0, language_hints: List[str] = []
+):
     # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -255,7 +407,9 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
 
     # Speaker identification only works with English and 16kHz sample rate
     # New Soniox streaming is not supported speaker indentification
-    has_speech_profile = False  # create_user_speech_profile(uid) if uid and sample_rate == 16000 and language == 'en' else False
+    has_speech_profile = (
+        False  # create_user_speech_profile(uid) if uid and sample_rate == 16000 and language == 'en' else False
+    )
 
     # Determine audio format based on sample rate
     audio_format = "s16le" if sample_rate == 16000 else "mulaw"
@@ -330,8 +484,9 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                             token_text = token['text']
                             if token_text.startswith('spk:'):
                                 new_speaker_id = token_text.split(':')[1] if ':' in token_text else "1"
-                                speaker_change_detected = (current_speaker_id is not None and
-                                                           current_speaker_id != new_speaker_id)
+                                speaker_change_detected = (
+                                    current_speaker_id is not None and current_speaker_id != new_speaker_id
+                                )
                                 current_speaker_id = new_speaker_id
                             else:
                                 token_texts.append(token_text)
@@ -344,8 +499,11 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
 
                         # If we have either a speaker change or threshold exceeded, send the current segment and start a new one
                         punctuation_marks = ['.', '?', '!', ',', ';', ':', ' ']
-                        time_threshold_exceed = current_segment_time and current_time - current_segment_time > 0.3 and \
-                            (current_segment and current_segment['text'][-1] in punctuation_marks)
+                        time_threshold_exceed = (
+                            current_segment_time
+                            and current_time - current_segment_time > 0.3
+                            and (current_segment and current_segment['text'][-1] in punctuation_marks)
+                        )
                         if (speaker_change_detected or time_threshold_exceed) and current_segment:
                             stream_transcript([current_segment])
                             current_segment = None
@@ -382,7 +540,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                                 'end': end_time,
                                 'text': content,
                                 'is_user': is_user,
-                                'person_id': None
+                                'person_id': None,
                             }
                             current_segment_time = current_time
                         else:
@@ -426,7 +584,7 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
             "max_delay": 3,
             "enable_partials": False,
             "enable_entities": True,
-            "speaker_diarization_config": {"max_speakers": 4}
+            "speaker_diarization_config": {"max_speakers": 4},
         },
         "audio_format": {"type": "raw", "encoding": "pcm_s16le", "sample_rate": sample_rate},
         # "audio_events_config": {
@@ -480,28 +638,32 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
                                 continue
                             # print(r_content, r_speaker, [r_start, r_end])
                             if not segments:
-                                segments.append({
-                                    'speaker': speaker,
-                                    'start': r_start,
-                                    'end': r_end,
-                                    'text': r_content,
-                                    'is_user': is_user,
-                                    'person_id': None,
-                                })
-                            else:
-                                last_segment = segments[-1]
-                                if last_segment['speaker'] == speaker:
-                                    last_segment['text'] += f' {r_content}'
-                                    last_segment['end'] += r_end
-                                else:
-                                    segments.append({
+                                segments.append(
+                                    {
                                         'speaker': speaker,
                                         'start': r_start,
                                         'end': r_end,
                                         'text': r_content,
                                         'is_user': is_user,
                                         'person_id': None,
-                                    })
+                                    }
+                                )
+                            else:
+                                last_segment = segments[-1]
+                                if last_segment['speaker'] == speaker:
+                                    last_segment['text'] += f' {r_content}'
+                                    last_segment['end'] += r_end
+                                else:
+                                    segments.append(
+                                        {
+                                            'speaker': speaker,
+                                            'start': r_start,
+                                            'end': r_end,
+                                            'text': r_content,
+                                            'is_user': is_user,
+                                            'person_id': None,
+                                        }
+                                    )
 
                         if segments:
                             stream_transcript(segments)

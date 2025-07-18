@@ -6,7 +6,6 @@ import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 
-
 class DesktopApp extends StatelessWidget {
   const DesktopApp({super.key});
 

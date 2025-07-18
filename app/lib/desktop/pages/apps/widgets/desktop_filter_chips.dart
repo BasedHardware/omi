@@ -118,7 +118,9 @@ class DesktopFilterChips extends StatelessWidget {
             ),
           ),
         if (selectedCategory != null) const PopupMenuDivider(),
-        ...appProvider.categories.map((category) => PopupMenuItem(value: category, child: Text(category.title, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
+        ...appProvider.categories.map((category) => PopupMenuItem(
+            value: category,
+            child: Text(category.title, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
       ],
       onSelected: (value) {
         if (value == 'clear') {
@@ -175,9 +177,21 @@ class DesktopFilterChips extends StatelessWidget {
     return OmiPopupMenuButton<String>(
       itemBuilder: (context) => [
         if (selectedRating != null)
-          PopupMenuItem(value: 'clear', child: Row(children: [const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary), const SizedBox(width: 8), Text('Clear selection', style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))])),
+          PopupMenuItem(
+              value: 'clear',
+              child: Row(children: [
+                const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary),
+                const SizedBox(width: 8),
+                Text('Clear selection', style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))
+              ])),
         if (selectedRating != null) const PopupMenuDivider(),
-        ...ratingOptions.map((rating) => PopupMenuItem(value: rating, child: Row(children: [const Icon(Icons.star_rounded, size: 16, color: ResponsiveHelper.purplePrimary), const SizedBox(width: 8), Text(rating, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))]))),
+        ...ratingOptions.map((rating) => PopupMenuItem(
+            value: rating,
+            child: Row(children: [
+              const Icon(Icons.star_rounded, size: 16, color: ResponsiveHelper.purplePrimary),
+              const SizedBox(width: 8),
+              Text(rating, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))
+            ]))),
       ],
       onSelected: (value) {
         if (value == 'clear') {
@@ -237,9 +251,17 @@ class DesktopFilterChips extends StatelessWidget {
     return OmiPopupMenuButton<dynamic>(
       itemBuilder: (context) => [
         if (selectedCapability != null)
-          PopupMenuItem(value: 'clear', child: Row(children: [const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary), const SizedBox(width: 8), Text('Clear selection', style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))])),
+          PopupMenuItem(
+              value: 'clear',
+              child: Row(children: [
+                const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary),
+                const SizedBox(width: 8),
+                Text('Clear selection', style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))
+              ])),
         if (selectedCapability != null) const PopupMenuDivider(),
-        ...appProvider.capabilities.map((cap) => PopupMenuItem(value: cap, child: Text(cap.title, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
+        ...appProvider.capabilities.map((cap) => PopupMenuItem(
+            value: cap,
+            child: Text(cap.title, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
       ],
       onSelected: (value) {
         if (value == 'clear') {

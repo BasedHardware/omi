@@ -26,7 +26,7 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
     has_start, has_end = False, False
 
     for i in range(0, len(data_float32), window_size_samples):
-        chunk = data_float32[i: i + window_size_samples]
+        chunk = data_float32[i : i + window_size_samples]
         if len(chunk) < window_size_samples:
             break
         speech_dict = vad_iterator(chunk, return_seconds=False)
@@ -106,7 +106,7 @@ def apply_vad_for_speech_profile(file_path: str):
         end = segment['end'] * 1000
         trimmed_aseg += AudioSegment.from_wav(file_path)[start:end]
         if i < len(joined_segments) - 1:
-            trimmed_aseg += AudioSegment.from_wav(file_path)[end:end + 1000]
+            trimmed_aseg += AudioSegment.from_wav(file_path)[end : end + 1000]
 
     # file_path.replace('.wav', '-cleaned.wav')
     trimmed_aseg.export(file_path, format="wav")

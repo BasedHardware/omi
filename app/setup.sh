@@ -54,7 +54,7 @@ echo "- bash setup.sh macos"
 echo ""
 
 
-API_BASE_URL=https://backend-dt5lrfkkoa-uc.a.run.app/
+API_BASE_URL=https://api.omiapi.com/
 
 ######################################
 # Setup Firebase with prebuilt configs

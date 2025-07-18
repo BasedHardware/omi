@@ -40,4 +40,4 @@ class OmiBadge extends AdaptiveWidget {
           ),
         ),
       );
-} 
+}

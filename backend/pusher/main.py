@@ -21,11 +21,7 @@ modal_app = App(
     name='pusher',
     secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
 )
-image = (
-    Image.debian_slim()
-    .apt_install('ffmpeg', 'git', 'unzip')
-    .pip_install_from_requirements('requirements.txt')
-)
+image = Image.debian_slim().apt_install('ffmpeg', 'git', 'unzip').pip_install_from_requirements('requirements.txt')
 
 
 @modal_app.function(

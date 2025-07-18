@@ -41,7 +41,6 @@ import 'package:flutter/services.dart';
 import '../../pages/conversations/sync_page.dart';
 import 'home/widgets/battery_info_widget.dart';
 
-
 enum MacWindowButtonType { close, minimize, maximize }
 
 class _MacWindowButton extends StatefulWidget {
@@ -122,7 +121,6 @@ class _MacWindowButtonState extends State<_MacWindowButton> {
   }
 }
 
-
 class DesktopHomePage extends StatefulWidget {
   final String? navigateToRoute;
   const DesktopHomePage({super.key, this.navigateToRoute});
@@ -138,7 +136,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   late AnimationController _sidebarAnimationController;
   late Animation<double> _sidebarSlideAnimation;
   final GlobalKey _profileCardKey = GlobalKey();
-
 
   bool _isRecordingMinimized = false;
 
@@ -406,7 +403,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.05),  
+                                    color: Colors.black.withValues(alpha: 0.05),
                                     blurRadius: 20,
                                     offset: const Offset(0, 4),
                                   ),
@@ -743,7 +740,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     _hideNativeOverlay();
   }
 
-
   Future<void> toggleRecordingFromFloat(CaptureProvider provider) async {
     var recordingState = provider.recordingState;
 
@@ -942,14 +938,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                     ),
                   ),
                   child: Center(
-                    child:Text(
-                            userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                            style: const TextStyle(
-                              color: ResponsiveHelper.purplePrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                    child: Text(
+                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                      style: const TextStyle(
+                        color: ResponsiveHelper.purplePrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
 
