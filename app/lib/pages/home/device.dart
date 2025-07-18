@@ -228,7 +228,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     animatedBackground: provider.connectedDevice != null,
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 8),
                   // Device Details Section
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
