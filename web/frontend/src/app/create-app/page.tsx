@@ -81,14 +81,7 @@ export default function CreateAppPage() {
     }
   }, [user, loading, router]);
 
-  useEffect(() => {
-    if (user) {
-      console.log('[CreateAppPage] User authenticated, initializing data...');
-      initializeData();
-    }
-  }, [user]);
-
-  const initializeData = async () => {
+  const initializeData = useCallback(async () => {
     setIsLoading(true);
     console.log('🚀 [initializeData] Starting data initialization...');
 
@@ -108,7 +101,13 @@ export default function CreateAppPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      initializeData();
+    }
+  }, [user, initializeData]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -461,11 +460,12 @@ export default function CreateAppPage() {
       setTimeout(() => {
         router.push('/');
       }, 1500);
-    } catch (error: any) {
+    } catch (error) {
+      const e = error as Error;
       console.error(
         '❌ [handleSubmit] App submission failed with error:',
-        error.message,
-        error.stack,
+        e.message,
+        e.stack,
       );
       submissionRef.current = false;
       setSubmissionStarted(false);
@@ -473,16 +473,16 @@ export default function CreateAppPage() {
       console.log('🔄 [handleSubmit] Guards reset due to error.');
 
       let errorMessage = 'Error submitting app. Please try again.';
-      if (error.message.includes('422'))
+      if (e.message.includes('422'))
         errorMessage = 'Please check all required fields and try again.';
-      else if (error.message.includes('401'))
+      else if (e.message.includes('401'))
         errorMessage = 'Authentication failed. Please sign in again.';
-      else if (error.message.includes('name')) errorMessage = 'App name is required.';
-      else if (error.message.includes('description'))
+      else if (e.message.includes('name')) errorMessage = 'App name is required.';
+      else if (e.message.includes('description'))
         errorMessage = 'App description is required.';
-      else if (error.message.includes('category'))
+      else if (e.message.includes('category'))
         errorMessage = 'Please select a category for your app.';
-      else if (error.message.includes('capabilities'))
+      else if (e.message.includes('capabilities'))
         errorMessage = 'Please select at least one capability for your app.';
       alert(errorMessage);
     } finally {
@@ -1033,7 +1033,7 @@ export default function CreateAppPage() {
                 No screenshots added yet
               </h4>
               <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-gray-400">
-                Add screenshots to showcase your app's features and functionality.
+                Add screenshots to showcase your app&apos;s features and functionality.
                 High-quality images help users understand what your app does.
               </p>
               <label className="inline-flex cursor-pointer items-center justify-center space-x-2 rounded-[0.375rem] bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-3 font-medium text-white transition-all duration-200 hover:from-blue-700 hover:to-purple-700">
@@ -1504,7 +1504,7 @@ export default function CreateAppPage() {
                   className="mr-3 h-4 w-4 rounded-[0.5rem] border-gray-600 bg-gray-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
                 />
                 <label htmlFor="dontShowAgain" className="text-sm text-gray-300">
-                  Don't show this dialog again
+                  Don&apos;t show this dialog again
                 </label>
               </div>
 

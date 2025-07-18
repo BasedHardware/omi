@@ -1,7 +1,7 @@
 'use client';
 
 import { Search, X } from 'lucide-react';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
 import debounce from 'lodash/debounce';
 import Fuse from 'fuse.js';
@@ -52,8 +52,8 @@ export function SearchBar({ className, allApps, onSearching }: SearchBarProps) {
     [fuse, onSearching],
   );
 
-  const debouncedSearch = useCallback(
-    debounce((query: string) => handleSearch(query), 150),
+  const debouncedSearch = useMemo(
+    () => debounce((query: string) => handleSearch(query), 150),
     [handleSearch],
   );
 

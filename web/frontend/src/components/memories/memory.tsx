@@ -9,8 +9,7 @@ interface MemoryProps {
   searchParams: SearchParamsTypes;
 }
 
-export default function Memory({ memory, searchParams }: MemoryProps) {
-  const currentTab = searchParams.tab ?? 'sum';
+export default function Memory({ memory }: MemoryProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/50 pb-6 text-white shadow-xl backdrop-blur-lg md:pb-12">
       <div className="relative py-6 md:pt-12">

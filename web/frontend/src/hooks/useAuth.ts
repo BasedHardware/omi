@@ -29,9 +29,10 @@ export const useAuth = (): UseAuthReturn => {
         setLoading(false);
         setAuthError(null); // Clear any previous errors
       });
-    } catch (error: any) {
-      console.error('❌ Firebase auth initialization failed:', error.message);
-      setAuthError(error.message);
+    } catch (error) {
+      const e = error as Error;
+      console.error('❌ Firebase auth initialization failed:', e.message);
+      setAuthError(e.message);
       setLoading(false);
       // Don't crash the app - just set user to null and continue
       setUser(null);
@@ -43,8 +44,8 @@ export const useAuth = (): UseAuthReturn => {
         if (unsubscribe) {
           unsubscribe();
         }
-      } catch (error: any) {
-        console.error('❌ Error cleaning up auth listener:', error.message);
+      } catch (error) {
+        console.error('❌ Error cleaning up auth listener:', (error as Error).message);
       }
     };
   }, []);
@@ -55,9 +56,10 @@ export const useAuth = (): UseAuthReturn => {
       setAuthError(null);
       const user = await signInWithGoogle();
       return user;
-    } catch (error: any) {
-      console.error('❌ Sign in failed:', error);
-      setAuthError(error.message || 'Sign in failed');
+    } catch (error) {
+      const e = error as Error;
+      console.error('❌ Sign in failed:', e);
+      setAuthError(e.message || 'Sign in failed');
       return null; // Don't throw - return null instead
     } finally {
       setLoading(false);
@@ -69,9 +71,10 @@ export const useAuth = (): UseAuthReturn => {
       setLoading(true);
       setAuthError(null);
       await signOutUser();
-    } catch (error: any) {
-      console.error('❌ Sign out failed:', error);
-      setAuthError(error.message || 'Sign out failed');
+    } catch (error) {
+      const e = error as Error;
+      console.error('❌ Sign out failed:', e);
+      setAuthError(e.message || 'Sign out failed');
       // Don't throw - just log the error
     } finally {
       setLoading(false);

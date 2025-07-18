@@ -38,7 +38,7 @@ export interface AppSubmissionData {
 export interface SubmitAppResponse {
   id: string;
   name: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export default async function submitApp(
