@@ -7,6 +7,7 @@ import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/widgets/custom_refresh_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -111,9 +112,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     debugPrint('building conversations page');
     super.build(context);
     return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-      return RefreshIndicator(
-        backgroundColor: Colors.black,
-        color: Colors.white,
+      return CustomRefreshIndicator(
         onRefresh: () async {
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
           await convoProvider.getInitialConversations();
