@@ -2,12 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/backend/preferences.dart';
 
 class ChatSessionProvider extends ChangeNotifier {
   AppProvider? appProvider;
   List<ChatSession> sessions = [];
   ChatSession? currentSession;
   bool isLoadingSessions = false;
+  bool hasCachedSessions = false;
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
@@ -22,7 +24,32 @@ class ChatSessionProvider extends ChangeNotifier {
 
     try {
       final appId = appProvider?.selectedChatAppId;
-      sessions = await getChatSessions(appId: appId);
+      
+      // First, try to load cached sessions
+      final cachedSessions = SharedPreferencesUtil().getCachedSessionsForApp(appId);
+      if (cachedSessions.isNotEmpty) {
+        sessions = cachedSessions;
+        hasCachedSessions = true;
+        
+        // If no current session and we have sessions, set the first one as current
+        if (currentSession == null && sessions.isNotEmpty) {
+          currentSession = sessions.first;
+        }
+        
+        // Notify listeners early with cached data
+        isLoadingSessions = false;
+        notifyListeners();
+      }
+      
+      // Then load from server and update cache
+      List<ChatSession> serverSessions = await getChatSessions(appId: appId);
+      sessions = serverSessions;
+      
+      // Update cache with fresh data
+      if (sessions.isNotEmpty) {
+        SharedPreferencesUtil().setCachedSessionsForApp(appId, sessions);
+        hasCachedSessions = true;
+      }
       
       // If no current session and we have sessions, set the first one as current
       if (currentSession == null && sessions.isNotEmpty) {
@@ -35,6 +62,10 @@ class ChatSessionProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error loading sessions: $e');
+      // If we have cached sessions, use them even if server fails
+      if (hasCachedSessions && sessions.isNotEmpty) {
+        debugPrint('Using cached sessions due to server error');
+      }
     } finally {
       isLoadingSessions = false;
       notifyListeners();
@@ -49,6 +80,11 @@ class ChatSessionProvider extends ChangeNotifier {
       if (newSession != null) {
         sessions.insert(0, newSession);
         currentSession = newSession;
+        
+        // Update cache with new session
+        SharedPreferencesUtil().setCachedSessionsForApp(appId, sessions);
+        hasCachedSessions = true;
+        
         notifyListeners();
       }
     } catch (e) {
@@ -78,6 +114,10 @@ class ChatSessionProvider extends ChangeNotifier {
           }
         }
         
+        // Update cache
+        final appId = appProvider?.selectedChatAppId;
+        SharedPreferencesUtil().setCachedSessionsForApp(appId, sessions);
+        
         notifyListeners();
       }
     } catch (e) {
@@ -95,6 +135,11 @@ class ChatSessionProvider extends ChangeNotifier {
           if (currentSession?.id == session.id) {
             currentSession = sessions[index];
           }
+          
+          // Update cache
+          final appId = appProvider?.selectedChatAppId;
+          SharedPreferencesUtil().setCachedSessionsForApp(appId, sessions);
+          
           notifyListeners();
         }
       }
@@ -107,14 +152,32 @@ class ChatSessionProvider extends ChangeNotifier {
     // Clear current state
     sessions.clear();
     currentSession = null;
+    hasCachedSessions = false;
     
     // Load sessions for the new app
     await loadSessions();
   }
 
+  void setSessionsFromCache() {
+    final appId = appProvider?.selectedChatAppId;
+    final cachedSessions = SharedPreferencesUtil().getCachedSessionsForApp(appId);
+    if (cachedSessions.isNotEmpty) {
+      sessions = cachedSessions;
+      hasCachedSessions = true;
+      
+      // If no current session and we have sessions, set the first one as current
+      if (currentSession == null && sessions.isNotEmpty) {
+        currentSession = sessions.first;
+      }
+      
+      notifyListeners();
+    }
+  }
+
   void clear() {
     sessions.clear();
     currentSession = null;
+    hasCachedSessions = false;
     notifyListeners();
   }
 } 
