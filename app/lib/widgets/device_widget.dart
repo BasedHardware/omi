@@ -63,14 +63,47 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                   )
                 : Container(),
             // Image.asset("assets/images/blob.png"),
-            Image.asset(
-              _getImagePath(),
-              height: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
-              width: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
-            )
+            _buildDeviceImage()
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDeviceImage() {
+    final double imageHeight = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
+    final double imageWidth = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
+
+    // Special stacked approach for "Omi" device
+    if (widget.deviceName != null && widget.deviceName == 'Omi') {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          // Bottom layer: turned-off image (always visible)
+          Image.asset(
+            'assets/images/omi-without-rope-turned-off.png',
+            height: imageHeight,
+            width: imageWidth,
+          ),
+          // Top layer: turned-on image (visible only when connected)
+          AnimatedOpacity(
+            opacity: widget.isConnected ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Image.asset(
+              'assets/images/omi-without-rope.png',
+              height: imageHeight,
+              width: imageWidth,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // For all other devices, use the regular single image approach
+    return Image.asset(
+      _getImagePath(),
+      height: imageHeight,
+      width: imageWidth,
     );
   }
 
