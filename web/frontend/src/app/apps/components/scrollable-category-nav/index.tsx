@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { categoryMetadata, type CategoryMetadata } from '../../utils/category';
+import { categoryMetadata } from '../../utils/category';
 
 interface ScrollableCategoryNavProps {
   currentCategory: string;

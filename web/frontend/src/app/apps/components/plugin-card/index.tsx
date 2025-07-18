@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Info,
 } from 'lucide-react';
+import Image from 'next/image';
 import type { Plugin, PluginStat } from '../types';
 
 export interface PluginCardProps {
@@ -55,7 +56,7 @@ const getCapabilityIcon = (capability: string) => {
   return icons[capability.toLowerCase()] ?? Info;
 };
 
-export function PluginCard({ plugin, stat }: PluginCardProps) {
+export function PluginCard({ plugin }: PluginCardProps) {
   const handleClick = () => {
     window.location.href = `/apps/${plugin.id}`;
   };
@@ -70,10 +71,12 @@ export function PluginCard({ plugin, stat }: PluginCardProps) {
       <div className="z-10 flex flex-1 flex-col p-6">
         <div className="mb-6">
           <div className="flex items-start space-x-4">
-            <img
+            <Image
               src={plugin.image || 'https://via.placeholder.com/80'}
               alt={plugin.name}
               className="h-14 w-14 rounded-xl object-cover shadow-lg transition-transform duration-300 group-hover:scale-110 group-hover:shadow-xl"
+              width={56}
+              height={56}
             />
             <div className="flex-1">
               <h2 className="line-clamp-2 text-lg font-bold leading-tight text-white">

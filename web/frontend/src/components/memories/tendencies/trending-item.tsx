@@ -6,10 +6,9 @@ import { useSearchBox } from 'react-instantsearch';
 
 interface TrendingItemProps {
   trend: Trend;
-  index: number;
 }
 
-export default function TrendingItem({ trend, index }: TrendingItemProps) {
+export default function TrendingItem({ trend }: TrendingItemProps) {
   const { refine } = useSearchBox();
 
   const updateSearch = () => {

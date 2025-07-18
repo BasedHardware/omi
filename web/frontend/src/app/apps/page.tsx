@@ -17,7 +17,7 @@ async function getAppsCount() {
 
 async function getPluginsData() {
   const rawPlugins = await getApprovedApps();
-  const plugins = rawPlugins.map((plugin: any) => {
+  const plugins = rawPlugins.map((plugin: { [key: string]: unknown }) => {
     const { created_at, capabilities, ...rest } = plugin;
     return {
       ...rest,

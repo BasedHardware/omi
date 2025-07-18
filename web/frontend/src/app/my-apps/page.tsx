@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '../../hooks/useAuth';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -28,13 +28,7 @@ export default function MyAppsPage() {
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    if (user) {
-      fetchUserApps();
-    }
-  }, [user]);
-
-  const fetchUserApps = async () => {
+  const fetchUserApps = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     console.log("🚀 [fetchUserApps] Fetching user's apps...");
@@ -65,13 +59,19 @@ export default function MyAppsPage() {
       const userApps: App[] = await response.json();
       setApps(userApps.filter((app) => !app.deleted));
       console.log('✅ [fetchUserApps] Apps fetched successfully:', userApps.length);
-    } catch (err: any) {
+    } catch (err) {
       console.error('❌ [fetchUserApps] Error fetching apps:', err);
-      setError(err.message || 'Failed to fetch apps. Please try again.');
+      setError((err as Error).message || 'Failed to fetch apps. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserApps();
+    }
+  }, [user, fetchUserApps]);
 
   if (!user) {
     return null;
@@ -166,7 +166,7 @@ export default function MyAppsPage() {
             </svg>
             <h3 className="mt-2 text-xl font-semibold text-white">No apps created yet</h3>
             <p className="mt-1 text-sm text-gray-400">
-              You haven't created any apps. Get started by creating your first one.
+              You haven&apos;t created any apps. Get started by creating your first one.
             </p>
             <div className="mt-6">
               <Link
@@ -245,17 +245,6 @@ export default function MyAppsPage() {
     </div>
   );
 }
-
-// Helper for truncating text (if needed for description)
-const TruncateText: React.FC<{ text: string; maxLength: number }> = ({
-  text,
-  maxLength,
-}) => {
-  if (text.length <= maxLength) {
-    return <>{text}</>;
-  }
-  return <>{text.substring(0, maxLength)}...</>;
-};
 
 // Add a CSS class for multi-line truncation if not using Tailwind plugin
 // In your global CSS or a style tag:

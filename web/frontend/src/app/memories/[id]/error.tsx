@@ -1,6 +1,6 @@
 'use client';
 
-import { NavArrowLeft, Xmark, ArrowRight, Clock } from 'iconoir-react';
+import { NavArrowLeft, Xmark } from 'iconoir-react';
 import Link from 'next/link';
 
 export default function Error() {
@@ -24,7 +24,7 @@ export default function Error() {
 
         {/* Description */}
         <p className="mb-8 text-lg leading-relaxed text-zinc-400">
-          Oops! The memory you're looking for seems to have vanished into the digital
+          Oops! The memory you&apos;re looking for seems to have vanished into the digital
           ether. It might have been deleted, moved, or perhaps it never existed in the
           first place.
         </p>
