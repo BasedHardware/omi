@@ -26,6 +26,8 @@ class ConversationCaptureWidget extends StatefulWidget {
 }
 
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
+  bool _isPhoneMicPaused = false;
+
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(builder: (context, provider, deviceProvider, connectivityProvider, child) {
@@ -42,7 +44,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           width: double.maxFinite,
           decoration: BoxDecoration(
             color: Colors.grey.shade900,
@@ -55,13 +57,29 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 header,
-                (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+                // Show content when recording is active OR when there are segments/photos
+                (provider.recordingState == RecordingState.record ||
+                        provider.recordingState == RecordingState.systemAudioRecord ||
+                        provider.recordingState == RecordingState.deviceRecord ||
+                        provider.recordingState == RecordingState.initialising ||
+                        provider.recordingState == RecordingState.pause ||
+                        provider.havingRecordingDevice ||
+                        provider.segments.isNotEmpty ||
+                        provider.photos.isNotEmpty ||
+                        _isPhoneMicPaused)
                     ? Column(
                         children: [
                           const SizedBox(height: 8),
-                          const LiteCaptureWidget(),
-                          // Add waveform below transcript when recording
-                          if (provider.recordingState == RecordingState.record || provider.recordingState == RecordingState.systemAudioRecord || provider.recordingState == RecordingState.deviceRecord || provider.havingRecordingDevice) ...[
+                          // Only show transcript widget when there are segments or photos
+                          if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) const LiteCaptureWidget(),
+                          // Show waveform when recording is active (including paused state)
+                          if (provider.recordingState == RecordingState.record ||
+                              provider.recordingState == RecordingState.systemAudioRecord ||
+                              provider.recordingState == RecordingState.deviceRecord ||
+                              provider.recordingState == RecordingState.initialising ||
+                              provider.recordingState == RecordingState.pause ||
+                              provider.havingRecordingDevice ||
+                              _isPhoneMicPaused) ...[
                             const SizedBox(height: 8),
                             RecordingWaveform(
                               segments: provider.segments,
@@ -93,22 +111,36 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         }
       }
       if (recordingState == RecordingState.systemAudioRecord) {
-        await provider.stopSystemAudioRecording();
-        // MixpanelManager().track("System Audio Recording Stopped");
+        await provider.pauseSystemAudioRecording();
+      } else if (provider.isPaused) {
+        await provider.resumeSystemAudioRecording();
       } else if (recordingState == RecordingState.initialising) {
         debugPrint('initialising, have to wait');
       } else {
         await provider.streamSystemAudioRecording();
-        // MixpanelManager().track("System Audio Recording Started");
       }
     } else {
-      // Phone mic logic - start recording directly
-      if (recordingState == RecordingState.record) {
+      // Phone mic logic - use local state to track pause
+      if (recordingState == RecordingState.record && !_isPhoneMicPaused) {
+        // Pause recording
+        setState(() {
+          _isPhoneMicPaused = true;
+        });
         await provider.stopStreamRecording();
         MixpanelManager().phoneMicRecordingStopped();
+      } else if (_isPhoneMicPaused) {
+        // Resume recording
+        setState(() {
+          _isPhoneMicPaused = false;
+        });
+        await provider.streamRecording();
+        MixpanelManager().phoneMicRecordingStarted();
       } else if (recordingState == RecordingState.initialising) {
         debugPrint('initialising, have to wait');
       } else {
+        setState(() {
+          _isPhoneMicPaused = false;
+        });
         await provider.streamRecording();
         MixpanelManager().phoneMicRecordingStarted();
       }
@@ -129,6 +161,20 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record || captureProvider.recordingState == RecordingState.initialising || captureProvider.recordingState == RecordingState.pause;
 
+    // Check if any recording is active (phone mic, system audio, or device recording)
+    bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
+        captureProvider.recordingState == RecordingState.systemAudioRecord ||
+        captureProvider.recordingState == RecordingState.deviceRecord ||
+        captureProvider.recordingState == RecordingState.initialising ||
+        captureProvider.recordingState == RecordingState.pause ||
+        captureProvider.isPaused ||
+        _isPhoneMicPaused;
+
+    // Hide the widget when no recording is active and there are no segments or photos
+    if (!isAnyRecordingActive && !isHavingTranscript && !isHavingPhotos && !isHavingRecordingDevice) {
+      return null;
+    }
+
     // Left
     Widget? left;
     if (isUsingPhoneMic || !isHavingDesireDevice) {
@@ -137,10 +183,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           context,
           () => _toggleRecording(context, captureProvider),
           captureProvider.recordingState,
+          isPhoneMicPaused: _isPhoneMicPaused,
         ),
       );
-    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript && !isHavingDesireDevice) {
-      return null; // not using phone mic, not ready
+    } else if (!isAnyRecordingActive && !deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript && !isHavingDesireDevice) {
+      return null; // not recording and not ready
     } else if (!deviceServiceStateOk) {
       left = Row(
         children: [
@@ -163,6 +210,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else {
       left = Row(
         children: [
+          const SizedBox(width: 14),
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
           Container(
@@ -184,7 +232,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // Right
     Widget? statusIndicator;
     var stateText = "";
-    if (!isHavingRecordingDevice && !isUsingPhoneMic) {
+
+    // Always check pause state first with highest priority (both desktop and phone)
+    if (captureProvider.isPaused || _isPhoneMicPaused) {
+      stateText = "Paused";
+      statusIndicator = const PausedStatusIndicator();
+    } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
     } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
       var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
@@ -276,7 +329,43 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
   }
 }
 
-getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb, RecordingState currentActualState) {
+class PausedStatusIndicator extends StatefulWidget {
+  const PausedStatusIndicator({super.key});
+
+  @override
+  State<PausedStatusIndicator> createState() => _PausedStatusIndicatorState();
+}
+
+class _PausedStatusIndicatorState extends State<PausedStatusIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1000), // Blink every half second
+      vsync: this,
+    )..repeat(reverse: true);
+    _opacityAnim = Tween<double>(begin: 1.0, end: 0.2).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnim,
+      child: const Icon(Icons.fiber_manual_record, color: Colors.orange, size: 16.0),
+    );
+  }
+}
+
+getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb, RecordingState currentActualState, {bool isPhoneMicPaused = false}) {
   if (SharedPreferencesUtil().btDevice.id.isNotEmpty && (!PlatformService.isDesktop)) {
     // If a BT device is configured and we are NOT on desktop, don't show this button.
     return const SizedBox.shrink();
@@ -309,7 +398,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
       text = 'Stop Recording';
       icon = const Icon(Icons.stop, color: Colors.red, size: 12);
     } else {
-      text = 'Start Recording';
+      text = 'Continue Recording';
       icon = const Icon(Icons.mic, size: 18);
     }
   } else {
@@ -331,15 +420,29 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         width: 24,
         height: 24,
         decoration: const BoxDecoration(
-          color: Color(0xFF7C3AED), // Deep purple
+          color: Colors.orange,
           shape: BoxShape.circle,
         ),
         child: const Center(
           child: Icon(Icons.pause, color: Colors.white, size: 14),
         ),
       );
+    } else if (isPhoneMicPaused) {
+      text = 'Resume Recording';
+      icon = Container(
+        margin: const EdgeInsets.only(right: 4),
+        width: 24,
+        height: 24,
+        decoration: const BoxDecoration(
+          color: Color(0xFF7C3AED), // Deep purple
+          shape: BoxShape.circle,
+        ),
+        child: const Center(
+          child: Icon(Icons.play_arrow, color: Colors.white, size: 14),
+        ),
+      );
     } else {
-      text = 'Start Recording';
+      text = 'Continue Recording';
       icon = const Icon(Icons.mic, size: 18);
     }
   }

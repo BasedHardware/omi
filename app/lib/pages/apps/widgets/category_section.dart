@@ -91,7 +91,7 @@ class CategorySection extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        // const SizedBox(width: 8),
                         Icon(
                           Icons.chevron_right,
                           color: Colors.grey.shade400,

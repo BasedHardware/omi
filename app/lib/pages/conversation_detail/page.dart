@@ -253,7 +253,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     );
                                   }
                                 },
-                          icon: const FaIcon(FontAwesomeIcons.trash, size: 16.0, color: Colors.white),
+                          icon: const FaIcon(FontAwesomeIcons.trashCan, size: 16.0, color: Colors.white),
                         ),
                       ),
                       // Share button (third)

@@ -203,9 +203,45 @@ class $AssetsImagesGen {
   AssetGenImage get notionLogo =>
       const AssetGenImage('assets/images/notion_logo.png');
 
+  /// File path: assets/images/omi-devkit-without-rope.png
+  AssetGenImage get omiDevkitWithoutRope =>
+      const AssetGenImage('assets/images/omi-devkit-without-rope.png');
+
+  /// File path: assets/images/omi-glass.png
+  AssetGenImage get omiGlass =>
+      const AssetGenImage('assets/images/omi-glass.png');
+
+  /// File path: assets/images/omi-without-rope.png
+  AssetGenImage get omiWithoutRope =>
+      const AssetGenImage('assets/images/omi-without-rope.png');
+
   /// File path: assets/images/onboarding-bg-1.png
   AssetGenImage get onboardingBg1 =>
       const AssetGenImage('assets/images/onboarding-bg-1.png');
+
+  /// File path: assets/images/onboarding-bg-2.png
+  AssetGenImage get onboardingBg2 =>
+      const AssetGenImage('assets/images/onboarding-bg-2.png');
+
+  /// File path: assets/images/onboarding-language-grey.png
+  AssetGenImage get onboardingLanguageGrey =>
+      const AssetGenImage('assets/images/onboarding-language-grey.png');
+
+  /// File path: assets/images/onboarding-name-grey.png
+  AssetGenImage get onboardingNameGrey =>
+      const AssetGenImage('assets/images/onboarding-name-grey.png');
+
+  /// File path: assets/images/onboarding-name-white.png
+  AssetGenImage get onboardingNameWhite =>
+      const AssetGenImage('assets/images/onboarding-name-white.png');
+
+  /// File path: assets/images/onboarding-name.png
+  AssetGenImage get onboardingName =>
+      const AssetGenImage('assets/images/onboarding-name.png');
+
+  /// File path: assets/images/onboarding-permissions.png
+  AssetGenImage get onboardingPermissions =>
+      const AssetGenImage('assets/images/onboarding-permissions.png');
 
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
@@ -310,7 +346,16 @@ class $AssetsImagesGen {
         logoTransparentV2,
         newBackground,
         notionLogo,
+        omiDevkitWithoutRope,
+        omiGlass,
+        omiWithoutRope,
         onboardingBg1,
+        onboardingBg2,
+        onboardingLanguageGrey,
+        onboardingNameGrey,
+        onboardingNameWhite,
+        onboardingName,
+        onboardingPermissions,
         recordingGreenCircleIcon,
         slackLogo,
         speaker0Icon,

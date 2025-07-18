@@ -786,16 +786,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           Row(
             children: [
               Container(
-                decoration: const BoxDecoration(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade900,
                   shape: BoxShape.circle,
-                  color: Colors.transparent,
                 ),
                 child: IconButton(
-                  padding: const EdgeInsets.fromLTRB(2.0, 2.0, 0, 2.0),
-                  icon: SvgPicture.asset(
-                    Assets.images.icSettingPersona,
-                    width: 36,
-                    height: 36,
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(
+                    FontAwesomeIcons.gear,
+                    size: 16,
+                    color: Colors.white70,
                   ),
                   onPressed: () {
                     MixpanelManager().pageOpened('Settings');

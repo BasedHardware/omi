@@ -249,9 +249,19 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
-      if (!showDiscardedConversations && convo.discarded) {
-        return false;
+      // Filter by discarded status
+      if (showDiscardedConversations) {
+        // When showing discarded conversations, only show discarded ones
+        if (!convo.discarded) {
+          return false;
+        }
+      } else {
+        // When not showing discarded conversations, only show non-discarded ones
+        if (convo.discarded) {
+          return false;
+        }
       }
+
       // Apply date filter if selected
       if (selectedDate != null) {
         var convoDate = DateTime(convo.createdAt.year, convo.createdAt.month, convo.createdAt.day);
