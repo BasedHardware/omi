@@ -76,7 +76,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  Future<void> searchConversations(String query) async {
+  Future<void> searchConversations(String query, {bool showShimmer = false}) async {
     if (query.isEmpty) {
       previousQuery = "";
       currentSearchPage = 0;
@@ -86,7 +86,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       return;
     }
 
-    setIsFetchingConversations(true);
+    if (showShimmer) {
+      setLoadingConversations(true);
+    } else {
+      setIsFetchingConversations(true);
+    }
+
     previousQuery = query;
     var (convos, current, total) = await searchConversationsServer(query, includeDiscarded: showDiscardedConversations);
     convos.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -94,7 +99,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     currentSearchPage = current;
     totalSearchPages = total;
     groupSearchConvosByDate();
-    setIsFetchingConversations(false);
+
+    if (showShimmer) {
+      setLoadingConversations(false);
+    } else {
+      setIsFetchingConversations(false);
+    }
 
     notifyListeners();
   }
@@ -153,8 +163,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
 
+    // Clear grouped conversations to show shimmer effect while loading
+    groupedConversations = {};
+    notifyListeners();
+
     if (previousQuery.isNotEmpty) {
-      searchConversations(previousQuery);
+      searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
     }
