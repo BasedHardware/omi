@@ -3,9 +3,10 @@ import uuid
 import asyncio
 import struct
 import json
+import re
 from datetime import datetime, timezone, timedelta, time
 from enum import Enum
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 
 import opuslib
 import webrtcvad
@@ -35,6 +36,7 @@ from models.message_event import (
     TranslationEvent,
     PhotoProcessingEvent,
     PhotoDescribedEvent,
+    SpeakerLabelSuggestionEvent,
 )
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
@@ -102,6 +104,8 @@ async def _listen(
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+    speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
+    speech_profile_processed = False
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
@@ -258,6 +262,18 @@ async def _listen(
         if not conversation or (not conversation.get('transcript_segments') and not conversation.get('photos')):
             return
         await _create_conversation(conversation)
+
+    def _detect_speaker_from_text(text: str) -> Optional[str]:
+        patterns = [
+            r"\b(I am|I'm|my name is)\s+([A-Z][a-z]+)\b",
+            r"\b([A-Z][a-z]+)\s+(is my name)\b",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                # Return the name, which is in the last captured group
+                return match.groups()[-1].capitalize()
+        return None
 
     conversation_creation_task_lock = asyncio.Lock()
     conversation_creation_task = None
@@ -671,7 +687,7 @@ async def _listen(
 
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
-        nonlocal current_conversation_id, including_combined_segments, translation_enabled
+        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
             await asyncio.sleep(0.3)
@@ -727,6 +743,38 @@ async def _listen(
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
+                if speech_profile_processed:
+                    for segment in conversation.transcript_segments[starts:ends]:
+                        if segment.person_id or segment.is_user:
+                            continue
+
+                        # Session consistency
+                        if segment.speaker_id in speaker_to_person_map:
+                            person_id, person_name = speaker_to_person_map[segment.speaker_id]
+                            _send_message_event(
+                                SpeakerLabelSuggestionEvent(
+                                    speaker_id=segment.speaker_id,
+                                    person_id=person_id,
+                                    person_name=person_name,
+                                    segment_id=segment.id,
+                                )
+                            )
+                            continue
+
+                        # Text-based detection
+                        detected_name = _detect_speaker_from_text(segment.text)
+                        if detected_name:
+                            person = user_db.get_person_by_name(uid, detected_name)
+                            person_id = person['id'] if person else ''
+                            _send_message_event(
+                                SpeakerLabelSuggestionEvent(
+                                    speaker_id=segment.speaker_id,
+                                    person_id=person_id,
+                                    person_name=detected_name,
+                                    segment_id=segment.id,
+                                )
+                            )
+
     image_chunks = {}  # A temporary in-memory cache for image chunks
 
     async def process_photo(uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer: list):
@@ -776,7 +824,7 @@ async def _listen(
 
     async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
-        nonlocal realtime_photo_buffers
+        nonlocal realtime_photo_buffers, speech_profile_processed, speaker_to_person_map
 
         timer_start = time.time()
         last_audio_received_time = timer_start
@@ -798,6 +846,7 @@ async def _listen(
                                 print('Killing soniox_socket2', uid)
                                 await soniox_socket2.close()
                                 soniox_socket2 = None
+                                speech_profile_processed = True
                         else:
                             await soniox_socket2.send(data)
 
@@ -812,6 +861,7 @@ async def _listen(
                                 print('Killing deepgram_socket2', uid)
                                 dg_socket2.finish()
                                 dg_socket2 = None
+                                speech_profile_processed = True
                         else:
                             dg_socket2.send(data)
 
@@ -825,6 +875,13 @@ async def _listen(
                             await handle_image_chunk(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
+                        elif json_data.get('type') == 'speaker_assigned':
+                            speaker_id = json_data.get('speaker_id')
+                            person_id = json_data.get('person_id')
+                            person_name = json_data.get('person_name')
+                            if speaker_id is not None and person_id is not None and person_name is not None:
+                                speaker_to_person_map[speaker_id] = (person_id, person_name)
+                                print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid)
                     except json.JSONDecodeError:
                         print(f"Received non-json text message: {message.get('text')}", uid)
 
