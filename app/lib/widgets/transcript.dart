@@ -20,6 +20,7 @@ class TranscriptWidget extends StatefulWidget {
   final double bottomMargin;
   final Function(String, int)? editSegment;
   final Map<String, SpeakerLabelSuggestionEvent> suggestions;
+  final List<String> taggingSegmentIds;
   final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
 
   const TranscriptWidget({
@@ -33,6 +34,7 @@ class TranscriptWidget extends StatefulWidget {
     this.bottomMargin = 200,
     this.editSegment,
     this.suggestions = const {},
+    this.taggingSegmentIds = const [],
     this.onAcceptSuggestion,
   });
 
@@ -102,6 +104,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
     final suggestion = widget.suggestions[data.id];
+    final isTagging = widget.taggingSegmentIds.contains(data.id);
 
     return Padding(
       padding:
@@ -137,12 +140,34 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                           ? '${suggestion.personName}?'
                           : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
                   style: TextStyle(
-                    color: person == null && !data.isUser ? Colors.grey.shade400 : Colors.white,
+                    color: person == null && !data.isUser && !isTagging ? Colors.grey.shade400 : Colors.white,
                     fontSize: 18,
-                    fontStyle: person == null && !data.isUser ? FontStyle.italic : FontStyle.normal,
+                    fontStyle: person == null && !data.isUser && !isTagging ? FontStyle.italic : FontStyle.normal,
                   ),
                 ),
-                if (suggestion != null && person == null && !data.isUser) ...[
+                if (!data.speechProfileProcessed && !data.isUser && (data.personId ?? "").isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Tooltip(
+                      message: 'Speaker identification calibrating',
+                      child: Icon(
+                        Icons.warning_rounded,
+                        color: Colors.orange,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                if (isTagging) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                ] else if (suggestion != null && person == null && !data.isUser) ...[
                   const SizedBox(width: 8),
                   TextButton(
                     onPressed: () => widget.onAcceptSuggestion?.call(suggestion),

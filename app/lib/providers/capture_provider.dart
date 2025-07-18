@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -36,6 +37,8 @@ class CaptureProvider extends ChangeNotifier
     implements ITransctipSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
+  PeopleProvider? peopleProvider;
+
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
@@ -114,9 +117,10 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp) {
     conversationProvider = cp;
-    messageProvider = p;
+    messageProvider = mp;
+    peopleProvider = pp;
     notifyListeners();
   }
 
@@ -125,9 +129,9 @@ class CaptureProvider extends ChangeNotifier
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
-  bool isSpeakerSuggestionReady = false;
 
   StreamSubscription? _bleBytesStream;
   StreamSubscription? _blePhotoStream;
@@ -186,7 +190,7 @@ class CaptureProvider extends ChangeNotifier
     hasTranscripts = false;
     suggestionsBySegmentId = {};
     _conversation = null;
-    isSpeakerSuggestionReady = false;
+    taggingSegmentIds = [];
     notifyListeners();
   }
 
@@ -876,12 +880,6 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    if (event is SpeakerSuggestionReadyEvent) {
-      isSpeakerSuggestionReady = event.ready;
-      notifyListeners();
-      return;
-    }
-
     if (event is TranslationEvent) {
       _handleTranslationEvent(event.segments);
       return;
@@ -978,21 +976,21 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
+    // Tagging
+    if (taggingSegmentIds.contains(event.segmentId)) {
+      return;
+    }
     // If segment already exists, check if it's assigned. If so, ignore suggestion.
     var segment = segments.firstWhere((s) => s.id == event.segmentId, orElse: () => TranscriptSegment.empty());
     if (segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
       return; // Segment exists and is already assigned, so ignore.
     }
 
+    debugPrint("adsasd ${SharedPreferencesUtil().autoCreateSpeakersEnabled}");
+
     // Auto-accept if enabled for new person suggestions
-    if (event.personId.isEmpty && SharedPreferencesUtil().autoCreateSpeakersEnabled) {
-      final segmentIdsToTag = segments
-          .where((s) => s.speakerId == event.speakerId && s.personId == null && !s.isUser)
-          .map((s) => s.id)
-          .toList();
-      if (segmentIdsToTag.isEmpty) segmentIdsToTag.add(event.segmentId);
-      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, segmentIdsToTag.toSet().toList(),
-          autoAccepted: true);
+    if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
+      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);
     } else {
       // Otherwise, store suggestion to be displayed.
       suggestionsBySegmentId[event.segmentId] = event;
@@ -1000,62 +998,63 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> assignSpeakerToConversation(int speakerId, String personId, String personName, List<String> segmentIds,
-      {bool autoAccepted = false}) async {
-    if (autoAccepted && !SharedPreferencesUtil().autoCreateSpeakersEnabled) return;
+  Future<void> assignSpeakerToConversation(
+      int speakerId, String personId, String personName, List<String> segmentIds) async {
+    if (segmentIds.isEmpty) return;
 
-    String finalPersonId = personId;
-
-    // Create person if new
-    if (finalPersonId.isEmpty) {
-      Person? newPerson = await createPerson(personName);
-      if (newPerson != null) {
-        finalPersonId = newPerson.id;
-        List<Person> people = SharedPreferencesUtil().cachedPeople;
-        people.add(newPerson);
-        people.sort((a, b) => a.name.compareTo(b.name));
-        SharedPreferencesUtil().cachedPeople = people;
-      } else {
-        // Failed to create person
-        return;
-      }
-    }
-
-    // Find conversation id
-    if (_conversation == null) return;
-
-    final isAssigningToUser = finalPersonId == 'user';
-
-    // Update local state for all segments with this speakerId
-    for (var segment in segments) {
-      if (segmentIds.contains(segment.id)) {
-        segment.isUser = isAssigningToUser;
-        segment.personId = isAssigningToUser ? null : finalPersonId;
-      }
-    }
-
-    // Persist change
-    await assignBulkConversationTranscriptSegments(
-      _conversation!.id,
-      segmentIds,
-      isUser: isAssigningToUser,
-      personId: isAssigningToUser ? null : finalPersonId,
-    );
-
-    // Notify backend session
-    if (_socket?.state == SocketServiceState.connected) {
-      final payload = jsonEncode({
-        'type': 'speaker_assigned',
-        'speaker_id': speakerId,
-        'person_id': finalPersonId,
-        'person_name': personName,
-      });
-      _socket?.send(payload);
-    }
-
-    // Remove all suggestions for this speakerId
-    suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == speakerId);
+    taggingSegmentIds = List.from(segmentIds);
     notifyListeners();
+
+    try {
+      String finalPersonId = personId;
+
+      // Create person if new
+      if (finalPersonId.isEmpty) {
+        Person? newPerson = await peopleProvider?.createPersonProvider(personName);
+        if (newPerson != null) {
+          finalPersonId = newPerson.id;
+        }
+      }
+
+      // Find conversation id
+      if (_conversation == null) return;
+
+      final isAssigningToUser = finalPersonId == 'user';
+
+      // Update local state for all segments with this speakerId
+      for (var segment in segments) {
+        if (segmentIds.contains(segment.id)) {
+          segment.isUser = isAssigningToUser;
+          segment.personId = isAssigningToUser ? null : finalPersonId;
+        }
+      }
+
+      // Persist change
+      await assignBulkConversationTranscriptSegments(
+        _conversation!.id,
+        segmentIds,
+        isUser: isAssigningToUser,
+        personId: isAssigningToUser ? null : finalPersonId,
+      );
+
+      // Notify backend session
+      if (_socket?.state == SocketServiceState.connected) {
+        final payload = jsonEncode({
+          'type': 'speaker_assigned',
+          'speaker_id': speakerId,
+          'person_id': finalPersonId,
+          'person_name': personName,
+          'segment_ids': segmentIds,
+        });
+        _socket?.send(payload);
+      }
+
+      // Remove all suggestions for this speakerId
+      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == speakerId);
+    } finally {
+      taggingSegmentIds = [];
+      notifyListeners();
+    }
   }
 
   @override

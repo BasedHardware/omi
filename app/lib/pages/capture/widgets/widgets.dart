@@ -186,6 +186,7 @@ getTranscriptWidget(
   double bottomMargin = 100.0,
   Function(String, int)? editSegment,
   Map<String, SpeakerLabelSuggestionEvent> suggestions = const {},
+  List<String> taggingSegmentIds = const [],
   Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
 }) {
   if (conversationCreating) {
@@ -214,6 +215,7 @@ getTranscriptWidget(
       bottomMargin: bottomMargin,
       editSegment: editSegment,
       suggestions: suggestions,
+      taggingSegmentIds: taggingSegmentIds,
       onAcceptSuggestion: onAcceptSuggestion,
     );
   }

@@ -107,18 +107,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   Text(provider.photos.isNotEmpty ? "📸" : "🎙️"),
                   const SizedBox(width: 4),
                   const Expanded(child: Text("Listening")),
-                  !provider.isSpeakerSuggestionReady
-                      ? Tooltip(
-                          message: 'Calibrating speaker identification...',
-                          child: FadeTransition(
-                              opacity: _animationController,
-                              child: Image.asset(
-                                Assets.images.speaker0Icon.path,
-                                width: 24,
-                                height: 24,
-                              )),
-                        )
-                      : const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -145,6 +133,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 provider.photos,
                                 deviceProvider.connectedDevice,
                                 suggestions: provider.suggestionsBySegmentId,
+                                taggingSegmentIds: provider.taggingSegmentIds,
                                 onAcceptSuggestion: (suggestion) {
                                   provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
                                       suggestion.personName, [suggestion.segmentId]);
@@ -157,31 +146,34 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     return;
                                   }
                                   showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: Colors.black,
-                                    shape: const RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                    ),
-                                    builder: (context) {
-                                      final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                          (s) => s.speakerId == speakerId,
-                                          orElse: () => SpeakerLabelSuggestionEvent.empty());
-                                      return NameSpeakerBottomSheet(
-                                        speakerId: speakerId,
-                                        segmentId: segmentId,
-                                        segments: provider.segments,
-                                        suggestion: suggestion,
-                                        isCapturing: true,
-                                        people: context.read<PeopleProvider>().people,
-                                        userName: SharedPreferencesUtil().givenName,
-                                        onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                          await provider.assignSpeakerToConversation(
-                                              speakerId, personId, personName, segmentIds);
-                                        },
-                                      );
-                                    },
-                                  );
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: Colors.black,
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                      ),
+                                      builder: (context) {
+                                        final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                            (s) => s.speakerId == speakerId,
+                                            orElse: () => SpeakerLabelSuggestionEvent.empty());
+                                        return Consumer<PeopleProvider>(
+                                          builder: (context, peopleProvider, child) {
+                                            return NameSpeakerBottomSheet(
+                                              speakerId: speakerId,
+                                              segmentId: segmentId,
+                                              segments: provider.segments,
+                                              suggestion: suggestion,
+                                              isCapturing: true,
+                                              people: peopleProvider.people,
+                                              userName: SharedPreferencesUtil().givenName,
+                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                                await provider.assignSpeakerToConversation(
+                                                    speakerId, personId, personName, segmentIds);
+                                              },
+                                            );
+                                          },
+                                        );
+                                      });
                                 },
                               ),
                         // Summary Tab

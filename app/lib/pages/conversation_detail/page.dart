@@ -439,49 +439,45 @@ class TranscriptWidgets extends StatelessWidget {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               builder: (context) {
-                final suggestion = context
-                    .read<CaptureProvider>()
-                    .suggestionsBySegmentId
-                    .values
-                    .firstWhere((s) => s.speakerId == speakerId, orElse: () => SpeakerLabelSuggestionEvent.empty());
-                return NameSpeakerBottomSheet(
-                  speakerId: speakerId,
-                  segmentId: segmentId,
-                  segments: provider.conversation.transcriptSegments,
-                  suggestion: suggestion,
-                  people: context.read<PeopleProvider>().people,
-                  userName: SharedPreferencesUtil().givenName,
-                  onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                    provider.toggleEditSegmentLoading(true);
-                    String finalPersonId = personId;
-                    if (personId.isEmpty) {
-                      Person? newPerson = await context.read<PeopleProvider>().createPersonProvider(personName);
-                      if (newPerson != null) {
-                        finalPersonId = newPerson.id;
-                      } else {
-                        provider.toggleEditSegmentLoading(false);
-                        return; // Failed to create person
+                return Consumer<PeopleProvider>(builder: (context, peopleProvider, child) {
+                  return NameSpeakerBottomSheet(
+                    speakerId: speakerId,
+                    segmentId: segmentId,
+                    segments: provider.conversation.transcriptSegments,
+                    people: peopleProvider.people,
+                    userName: SharedPreferencesUtil().givenName,
+                    onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                      provider.toggleEditSegmentLoading(true);
+                      String finalPersonId = personId;
+                      if (personId.isEmpty) {
+                        Person? newPerson = await peopleProvider.createPersonProvider(personName);
+                        if (newPerson != null) {
+                          finalPersonId = newPerson.id;
+                        } else {
+                          provider.toggleEditSegmentLoading(false);
+                          return; // Failed to create person
+                        }
                       }
-                    }
 
-                    MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
-                    for (final segmentId in segmentIds) {
-                      final segmentIndex =
-                          provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
-                      if (segmentIndex == -1) continue;
-                      provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                      provider.conversation.transcriptSegments[segmentIndex].personId =
-                          finalPersonId == 'user' ? null : finalPersonId;
-                    }
-                    await assignBulkConversationTranscriptSegments(
-                      provider.conversation.id,
-                      segmentIds,
-                      isUser: finalPersonId == 'user',
-                      personId: finalPersonId == 'user' ? null : finalPersonId,
-                    );
-                    provider.toggleEditSegmentLoading(false);
-                  },
-                );
+                      MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+                      for (final segmentId in segmentIds) {
+                        final segmentIndex =
+                            provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+                        if (segmentIndex == -1) continue;
+                        provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
+                        provider.conversation.transcriptSegments[segmentIndex].personId =
+                            finalPersonId == 'user' ? null : finalPersonId;
+                      }
+                      await assignBulkConversationTranscriptSegments(
+                        provider.conversation.id,
+                        segmentIds,
+                        isUser: finalPersonId == 'user',
+                        personId: finalPersonId == 'user' ? null : finalPersonId,
+                      );
+                      provider.toggleEditSegmentLoading(false);
+                    },
+                  );
+                });
               },
             );
           },

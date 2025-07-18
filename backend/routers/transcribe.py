@@ -37,7 +37,6 @@ from models.message_event import (
     PhotoProcessingEvent,
     PhotoDescribedEvent,
     SpeakerLabelSuggestionEvent,
-    SpeakerSuggestionReadyEvent,
 )
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
@@ -107,6 +106,7 @@ async def _listen(
     websocket_close_code = 1001  # Going Away, don't close with good from backend
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     speech_profile_processed = False
+    current_session_segments: Dict[str, TranscriptSegment] = {}
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
@@ -266,11 +266,11 @@ async def _listen(
 
     def _detect_speaker_from_text(text: str) -> Optional[str]:
         patterns = [
-            r"\b(I am|I'm|my name is)\s+([A-Z][a-z]+)\b",
+            r"\b(I am|I'm|my name is|My name is)\s+([A-Z][a-z]+)\b",
             r"\b([A-Z][a-z]+)\s+(is my name)\b",
         ]
         for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+            match = re.search(pattern, text)
             if match:
                 # Return the name, which is in the last captured group
                 return match.groups()[-1].capitalize()
@@ -431,8 +431,6 @@ async def _listen(
                 speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
             speech_profile_processed = not (speech_profile_duration > 0)
-            if not speech_profile_processed:
-                _send_message_event(SpeakerSuggestionReadyEvent(ready=speech_profile_processed))
 
             # DEEPGRAM
             if stt_service == STTService.deepgram:
@@ -629,7 +627,7 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = including_combined_segments and stt_language == 'multi'
+    translation_enabled = including_combined_segments and stt_language == 'multi' and language not in ["multi", "auto"]
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
@@ -726,9 +724,13 @@ async def _listen(
                         segment["end"] -= seconds_to_trim
                         segments_to_process[i] = segment
 
-                transcript_segments, _ = TranscriptSegment.combine_segments(
-                    [], [TranscriptSegment(**s) for s in segments_to_process]
-                )
+                newly_processed_segments = [
+                    TranscriptSegment(**s, speech_profile_processed=speech_profile_processed)
+                    for s in segments_to_process
+                ]
+                for seg in newly_processed_segments:
+                    current_session_segments[seg.id] = seg
+                transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             result = _upsert_in_progress_conversation(transcript_segments, photos_to_process, finished_at)
             if not result or not result[0]:
@@ -853,7 +855,6 @@ async def _listen(
                                 await soniox_socket2.close()
                                 soniox_socket2 = None
                                 speech_profile_processed = True
-                                _send_message_event(SpeakerSuggestionReadyEvent(ready=True))
                         else:
                             await soniox_socket2.send(data)
 
@@ -869,7 +870,6 @@ async def _listen(
                                 dg_socket2.finish()
                                 dg_socket2 = None
                                 speech_profile_processed = True
-                                _send_message_event(SpeakerSuggestionReadyEvent(ready=True))
                         else:
                             dg_socket2.send(data)
 
@@ -884,7 +884,18 @@ async def _listen(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
                         elif json_data.get('type') == 'speaker_assigned':
-                            if speech_profile_processed:
+                            segment_ids = json_data.get('segment_ids', [])
+                            can_assign = False
+                            if segment_ids:
+                                for sid in segment_ids:
+                                    if (
+                                        sid in current_session_segments
+                                        and current_session_segments[sid].speech_profile_processed
+                                    ):
+                                        can_assign = True
+                                        break
+
+                            if can_assign:
                                 speaker_id = json_data.get('speaker_id')
                                 person_id = json_data.get('person_id')
                                 person_name = json_data.get('person_name')
@@ -893,7 +904,8 @@ async def _listen(
                                     print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid)
                             else:
                                 print(
-                                    "Speaker assignment received, but speech profile not processed yet. Ignoring.", uid
+                                    "Speaker assignment ignored: no segment_ids or no speech-profile-processed segments.",
+                                    uid,
                                 )
                     except json.JSONDecodeError:
                         print(f"Received non-json text message: {message.get('text')}", uid)

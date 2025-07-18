@@ -464,12 +464,6 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                 setLoading(false);
                 if (mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                          'Segments tagged to ${personIdToAssign == 'user' ? 'you' : personNameToAssign} successfully'),
-                    ),
-                  );
                 }
               },
         child: const Center(

@@ -40,6 +40,7 @@ class TranscriptSegment {
   double start;
   double end;
   List<Translation> translations = [];
+  bool speechProfileProcessed;
 
   TranscriptSegment({
     required this.id,
@@ -50,6 +51,7 @@ class TranscriptSegment {
     required this.start,
     required this.end,
     required this.translations,
+    this.speechProfileProcessed = true,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
   }
@@ -89,6 +91,7 @@ class TranscriptSegment {
       start: double.tryParse(json['start'].toString()) ?? 0.0,
       end: double.tryParse(json['end'].toString()) ?? 0.0,
       translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
+      speechProfileProcessed: (json['speech_profile_processed'] ?? true) as bool,
     );
   }
 

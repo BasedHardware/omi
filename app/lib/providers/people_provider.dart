@@ -22,13 +22,13 @@ class PeopleProvider extends BaseProvider {
     _setupAudioPlayerListeners();
   }
 
-  setPeople() {
-    getAllPeople().then((value) {
-      loading = false;
-      people = value;
-      SharedPreferencesUtil().cachedPeople = people;
-      notifyListeners();
-    });
+  setPeople() async {
+    final value = await getAllPeople();
+    loading = false;
+    people = value;
+    SharedPreferencesUtil().cachedPeople = people;
+    debugPrint("${SharedPreferencesUtil().cachedPeople.length} people");
+    notifyListeners();
   }
 
   void _setupAudioPlayerListeners() {
