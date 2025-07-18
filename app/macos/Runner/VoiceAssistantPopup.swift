@@ -1,12 +1,14 @@
 import SwiftUI
 import Combine
 import AVFoundation
+import Speech
 
 // Voice popup state for managing different UI states
 enum VoicePopupState: Equatable {
     case idle
     case recording
     case transcribing
+    case transcribed(String)
     case success(String)
     case error(String)
 }
@@ -212,6 +214,10 @@ struct VoiceAssistantPopup: View {
     @StateObject private var voiceRecorder = SimpleVoiceRecorder()
     @State private var popupState: VoicePopupState = .idle
     @State private var transcribedText = ""
+    @State private var editableText = ""
+    @State private var isLoading = false
+    @State private var apiResponse = ""
+    @State private var isViewActive = true
 
     var body: some View {
         ZStack {
@@ -219,7 +225,7 @@ struct VoiceAssistantPopup: View {
                 .ignoresSafeArea()
 
             if isChatVisible {
-                ChatView()
+                SafeChatView()
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .animation(.easeInOut(duration: 0.3), value: isChatVisible)
             } else {
@@ -240,6 +246,8 @@ struct VoiceAssistantPopup: View {
                             recordingView
                         case .transcribing:
                             transcribingView
+                        case .transcribed(let text):
+                            transcribedView(text: text)
                         case .success(let text):
                             successView(text: text)
                         case .error(let message):
@@ -287,9 +295,11 @@ struct VoiceAssistantPopup: View {
             }
         }
         .onAppear {
+            isViewActive = true
             popupState = .idle
         }
         .onDisappear {
+            isViewActive = false
             voiceRecorder.cancelRecording()
         }
     }
@@ -400,6 +410,55 @@ struct VoiceAssistantPopup: View {
         }
     }
     
+    private func transcribedView(text: String) -> some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Review and edit your message:")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.7))
+                
+                HStack {
+                    TextField("Your message", text: $editableText, axis: .vertical)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black.opacity(0.2))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                        .foregroundColor(.white)
+                        .font(.body)
+                        .lineLimit(3...6)
+                    
+                    Button(action: {
+                        sendToAPI()
+                    }) {
+                        if isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle()
+                            .fill(Color.purple)
+                    )
+                    .disabled(editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                    .opacity(editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1.0)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+    
     private func successView(text: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
@@ -462,6 +521,8 @@ struct VoiceAssistantPopup: View {
             return "Listening..."
         case .transcribing:
             return "Processing..."
+        case .transcribed:
+            return "Review & Send"
         case .success:
             return "Got it!"
         case .error:
@@ -499,21 +560,15 @@ struct VoiceAssistantPopup: View {
         
         Task {
             do {
-                // For now, we'll create a placeholder transcription since the OmiAPIClient 
-                // doesn't have a transcribeAudio method yet
-                let transcript = await simulateTranscription(audioURL)
+                let transcript = try await performSpeechRecognition(audioURL: audioURL)
                 
                 await MainActor.run {
                     if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         popupState = .error("No speech detected. Please try again.")
                     } else {
                         transcribedText = transcript
-                        popupState = .success(transcript)
-                        
-                        // Navigate to chat after showing success for 1.5 seconds
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            navigateToChatWithText(transcript)
-                        }
+                        editableText = transcript
+                        popupState = .transcribed(transcript)
                     }
                 }
                 
@@ -522,35 +577,297 @@ struct VoiceAssistantPopup: View {
                 
             } catch {
                 await MainActor.run {
-                    popupState = .error("Transcription failed. Please try again.")
+                    popupState = .error("Transcription failed: \(error.localizedDescription)")
+                }
+                
+                // Clean up the temporary audio file even on error
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+        }
+    }
+    
+    private func performSpeechRecognition(audioURL: URL) async throws -> String {
+        return try await withCheckedThrowingContinuation { continuation in
+            // Ensure we're on main thread for authorization
+            DispatchQueue.main.async {
+                // Request speech recognition authorization
+                SFSpeechRecognizer.requestAuthorization { authStatus in
+                    guard authStatus == .authorized else {
+                        continuation.resume(throwing: NSError(domain: "SpeechRecognitionError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Speech recognition not authorized"]))
+                        return
+                    }
+                    
+                    // Create speech recognizer
+                    guard let recognizer = SFSpeechRecognizer() else {
+                        continuation.resume(throwing: NSError(domain: "SpeechRecognitionError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Speech recognizer not available"]))
+                        return
+                    }
+                    
+                    guard recognizer.isAvailable else {
+                        continuation.resume(throwing: NSError(domain: "SpeechRecognitionError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Speech recognizer not available"]))
+                        return
+                    }
+                    
+                    // Create recognition request
+                    let request = SFSpeechURLRecognitionRequest(url: audioURL)
+                    request.shouldReportPartialResults = false
+                    request.requiresOnDeviceRecognition = false // Allow network if needed
+                    
+                    // Add timeout for recognition
+                    var hasCompleted = false
+                    let timeout = DispatchTime.now() + .seconds(10)
+                    
+                    // Perform recognition
+                    let task = recognizer.recognitionTask(with: request) { result, error in
+                        guard !hasCompleted else { return }
+                        
+                        if let error = error {
+                            hasCompleted = true
+                            continuation.resume(throwing: error)
+                            return
+                        }
+                        
+                        if let result = result, result.isFinal {
+                            hasCompleted = true
+                            let transcript = result.bestTranscription.formattedString
+                            continuation.resume(returning: transcript)
+                        }
+                    }
+                    
+                    // Set up timeout
+                    DispatchQueue.main.asyncAfter(deadline: timeout) {
+                        if !hasCompleted {
+                            hasCompleted = true
+                            task.cancel()
+                            continuation.resume(throwing: NSError(domain: "SpeechRecognitionError", code: 4, userInfo: [NSLocalizedDescriptionKey: "Speech recognition timed out"]))
+                        }
+                    }
                 }
             }
         }
     }
     
-    // Placeholder transcription method - replace with actual API call when available
-    private func simulateTranscription(_ audioURL: URL) async -> String {
-        // Simulate processing time
-        try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
+    private func sendToAPI() {
+        guard !editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
-        // For now, return a placeholder text. In the future, this should call
-        // the actual transcription API or use a local transcription library
-        return "This is a placeholder transcription. Voice recording was successful!"
+        isLoading = true
+        
+        Task {
+            do {
+                let response = try await sendMessageToAPI(text: editableText)
+                
+                await MainActor.run {
+                    // Check if view is still active before updating UI
+                    guard isViewActive else {
+                        print("⚠️ API response ignored - view is no longer active")
+                        return
+                    }
+                    
+                    isLoading = false
+                    apiResponse = response
+                    popupState = .success(response)
+                    
+                    // Show success for 2 seconds then navigate to chat
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        // Ensure we're still in a valid state before navigating
+                        if popupState == .success(response) && isViewActive {
+                            navigateToChatWithResponse(originalMessage: editableText, response: response)
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    popupState = .error("Failed to send message: \(error.localizedDescription)")
+                }
+            }
+        }
     }
     
-    private func navigateToChatWithText(_ text: String) {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            isChatVisible = true
+    private func sendMessageToAPI(text: String) async throws -> String {
+        // Use the existing OmiAPIClient to send the message
+        var fullResponse = ""
+        
+        do {
+            // Ensure authentication is synced before API call
+            await MainActor.run {
+                AuthBridge.shared.syncFromFlutterApp()
+            }
+            
+            // Check if configuration is valid
+            guard OmiConfig.isConfigured() else {
+                throw NSError(domain: "VoiceAssistantError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Authentication required. Please sign in to Omi."])
+            }
+            
+            // Create async stream to collect the response
+            let stream = OmiAPIClient.shared.sendMessage(text: text, appId: nil, fileIds: [])
+            
+            // Collect response chunks with timeout
+            let timeoutDuration: TimeInterval = 30.0 // 30 second timeout
+            let startTime = Date()
+            
+            for try await chunk in stream {
+                // Check for timeout
+                if Date().timeIntervalSince(startTime) > timeoutDuration {
+                    throw NSError(domain: "VoiceAssistantError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+                }
+                
+                fullResponse += chunk.text
+                
+                // Yield to prevent blocking
+                if Task.isCancelled {
+                    throw CancellationError()
+                }
+            }
+            
+            return fullResponse.isEmpty ? "I received your message but couldn't generate a response." : fullResponse
+            
+        } catch {
+            // Log the error for debugging
+            print("❌ API Error: \(error.localizedDescription)")
+            throw error
+        }
+    }
+    
+    private func navigateToChatWithResponse(originalMessage: String, response: String) {
+        // Ensure we're on the main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async {
+                self.navigateToChatWithResponse(originalMessage: originalMessage, response: response)
+            }
+            return
         }
         
-        // TODO: Pass the transcribed text to the chat view
-        // This will need to be implemented when we integrate with ChatView
+        // Check if view is still active
+        guard isViewActive else {
+            print("⚠️ Navigation cancelled - view is no longer active")
+            return
+        }
+        
+        // Double-check that we're still in a valid state
+        guard case .success = popupState else {
+            print("⚠️ Navigation cancelled - popup state changed")
+            return
+        }
+        
+        print("🔄 Preparing to navigate to chat with message: \(originalMessage)")
+        
+        // Instead of immediate navigation, let's delay and be more cautious
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Final safety check before navigation
+            guard self.isViewActive else {
+                print("⚠️ Late navigation cancelled - view not active")
+                return
+            }
+            
+            if case .success = self.popupState {
+                print("🔄 Actually navigating to chat now")
+                
+                // Use the most gentle animation possible
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    self.isChatVisible = true
+                }
+            } else {
+                print("⚠️ Late navigation cancelled - state changed")
+            }
+        }
+        
+        // TODO: Pass both the original message and response to ChatView
+        // This will need proper implementation when we integrate message passing
     }
     
     private func formatDuration(_ duration: TimeInterval) -> String {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
+// Safe wrapper for ChatView to prevent crashes during initialization
+struct SafeChatView: View {
+    @State private var isReady = false
+    @State private var hasError = false
+    @State private var errorMessage = ""
+    
+    var body: some View {
+        ZStack {
+            Color(.windowBackgroundColor)
+                .ignoresSafeArea()
+            
+            if hasError {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 40)
+                        .foregroundColor(.orange)
+                    
+                    Text("Chat Loading Error")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                    
+                    Button("Retry") {
+                        attemptChatLoad()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.purple)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .padding(24)
+            } else if isReady {
+                ChatView()
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.3), value: isReady)
+            } else {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                        .scaleEffect(1.5)
+                    
+                    Text("Loading chat...")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                .padding(24)
+            }
+        }
+        .onAppear {
+            attemptChatLoad()
+        }
+    }
+    
+    private func attemptChatLoad() {
+        hasError = false
+        isReady = false
+        
+        // Add a small delay to ensure the popup animation completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            do {
+                // Try to safely initialize required components
+                let _ = OmiConfig.isConfigured()
+                let _ = AuthBridge.shared.getAuthStatus()
+                
+                // If we get here without crashing, we can safely show ChatView
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isReady = true
+                }
+                
+                print("✅ SafeChatView: Successfully loaded ChatView")
+                
+            } catch {
+                print("❌ SafeChatView: Failed to load ChatView - \(error.localizedDescription)")
+                hasError = true
+                errorMessage = "Failed to initialize chat: \(error.localizedDescription)"
+            }
+        }
     }
 }
 

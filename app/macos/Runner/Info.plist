@@ -75,6 +75,8 @@
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Omi records your microphone audio as part of conversation recording feature and transcribes in real-time</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Omi uses speech recognition to transcribe your voice recordings into text for the conversation feature</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Omi records screen and system audio as part of conversation recording feature and transcribes in real-time.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
