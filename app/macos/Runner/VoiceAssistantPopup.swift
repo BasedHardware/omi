@@ -291,17 +291,13 @@ struct VoiceAssistantPopup: View {
     }
 
     var body: some View {
-        ZStack {
-            Color(.windowBackgroundColor)
-                .ignoresSafeArea()
-
-            VStack(spacing: 20) {
-                Text(titleText)
-                    .font(.title2)
-                    .bold()
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .transition(.opacity)
+        VStack(spacing: 20) {
+            Text(titleText)
+                .font(.title2)
+                .bold()
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .transition(.opacity)
 
                 // Main content based on state
                 Group {
@@ -360,7 +356,6 @@ struct VoiceAssistantPopup: View {
                     )
             )
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-        }
         .onAppear {
             isViewActive = true
             popupState = .idle
@@ -378,10 +373,15 @@ struct VoiceAssistantPopup: View {
             voiceRecorder.cancelRecording()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            // Sync auth when app becomes active
+            // Sync auth when app becomes active with error handling
             DispatchQueue.main.async {
-                AuthBridge.shared.forceSync()
-                checkOmiConnection()
+                do {
+                    AuthBridge.shared.forceSync()
+                    checkOmiConnection()
+                } catch {
+                    print("❌ Failed to sync authentication on app activation")
+                    errorMessage = "Authentication sync failed"
+                }
             }
         }
     }
@@ -700,26 +700,44 @@ struct VoiceAssistantPopup: View {
     
     private func initializeAuthentication() {
         DispatchQueue.main.async {
-            AuthBridge.shared.syncFromFlutterApp()
-            self.isInitialized = true
-            self.checkOmiConnection()
+            do {
+                AuthBridge.shared.syncFromFlutterApp()
+                self.isInitialized = true
+                self.checkOmiConnection()
+            } catch {
+                print("❌ Failed to initialize authentication")
+                self.errorMessage = "Authentication initialization failed"
+                self.isInitialized = false
+            }
         }
     }
     
     private func checkOmiConnection() {
-        // Force sync authentication data from Flutter app
-        AuthBridge.shared.forceSync()
+        // Sync authentication data from Flutter app with error handling
+        do {
+            AuthBridge.shared.forceSync()
+        } catch {
+            print("❌ Failed to sync authentication data")
+            errorMessage = "Authentication sync failed. Please restart the app."
+            return
+        }
         
         if !OmiConfig.isConfigured() {
             let status = AuthBridge.shared.getAuthStatus()
-            print("Omi not configured. Missing: \(status.missingData.joined(separator: ", "))")
+            // Log minimal info for debugging without exposing sensitive data
+            print("⚠️ Omi configuration incomplete")
             errorMessage = "Please sign in to Omi to use chat functionality"
             
-            // Debug: Print available keys to help with integration
-            AuthBridge.shared.printAvailableKeys()
+            #if DEBUG
+            // Only print debug info in debug builds, never in production
+            print("Debug: Missing configuration fields count: \(status.missingData.count)")
+            #endif
         } else {
             print("✅ Omi configuration successful")
+            #if DEBUG
+            // Only print configuration details in debug builds
             OmiConfig.printConfiguration()
+            #endif
             errorMessage = nil
         }
     }
@@ -760,13 +778,13 @@ struct VoiceAssistantPopup: View {
                 }
             } catch APIError.authenticationRequired {
                 await MainActor.run {
-                    print("Authentication required for loading messages")
+                    print("⚠️ Authentication required for loading messages")
                     errorMessage = "Please sign in to Omi to view messages"
                     showWelcomeMessage = true
                 }
             } catch {
                 await MainActor.run {
-                    print("Failed to load messages: \(error)")
+                    print("❌ Failed to load messages: \(type(of: error))")
                     errorMessage = "Failed to load messages. Please check your connection."
                     // Show welcome message as fallback
                     showWelcomeMessage = true
@@ -788,7 +806,7 @@ struct VoiceAssistantPopup: View {
                 }
             } catch {
                 await MainActor.run {
-                    print("Failed to get initial message: \(error)")
+                    print("❌ Failed to get initial message: \(type(of: error))")
                     // Keep welcome message
                 }
             }
@@ -1119,9 +1137,13 @@ struct VoiceAssistantPopup: View {
         var fullResponse = ""
         
         do {
-            // Ensure authentication is synced before API call
+            // Ensure authentication is synced before API call with proper error handling
             await MainActor.run {
-                AuthBridge.shared.syncFromFlutterApp()
+                do {
+                    AuthBridge.shared.syncFromFlutterApp()
+                } catch {
+                    print("❌ Failed to sync authentication before API call")
+                }
             }
             
             // Check if configuration is valid
@@ -1153,8 +1175,8 @@ struct VoiceAssistantPopup: View {
             return fullResponse.isEmpty ? "I received your message but couldn't generate a response." : fullResponse
             
         } catch {
-            // Log the error for debugging
-            print("❌ API Error: \(error.localizedDescription)")
+            // Log the error for debugging without exposing sensitive information
+            print("❌ API Error: \(type(of: error))")
             throw error
         }
     }

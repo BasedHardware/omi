@@ -191,36 +191,59 @@ struct ChatView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .onAppear {
-            // Safely sync auth data first, then initialize
+            // Safely sync auth data first, then initialize with error handling
             DispatchQueue.main.async {
-                AuthBridge.shared.syncFromFlutterApp()
-                isInitialized = true
-                checkOmiConnection()
+                do {
+                    AuthBridge.shared.syncFromFlutterApp()
+                    isInitialized = true
+                    checkOmiConnection()
+                } catch {
+                    print("❌ Failed to initialize authentication")
+                    errorMessage = "Authentication initialization failed"
+                    isInitialized = false
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            // Sync auth when app becomes active
+            // Sync auth when app becomes active with error handling
             DispatchQueue.main.async {
-                AuthBridge.shared.forceSync()
-                checkOmiConnection()
+                do {
+                    AuthBridge.shared.forceSync()
+                    checkOmiConnection()
+                } catch {
+                    print("❌ Failed to sync authentication on app activation")
+                    errorMessage = "Authentication sync failed"
+                }
             }
         }
     }
 
     private func checkOmiConnection() {
-        // Force sync authentication data from Flutter app
-        AuthBridge.shared.forceSync()
+        // Sync authentication data from Flutter app with error handling
+        do {
+            AuthBridge.shared.forceSync()
+        } catch {
+            print("❌ Failed to sync authentication data")
+            errorMessage = "Authentication sync failed. Please restart the app."
+            return
+        }
         
         if !OmiConfig.isConfigured() {
             let status = AuthBridge.shared.getAuthStatus()
-            print("Omi not configured. Missing: \(status.missingData.joined(separator: ", "))")
+            // Log minimal info for debugging without exposing sensitive data
+            print("⚠️ Omi configuration incomplete")
             errorMessage = "Please sign in to Omi to use chat functionality"
             
-            // Debug: Print available keys to help with integration
-            AuthBridge.shared.printAvailableKeys()
+            #if DEBUG
+            // Only print debug info in debug builds, never in production
+            print("Debug: Missing configuration fields count: \(status.missingData.count)")
+            #endif
         } else {
             print("✅ Omi configuration successful")
+            #if DEBUG
+            // Only print configuration details in debug builds
             OmiConfig.printConfiguration()
+            #endif
             errorMessage = nil
         }
     }
@@ -255,13 +278,13 @@ struct ChatView: View {
                 }
             } catch APIError.authenticationRequired {
                 await MainActor.run {
-                    print("Authentication required for loading messages")
+                    print("⚠️ Authentication required for loading messages")
                     errorMessage = "Please sign in to Omi to view messages"
                     showWelcomeMessage = true
                 }
             } catch {
                 await MainActor.run {
-                    print("Failed to load messages: \(error)")
+                    print("❌ Failed to load messages: \(type(of: error))")
                     errorMessage = "Failed to load messages. Please check your connection."
                     // Show welcome message as fallback
                     showWelcomeMessage = true
@@ -283,7 +306,7 @@ struct ChatView: View {
                 }
             } catch {
                 await MainActor.run {
-                    print("Failed to get initial message: \(error)")
+                    print("❌ Failed to get initial message: \(type(of: error))")
                     // Keep welcome message
                 }
             }
@@ -389,12 +412,12 @@ struct ChatView: View {
                     // Update the last message with error
                     if let lastIndex = messages.indices.last {
                         messages[lastIndex] = ChatMessage(
-                            content: "Failed to send message: \(error.localizedDescription)", 
+                            content: "Failed to send message. Please try again.", 
                             isUser: false
                         )
                     }
                     isLoading = false
-                    errorMessage = error.localizedDescription
+                    errorMessage = "Failed to send message. Please check your connection."
                 }
             }
         }
