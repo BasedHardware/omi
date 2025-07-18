@@ -134,7 +134,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       var provider = context.read<MessageProvider>();
       var sessionProvider = context.read<ChatSessionProvider>();
       
-      // Load sessions first
+      // Load sessions from cache first for instant UI
+      sessionProvider.setSessionsFromCache();
+      
+      // Then load sessions from server
       await sessionProvider.loadSessions();
       
       if (provider.messages.isEmpty) {
@@ -198,36 +201,36 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 
                 // Main chat area
                 Expanded(
-                  child: Stack(
-                    children: [
-                      // Animated background pattern
-                      _buildAnimatedBackground(),
+            child: Stack(
+              children: [
+                // Animated background pattern
+                _buildAnimatedBackground(),
 
-                      // Main content with glassmorphism
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.02),
+                // Main content with glassmorphism
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.02),
                           borderRadius: const BorderRadius.only(
                             topRight: Radius.circular(20),
                             bottomRight: Radius.circular(20),
                           ),
-                        ),
-                        child: Column(
-                          children: [
-                            _buildModernHeader(appProvider),
-                            if (provider.isLoadingMessages) _buildLoadingBar(),
-                            Expanded(
-                              child: _animationsInitialized
-                                  ? FadeTransition(
-                                      opacity: _fadeAnimation,
-                                      child: SlideTransition(
-                                        position: _slideAnimation,
-                                        child: _buildChatContent(provider, connectivityProvider),
-                                      ),
-                                    )
-                                  : _buildChatContent(provider, connectivityProvider),
-                            ),
-                            _buildFloatingInputArea(provider, connectivityProvider),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildModernHeader(appProvider),
+                      if (provider.isLoadingMessages) _buildLoadingBar(),
+                      Expanded(
+                        child: _animationsInitialized
+                            ? FadeTransition(
+                                opacity: _fadeAnimation,
+                                child: SlideTransition(
+                                  position: _slideAnimation,
+                                  child: _buildChatContent(provider, connectivityProvider),
+                                ),
+                              )
+                            : _buildChatContent(provider, connectivityProvider),
+                      ),
+                      _buildFloatingInputArea(provider, connectivityProvider),
                           ],
                         ),
                       ),
