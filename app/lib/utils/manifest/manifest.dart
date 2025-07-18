@@ -49,8 +49,7 @@ class ManifestFile {
 
   int get image => int.parse(imageIndex ?? "0");
 
-  factory ManifestFile.fromJson(Map<String, dynamic> json) =>
-      _$ManifestFileFromJson(json);
+  factory ManifestFile.fromJson(Map<String, dynamic> json) => _$ManifestFileFromJson(json);
 
   ManifestFile({
     this.type,

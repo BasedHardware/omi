@@ -6,8 +6,12 @@ import httpx
 from pydantic import BaseModel
 from ulid import ULID
 
-from database.apps import update_app_in_db, upsert_app_to_db, get_persona_by_id_db, \
-    get_persona_by_username_twitter_handle_db
+from database.apps import (
+    update_app_in_db,
+    upsert_app_to_db,
+    get_persona_by_id_db,
+    get_persona_by_username_twitter_handle_db,
+)
 from database.redis_db import delete_generic_cache, save_username, is_username_taken
 from utils.llm.persona import condense_tweets, generate_twitter_persona_prompt
 from utils.conversations.memories import process_twitter_memories
@@ -51,7 +55,7 @@ class TwitterProfile(BaseModel):
             friends=data.get("friends") or 0,
             sub_count=data.get("sub_count") or 0,
             id=data.get("id") or "",
-            status=data.get("status", "error")
+            status=data.get("status", "error"),
         )
 
 
@@ -66,7 +70,7 @@ def with_retry(operation_name: str, func: Callable[[], T]) -> T:
         try:
             return func()
         except Exception as e:
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             if attempt == max_retries - 1:
                 raise
             print(f"Error in {operation_name} (attempt {attempt + 1}/{max_retries}): {str(e)}")
@@ -79,10 +83,7 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
     """Fetch Twitter profile for a user and return structured data"""
     url = f"https://{rapid_api_host}/screenname.php?screenname={handle}"
 
-    headers = {
-        "X-RapidAPI-Key": rapid_api_key,
-        "X-RapidAPI-Host": rapid_api_host
-    }
+    headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
 
     def fetch_profile():
         response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
@@ -116,10 +117,7 @@ async def get_twitter_timeline(handle: str) -> TwitterTimeline:
     print(f"Fetching Twitter timeline for {handle}...")
     url = f"https://{rapid_api_host}/timeline.php?screenname={handle}"
 
-    headers = {
-        "X-RapidAPI-Key": rapid_api_key,
-        "X-RapidAPI-Host": rapid_api_host
-    }
+    headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
 
     def fetch_timeline():
         response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
@@ -130,11 +128,10 @@ async def get_twitter_timeline(handle: str) -> TwitterTimeline:
 
             # Convert raw timeline to structured model
             timeline_data = data.get('timeline', [])
-            tweets = [TwitterTweet(
-                text=tweet['text'],
-                created_at=tweet['created_at'],
-                id=tweet['tweet_id']
-            ) for tweet in timeline_data]
+            tweets = [
+                TwitterTweet(text=tweet['text'], created_at=tweet['created_at'], id=tweet['tweet_id'])
+                for tweet in timeline_data
+            ]
 
             return TwitterTimeline(timeline=tweets)
         # else
@@ -218,7 +215,7 @@ def _create_or_update_persona(profile: TwitterProfile, username: str, uid: str, 
     persona["twitter"] = {
         "username": profile.profile,
         "avatar": profile.avatar,
-        "connected_at": datetime.now(timezone.utc)
+        "connected_at": datetime.now(timezone.utc),
     }
 
     # Ensure persona is published
@@ -240,7 +237,7 @@ async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
     persona['twitter'] = {
         "username": profile.profile,
         "avatar": profile.avatar,
-        "connected_at": datetime.now(timezone.utc)
+        "connected_at": datetime.now(timezone.utc),
     }
 
     update_app_in_db(persona)

@@ -4,17 +4,13 @@
 //   envConfig.ALGOLIA_SEARCH_API_KEY,
 // );
 
-interface SearchControlsProps {
-  children: React.ReactNode;
-}
-
 // const routing = {
 //   router: history({
 //     cleanUrlOnDispose: false,
 //   }),
 // };
 
-export default function SearchControls({ children }: SearchControlsProps) {
+export default function SearchControls() {
   return null;
   // return (
   //   <Fragment>
@@ -27,7 +23,7 @@ export default function SearchControls({ children }: SearchControlsProps) {
   //       routing={routing}
   //     >
   //       <Configure hitsPerPage={20} />
-  //       {children}
+  //       {/* {children} */}
   //     </InstantSearch>
   //   </Fragment>
   // );

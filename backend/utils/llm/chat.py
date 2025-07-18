@@ -7,10 +7,12 @@ from typing import List, Optional, Tuple
 
 from pydantic import BaseModel, Field, ValidationError
 
+import database.users as users_db
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
+from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 
@@ -18,6 +20,7 @@ from utils.llms.memory import get_prompt_memories
 # ****************************************
 # ************* CHAT BASICS **************
 # ****************************************
+
 
 def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_str: str = '') -> str:
     user_name, memories_str = get_prompt_memories(uid)
@@ -47,6 +50,7 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 # ************* RETRIEVAL + CHAT **************
 # *********************************************
 
+
 class RequiresContext(BaseModel):
     value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
 
@@ -56,9 +60,11 @@ class TopicsContext(BaseModel):
 
 
 class DatesContext(BaseModel):
-    dates_range: List[datetime] = Field(default=[],
-                                        examples=[['2024-12-23T00:00:00+07:00', '2024-12-23T23:59:00+07:00']],
-                                        description="Dates range. (Optional)", )
+    dates_range: List[datetime] = Field(
+        default=[],
+        examples=[['2024-12-23T00:00:00+07:00', '2024-12-23T23:59:00+07:00']],
+        description="Dates range. (Optional)",
+    )
 
 
 def requires_context(question: str) -> bool:
@@ -105,7 +111,9 @@ def retrieve_is_an_omi_question(question: str) -> bool:
 
     User's Question:
     {question}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -156,7 +164,9 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     {question}
     </question>
 
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
@@ -169,8 +179,8 @@ class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
 
 
-def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
-    content = TranscriptSegment.segments_as_string(segments)
+def chunk_extraction(segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None) -> str:
+    content = TranscriptSegment.segments_as_string(segments, people=people)
     prompt = f'''
     You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
     You will be given a conversation transcript of a low quality recording, and a list of topics.
@@ -209,7 +219,9 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
@@ -217,8 +229,7 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Ap
     return llm_mini.invoke(prompt).content
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None,
-                                 callbacks=[]) -> str:
+def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
     return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
 
@@ -241,7 +252,9 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
@@ -254,9 +267,15 @@ def answer_omi_question_stream(messages: List[Message], context: str, callbacks:
     return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
-def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[App] = None,
-                       cited: Optional[bool] = False,
-                       messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+def _get_qa_rag_prompt(
+    uid: str,
+    question: str,
+    context: str,
+    plugin: Optional[App] = None,
+    cited: Optional[bool] = False,
+    messages: List[Message] = [],
+    tz: Optional[str] = "UTC",
+) -> str:
     user_name, memories_str = get_prompt_memories(uid)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
@@ -275,7 +294,8 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[A
       - Avoid citing irrelevant memories.
     """
 
-    return f"""
+    return (
+        f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -334,20 +354,40 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[A
     </question_timezone>
 
     <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    """.replace(
+            '    ', ''
+        )
+        .replace('\n\n\n', '\n\n')
+        .strip()
+    )
 
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[App] = None, cited: Optional[bool] = False,
-           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+def qa_rag(
+    uid: str,
+    question: str,
+    context: str,
+    plugin: Optional[App] = None,
+    cited: Optional[bool] = False,
+    messages: List[Message] = [],
+    tz: Optional[str] = "UTC",
+) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_medium.invoke(prompt).content
 
 
-def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[App] = None, cited: Optional[bool] = False,
-                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+def qa_rag_stream(
+    uid: str,
+    question: str,
+    context: str,
+    plugin: Optional[App] = None,
+    cited: Optional[bool] = False,
+    messages: List[Message] = [],
+    tz: Optional[str] = "UTC",
+    callbacks=[],
+) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    #print('qa_rag prompt', prompt)
+    # print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
@@ -355,8 +395,15 @@ def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[App] =
 # ************* RETRIEVAL (EMOTIONAL) **************
 # **************************************************
 
-def retrieve_memory_context_params(memory: Conversation) -> List[str]:
-    transcript = memory.get_transcript(False)
+
+def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
+    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = memory.get_transcript(False, people=people)
     if len(transcript) == 0:
         return []
 
@@ -368,7 +415,9 @@ def retrieve_memory_context_params(memory: Conversation) -> List[str]:
 
     Conversation:
     {transcript}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
 
     try:
         with_parser = llm_mini.with_structured_output(TopicsContext)
@@ -381,7 +430,14 @@ def retrieve_memory_context_params(memory: Conversation) -> List[str]:
 
 def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    transcript = memory.get_transcript(False)
+
+    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = memory.get_transcript(False, people=people)
     prompt = f"""
     You are a thoughtful and encouraging Friend.
     Your best friend is {user_name}, {memories_str}
@@ -403,20 +459,22 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.invoke(prompt).content
-
 
 
 # **********************************************
 # ************* CHAT V2 LANGGRAPH **************
 # **********************************************
 
+
 class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
         examples=[['John Doe', 'Jane Doe']],
-        description='Identify all the people names who were mentioned during the conversation.'
+        description='Identify all the people names who were mentioned during the conversation.',
     )
     topics: List[str] = Field(
         default=[],
@@ -426,12 +484,12 @@ class ExtractedInformation(BaseModel):
     entities: List[str] = Field(
         default=[],
         examples=[['OpenAI', 'GPT-4']],
-        description='List any products, technologies, places, or other entities that are relevant to the conversation.'
+        description='List any products, technologies, places, or other entities that are relevant to the conversation.',
     )
     dates: List[str] = Field(
         default=[],
         examples=[['2024-01-01', '2024-01-02']],
-        description=f'Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.'
+        description=f'Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.',
     )
 
 
@@ -445,7 +503,6 @@ class FiltersToUse(BaseModel):
 
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
-
 
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
@@ -512,7 +569,9 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
@@ -520,7 +579,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
 
 
 def retrieve_metadata_fields_from_transcript(
-        uid: str, created_at: datetime, transcript_segment: List[dict], tz: str, photos: List[ConversationPhoto] = None
+    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str, photos: List[ConversationPhoto] = None
 ) -> ExtractedInformation:
     context_parts = []
     if transcript_segment:
@@ -559,7 +618,9 @@ def retrieve_metadata_fields_from_transcript(
     ```
     {full_context}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
@@ -589,13 +650,13 @@ def retrieve_metadata_fields_from_transcript(
         'people': [normalize_filter(p) for p in result.people],
         'topics': [normalize_filter(t) for t in result.topics],
         'entities': [normalize_filter(e) for e in result.topics],
-        'dates': []
+        'dates': [],
     }
     # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
     for date in result.dates:
         try:
             date = datetime.strptime(date, '%Y-%m-%d')
-            #if date.year > 2025:
+            # if date.year > 2025:
             #    continue
             metadata['dates'].append(date.strftime('%Y-%m-%d'))
         except Exception as e:
@@ -613,8 +674,9 @@ def retrieve_metadata_fields_from_transcript(
     return metadata
 
 
-def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str,
-                                   source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_message(
+    uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None
+) -> ExtractedInformation:
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
 
@@ -641,13 +703,16 @@ def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text:
     ```
     {message_text}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
 
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str,
-                                source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_text(
+    uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None
+) -> ExtractedInformation:
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
@@ -674,7 +739,9 @@ def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: s
     ```
     {text}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -710,7 +777,7 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
         'people': [normalize_filter(p) for p in result.people],
         'topics': [normalize_filter(t) for t in result.topics],
         'entities': [normalize_filter(e) for e in result.entities],
-        'dates': []
+        'dates': [],
     }
 
     for date in result.dates:
@@ -746,7 +813,9 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     ```
 
     Question: {question}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
@@ -767,6 +836,13 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
 
 def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
+
+    person_ids = [s.person_id for s in segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
     prompt = f'''
     {user_name} is having a conversation.
 
@@ -785,9 +861,11 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
 
     Conversation:
     ```
-    {TranscriptSegment.segments_as_string(segments)}
+    {TranscriptSegment.segments_as_string(segments, people=people)}
     ```
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
@@ -797,7 +875,14 @@ class OutputMessage(BaseModel):
 
 def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    transcript = TranscriptSegment.segments_as_string(segments)
+
+    person_ids = [s.person_id for s in segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = TranscriptSegment.segments_as_string(segments, people=people)
     # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
     prompt = f"""
@@ -829,5 +914,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message

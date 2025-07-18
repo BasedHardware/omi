@@ -61,8 +61,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       // Small delay to ensure all state updates are complete
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
-          setState(() {
-          });
+          setState(() {});
         }
       });
     }
@@ -272,7 +271,6 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           );
                         }
 
-
                         return Text(
                           'Browse, install, and create apps',
                           style: responsive.bodyMedium.copyWith(
@@ -437,7 +435,10 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
               } else if (value is String) {
                 if (value == 'Installed Apps' || value == 'My Apps') {
                   MixpanelManager().appsTypeFilter(value, false);
-                } else if (value.startsWith('1+') || value.startsWith('2+') || value.startsWith('3+') || value.startsWith('4+')) {
+                } else if (value.startsWith('1+') ||
+                    value.startsWith('2+') ||
+                    value.startsWith('3+') ||
+                    value.startsWith('4+')) {
                   MixpanelManager().appsRatingFilter(value, false);
                 } else if (value == 'A-Z' || value == 'Z-A' || value == 'Highest Rating' || value == 'Lowest Rating') {
                   MixpanelManager().appsSortFilter(value, false);
@@ -751,7 +752,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     return slivers;
   }
 
-  Widget _buildCategorySection(ResponsiveHelper responsive, AppProvider appProvider, dynamic category, List<App> categoryApps) {
+  Widget _buildCategorySection(
+      ResponsiveHelper responsive, AppProvider appProvider, dynamic category, List<App> categoryApps) {
     // Show up to 8 apps from this category
     final displayApps = categoryApps.take(8).toList();
 
@@ -908,7 +910,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   Widget _buildCategoryAppCard(ResponsiveHelper responsive, App app) {
     return SizedBox(
-      width: 320, 
+      width: 320,
       height: 120,
       child: Material(
         color: Colors.transparent,
@@ -1068,7 +1070,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   }
 
   Widget _buildAppsGrid(ResponsiveHelper responsive, AppProvider appProvider) {
-    final apps = appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps : appProvider.apps;
+    final apps =
+        appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps : appProvider.apps;
 
     if (apps.isEmpty) {
       return SliverFillRemaining(

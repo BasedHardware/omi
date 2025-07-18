@@ -26,10 +26,7 @@ def create_product(name: str, description: str, image: str):
 def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, currency: str = 'usd'):
     """Create a price for the given product."""
     price = stripe.Price.create(
-        unit_amount=amount_in_cents,
-        currency=currency,
-        product=product_id,
-        recurring={'interval': 'month'}
+        unit_amount=amount_in_cents, currency=currency, product=product_id, recurring={'interval': 'month'}
     )
     return price
 
@@ -37,37 +34,29 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
 def create_app_payment_link(price_id: str, app_id: str, stripe_acc_id: str):
     """Create a payment link for the specified price."""
     payment_link = stripe.PaymentLink.create(
-        line_items=[{
-            'price': price_id,
-            'quantity': 1,
-        }],
+        line_items=[
+            {
+                'price': price_id,
+                'quantity': 1,
+            }
+        ],
         transfer_data={
             'destination': stripe_acc_id,
         },
-        subscription_data={
-            'metadata': {
-                'app_id': app_id
-            }
-        },
-        metadata={
-            'app_id': app_id
-        },
+        subscription_data={'metadata': {'app_id': app_id}},
+        metadata={'app_id': app_id},
     )
     return payment_link
 
 
 def parse_event(payload, sig_header):
     """Parse the Stripe event."""
-    return stripe.Webhook.construct_event(
-        payload, sig_header, endpoint_secret
-    )
+    return stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
 
 
 def parse_connect_event(payload, sig_header):
     """Parse the Stripe Connect event."""
-    return stripe.Webhook.construct_event(
-        payload, sig_header, connect_secret
-    )
+    return stripe.Webhook.construct_event(payload, sig_header, connect_secret)
 
 
 def create_connect_account(uid: str, country: str):
@@ -76,12 +65,8 @@ def create_connect_account(uid: str, country: str):
             "stripe_dashboard": {
                 "type": "express",
             },
-            "fees": {
-                "payer": "application"
-            },
-            "losses": {
-                "payments": "application"
-            },
+            "fees": {"payer": "application"},
+            "losses": {"payments": "application"},
         },
         country=country,
         tos_acceptance={"service_agreement": "full" if country == "US" else "recipient"},
@@ -91,12 +76,9 @@ def create_connect_account(uid: str, country: str):
         },
         settings={
             "payouts": {
-                "schedule": {
-                    "interval": "monthly",
-                    "monthly_anchor": 2
-                },
+                "schedule": {"interval": "monthly", "monthly_anchor": 2},
             },
-        }
+        },
     )
 
     # Generate the onboarding URL with dynamic return and refresh URLs
@@ -107,10 +89,7 @@ def create_connect_account(uid: str, country: str):
         type="account_onboarding",
     )
 
-    return {
-        "account_id": account.id,
-        "url": account_links.url
-    }
+    return {"account_id": account.id, "url": account_links.url}
 
 
 def refresh_connect_account_link(account_id: str):
@@ -120,10 +99,7 @@ def refresh_connect_account_link(account_id: str):
         return_url=urljoin(base_url, f"/v1/stripe/return/{account_id}"),
         type="account_onboarding",
     )
-    return {
-        "account_id": account_id,
-        "url": account_link.url
-    }
+    return {"account_id": account_id, "url": account_link.url}
 
 
 def is_onboarding_complete(account_id: str):

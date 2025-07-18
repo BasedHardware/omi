@@ -177,7 +177,7 @@ cat .env.template > .dev.env
 
 Add your API keys to the `.env` file. (Sentry is not needed)
 
-- `API_BASE_URL` is your backend url. You can use our dev backend URL https://backend-dt5lrfkkoa-uc.a.run.app/ or Follow this guide to [install backend](https://docs.omi.me/docs/developer/backend/Backend_Setup)
+- `API_BASE_URL` is your backend url. You can use our dev backend URL https://api.omiapi.com/ or Follow this guide to [install backend](https://docs.omi.me/docs/developer/backend/Backend_Setup)
 - Be sure to include the trailing '/' or you'll get malformed URL's
 - If you want to update this later on, you will need to delete the builds folder, and recreate the runner using dart.
 
@@ -213,5 +213,16 @@ If you're facing auth issues running the app, enable Google/Apple sign-in in Fir
 - Select your target device in Xcode or Android Studio.
 - Run the app using `flutter run -v --flavor dev`
 - To generate a dev apk `flutter build apk --flavor dev`
+
+### 9. Code Formatting[​](#9-code-formatting)
+
+To ensure code consistency, we use `dart format` with a line length of 120 characters.
+
+To automatically format your code on commit, install the pre-commit hook:
+
+```bash
+# From the root of the repository
+ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+```
 
 Having troubles? [Join Discord and search your issue in help channel](https://discord.gg/omi)

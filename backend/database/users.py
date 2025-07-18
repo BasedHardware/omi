@@ -46,11 +46,23 @@ def get_person(uid: str, person_id: str):
 
 
 def get_people(uid: str):
-    people_ref = (
-        db.collection('users').document(uid).collection('people')
-    )
+    people_ref = db.collection('users').document(uid).collection('people')
     people = people_ref.stream()
     return [person.to_dict() for person in people]
+
+
+def get_people_by_ids(uid: str, person_ids: list[str]):
+    if not person_ids:
+        return []
+    people_ref = db.collection('users').document(uid).collection('people')
+    # Firestore 'in' query supports up to 30 items.
+    all_people = []
+    for i in range(0, len(person_ids), 30):
+        chunk_ids = person_ids[i : i + 30]
+        people_query = people_ref.where("id", 'in', chunk_ids)
+        people = people_query.stream()
+        all_people.extend([person.to_dict() for person in people])
+    return all_people
 
 
 def update_person(uid: str, person_id: str, name: str):
@@ -103,16 +115,19 @@ def delete_user_data(uid: str):
 # ************* Analytics **************
 # **************************************
 
+
 def set_conversation_summary_rating_score(uid: str, conversation_id: str, value: int):
     doc_id = document_id_from_seed('memory_summary' + conversation_id)
-    db.collection('analytics').document(doc_id).set({
-        'id': doc_id,
-        'memory_id': conversation_id,
-        'uid': uid,
-        'value': value,
-        'created_at': datetime.now(timezone.utc),
-        'type': 'memory_summary',
-    })
+    db.collection('analytics').document(doc_id).set(
+        {
+            'id': doc_id,
+            'memory_id': conversation_id,
+            'uid': uid,
+            'value': value,
+            'created_at': datetime.now(timezone.utc),
+            'type': 'memory_summary',
+        }
+    )
 
 
 def get_conversation_summary_rating_score(conversation_id: str):
@@ -131,19 +146,22 @@ def get_all_ratings(rating_type: str = 'memory_summary'):
 
 def set_chat_message_rating_score(uid: str, message_id: str, value: int):
     doc_id = document_id_from_seed('chat_message' + message_id)
-    db.collection('analytics').document(doc_id).set({
-        'id': doc_id,
-        'message_id': message_id,
-        'uid': uid,
-        'value': value,
-        'created_at': datetime.now(timezone.utc),
-        'type': 'chat_message',
-    })
+    db.collection('analytics').document(doc_id).set(
+        {
+            'id': doc_id,
+            'message_id': message_id,
+            'uid': uid,
+            'value': value,
+            'created_at': datetime.now(timezone.utc),
+            'type': 'chat_message',
+        }
+    )
 
 
 # **************************************
 # ************** Payments **************
 # **************************************
+
 
 def get_stripe_connect_account_id(uid: str):
     user_ref = db.collection('users').document(uid)
@@ -177,9 +195,11 @@ def get_default_payment_method(uid: str):
     user_data = user_ref.get().to_dict()
     return user_data.get('default_payment_method', None)
 
+
 # **************************************
 # ********* Data Protection ************
 # **************************************
+
 
 def get_data_protection_level(uid: str) -> str:
     """
@@ -218,51 +238,45 @@ def set_data_protection_level(uid: str, level: str) -> None:
 def set_migration_status(uid: str, target_level: str):
     """Sets the migration status on the user's profile."""
     user_ref = db.collection('users').document(uid)
-    migration_status = {
-        'target_level': target_level,
-        'status': 'in_progress',
-        'started_at': datetime.now(timezone.utc)
-    }
+    migration_status = {'target_level': target_level, 'status': 'in_progress', 'started_at': datetime.now(timezone.utc)}
     user_ref.set({'migration_status': migration_status}, merge=True)
 
 
 def finalize_migration(uid: str, target_level: str):
     """Atomically sets the new protection level and removes the migration status field."""
     user_ref = db.collection('users').document(uid)
-    user_ref.update({
-        'data_protection_level': target_level,
-        'migration_status': firestore.DELETE_FIELD
-    })
+    user_ref.update({'data_protection_level': target_level, 'migration_status': firestore.DELETE_FIELD})
 
 
 # **************************************
 # ************* Language ***************
 # **************************************
 
+
 def get_user_language_preference(uid: str) -> str:
     """
     Get the user's preferred language.
-    
+
     Args:
         uid: User ID
-        
+
     Returns:
         Language code (e.g., 'en', 'vi') or empty string if not set
     """
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
-    
+
     if user_doc.exists:
         user_data = user_doc.to_dict()
         return user_data.get('language', '')
-    
+
     return ''  # Return empty string if not set
 
 
 def set_user_language_preference(uid: str, language: str) -> None:
     """
     Set the user's preferred language.
-    
+
     Args:
         uid: User ID
         language: Language code (e.g., 'en', 'vi')

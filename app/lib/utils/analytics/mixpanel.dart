@@ -98,7 +98,7 @@ class MixpanelManager {
           _mixpanel?.optOutTracking();
           _mixpanel?.reset();
         } else if (PlatformService.isDesktop) {
-          // Note: mixpanel_analytics doesn't have built-in opt-out, 
+          // Note: mixpanel_analytics doesn't have built-in opt-out,
           // but we can set userId to null to stop tracking
           _mixpanelAnalytics?.userId = null;
         }
@@ -129,7 +129,7 @@ class MixpanelManager {
           _mixpanel?.alias(newUid, _preferences.uid);
           _mixpanel?.identify(newUid);
         } else if (PlatformService.isDesktop) {
-          // Note: mixpanel_analytics doesn't have built-in alias, 
+          // Note: mixpanel_analytics doesn't have built-in alias,
           // but we can just set the new userId
           _mixpanelAnalytics?.userId = newUid;
         }

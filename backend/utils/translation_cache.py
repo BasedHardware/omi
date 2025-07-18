@@ -27,7 +27,7 @@ class TranscriptSegmentLanguageCache:
 
         # Simple approach: if new text starts with old text, return the difference
         if new_text.startswith(old_text):
-            return new_text[len(old_text):].strip()
+            return new_text[len(old_text) :].strip()
 
         # If not a simple continuation, return the full new text for re-evaluation
         return new_text

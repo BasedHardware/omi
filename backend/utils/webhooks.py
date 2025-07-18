@@ -6,8 +6,13 @@ from typing import List
 import requests
 import websockets
 
-from database.redis_db import get_user_webhook_db, user_webhook_status_db, disable_user_webhook_db, \
-    enable_user_webhook_db, set_user_webhook_db
+from database.redis_db import (
+    get_user_webhook_db,
+    user_webhook_status_db,
+    disable_user_webhook_db,
+    enable_user_webhook_db,
+    set_user_webhook_db,
+)
 from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
@@ -45,11 +50,7 @@ def day_summary_webhook(uid, summary: str):
         try:
             response = requests.post(
                 webhook_url,
-                json={
-                    'summary': summary,
-                    'uid': uid,
-                    'created_at': datetime.now().isoformat()
-                },
+                json={'summary': summary, 'uid': uid, 'created_at': datetime.now().isoformat()},
                 headers={'Content-Type': 'application/json'},
                 timeout=30,
             )
@@ -118,7 +119,9 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             return
         webhook_url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
-            response = requests.post(webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
+            response = requests.post(
+                webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15
+            )
             print('send_audio_bytes_developer_webhook:', webhook_url, response.status_code)
         except Exception as e:
             print(f"Error sending audio bytes to developer webhook: {e}")
@@ -164,6 +167,7 @@ def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
         enable_user_webhook_db(uid, wType)
         res = True
     return res
+
 
 def send_webhook_notification(token: str, message: str):
     send_notification(token, "Webhook" + ' says', message)

@@ -12,13 +12,23 @@ from multipart.multipart import shutil
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
-from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageConversation, \
-    FileChat
+from models.chat import (
+    ChatSession,
+    Message,
+    SendMessageRequest,
+    MessageSender,
+    ResponseMessage,
+    MessageConversation,
+    FileChat,
+)
 from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
-from utils.chat import process_voice_message_segment, process_voice_message_segment_stream, \
-    transcribe_voice_message_segment
+from utils.chat import (
+    process_voice_message_segment,
+    process_voice_message_segment_stream,
+    transcribe_voice_message_segment,
+)
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
@@ -43,18 +53,14 @@ def filter_messages(messages, app_id):
 def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
     chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     if chat_session is None:
-        cs = ChatSession(
-            id=str(uuid.uuid4()),
-            created_at=datetime.now(timezone.utc),
-            plugin_id=plugin_id
-        )
+        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=plugin_id)
         chat_session = chat_db.add_chat_session(uid, cs.dict())
     return chat_session
 
 
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
-        data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
 
@@ -66,8 +72,12 @@ def send_message(
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
-        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
-        app_id=plugin_id
+        id=str(uuid.uuid4()),
+        text=data.text,
+        created_at=datetime.now(timezone.utc),
+        sender='human',
+        type='text',
+        app_id=plugin_id,
     )
     if data.file_ids is not None:
         new_file_ids = fc.retrieve_new_file(data.file_ids)
@@ -139,8 +149,9 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data,
-                                                     chat_session=chat_session):
+        async for chunk in execute_graph_chat_stream(
+            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
+        ):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
                 yield f'{msg}\n\n'
@@ -154,16 +165,11 @@ def send_message(
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
                     yield f"done: {data}\n\n"
 
-    return StreamingResponse(
-        generate_stream(),
-        media_type="text/event-stream"
-    )
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message(
-        message_id: str, uid: str = Depends(auth.get_current_user_uid)
-):
+def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -252,8 +258,9 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    messages = chat_db.get_messages(uid, limit=100, include_conversations=True, app_id=plugin_id,
-                                    chat_session_id=chat_session_id)
+    messages = chat_db.get_messages(
+        uid, limit=100, include_conversations=True, app_id=plugin_id, chat_session_id=chat_session_id
+    )
     print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
@@ -261,8 +268,9 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
 
 
 @router.post("/v2/voice-messages")
-async def create_voice_message_stream(files: List[UploadFile] = File(...),
-                                      uid: str = Depends(auth.get_current_user_uid)):
+async def create_voice_message_stream(
+    files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)
+):
     # wav
     paths = retrieve_file_paths(files, uid)
     if len(paths) == 0:
@@ -277,15 +285,11 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid):
             yield chunk
 
-    return StreamingResponse(
-        generate_stream(),
-        media_type="text/event-stream"
-    )
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 @router.post("/v2/voice-message/transcribe")
-async def transcribe_voice_message(files: List[UploadFile] = File(...),
-                                   uid: str = Depends(auth.get_current_user_uid)):
+async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     # Check if files are empty
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail='No files provided')
@@ -382,7 +386,8 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
     return response
 
 
-#CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
+# CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
+
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
 def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
@@ -435,9 +440,7 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
 
 
 @router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message(
-        message_id: str, uid: str = Depends(auth.get_current_user_uid)
-):
+def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -474,8 +477,7 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
 
 
 @router.post("/v1/voice-message/transcribe")
-async def transcribe_voice_message(files: List[UploadFile] = File(...),
-                                   uid: str = Depends(auth.get_current_user_uid)):
+async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     # Check if files are empty
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail='No files provided')

@@ -88,12 +88,14 @@ class OmiSettingsTile extends AdaptiveWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                trailing ?? 
-                (showArrow ? const Icon(
-                  FontAwesomeIcons.chevronRight,
-                  size: 12,
-                  color: ResponsiveHelper.textTertiary,
-                ) : const SizedBox.shrink()),
+                trailing ??
+                    (showArrow
+                        ? const Icon(
+                            FontAwesomeIcons.chevronRight,
+                            size: 12,
+                            color: ResponsiveHelper.textTertiary,
+                          )
+                        : const SizedBox.shrink()),
               ],
             ),
           ),
@@ -101,4 +103,4 @@ class OmiSettingsTile extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

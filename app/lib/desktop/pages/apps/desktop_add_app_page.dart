@@ -1,4 +1,3 @@
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -369,7 +368,8 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                         ),
 
                         // Prompts section (if applicable) - using desktop widgets
-                        if (provider.isCapabilitySelectedById('chat') || provider.isCapabilitySelectedById('memories')) ...[
+                        if (provider.isCapabilitySelectedById('chat') ||
+                            provider.isCapabilitySelectedById('memories')) ...[
                           const SizedBox(height: 24),
                           _buildDesktopPromptsSection(provider),
                         ],
@@ -748,7 +748,8 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                 label: 'Chat Prompt',
                 hint: 'You are an awesome app, your job is to respond to the user queries and make them feel good...',
               ),
-            if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat')) const SizedBox(height: 20),
+            if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat'))
+              const SizedBox(height: 20),
             if (provider.isCapabilitySelectedById('memories'))
               DesktopPromptTextField(
                 controller: provider.conversationPromptController,
@@ -849,7 +850,9 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                   decoration: BoxDecoration(
-                    color: provider.isValid ? ResponsiveHelper.purplePrimary : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    color: provider.isValid
+                        ? ResponsiveHelper.purplePrimary
+                        : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: provider.isValid
                         ? [
@@ -897,7 +900,9 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
         builder: (ctx) {
           return ConfirmationDialog(
             title: 'Submit App?',
-            description: provider.makeAppPublic ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!' : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
+            description: provider.makeAppPublic
+                ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
+                : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
             checkboxText: "Don't show it again",
             checkboxValue: !showSubmitAppConfirmation,
             onCheckboxChanged: (value) {

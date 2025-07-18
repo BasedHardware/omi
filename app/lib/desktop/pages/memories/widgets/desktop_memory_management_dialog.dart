@@ -94,9 +94,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
               size: 16,
             ),
           ),
-          
           const SizedBox(width: 16),
-          
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +120,6 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
               ],
             ),
           ),
-          
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -236,15 +233,15 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
           'Set all memories to private visibility',
           () => _makeAllMemoriesPrivate(context),
         ),
-        
+
         _buildActionItem(
           'Make All Memories Public',
           'Set all memories to public visibility',
           () => _makeAllMemoriesPublic(context),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // Divider
         Container(
           height: 1,
@@ -259,9 +256,9 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
             ),
           ),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // Danger zone
         _buildActionItem(
           'Delete All Memories',
@@ -292,9 +289,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isDangerous 
-            ? Colors.red.withOpacity(0.15)
-            : Colors.white.withOpacity(0.04),
+          color: isDangerous ? Colors.red.withOpacity(0.15) : Colors.white.withOpacity(0.04),
           width: 0.5,
         ),
       ),
@@ -332,13 +327,10 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                     ],
                   ),
                 ),
-                
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: isDangerous 
-                      ? Colors.red.withOpacity(0.1)
-                      : Colors.white.withOpacity(0.05),
+                    color: isDangerous ? Colors.red.withOpacity(0.1) : Colors.white.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(
@@ -418,9 +410,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                     size: 32,
                   ),
                 ),
-                
                 const SizedBox(height: 20),
-                
                 const Text(
                   'Clear Omi\'s Memory',
                   style: TextStyle(
@@ -429,9 +419,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                
                 const SizedBox(height: 12),
-                
                 Text(
                   'Are you sure you want to clear Omi\'s memory? This action cannot be undone and will permanently delete all ${provider.memories.length} memories.',
                   textAlign: TextAlign.center,
@@ -441,9 +429,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
-                
                 const SizedBox(height: 24),
-                
                 Row(
                   children: [
                     Expanded(
@@ -471,9 +457,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                         ),
                       ),
                     ),
-                    
                     const SizedBox(width: 12),
-                    
                     Expanded(
                       child: Material(
                         color: Colors.transparent,
@@ -482,7 +466,8 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                             provider.deleteAllMemories();
                             Navigator.pop(context); // Close confirmation dialog
                             Navigator.pop(context); // Close management dialog
-                            _showSuccessMessage(context, 'Omi\'s memory about you has been cleared', FontAwesomeIcons.trash);
+                            _showSuccessMessage(
+                                context, 'Omi\'s memory about you has been cleared', FontAwesomeIcons.trash);
                           },
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
@@ -610,4 +595,4 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
     overlay.insert(entry);
     Future.delayed(const Duration(seconds: 2), () => entry.remove());
   }
-} 
+}

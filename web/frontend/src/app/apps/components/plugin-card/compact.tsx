@@ -1,6 +1,7 @@
 'use client';
 
 import { Star, Download } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import type { Plugin, PluginStat } from '../types';
 import { NewBadge } from '../new-badge';
@@ -34,10 +35,12 @@ export function CompactPluginCard({ plugin, index }: CompactPluginCardProps) {
       </span>
 
       {/* App icon */}
-      <img
+      <Image
         src={plugin.image || 'https://via.placeholder.com/40'}
         alt={plugin.name}
         className="h-11 w-11 shrink-0 rounded-lg object-cover sm:h-14 sm:w-14"
+        width={56}
+        height={56}
       />
 
       {/* Content */}

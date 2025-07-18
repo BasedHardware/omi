@@ -66,9 +66,7 @@ class _DesktopSearchWidgetState extends State<DesktopSearchWidget> {
                   },
                 ),
               ),
-
               const SizedBox(width: 12),
-
               Consumer<ConversationProvider>(
                 builder: (context, convoProvider, _) {
                   bool isFiltered = convoProvider.showDiscardedConversations;

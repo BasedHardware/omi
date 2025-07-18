@@ -65,4 +65,4 @@ class OmiLoadingBadge extends AdaptiveWidget {
           ],
         ),
       );
-} 
+}

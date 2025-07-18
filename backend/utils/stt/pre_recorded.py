@@ -9,7 +9,7 @@ from utils.other.endpoints import timeit
 
 @timeit
 def fal_whisperx(
-        audio_url: str, speakers_count: int = None, attempts: int = 0, return_language: bool = False
+    audio_url: str, speakers_count: int = None, attempts: int = 0, return_language: bool = False
 ) -> List[dict]:
     print('fal_whisperx', audio_url, speakers_count, attempts)
 
@@ -48,14 +48,16 @@ def _words_cleaning(words: List[dict]):
     for i, w in enumerate(words):
         # if w['timestamp'][0] == w['timestamp'][1]:
         #     continue
-        words_cleaned.append({
-            'start': round(w['timestamp'][0], 2),
-            'end': round(w['timestamp'][1] or w['timestamp'][0] + 1, 2),
-            'speaker': w['speaker'],
-            'text': str(w['text']).strip(),
-            'is_user': False,
-            'person_id': None,
-        })
+        words_cleaned.append(
+            {
+                'start': round(w['timestamp'][0], 2),
+                'end': round(w['timestamp'][1] or w['timestamp'][0] + 1, 2),
+                'speaker': w['speaker'],
+                'text': str(w['text']).strip(),
+                'is_user': False,
+                'person_id': None,
+            }
+        )
 
     for i, word in enumerate(words_cleaned):
         speaker = word['speaker']
@@ -125,18 +127,21 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
-    return [TranscriptSegment(
-        text=str(segment['text']).strip().capitalize(),
-        speaker=segment['speaker'],
-        is_user=segment['is_user'],
-        person_id=None,
-        start=round(segment['start'] - starts_at, 2),
-        end=round(segment['end'] - starts_at, 2),
-    ) for segment in segments]
+    return [
+        TranscriptSegment(
+            text=str(segment['text']).strip().capitalize(),
+            speaker=segment['speaker'],
+            is_user=segment['is_user'],
+            person_id=None,
+            start=round(segment['start'] - starts_at, 2),
+            end=round(segment['end'] - starts_at, 2),
+        )
+        for segment in segments
+    ]
 
 
 def fal_postprocessing(
-        words: List[dict], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
+    words: List[dict], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
 ) -> List[TranscriptSegment]:
     words: List[dict] = _words_cleaning(words)
     user_speaker_id = _retrieve_user_speaker_id(words, skip_n_seconds)

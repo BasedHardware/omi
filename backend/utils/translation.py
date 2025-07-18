@@ -18,6 +18,7 @@ _client = translate_v3.TranslationServiceClient()
 _parent = f"projects/{PROJECT_ID}/locations/global"
 _mime_type = "text/plain"
 
+
 def detect_language(text: str) -> str | None:
     """
     Detects the language of the provided text using Google Cloud Translate API.
@@ -36,11 +37,7 @@ def detect_language(text: str) -> str | None:
 
     try:
         # Call the Google Cloud Translate API to detect language
-        response = _client.detect_language(
-            parent=_parent,
-            content=text,
-            mime_type=_mime_type
-        )
+        response = _client.detect_language(parent=_parent, content=text, mime_type=_mime_type)
 
         detected_language = None
         # Return the language code only if confidence is >= 1
@@ -49,7 +46,7 @@ def detect_language(text: str) -> str | None:
                 if language.confidence >= 1:
                     detected_language = language.language_code
                     break
-        
+
         if len(detection_cache) >= MAX_DETECTION_CACHE_SIZE:
             detection_cache.popitem(last=False)
         detection_cache[text] = detected_language

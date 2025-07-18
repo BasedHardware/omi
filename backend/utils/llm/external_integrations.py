@@ -1,13 +1,16 @@
 from datetime import datetime
 from typing import List
 from langchain_core.prompts import ChatPromptTemplate
+import database.users as users_db
 from models.conversation import Structured, Conversation
+from models.other import Person
 from utils.llm.clients import parser, llm_mini
 from utils.llms.memory import get_prompt_memories
 
 
-def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str,
-                          text_source_spec: str = None) -> Structured:
+def get_message_structure(
+    text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None
+) -> Structured:
     prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
     The message language is {language_code}. Use the same language {language_code} for your response.
@@ -21,21 +24,25 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
     Message Content: ```{text}```
     Message Source: {text_source_spec}
 
-    {format_instructions}'''.replace('    ', '').strip()
+    {format_instructions}'''.replace(
+        '    ', ''
+    ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | llm_mini | parser
 
-    response = chain.invoke({
-        'language_code': language_code,
-        'started_at': started_at.isoformat(),
-        'tz': tz,
-        'text': text,
-        'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
-        'format_instructions': parser.get_format_instructions(),
-    })
+    response = chain.invoke(
+        {
+            'language_code': language_code,
+            'started_at': started_at.isoformat(),
+            'tz': tz,
+            'text': text,
+            'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
+            'format_instructions': parser.get_format_instructions(),
+        }
+    )
 
-    for event in (response.events or []):
+    for event in response.events or []:
         if event.duration > 180:
             event.duration = 180
         event.created = False
@@ -52,14 +59,25 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       For Calendar Events, include any events or meetings mentioned in the content.
 
       Text: ```{text}```
-      '''.replace('    ', '').strip()
+      '''.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
 
-    conversation_history = Conversation.conversations_to_string(memories)
+    all_person_ids = []
+    for m in memories:
+        all_person_ids.extend([s.person_id for s in m.transcript_segments if s.person_id])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    conversation_history = Conversation.conversations_to_string(memories, people=people)
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
@@ -75,6 +93,8 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     ```
     ${conversation_history}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     return llm_mini.invoke(prompt).content

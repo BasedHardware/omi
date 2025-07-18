@@ -22,15 +22,15 @@ NotificationInterface _createPlatformNotificationService() {
 /// Automatically selects the correct platform-specific implementation
 class NotificationService {
   static NotificationInterface? _instance;
-  
+
   /// Get the singleton notification service instance
   static NotificationInterface get instance {
     _instance ??= _createPlatformNotificationService();
     return _instance!;
   }
-  
+
   /// Clear the instance (useful for testing)
   static void reset() {
     _instance = null;
   }
-} 
+}

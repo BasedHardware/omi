@@ -395,8 +395,6 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
     );
   }
 
-
-
   Widget _buildPreferenceTile({
     required String title,
     required bool value,
@@ -458,4 +456,4 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
       ),
     );
   }
-} 
+}

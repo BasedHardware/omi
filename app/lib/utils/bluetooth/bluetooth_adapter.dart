@@ -7,7 +7,7 @@ import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart' as win
 
 /// Bluetooth adapter that automatically chooses the right Bluetooth package
 /// Uses flutter_blue_plus_windows on Windows, flutter_blue_plus on other platforms
-/// 
+///
 /// This adapter provides a unified interface and exposes all necessary types,
 /// so no other files need to import flutter_blue_plus packages directly.
 class BluetoothAdapter {
@@ -93,7 +93,7 @@ class BluetoothAdapter {
       return standard_ble.Guid(uuid);
     }
   }
-  
+
   /// Get the FlutterBluePlus class for advanced operations
   static dynamic get flutterBluePlus {
     if (Platform.isWindows) {
@@ -113,7 +113,7 @@ class BluetoothAdapterStateHelper {
       return standard_ble.BluetoothAdapterState.on;
     }
   }
-  
+
   static dynamic get off {
     if (Platform.isWindows) {
       return windows_ble.BluetoothAdapterState.off;
@@ -121,7 +121,7 @@ class BluetoothAdapterStateHelper {
       return standard_ble.BluetoothAdapterState.off;
     }
   }
-  
+
   static dynamic get unknown {
     if (Platform.isWindows) {
       return windows_ble.BluetoothAdapterState.unknown;
@@ -140,7 +140,7 @@ class BluetoothConnectionStateHelper {
       return standard_ble.BluetoothConnectionState.connected;
     }
   }
-  
+
   static dynamic get disconnected {
     if (Platform.isWindows) {
       return windows_ble.BluetoothConnectionState.disconnected;
@@ -149,5 +149,3 @@ class BluetoothConnectionStateHelper {
     }
   }
 }
-
- 

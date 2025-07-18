@@ -28,7 +28,7 @@ export default function TrendingBanner() {
     <header className="sticky top-16 z-[40] w-full text-white md:hidden">
       <Link href={'/dreamforce'}>
         <div className="flex items-center justify-between bg-gradient-to-r from-[#030710] to-[#050c1b] px-4 py-3 shadow-md shadow-black/20 md:px-12">
-          <h1>What's Trending</h1>
+          <h1>What&apos;s Trending</h1>
           <div className="flex items-center gap-2">
             {currentTrend && (
               <span

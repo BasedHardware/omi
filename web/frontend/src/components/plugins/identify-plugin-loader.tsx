@@ -7,7 +7,9 @@ export default function IdentifyPluginLoader() {
         <OnePointCircle className="animate-spin text-xs" />
       </div>
       <div>
-        <h3 className="h-[13px] w-[150px] animate-pulse rounded-sm bg-gray-600 text-base font-semibold md:text-base"></h3>
+        <h3 className="h-[13px] w-[150px] animate-pulse rounded-sm bg-gray-600 text-base font-semibold md:text-base">
+          &nbsp;
+        </h3>
         <p className="mt-2 line-clamp-1 h-[10px] w-[200px] animate-pulse rounded-sm bg-gray-800 text-sm text-gray-500 md:text-base"></p>
       </div>
     </div>

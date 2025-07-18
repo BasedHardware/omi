@@ -29,9 +29,7 @@ def get_keys(uid: str = Depends(get_current_user_id)):
 
 
 @router.post("/v1/mcp/keys", response_model=McpApiKeyCreated, tags=["mcp"])
-def create_key(
-    key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id)
-):
+def create_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id)):
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
@@ -83,14 +81,10 @@ def get_memories(
     category_list = []
     if categories:
         try:
-            category_list = [
-                MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()
-            ]
+            category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
-    return memories_db.get_memories(
-        uid, limit, offset, [c.value for c in category_list]
-    )
+    return memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
 
 
 class SimpleStructured(BaseModel):
@@ -129,9 +123,7 @@ class FullConversation(SimpleConversation):
 #     }
 
 
-@router.get(
-    "/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"]
-)
+@router.get("/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"])
 def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -142,11 +134,7 @@ def get_conversations(
 ):
     print("get_conversations", uid, limit, offset, start_date, end_date, categories)
     try:
-        category_list = (
-            [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()]
-            if categories
-            else []
-        )
+        category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
@@ -168,8 +156,6 @@ def get_conversations(
     response_model=FullConversation,
     tags=["mcp"],
 )
-def get_conversation_by_id(
-    conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)
-):
+def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     print("get_conversation_by_id", uid, conversation_id)
     return conversations_db.get_conversation(uid, conversation_id)

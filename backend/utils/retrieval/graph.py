@@ -10,15 +10,18 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
+
 # import os
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 import database.conversations as conversations_db
+import database.users as users_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
 from models.conversation import Conversation
+from models.other import Person
 from utils.llm.chat import (
     answer_omi_question,
     answer_omi_question_stream,
@@ -122,9 +125,14 @@ def determine_conversation(state: GraphState):
 
 
 def determine_conversation_type(
-        state: GraphState,
+    state: GraphState,
 ) -> Literal[
-    "no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question", "persona_question"]:
+    "no_context_conversation",
+    "context_dependent_conversation",
+    "omi_question",
+    "file_chat_question",
+    "persona_question",
+]:
     # chat with files by attachments on the last message
     print("determine_conversation_type")
     messages = state.get("messages", [])
@@ -171,15 +179,14 @@ def no_context_conversation(state: GraphState):
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
         answer: str = answer_simple_message_stream(
-            state.get("uid"), state.get("messages"),
-            state.get("plugin_selected"),
-            callbacks=[state.get('callback')]
+            state.get("uid"), state.get("messages"), state.get("plugin_selected"), callbacks=[state.get('callback')]
         )
         return {"answer": answer, "ask_for_nps": False}
 
     # no streaming
     answer: str = answer_simple_message(
-        state.get("uid"), state.get("messages"),
+        state.get("uid"),
+        state.get("messages"),
         state.get("plugin_selected"),
     )
     return {"answer": answer, "ask_for_nps": False}
@@ -196,8 +203,7 @@ def omi_question(state: GraphState):
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
         answer: str = answer_omi_question_stream(
-            state.get("messages", []), context_str,
-            callbacks=[state.get('callback')]
+            state.get("messages", []), context_str, callbacks=[state.get('callback')]
         )
         return {'answer': answer, 'ask_for_nps': True}
 
@@ -214,9 +220,7 @@ def persona_question(state: GraphState):
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
         answer: str = answer_persona_question_stream(
-            state.get("plugin_selected"),
-            state.get("messages", []),
-            callbacks=[state.get('callback')]
+            state.get("plugin_selected"), state.get("messages", []), callbacks=[state.get('callback')]
         )
         return {'answer': answer, 'ask_for_nps': True}
 
@@ -235,6 +239,7 @@ def context_dependent_conversation(state: GraphState):
 
 
 # !! include a question extractor? node?
+
 
 def retrieve_topics_filters(state: GraphState):
     print("retrieve_topics_filters")
@@ -281,7 +286,7 @@ def query_vectors(state: GraphState):
     # )
 
     # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
-    vector = ([1] * 3072)
+    vector = [1] * 3072
     print("query_vectors vector:", vector[:5])
 
     # TODO: enable it when the in-accurate topic filter get fixed
@@ -312,30 +317,40 @@ def query_vectors(state: GraphState):
 
 def qa_handler(state: GraphState):
     uid = state.get("uid")
+    memories = state.get("memories_found", [])
+
+    all_person_ids = []
+    for m in memories:
+        # m is a dict
+        segments = m.get('transcript_segments', [])
+        all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
 
     # streaming
     streaming = state.get("streaming")
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
-        memories = state.get("memories_found", [])
         response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
-            Conversation.conversations_to_string(memories, False),
+            Conversation.conversations_to_string(memories, False, people=people),
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
             tz=state.get("tz"),
-            callbacks=[state.get('callback')]
+            callbacks=[state.get('callback')],
         )
         return {"answer": response, "ask_for_nps": True}
 
     # no streaming
-    memories = state.get("memories_found", [])
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Conversation.conversations_to_string(memories, False),
+        Conversation.conversations_to_string(memories, False, people=people),
         state.get("plugin_selected"),
         cited=state.get("cited"),
         messages=state.get("messages"),
@@ -419,7 +434,7 @@ graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-        uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False
+    uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat app    :', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -431,18 +446,32 @@ def execute_graph_chat(
 
 
 async def execute_graph_chat_stream(
-        uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False,
-        callback_data: dict = {}, chat_session: Optional[ChatSession] = None
+    uid: str,
+    messages: List[Message],
+    app: Optional[App] = None,
+    cited: Optional[bool] = False,
+    callback_data: dict = {},
+    chat_session: Optional[ChatSession] = None,
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
 
-    task = asyncio.create_task(graph_stream.ainvoke(
-        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": app,
-         "streaming": True, "callback": callback, "chat_session": chat_session, },
-        {"configurable": {"thread_id": str(uuid.uuid4())}},
-    ))
+    task = asyncio.create_task(
+        graph_stream.ainvoke(
+            {
+                "uid": uid,
+                "tz": tz,
+                "cited": cited,
+                "messages": messages,
+                "plugin_selected": app,
+                "streaming": True,
+                "callback": callback,
+                "chat_session": chat_session,
+            },
+            {"configurable": {"thread_id": str(uuid.uuid4())}},
+        )
+    )
 
     while True:
         try:
@@ -464,8 +493,12 @@ async def execute_graph_chat_stream(
 
 
 async def execute_persona_chat_stream(
-        uid: str, messages: List[Message], app: App, cited: Optional[bool] = False,
-        callback_data: dict = None, chat_session: Optional[str] = None
+    uid: str,
+    messages: List[Message],
+    app: App,
+    cited: Optional[bool] = False,
+    callback_data: dict = None,
+    chat_session: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Handle streaming chat responses for persona-type apps"""
 
@@ -482,10 +515,7 @@ async def execute_persona_chat_stream(
     callback = AsyncStreamingCallback()
 
     try:
-        task = asyncio.create_task(llm_medium_stream.agenerate(
-            messages=[formatted_messages],
-            callbacks=[callback]
-        ))
+        task = asyncio.create_task(llm_medium_stream.agenerate(messages=[formatted_messages], callbacks=[callback]))
 
         while True:
             try:

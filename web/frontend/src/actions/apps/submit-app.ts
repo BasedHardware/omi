@@ -38,18 +38,18 @@ export interface AppSubmissionData {
 export interface SubmitAppResponse {
   id: string;
   name: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export default async function submitApp(
-  formData: FormData
+  formData: FormData,
 ): Promise<SubmitAppResponse | null> {
   const apiUrl = envConfig.API_URL || 'http://localhost:8000';
-  
+
   try {
     // Get token from formData
     const token = formData.get('token') as string;
-    
+
     // Remove token from formData before sending to API
     const apiFormData = new FormData();
     Array.from(formData.entries()).forEach(([key, value]) => {
@@ -57,26 +57,28 @@ export default async function submitApp(
         apiFormData.append(key, value);
       }
     });
-    
+
     const response = await fetch(`${apiUrl}/v1/apps`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
       body: apiFormData,
     });
-    
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ 
-        detail: 'Failed to parse error response' 
+      const errorData = await response.json().catch(() => ({
+        detail: 'Failed to parse error response',
       }));
       console.error('Failed to submit app:', response.status, errorData);
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(
+        errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
+      );
     }
-    
+
     return await response.json();
   } catch (error) {
     console.error('Error submitting app:', error);
     throw error;
   }
-} 
+}

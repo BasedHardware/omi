@@ -3,8 +3,6 @@ from firebase_admin import auth
 from database.redis_db import cache_user_name, get_cached_user_name
 
 
-
-
 def get_user_from_uid(uid: str):
     try:
         user = auth.get_user(uid) if uid else None

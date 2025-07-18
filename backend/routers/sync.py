@@ -156,7 +156,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
             continue
         segment_timestamp = start_timestamp + segment['start']
         segment_path = f'{path_dir}/{segment_timestamp}.wav'
-        segment_aseg = aseg[segment['start'] * 1000:segment['end'] * 1000]
+        segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
         segment_aseg.export(segment_path, format='wav')
         segmented_paths.add(segment_path)
 
@@ -183,7 +183,7 @@ def process_segment(path: str, uid: str, response: dict):
         create_memory = CreateConversation(
             started_at=datetime.fromtimestamp(timestamp),
             finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
-            transcript_segments=transcript_segments
+            transcript_segments=transcript_segments,
         )
         created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
@@ -228,8 +228,8 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
     def chunk_threads(threads):
         chunk_size = 5
         for i in range(0, len(threads), chunk_size):
-            [t.start() for t in threads[i:i + chunk_size]]
-            [t.join() for t in threads[i:i + chunk_size]]
+            [t.start() for t in threads[i : i + chunk_size]]
+            [t.join() for t in threads[i : i + chunk_size]]
 
     segmented_paths = set()
     threads = [threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths)) for path in wav_paths]
@@ -238,7 +238,17 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
     print('sync_local_files len(segmented_paths)', len(segmented_paths))
 
     response = {'updated_memories': set(), 'new_memories': set()}
-    threads = [threading.Thread(target=process_segment, args=(path, uid, response,)) for path in segmented_paths]
+    threads = [
+        threading.Thread(
+            target=process_segment,
+            args=(
+                path,
+                uid,
+                response,
+            ),
+        )
+        for path in segmented_paths
+    ]
     chunk_threads(threads)
 
     # notify through FCM too ?

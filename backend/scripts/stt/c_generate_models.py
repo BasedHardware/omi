@@ -5,8 +5,7 @@ import torchaudio
 from speechbrain.inference.speaker import SpeakerRecognition
 
 verification = SpeakerRecognition.from_hparams(
-    source="speechbrain/spkrec-ecapa-voxceleb",
-    savedir="pretrained_models/spkrec-ecapa-voxceleb"
+    source="speechbrain/spkrec-ecapa-voxceleb", savedir="pretrained_models/spkrec-ecapa-voxceleb"
 )
 os.environ['HUGGINGFACE_TOKEN'] = ''
 
@@ -49,19 +48,19 @@ if __name__ == '__main__':
 
     models_configs = []
     for i in range(0, len(raw_files) - 5):
-        audio_paths = raw_files[i: i + 5]
+        audio_paths = raw_files[i : i + 5]
         models_configs.append([f'models/raw_5_samples_{i}_{i + 5}.pt', audio_paths])
 
     for i in range(0, len(cleaned_files) - 5):
-        audio_paths = cleaned_files[i: i + 5]
+        audio_paths = cleaned_files[i : i + 5]
         models_configs.append([f'models/cleaned_5_samples_{i}_{i + 5}.pt', audio_paths])
 
     for i in range(0, len(raw_files) - 10):
-        audio_paths = raw_files[i: i + 10]
+        audio_paths = raw_files[i : i + 10]
         models_configs.append([f'models/raw_10_samples_{i}_{i + 10}.pt', audio_paths])
 
     for i in range(0, len(cleaned_files) - 10):
-        audio_paths = cleaned_files[i: i + 10]
+        audio_paths = cleaned_files[i : i + 10]
         models_configs.append([f'models/cleaned_10_samples_{i}_{i + 10}.pt', audio_paths])
 
     models_configs.append([f'models/raw_{len(raw_files)}_samples.pt', raw_files])

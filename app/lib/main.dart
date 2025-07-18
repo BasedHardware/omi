@@ -204,34 +204,41 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
-            update: (BuildContext context, value, MessageProvider? previous) => (previous?..updateAppProvider(value)) ?? MessageProvider(),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
           ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, CaptureProvider? previous) => (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
-            update: (BuildContext context, captureProvider, DeviceProvider? previous) => (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
+            update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
+                (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
             create: (context) => OnboardingProvider(),
-            update: (BuildContext context, value, OnboardingProvider? previous) => (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
+            update: (BuildContext context, value, OnboardingProvider? previous) =>
+                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
           ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, SpeechProfileProvider? previous) => (previous?..setProviders(device)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, SpeechProfileProvider? previous) =>
+                (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
           ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
             create: (context) => ConversationDetailProvider(),
-            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) => (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
+            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
+                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
           ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
-            update: (BuildContext context, value, AddAppProvider? previous) => (previous?..setAppProvider(value)) ?? AddAppProvider(),
+            update: (BuildContext context, value, AddAppProvider? previous) =>
+                (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
@@ -242,7 +249,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           return WithForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
-                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null) PlatformManager.instance.instabug.getNavigatorObserver()!,
+                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null)
+                  PlatformManager.instance.instabug.getNavigatorObserver()!,
                 if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -402,7 +410,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
           } else {
             return const OnboardingWrapper();
           }
-        } else if (SharedPreferencesUtil().hasOmiDevice == false && SharedPreferencesUtil().hasPersonaCreated && SharedPreferencesUtil().verifiedPersonaId != null) {
+        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
+            SharedPreferencesUtil().hasPersonaCreated &&
+            SharedPreferencesUtil().verifiedPersonaId != null) {
           return const PersonaProfilePage();
         } else {
           return const DeviceSelectionPage();

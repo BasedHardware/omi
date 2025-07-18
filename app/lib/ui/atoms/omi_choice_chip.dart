@@ -71,4 +71,4 @@ class OmiChoiceChip extends AdaptiveWidget {
       ),
     );
   }
-} 
+}
