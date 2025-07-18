@@ -63,9 +63,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool hasAudioRecording = false;
 
-  List<ConversationPhoto> photos = [];
-  List<Tuple2<String, String>> photosData = [];
-
   bool displayDevToolsInSheet = false;
   bool displayShareOptionsInSheet = false;
 
@@ -80,16 +77,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   void setShowUnassignedFloatingButton(bool value) {
     showUnassignedFloatingButton = value;
-    notifyListeners();
-  }
-
-  Future populatePhotosData() async {
-    if (photos.isEmpty) return;
-    // photosData = await compute<List<MemoryPhoto>, List<Tuple2<String, String>>>(
-    //   (photos) => photos.map((e) => Tuple2(e.base64, e.description)).toList(),
-    //   photos,
-    // );
-    photosData = photos.map((e) => Tuple2(e.base64, e.description)).toList();
     notifyListeners();
   }
 
@@ -220,14 +207,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
     });
 
-    photos = [];
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
-    if (conversation.source == ConversationSource.openglass) {
-      await getConversationPhotos(conversation.id).then((value) async {
-        photos = value;
-        await populatePhotosData();
-      });
-    }
+
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;

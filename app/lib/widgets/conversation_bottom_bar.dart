@@ -86,7 +86,7 @@ class ConversationBottomBar extends StatelessWidget {
 
   Widget _buildTranscriptTab() {
     return TabButton(
-      icon: Icons.graphic_eq_rounded,
+      icon: Icons.forum_outlined,
       isSelected: selectedTab == ConversationTab.transcript,
       onTap: () => onTabSelected(ConversationTab.transcript),
     );
@@ -146,7 +146,7 @@ class ConversationBottomBar extends StatelessWidget {
           icon: null,
           customIcon: app == null && reprocessingApp == null
               ? SvgPicture.asset(
-                  Assets.images.aiMagic.path,
+                  Assets.images.aiMagic,
                   color: Colors.white,
                 )
               : null,

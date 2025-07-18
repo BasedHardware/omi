@@ -214,7 +214,7 @@ env:
         name: dev-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
+    value: "false"
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
@@ -227,10 +227,10 @@ resources:
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
     cpu: 1
-    memory: 4Gi
+    memory: 2Gi
   limits:
     cpu: 2
-    memory: 6Gi
+    memory: 4Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:

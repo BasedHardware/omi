@@ -12,7 +12,6 @@ interface App {
   description: string;
   icon_url?: string;
   deleted?: boolean;
-  // Add other relevant app fields if needed
 }
 
 export default function MyAppsPage() {
@@ -74,23 +73,8 @@ export default function MyAppsPage() {
     }
   };
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
-        <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-white"></div>
-          <p>{authLoading ? 'Loading user...' : 'Loading your apps...'}</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
-        <p>Redirecting to login...</p>
-      </div>
-    );
+    return null;
   }
 
   return (

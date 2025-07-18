@@ -19,6 +19,7 @@ router = APIRouter(
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
+
 @router.get("/v1/oauth/authorize", response_class=HTMLResponse)
 async def oauth_authorize(
     request: Request,
@@ -65,7 +66,11 @@ async def oauth_authorize(
                     elif action_type_value == ActionType.READ_MEMORIES.value:
                         permissions.append({"icon": "🔍", "text": "Access and read your stored memories."})
 
-        if "proactive_notification" in app.capabilities and app.proactive_notification and app.proactive_notification.scopes:
+        if (
+            "proactive_notification" in app.capabilities
+            and app.proactive_notification
+            and app.proactive_notification.scopes
+        ):
             if "user_name" in app.proactive_notification.scopes:
                 permissions.append({"icon": "📛", "text": "Access your user name for notifications."})
             if "user_facts" in app.proactive_notification.scopes:
@@ -87,25 +92,24 @@ async def oauth_authorize(
             seen_texts.add(perm["text"])
     permissions = unique_permissions
 
-    return templates.TemplateResponse("oauth_authenticate.html", {
-        "request": request,
-        "app_id": app_id,
-        "app_name": app.name,
-        "app_image": app.image,
-        "state": state,
-        "permissions": permissions,
-        "firebase_api_key": os.getenv("FIREBASE_API_KEY"),
-        "firebase_auth_domain": os.getenv("FIREBASE_AUTH_DOMAIN"),
-        "firebase_project_id": os.getenv("FIREBASE_PROJECT_ID"),
-    })
+    return templates.TemplateResponse(
+        "oauth_authenticate.html",
+        {
+            "request": request,
+            "app_id": app_id,
+            "app_name": app.name,
+            "app_image": app.image,
+            "state": state,
+            "permissions": permissions,
+            "firebase_api_key": os.getenv("FIREBASE_API_KEY"),
+            "firebase_auth_domain": os.getenv("FIREBASE_AUTH_DOMAIN"),
+            "firebase_project_id": os.getenv("FIREBASE_PROJECT_ID"),
+        },
+    )
 
 
 @router.post("/v1/oauth/token")
-async def oauth_token(
-        firebase_id_token: str = Form(...),
-        app_id: str = Form(...),
-        state: Optional[str] = Form(None)
-):
+async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...), state: Optional[str] = Form(None)):
     try:
         decoded_token = firebase_admin.auth.verify_id_token(firebase_id_token)
         uid = decoded_token['uid']
@@ -127,8 +131,9 @@ async def oauth_token(
     if not is_user_app_enabled(uid, app_id):
         if app.private is not None:
             if app.private and app.uid != uid and not is_tester(uid):
-                raise HTTPException(status_code=403,
-                                    detail="This app is private and you are not authorized to enable it.")
+                raise HTTPException(
+                    status_code=403, detail="This app is private and you are not authorized to enable it."
+                )
 
         # Check Setup completes
         if app.works_externally() and app.external_integration.setup_completed_url:
@@ -136,33 +141,37 @@ async def oauth_token(
                 res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
                 res.raise_for_status()
                 if not res.json().get('is_setup_completed', False):
-                    raise HTTPException(status_code=400,
-                                        detail='App setup is not completed. Please complete app setup before authorizing.')
+                    raise HTTPException(
+                        status_code=400,
+                        detail='App setup is not completed. Please complete app setup before authorizing.',
+                    )
             except requests.RequestException as e:
-                raise HTTPException(status_code=503,
-                                    detail=f'Failed to verify app setup completion. Please try again later or contact support.')
+                raise HTTPException(
+                    status_code=503,
+                    detail=f'Failed to verify app setup completion. Please try again later or contact support.',
+                )
             except ValueError:
-                raise HTTPException(status_code=503,
-                                    detail='Could not verify app setup due to an invalid response from the app. Please contact app developer or support.')
+                raise HTTPException(
+                    status_code=503,
+                    detail='Could not verify app setup due to an invalid response from the app. Please contact app developer or support.',
+                )
 
         # Check payment status
         if app.is_paid and not get_is_user_paid_app(app.id, uid):
-            raise HTTPException(status_code=403,
-                                detail='This is a paid app. Please purchase the app before authorizing.')
+            raise HTTPException(
+                status_code=403, detail='This is a paid app. Please purchase the app before authorizing.'
+            )
 
         try:
             enable_app(uid, app_id)
-            if (app.private is None or not app.private) and \
-               (app.uid is None or app.uid != uid) and \
-               not is_tester(uid):
+            if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
                 increase_app_installs_count(app_id)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not automatically enable the app. Please try again or enable it manually.")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Could not automatically enable the app. Please try again or enable it manually.",
+            )
 
     redirect_url = app.external_integration.app_home_url
 
-    return {
-        "uid": uid,
-        "redirect_url": redirect_url,
-        "state": state
-    }
+    return {"uid": uid, "redirect_url": redirect_url, "state": state}

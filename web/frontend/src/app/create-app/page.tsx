@@ -18,6 +18,7 @@ import {
   type ExternalIntegration,
   type ProactiveNotification,
 } from '../../actions/apps';
+import LoadingState from '@/src/components/loading-state';
 
 export default function CreateAppPage() {
   const { user, loading, signOut } = useAuth();
@@ -490,50 +491,12 @@ export default function CreateAppPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
-        <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-white"></div>
-          <p>Loading user...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!user) {
-    // This case should be handled by the useEffect redirect, but as a fallback:
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
-        <p>Redirecting to login...</p>
-      </div>
-    );
+    return null;
   }
 
   if (isLoading || (isSubmitting && submissionRef.current) || isRedirecting) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
-        <div className="text-center">
-          <div className="mx-auto mb-6 h-8 w-8 animate-spin rounded-full border-2 border-gray-600 border-t-white"></div>
-
-          <p className="text-lg font-medium text-white">
-            {isRedirecting
-              ? 'App submitted successfully!'
-              : isSubmitting
-              ? 'Submitting your app...'
-              : 'Loading...'}
-          </p>
-
-          {(isSubmitting || isRedirecting) && (
-            <p className="mt-2 text-sm text-gray-400">
-              {isRedirecting
-                ? 'Redirecting to homepage...'
-                : 'Please wait while we process your submission'}
-            </p>
-          )}
-        </div>
-      </div>
-    );
+    return <LoadingState isRedirecting={isRedirecting} isSubmitting={isSubmitting} />;
   }
 
   return (

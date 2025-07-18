@@ -7,11 +7,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/auth/custom_post_auth_page.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart' as standard_google_sign_in;
 import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart' as all_platforms_google_sign_in;
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:flutter/services.dart';
 
 /// Generates a cryptographically secure random nonce, to be included in a
 /// credential request.
@@ -31,6 +33,20 @@ String sha256ofString(String input) {
 final String _googleClientId = Env.googleClientId!;
 final String _googleClientSecret = Env.googleClientSecret!;
 
+// Method channel for native platform calls
+const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
+
+/// Brings the desktop app to the front (macOS and Windows)
+Future<void> _bringAppToFront() async {
+  if (PlatformService.isDesktop) {
+    try {
+      await _screenCaptureChannel.invokeMethod('bringAppToFront');
+    } catch (e) {
+      debugPrint('Error bringing app to front: $e');
+    }
+  }
+}
+
 // Create a single GoogleSignIn instance for all platforms to avoid assertion errors
 all_platforms_google_sign_in.GoogleSignIn? _googleSignInAllPlatforms;
 
@@ -44,6 +60,7 @@ all_platforms_google_sign_in.GoogleSignIn _getGoogleSignInAllPlatforms() {
         'https://www.googleapis.com/auth/userinfo.email',
       ],
       redirectPort: 5000,
+      customPostAuthPage: customPostAuthHtml,
     ),
   );
 }
@@ -117,6 +134,10 @@ Future<UserCredential?> signInWithApple() async {
 
     debugPrint('signInWithApple Name: ${SharedPreferencesUtil().fullName}');
     debugPrint('signInWithApple Email: ${SharedPreferencesUtil().email}');
+
+    // Bring app to front after successful authentication
+    await _bringAppToFront();
+
     return userCred;
   } on FirebaseAuthException catch (e) {
     debugPrint('FirebaseAuthException: ${e.code} - ${e.message}');
@@ -290,6 +311,10 @@ Future<UserCredential?> _processGoogleSignInResult(UserCredential result) async 
 
   debugPrint('signInWithGoogle Email: ${SharedPreferencesUtil().email}');
   debugPrint('signInWithGoogle Name: ${SharedPreferencesUtil().givenName}');
+
+  // Bring app to front after successful authentication
+  _bringAppToFront();
+
   return result;
 }
 
@@ -320,6 +345,10 @@ Future<UserCredential?> _processGoogleSignInResultAllPlatforms(
 
   debugPrint('signInWithGoogle (All Platforms) Email: ${SharedPreferencesUtil().email}');
   debugPrint('signInWithGoogle (All Platforms) Name: ${SharedPreferencesUtil().givenName}');
+
+  // Bring app to front after successful authentication
+  await _bringAppToFront();
+
   return result;
 }
 

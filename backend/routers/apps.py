@@ -8,20 +8,60 @@ import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 
-from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
-    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
-    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
-    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db, \
-    create_api_key_db, list_api_keys_db, delete_api_key_db, set_app_popular_db
+from database.apps import (
+    change_app_approval_status,
+    get_unapproved_public_apps_db,
+    add_app_to_db,
+    update_app_in_db,
+    delete_app_from_db,
+    update_app_visibility_in_db,
+    get_personas_by_username_db,
+    get_persona_by_id_db,
+    delete_persona_db,
+    get_persona_by_twitter_handle_db,
+    get_persona_by_username_db,
+    migrate_app_owner_id_db,
+    get_user_persona_by_uid,
+    get_omi_persona_apps_by_uid_db,
+    create_api_key_db,
+    list_api_keys_db,
+    delete_api_key_db,
+    set_app_popular_db,
+)
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
-from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
-    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken, save_username
-from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
-    get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
-    add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
-    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
-    increment_username, generate_api_key, get_popular_apps
+from database.redis_db import (
+    delete_generic_cache,
+    get_specific_user_review,
+    increase_app_installs_count,
+    decrease_app_installs_count,
+    enable_app,
+    disable_app,
+    delete_app_cache_by_id,
+    is_username_taken,
+    save_username,
+)
+from utils.apps import (
+    get_available_apps,
+    get_available_app_by_id,
+    get_approved_available_apps,
+    get_available_app_by_id_with_reviews,
+    set_app_review,
+    get_app_reviews,
+    add_tester,
+    is_tester,
+    add_app_access_for_tester,
+    remove_app_access_for_tester,
+    upsert_app_payment_link,
+    get_is_user_paid_app,
+    is_permit_payment_plan_get,
+    generate_persona_prompt,
+    generate_persona_desc,
+    get_persona_by_uid,
+    increment_username,
+    generate_api_key,
+    get_popular_apps,
+)
 
 from database.memories import migrate_memories
 
@@ -30,8 +70,12 @@ from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App, ActionType, AppCreate, AppUpdate
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.social import get_twitter_profile, verify_latest_tweet, \
-    upsert_persona_from_twitter_profile, add_twitter_to_persona
+from utils.social import (
+    get_twitter_profile,
+    verify_latest_tweet,
+    upsert_persona_from_twitter_profile,
+    add_twitter_to_persona,
+)
 
 router = APIRouter()
 
@@ -39,6 +83,7 @@ router = APIRouter()
 # ******************************************************
 # ********************* APPS CRUD **********************
 # ******************************************************
+
 
 @router.get('/v1/apps', tags=['v1'], response_model=List[App])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
@@ -78,15 +123,15 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 raise HTTPException(status_code=422, detail='Payment plan is required')
 
     if external_integration := data.get('external_integration'):
-        if external_integration.get('triggers_on') is None and \
-                len(external_integration.get('actions', [])) == 0:
+        if external_integration.get('triggers_on') is None and len(external_integration.get('actions', [])) == 0:
             raise HTTPException(status_code=422, detail='Triggers on or actions is required')
         # Trigger on
         if external_integration.get('triggers_on'):
             external_integration['webhook_url'] = external_integration['webhook_url'].strip()
             if external_integration.get('setup_instructions_file_path'):
                 external_integration['setup_instructions_file_path'] = external_integration[
-                    'setup_instructions_file_path'].strip()
+                    'setup_instructions_file_path'
+                ].strip()
                 if external_integration['setup_instructions_file_path'].startswith('http'):
                     external_integration['is_instructions_url'] = True
                 else:
@@ -98,8 +143,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 if not action.get('action'):
                     raise HTTPException(status_code=422, detail='Action field is required for each action')
                 if action.get('action') not in [action_type.value for action_type in ActionType]:
-                    raise HTTPException(status_code=422,
-                                        detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}')
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
+                    )
     os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -111,9 +158,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
-        if (not ext_int.get('app_home_url') and
-                ext_int.get('auth_steps') and
-                len(ext_int['auth_steps']) == 1):
+        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
     try:
@@ -130,8 +175,9 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
 
 @router.post('/v1/personas', tags=['v1'])
-async def create_persona(persona_data: str = Form(...), file: UploadFile = File(...),
-                         uid=Depends(auth.get_current_user_uid)):
+async def create_persona(
+    persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
+):
     data = json.loads(persona_data)
     data['approved'] = False
     data['status'] = 'under-review'
@@ -172,8 +218,12 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
 
 
 @router.patch('/v1/personas/{persona_id}', tags=['v1'])
-async def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None),
-                         uid=Depends(auth.get_current_user_uid)):
+async def update_persona(
+    persona_id: str,
+    persona_data: str = Form(...),
+    file: UploadFile = File(None),
+    uid=Depends(auth.get_current_user_uid),
+):
     data = json.loads(persona_data)
     persona = get_available_app_by_id(persona_id, uid)
     if not persona:
@@ -183,8 +233,11 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
 
     # Image
     if file:
-        if 'image' in persona and len(persona['image']) > 0 and \
-                persona['image'].startswith('https://storage.googleapis.com/'):
+        if (
+            'image' in persona
+            and len(persona['image']) > 0
+            and persona['image'].startswith('https://storage.googleapis.com/')
+        ):
             delete_app_logo(persona['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
         file_path = f"_temp/apps/{file.filename}"
@@ -198,8 +251,7 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Update 'omi' connected_accounts
-    if 'omi' in data.get('connected_accounts', []) and \
-            'omi' not in persona.get('connected_accounts', []):
+    if 'omi' in data.get('connected_accounts', []) and 'omi' not in persona.get('connected_accounts', []):
         data['persona_prompt'] = await generate_persona_prompt(uid, persona)
 
     try:
@@ -266,7 +318,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
         'capabilities': ['persona'],
         'connected_accounts': ['omi'],
         'created_at': datetime.now(timezone.utc),
-        'private': True
+        'private': True,
     }
 
     # Generate persona prompt
@@ -300,8 +352,9 @@ def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
-def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(None),
-               uid=Depends(auth.get_current_user_uid)):
+def update_app(
+    app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
+):
     data = json.loads(app_data)
     app = get_available_app_by_id(app_id, uid)
     if not app:
@@ -309,8 +362,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
-        if 'image' in app and len(app['image']) > 0 and \
-                app['image'].startswith('https://storage.googleapis.com/'):
+        if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
             delete_app_logo(app['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
         file_path = f"_temp/apps/{file.filename}"
@@ -323,9 +375,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
-        if (not ext_int.get('app_home_url') and
-                ext_int.get('auth_steps') and
-                len(ext_int['auth_steps']) == 1):
+        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
     try:
@@ -336,9 +386,14 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(update_app.model_dump(exclude_unset=True))
 
     # payment link
-    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
-                            data.get('uid'),
-                            previous_price=app.get("price", 0))
+    upsert_app_payment_link(
+        data.get('id'),
+        data.get('is_paid', False),
+        data.get('price'),
+        data.get('payment_plan'),
+        data.get('uid'),
+        previous_price=app.get("price", 0),
+    )
 
     if app['approved'] and (app['private'] is None or app['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
@@ -381,10 +436,7 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
     # Generate thumbnail URLs if thumbnails exist
     if app.thumbnails:
-        app.thumbnail_urls = [
-            get_app_thumbnail_url(thumbnail_id)
-            for thumbnail_id in app.thumbnails
-        ]
+        app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
 
     return app
 
@@ -407,7 +459,7 @@ def get_app_categories():
         {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
         {'title': 'News and Information', 'id': 'news-and-information'},
         {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
-        {'title': 'Other', 'id': 'other'}
+        {'title': 'Other', 'id': 'other'},
     ]
 
 
@@ -433,7 +485,7 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
         'username': data.get('username', ''),
         'response': data.get('response', ''),
         'rated_at': datetime.now(timezone.utc).isoformat(),
-        'uid': uid
+        'uid': uid,
     }
     set_app_review(app_id, uid, review_data)
     return {'status': 'ok'}
@@ -464,7 +516,7 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
         'rated_at': old_review['rated_at'],
         'username': old_review.get('username', ''),
         'response': old_review.get('response', ''),
-        'uid': uid
+        'uid': uid,
     }
     set_app_review(app_id, uid, review_data)
     return {'status': 'ok'}
@@ -496,9 +548,7 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
 @router.get('/v1/apps/{app_id}/reviews', tags=['v1'])
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
-    reviews = [
-        details for details in reviews.values() if details['review']
-    ]
+    reviews = [details for details in reviews.values() if details['review']]
     return reviews
 
 
@@ -521,7 +571,7 @@ def get_notification_scopes():
         {'title': 'User Name', 'id': 'user_name'},
         {'title': 'User Memories', 'id': 'user_facts'},
         {'title': 'User Conversations', 'id': 'user_context'},
-        {'title': 'User Chat', 'id': 'user_chat'}
+        {'title': 'User Chat', 'id': 'user_chat'},
     ]
 
 
@@ -530,42 +580,51 @@ def get_app_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
         {'title': 'Conversations', 'id': 'memories'},
-        {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
-            {'title': 'Audio Bytes', 'id': 'audio_bytes'},
-            {'title': 'Conversation Creation', 'id': 'memory_creation'},
-            {'title': 'Transcript Processed', 'id': 'transcript_processed'},
-        ], 'actions': [
-            {
-                'title': 'Create conversations',
-                'id': 'create_conversation',
-                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
-                'description': 'Extend user conversations by making a POST request to the OMI System.'
-            },
-            {
-                'title': 'Create memories',
-                'id': 'create_facts',
-                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
-                'description': 'Create new memories for the user through the OMI System.'
-            },
-            {
-                'title': 'Read conversations',
-                'id': 'read_conversations',
-                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
-                'description': 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
-            },
-            {
-                'title': 'Read memories',
-                'id': 'read_memories',
-                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
-                'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
-            }
-        ]},
-        {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
-            {'title': 'User Name', 'id': 'user_name'},
-            {'title': 'User Facts', 'id': 'user_facts'},
-            {'title': 'User Conversations', 'id': 'user_context'},
-            {'title': 'User Chat', 'id': 'user_chat'}
-        ]}
+        {
+            'title': 'External Integration',
+            'id': 'external_integration',
+            'triggers': [
+                {'title': 'Audio Bytes', 'id': 'audio_bytes'},
+                {'title': 'Conversation Creation', 'id': 'memory_creation'},
+                {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+            ],
+            'actions': [
+                {
+                    'title': 'Create conversations',
+                    'id': 'create_conversation',
+                    'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                    'description': 'Extend user conversations by making a POST request to the OMI System.',
+                },
+                {
+                    'title': 'Create memories',
+                    'id': 'create_facts',
+                    'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                    'description': 'Create new memories for the user through the OMI System.',
+                },
+                {
+                    'title': 'Read conversations',
+                    'id': 'read_conversations',
+                    'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                    'description': 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.',
+                },
+                {
+                    'title': 'Read memories',
+                    'id': 'read_memories',
+                    'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                    'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.',
+                },
+            ],
+        },
+        {
+            'title': 'Notification',
+            'id': 'proactive_notification',
+            'scopes': [
+                {'title': 'User Name', 'id': 'user_name'},
+                {'title': 'User Facts', 'id': 'user_facts'},
+                {'title': 'User Conversations', 'id': 'user_context'},
+                {'title': 'User Chat', 'id': 'user_chat'},
+            ],
+        },
     ]
 
 
@@ -602,6 +661,7 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 # ********************** SOCIAL ************************
 # ******************************************************
 
+
 @router.get('/v1/personas/twitter/profile', tags=['v1'])
 async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     if handle.startswith('@'):
@@ -637,10 +697,7 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
 
 @router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
 async def verify_twitter_ownership_tweet(
-        username: str,
-        handle: str,
-        uid: str = Depends(auth.get_current_user_uid),
-        persona_id: str | None = None
+    username: str, handle: str, uid: str = Depends(auth.get_current_user_uid), persona_id: str | None = None
 ):
     # Get user info to check auth provider
     user = get_user_from_uid(uid)
@@ -720,6 +777,7 @@ async def update_omi_persona_connected_accounts(uid: str):
 # **************** ENABLE/DISABLE APPS *****************
 # ******************************************************
 
+
 @router.post('/v1/apps/enable')
 def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
@@ -763,6 +821,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 # ******************************************************
 # ******************* TEAM ENDPOINTS *******************
 # ******************************************************
+
 
 @router.post('/v1/apps/tester', tags=['v1'])
 def add_new_tester(data: dict, secret_key: str = Header(...)):
@@ -835,8 +894,11 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
-        send_notification(token, 'App Approved 🎉',
-                          f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳')
+        send_notification(
+            token,
+            'App Approved 🎉',
+            f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳',
+        )
     return {'status': 'ok'}
 
 
@@ -850,17 +912,17 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     token = get_token_only(uid)
     if token:
         # TODO: Add reason for rejection in payload and also redirect to the app page
-        send_notification(token, 'App Rejected 😔',
-                          f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
+        send_notification(
+            token,
+            'App Rejected 😔',
+            f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
+        )
     return {'status': 'ok'}
 
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @router.post('/v1/app/thumbnails', tags=['v1'])
-async def upload_app_thumbnail_endpoint(
-        file: UploadFile = File(...),
-        uid: str = Depends(auth.get_current_user_uid)
-):
+async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
     """Upload a thumbnail image for an app.
 
     Args:
@@ -883,10 +945,7 @@ async def upload_app_thumbnail_endpoint(
         # Upload to cloud storage
         url = upload_app_thumbnail(temp_path, thumbnail_id)
 
-        return {
-            'thumbnail_url': url,
-            'thumbnail_id': thumbnail_id
-        }
+        return {'thumbnail_url': url, 'thumbnail_id': thumbnail_id}
 
     finally:
         # Cleanup temp file
@@ -926,21 +985,11 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
 
     key, hashed_key, label = generate_api_key()
 
-    data = {
-        'id': str(ULID()),
-        'hashed': hashed_key,
-        'label': label,
-        'created_at': datetime.now(timezone.utc)
-    }
+    data = {'id': str(ULID()), 'hashed': hashed_key, 'label': label, 'created_at': datetime.now(timezone.utc)}
     create_api_key_db(app_id, data)
 
     # Return both the raw key (for one-time display to user) and the stored data
-    return {
-        'id': data['id'],
-        'secret': key,  # with sk_
-        'label': label,
-        'created_at': data['created_at']
-    }
+    return {'id': data['id'], 'secret': key, 'label': label, 'created_at': data['created_at']}  # with sk_
 
 
 @router.get('/v1/apps/{app_id}/keys', tags=['v1'])

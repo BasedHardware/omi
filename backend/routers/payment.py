@@ -1,15 +1,20 @@
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 
-from database.users import get_stripe_connect_account_id, set_stripe_connect_account_id, set_paypal_payment_details, \
-    get_default_payment_method, set_default_payment_method, get_paypal_payment_details
+from database.users import (
+    get_stripe_connect_account_id,
+    set_stripe_connect_account_id,
+    set_paypal_payment_details,
+    get_default_payment_method,
+    set_default_payment_method,
+    get_paypal_payment_details,
+)
 from utils import stripe as stripe_utils
 from utils.apps import paid_app
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
 
-from utils.stripe import create_connect_account, refresh_connect_account_link, \
-    is_onboarding_complete
+from utils.stripe import create_connect_account, refresh_connect_account_link, is_onboarding_complete
 
 router = APIRouter()
 
@@ -39,10 +44,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
         if session.get("subscription"):
             subscription_id = session["subscription"]
-            stripe.Subscription.modify(
-                subscription_id,
-                metadata={"uid": uid, "app_id": app_id}
-            )
+            stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
 
         # paid
         paid_app(app_id, uid)
@@ -78,7 +80,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
 
 @router.post("/v1/stripe/connect-accounts")
-async def create_connect_account_endpoint(country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)):
+async def create_connect_account_endpoint(
+    country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)
+):
     """
     Create a Stripe Connect account and return the account creation response
     """
@@ -118,8 +122,9 @@ async def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid))
 
 
 @router.post("/v1/stripe/refresh/{account_id}")
-async def refresh_account_link_endpoint(request: Request, account_id: str,
-                                        uid: str = Depends(auth.get_current_user_uid)):
+async def refresh_account_link_endpoint(
+    request: Request, account_id: str, uid: str = Depends(auth.get_current_user_uid)
+):
     """
     Generate a fresh account link if the previous one expired
     """
@@ -138,8 +143,11 @@ async def stripe_return(account_id: str):
     onboarding_complete = is_onboarding_complete(account_id)
     title = "Stripe Account Setup Complete" if onboarding_complete else "Stripe Account Setup Incomplete"
     message_class = "" if onboarding_complete else "error"
-    message = "Your Stripe account has been successfully set up with Omi AI. You can now start receiving payments." if onboarding_complete \
+    message = (
+        "Your Stripe account has been successfully set up with Omi AI. You can now start receiving payments."
+        if onboarding_complete
         else "The account setup process was not completed. Please try again in a few minutes. If the issue persists, contact support."
+    )
 
     html_content = f"""
     <!DOCTYPE html>
@@ -242,11 +250,7 @@ def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     # Check PayPal status
     paypal_status = 'connected' if get_paypal_payment_details(uid) else 'not_connected'
 
-    return {
-        "stripe": stripe_status,
-        "paypal": paypal_status,
-        "default": default_payment_method
-    }
+    return {"stripe": stripe_status, "paypal": paypal_status, "default": default_payment_method}
 
 
 @router.post("/v1/payment-methods/default")

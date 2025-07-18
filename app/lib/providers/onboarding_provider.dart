@@ -82,6 +82,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         hasScreenCapturePermission = false;
       }
     } else {
+      // Mobile platforms (iOS/Android)
       hasBluetoothPermission = await Permission.bluetooth.isGranted;
       hasLocationPermission = await Permission.location.isGranted;
       hasNotificationPermission = await Permission.notification.isGranted;
@@ -401,12 +402,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     required bool isFromOnboarding,
     VoidCallback? goNext,
   }) async {
-    if (device.name.toLowerCase() == 'openglass' || device.type == DeviceType.openglass) {
-      // notifyInfo('OPENGLASS_NOT_SUPPORTED');
-      AppSnackbar.showSnackbarError(
-          'OpenGlass is not supported at the moment. Support will be added in a future update');
-      return;
-    }
     try {
       if (isClicked) return; // if any item is clicked, don't do anything
       isClicked = true; // Prevent further clicks

@@ -1,15 +1,15 @@
-import 'dart:io';
-
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:mixpanel_analytics/mixpanel_analytics.dart';
 
 class MixpanelManager {
   static final MixpanelManager _instance = MixpanelManager._internal();
-  static Mixpanel? _mixpanel;
+  static Mixpanel? _mixpanel; // For mobile platforms
+  static MixpanelAnalytics? _mixpanelAnalytics; // For desktop platforms
   static final SharedPreferencesUtil _preferences = SharedPreferencesUtil();
 
   static Future<void> init() async {
@@ -17,13 +17,25 @@ class MixpanelManager {
     return PlatformService.executeIfSupportedAsync(
       PlatformService.isMixpanelSupported,
       () async {
-        if (_mixpanel == null) {
-          _mixpanel = await Mixpanel.init(
-            Env.mixpanelProjectToken!,
-            optOutTrackingDefault: false,
-            trackAutomaticEvents: true,
+        if (PlatformService.isMobile) {
+          // Use mixpanel_flutter for mobile platforms
+          if (_mixpanel == null) {
+            _mixpanel = await Mixpanel.init(
+              Env.mixpanelProjectToken!,
+              optOutTrackingDefault: false,
+              trackAutomaticEvents: true,
+            );
+            _mixpanel?.setLoggingEnabled(false);
+          }
+        } else if (PlatformService.isDesktop) {
+          // Use mixpanel_analytics for desktop platforms
+          _mixpanelAnalytics ??= MixpanelAnalytics.batch(
+            token: Env.mixpanelProjectToken!,
+            uploadInterval: const Duration(seconds: 3),
+            userId$: Stream.value(_preferences.uid),
+            useIp: true,
+            verbose: false,
           );
-          _mixpanel?.setLoggingEnabled(false);
         }
       },
     );
@@ -53,14 +65,26 @@ class MixpanelManager {
 
   setUserProperty(String key, dynamic value) => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
-        () => _mixpanel?.getPeople().set(key, value),
+        () {
+          if (PlatformService.isMobile) {
+            _mixpanel?.getPeople().set(key, value);
+          } else if (PlatformService.isDesktop) {
+            _mixpanelAnalytics?.engage(
+              operation: MixpanelUpdateOperations.$set,
+              value: {key: value},
+            );
+          }
+        },
       );
 
   void optInTracking() {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        _mixpanel?.optInTracking();
+        if (PlatformService.isMobile) {
+          _mixpanel?.optInTracking();
+        }
+        // Note: mixpanel_analytics doesn't have built-in opt-in/opt-out, but we can still identify
         identify();
       },
     );
@@ -70,8 +94,14 @@ class MixpanelManager {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        _mixpanel?.optOutTracking();
-        _mixpanel?.reset();
+        if (PlatformService.isMobile) {
+          _mixpanel?.optOutTracking();
+          _mixpanel?.reset();
+        } else if (PlatformService.isDesktop) {
+          // Note: mixpanel_analytics doesn't have built-in opt-out,
+          // but we can set userId to null to stop tracking
+          _mixpanelAnalytics?.userId = null;
+        }
       },
     );
   }
@@ -80,7 +110,11 @@ class MixpanelManager {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        _mixpanel?.identify(_preferences.uid);
+        if (PlatformService.isMobile) {
+          _mixpanel?.identify(_preferences.uid);
+        } else if (PlatformService.isDesktop) {
+          _mixpanelAnalytics?.userId = _preferences.uid;
+        }
         _instance.setPeopleValues();
         setNameAndEmail();
       },
@@ -91,8 +125,14 @@ class MixpanelManager {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        _mixpanel?.alias(newUid, _preferences.uid);
-        _mixpanel?.identify(newUid);
+        if (PlatformService.isMobile) {
+          _mixpanel?.alias(newUid, _preferences.uid);
+          _mixpanel?.identify(newUid);
+        } else if (PlatformService.isDesktop) {
+          // Note: mixpanel_analytics doesn't have built-in alias,
+          // but we can just set the new userId
+          _mixpanelAnalytics?.userId = newUid;
+        }
         setNameAndEmail();
       },
     );
@@ -105,12 +145,32 @@ class MixpanelManager {
 
   void track(String eventName, {Map<String, dynamic>? properties}) => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
-        () => _mixpanel?.track(eventName, properties: properties),
+        () {
+          if (PlatformService.isMobile) {
+            _mixpanel?.track(eventName, properties: properties);
+          } else if (PlatformService.isDesktop) {
+            _mixpanelAnalytics?.track(
+              event: eventName,
+              properties: properties ?? {},
+            );
+          }
+        },
       );
 
   void startTimingEvent(String eventName) => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
-        () => _mixpanel?.timeEvent(eventName),
+        () {
+          if (PlatformService.isMobile) {
+            _mixpanel?.timeEvent(eventName);
+          } else if (PlatformService.isDesktop) {
+            // Note: mixpanel_analytics doesn't have built-in timing events,
+            // but we can track the start time manually in properties
+            _mixpanelAnalytics?.track(
+              event: eventName,
+              properties: {'event_start_time': DateTime.now().millisecondsSinceEpoch},
+            );
+          }
+        },
       );
 
   void onboardingDeviceConnected() => track('Onboarding Device Connected');
@@ -416,7 +476,16 @@ class MixpanelManager {
 
   void deleteUser() => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
-        () => _mixpanel?.getPeople().deleteUser(),
+        () {
+          if (PlatformService.isMobile) {
+            _mixpanel?.getPeople().deleteUser();
+          } else if (PlatformService.isDesktop) {
+            _mixpanelAnalytics?.engage(
+              operation: MixpanelUpdateOperations.$delete,
+              value: {},
+            );
+          }
+        },
       );
 
   // Apps Filter

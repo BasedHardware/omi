@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.64+316
+version: 1.0.64+318
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -15,6 +15,10 @@ dependencies:
   # State Management
   provider: ^6.1.2
   flutter_provider_utilities: ^1.0.6
+
+
+  # Desktop
+  window_manager: 0.3.7
 
   # Localizations
   flutter_localizations:
@@ -45,6 +49,10 @@ dependencies:
   intercom_flutter: 9.3.3
   mixpanel_flutter: ^2.4.4
   posthog_flutter: ^5.0.0
+  mixpanel_analytics:
+    git:
+      url: https://github.com/mdmohsin7/mixpanel_analytics.git
+      ref: master
 
   # Utils
   collection: ^1.19.1
@@ -74,7 +82,7 @@ dependencies:
   package_info_plus: ^8.0.1
   path_provider: 2.1.5
   flutter_foreground_task: 9.1.0
-  upgrader: ^10.3.0
+  upgrader: 11.4.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.7
   flutter_background_service: 5.1.0
@@ -181,15 +189,6 @@ flutter:
 
 flutter_gen:
   output: lib/gen/
-  class_name: Assets
-  integrations:
-    flutter_svg: true
-    rive: true
-    lottie: true
-  gen_package_path: true
-  ignore_resolution: true
-  omit_path_levels: 3
-  format_dart_code: false
 
 flutter_native_splash:
   background_image: "assets/images/splash.png"

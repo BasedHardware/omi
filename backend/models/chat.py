@@ -25,6 +25,7 @@ class MessageConversation(BaseModel):
     structured: MessageConversationStructured
     created_at: datetime
 
+
 class FileChat(BaseModel):
     id: str
     name: str
@@ -76,9 +77,7 @@ class Message(BaseModel):
 
     @staticmethod
     def get_messages_as_string(
-            messages: List['Message'],
-            use_user_name_if_available: bool = False,
-            use_plugin_name_if_available: bool = False
+        messages: List['Message'], use_user_name_if_available: bool = False, use_plugin_name_if_available: bool = False
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
 
@@ -100,9 +99,7 @@ class Message(BaseModel):
 
     @staticmethod
     def get_messages_as_xml(
-            messages: List['Message'],
-            use_user_name_if_available: bool = False,
-            use_plugin_name_if_available: bool = False
+        messages: List['Message'], use_user_name_if_available: bool = False, use_plugin_name_if_available: bool = False
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
 
@@ -129,7 +126,11 @@ class Message(BaseModel):
                 </content>
                 {('<attachments>' + ''.join(f"<file>{file.name}</file>" for file in message.files) + '</attachments>') if message.files and len(message.files) > 0 else ''}
                 </message>
-            """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+            """.replace(
+                '    ', ''
+            )
+            .replace('\n\n\n', '\n\n')
+            .strip()
             for message in sorted_messages
         ]
 

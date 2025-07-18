@@ -23,12 +23,14 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -52,6 +54,7 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/debugging/instabug_manager.dart';
+import 'package:window_manager/window_manager.dart';
 
 Future<bool> _init() async {
   // Service manager
@@ -97,8 +100,20 @@ Future<void> initPostHog() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (PlatformService.isDesktop) {
+    await windowManager.ensureInitialized();
+    windowManager.waitUntilReadyToShow().then((_) async {
+      await windowManager.setAsFrameless();
+      // Enforce a minimum window size so the desktop layout doesn't collapse into the mobile view
+      // Width chosen slightly above the small-screen breakpoint (1000px) used in ResponsiveHelper.
+      // Height is set to a sensible value to keep vertical content usable.
+      await windowManager.setMinimumSize(const Size(1100, 600));
+      await windowManager.setSize(const Size(1100, 700));
+    });
+  }
+
   if (PlatformService.isWindows) {
-    // Windows does not support flavors
+    // Windows does not support flavors`
     Env.init(ProdEnv());
   } else {
     if (F.env == Environment.prod) {
@@ -109,7 +124,7 @@ void main() async {
   }
 
   FlutterForegroundTask.initCommunicationPort();
-  if (Env.posthogApiKey != null) {
+  if (Env.posthogApiKey != null && !PlatformService.isDesktop) {
     await initPostHog();
   }
   // _setupAudioSession();
@@ -217,6 +232,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
             update: (BuildContext context, value, AddAppProvider? previous) =>
@@ -293,7 +309,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     return LoggerSnackbar(exception: data);
                   },
                 ),
-                child: const DeciderWidget(),
+                child: const AppShell(), // Use AppShell instead of DeciderWidget
               ),
             ),
           );

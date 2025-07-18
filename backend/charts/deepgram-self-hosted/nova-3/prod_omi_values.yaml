@@ -41,11 +41,11 @@ scaling:
     api:
       metrics:
         # -- Scale the API deployment to this Engine-to-Api pod ratio
-        engineToApiRatio: 1
+        engineToApiRatio: 3
 
     engine:
       # -- Minimum number of Engine replicas.
-      minReplicas: 10
+      minReplicas: 5
       # -- Maximum number of Engine replicas.
       maxReplicas: 20
       metrics:
@@ -75,7 +75,7 @@ scaling:
 api:
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-api
-    tag: release-250610
+    tag: release-250626
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -108,7 +108,7 @@ api:
 engine:
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-engine
-    tag: release-250610
+    tag: release-250626
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -144,7 +144,7 @@ licenseProxy:
   enabled: true
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-license-proxy
-    tag: release-250610
+    tag: release-250626
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

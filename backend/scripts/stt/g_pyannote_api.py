@@ -50,12 +50,7 @@ def voice_identification():
         # "url": file_to_base64_url('pyannote_void.wav'),
         "url": file_to_base64_url('data/more/18-45-32-069108.wav'),
         "webhook": webhook,
-        "voiceprints": [
-            {
-                "voiceprint": "",
-                "label": "Joan"
-            }
-        ],
+        "voiceprints": [{"voiceprint": "", "label": "Joan"}],
     }
     response = requests.request("POST", url, json=payload, headers=headers)
 

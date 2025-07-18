@@ -62,7 +62,7 @@ ceo_options = [
     "Roland Busch",
     "Christian Klein",
     "Kazuhiro Tsuga",
-    "Stéphane Bancel"
+    "Stéphane Bancel",
 ]
 
 company_options = [
@@ -105,7 +105,7 @@ company_options = [
     "Snapchat",
     "Nestlé",
     "Facebook",
-    "GameStop"
+    "GameStop",
 ]
 
 software_product_options = [
@@ -147,7 +147,7 @@ software_product_options = [
     "Salesforce Marketing Cloud",
     "Microsoft Teams",
     "Intel AI Suite",
-    "Uber Driver App"
+    "Uber Driver App",
 ]
 
 hardware_product_options = [
@@ -170,7 +170,7 @@ hardware_product_options = [
     "Samsung Galaxy Fold 4",
     "Fitbit Charge 6",
     "Apple Watch 9",
-    "Lumix S5 II"
+    "Lumix S5 II",
 ]
 
 ai_product_options = [
@@ -213,8 +213,9 @@ ai_product_options = [
     "ChatGPT clones",
     "Tinder AI",
     "Zoom AI transcription",
-    "Salesforce AI"
+    "Salesforce AI",
 ]
 
 valid_items = set(
-    ceo_options + company_options + software_product_options + hardware_product_options + ai_product_options)
+    ceo_options + company_options + software_product_options + hardware_product_options + ai_product_options
+)

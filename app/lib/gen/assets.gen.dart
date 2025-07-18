@@ -7,11 +7,7 @@
 // ignore_for_file: type=lint
 // ignore_for_file: directives_ordering,unnecessary_import,implicit_dynamic_list_literal,deprecated_member_use
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_svg/flutter_svg.dart' as _svg;
-import 'package:lottie/lottie.dart' as _lottie;
-import 'package:vector_graphics/vector_graphics.dart' as _vg;
 
 class $AssetsDeviceAssetsGen {
   const $AssetsDeviceAssetsGen();
@@ -72,7 +68,7 @@ class $AssetsImagesGen {
   const $AssetsImagesGen();
 
   /// File path: assets/images/ai_magic.svg
-  SvgGenImage get aiMagic => const SvgGenImage('assets/images/ai_magic.svg');
+  String get aiMagic => 'assets/images/ai_magic.svg';
 
   /// File path: assets/images/app_launcher_icon.png
   AssetGenImage get appLauncherIcon =>
@@ -102,7 +98,7 @@ class $AssetsImagesGen {
       const AssetGenImage('assets/images/calendar_logo.png');
 
   /// File path: assets/images/checkbox.svg
-  SvgGenImage get checkbox => const SvgGenImage('assets/images/checkbox.svg');
+  String get checkbox => 'assets/images/checkbox.svg';
 
   /// File path: assets/images/clone.png
   AssetGenImage get clone => const AssetGenImage('assets/images/clone.png');
@@ -144,30 +140,25 @@ class $AssetsImagesGen {
       const AssetGenImage('assets/images/herologo_v4.png');
 
   /// File path: assets/images/ic_chart.svg
-  SvgGenImage get icChart => const SvgGenImage('assets/images/ic_chart.svg');
+  String get icChart => 'assets/images/ic_chart.svg';
 
   /// File path: assets/images/ic_clone_chat.svg
-  SvgGenImage get icCloneChat =>
-      const SvgGenImage('assets/images/ic_clone_chat.svg');
+  String get icCloneChat => 'assets/images/ic_clone_chat.svg';
 
   /// File path: assets/images/ic_clone_plus.svg
-  SvgGenImage get icClonePlus =>
-      const SvgGenImage('assets/images/ic_clone_plus.svg');
+  String get icClonePlus => 'assets/images/ic_clone_plus.svg';
 
   /// File path: assets/images/ic_dollar.svg
-  SvgGenImage get icDollar => const SvgGenImage('assets/images/ic_dollar.svg');
+  String get icDollar => 'assets/images/ic_dollar.svg';
 
   /// File path: assets/images/ic_persona_profile.svg
-  SvgGenImage get icPersonaProfile =>
-      const SvgGenImage('assets/images/ic_persona_profile.svg');
+  String get icPersonaProfile => 'assets/images/ic_persona_profile.svg';
 
   /// File path: assets/images/ic_setting_persona.svg
-  SvgGenImage get icSettingPersona =>
-      const SvgGenImage('assets/images/ic_setting_persona.svg');
+  String get icSettingPersona => 'assets/images/ic_setting_persona.svg';
 
   /// File path: assets/images/imessage_logo.svg
-  SvgGenImage get imessageLogo =>
-      const SvgGenImage('assets/images/imessage_logo.svg');
+  String get imessageLogo => 'assets/images/imessage_logo.svg';
 
   /// File path: assets/images/instagram_logo.png
   AssetGenImage get instagramLogo =>
@@ -186,7 +177,7 @@ class $AssetsImagesGen {
       const AssetGenImage('assets/images/instruction_3.png');
 
   /// File path: assets/images/link_icon.svg
-  SvgGenImage get linkIcon => const SvgGenImage('assets/images/link_icon.svg');
+  String get linkIcon => 'assets/images/link_icon.svg';
 
   /// File path: assets/images/linkedin_logo.png
   AssetGenImage get linkedinLogo =>
@@ -255,8 +246,7 @@ class $AssetsImagesGen {
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
 
   /// File path: assets/images/stripe_logo.svg
-  SvgGenImage get stripeLogo =>
-      const SvgGenImage('assets/images/stripe_logo.svg');
+  String get stripeLogo => 'assets/images/stripe_logo.svg';
 
   /// File path: assets/images/telegram_logo.png
   AssetGenImage get telegramLogo =>
@@ -340,19 +330,16 @@ class $AssetsLottieAnimationsGen {
   const $AssetsLottieAnimationsGen();
 
   /// File path: assets/lottie_animations/no_internet.json
-  LottieGenImage get noInternet =>
-      const LottieGenImage('assets/lottie_animations/no_internet.json');
+  String get noInternet => 'assets/lottie_animations/no_internet.json';
 
   /// File path: assets/lottie_animations/server_error.json
-  LottieGenImage get serverError =>
-      const LottieGenImage('assets/lottie_animations/server_error.json');
+  String get serverError => 'assets/lottie_animations/server_error.json';
 
   /// File path: assets/lottie_animations/wave.json
-  LottieGenImage get wave =>
-      const LottieGenImage('assets/lottie_animations/wave.json');
+  String get wave => 'assets/lottie_animations/wave.json';
 
   /// List of all assets
-  List<LottieGenImage> get values => [noInternet, serverError, wave];
+  List<String> get values => [noInternet, serverError, wave];
 }
 
 class $AssetsPdfsGen {
@@ -366,7 +353,7 @@ class $AssetsPdfsGen {
 }
 
 class Assets {
-  Assets._();
+  const Assets._();
 
   static const $AssetsDeviceAssetsGen deviceAssets = $AssetsDeviceAssetsGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
@@ -415,7 +402,7 @@ class AssetGenImage {
     bool gaplessPlayback = true,
     bool isAntiAlias = false,
     String? package,
-    FilterQuality filterQuality = FilterQuality.low,
+    FilterQuality filterQuality = FilterQuality.medium,
     int? cacheWidth,
     int? cacheHeight,
   }) {
@@ -455,150 +442,6 @@ class AssetGenImage {
       _assetName,
       bundle: bundle,
       package: package,
-    );
-  }
-
-  String get path => _assetName;
-
-  String get keyName => _assetName;
-}
-
-class SvgGenImage {
-  const SvgGenImage(
-    this._assetName, {
-    this.size,
-    this.flavors = const {},
-  }) : _isVecFormat = false;
-
-  const SvgGenImage.vec(
-    this._assetName, {
-    this.size,
-    this.flavors = const {},
-  }) : _isVecFormat = true;
-
-  final String _assetName;
-  final Size? size;
-  final Set<String> flavors;
-  final bool _isVecFormat;
-
-  _svg.SvgPicture svg({
-    Key? key,
-    bool matchTextDirection = false,
-    AssetBundle? bundle,
-    String? package,
-    double? width,
-    double? height,
-    BoxFit fit = BoxFit.contain,
-    AlignmentGeometry alignment = Alignment.center,
-    bool allowDrawingOutsideViewBox = false,
-    WidgetBuilder? placeholderBuilder,
-    String? semanticsLabel,
-    bool excludeFromSemantics = false,
-    _svg.SvgTheme? theme,
-    ColorFilter? colorFilter,
-    Clip clipBehavior = Clip.hardEdge,
-    @deprecated Color? color,
-    @deprecated BlendMode colorBlendMode = BlendMode.srcIn,
-    @deprecated bool cacheColorFilter = false,
-  }) {
-    final _svg.BytesLoader loader;
-    if (_isVecFormat) {
-      loader = _vg.AssetBytesLoader(
-        _assetName,
-        assetBundle: bundle,
-        packageName: package,
-      );
-    } else {
-      loader = _svg.SvgAssetLoader(
-        _assetName,
-        assetBundle: bundle,
-        packageName: package,
-        theme: theme,
-      );
-    }
-    return _svg.SvgPicture(
-      loader,
-      key: key,
-      matchTextDirection: matchTextDirection,
-      width: width,
-      height: height,
-      fit: fit,
-      alignment: alignment,
-      allowDrawingOutsideViewBox: allowDrawingOutsideViewBox,
-      placeholderBuilder: placeholderBuilder,
-      semanticsLabel: semanticsLabel,
-      excludeFromSemantics: excludeFromSemantics,
-      colorFilter: colorFilter ??
-          (color == null ? null : ColorFilter.mode(color, colorBlendMode)),
-      clipBehavior: clipBehavior,
-      cacheColorFilter: cacheColorFilter,
-    );
-  }
-
-  String get path => _assetName;
-
-  String get keyName => _assetName;
-}
-
-class LottieGenImage {
-  const LottieGenImage(
-    this._assetName, {
-    this.flavors = const {},
-  });
-
-  final String _assetName;
-  final Set<String> flavors;
-
-  _lottie.LottieBuilder lottie({
-    Animation<double>? controller,
-    bool? animate,
-    _lottie.FrameRate? frameRate,
-    bool? repeat,
-    bool? reverse,
-    _lottie.LottieDelegates? delegates,
-    _lottie.LottieOptions? options,
-    void Function(_lottie.LottieComposition)? onLoaded,
-    _lottie.LottieImageProviderFactory? imageProviderFactory,
-    Key? key,
-    AssetBundle? bundle,
-    Widget Function(
-      BuildContext,
-      Widget,
-      _lottie.LottieComposition?,
-    )? frameBuilder,
-    ImageErrorWidgetBuilder? errorBuilder,
-    double? width,
-    double? height,
-    BoxFit? fit,
-    AlignmentGeometry? alignment,
-    String? package,
-    bool? addRepaintBoundary,
-    FilterQuality? filterQuality,
-    void Function(String)? onWarning,
-  }) {
-    return _lottie.Lottie.asset(
-      _assetName,
-      controller: controller,
-      animate: animate,
-      frameRate: frameRate,
-      repeat: repeat,
-      reverse: reverse,
-      delegates: delegates,
-      options: options,
-      onLoaded: onLoaded,
-      imageProviderFactory: imageProviderFactory,
-      key: key,
-      bundle: bundle,
-      frameBuilder: frameBuilder,
-      errorBuilder: errorBuilder,
-      width: width,
-      height: height,
-      fit: fit,
-      alignment: alignment,
-      package: package,
-      addRepaintBoundary: addRepaintBoundary,
-      filterQuality: filterQuality,
-      onWarning: onWarning,
     );
   }
 

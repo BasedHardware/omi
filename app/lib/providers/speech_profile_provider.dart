@@ -341,7 +341,7 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   @override
-  void onMessageEventReceived(ServerMessageEvent event) {
+  void onMessageEventReceived(MessageEvent event) {
     // TODO: implement onMessageEventReceived
   }
 

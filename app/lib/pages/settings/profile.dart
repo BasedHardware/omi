@@ -208,7 +208,7 @@ class _ProfilePageState extends State<ProfilePage> {
               title: 'Persona',
               subtitle: 'Manage your Omi persona',
               iconWidget: SvgPicture.asset(
-                Assets.images.icPersonaProfile.path,
+                Assets.images.icPersonaProfile,
                 width: 20,
                 height: 20,
                 colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),

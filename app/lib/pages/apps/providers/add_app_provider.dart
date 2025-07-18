@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -600,29 +602,141 @@ class AddAppProvider extends ChangeNotifier {
     return appId;
   }
 
-  Future<void> pickThumbnail() async {
-    ImagePicker imagePicker = ImagePicker();
+  Future pickImage() async {
     try {
-      var file = await imagePicker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-      if (file != null) {
+      debugPrint('🖼️ Attempting to pick image from gallery...');
+
+      // Use file_picker for desktop platforms, image_picker for mobile
+      if (kIsWeb || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        debugPrint('🖼️ Using file_picker for desktop platform');
+        try {
+          FilePickerResult? result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+            allowMultiple: false,
+            dialogTitle: 'Select an image file',
+            withData: false, // Only get file path, not data
+            withReadStream: false,
+          );
+
+          if (result != null && result.files.isNotEmpty && result.files.single.path != null) {
+            debugPrint('🖼️ Image picked successfully via file_picker: ${result.files.single.path}');
+            imageFile = File(result.files.single.path!);
+            debugPrint('🖼️ Image file set, notifying listeners...');
+          } else {
+            debugPrint('🖼️ No image selected by user via file_picker');
+          }
+        } on PlatformException catch (e) {
+          debugPrint('🖼️ FilePicker PlatformException: ${e.code} - ${e.message}');
+          AppSnackbar.showSnackbarError('Error opening file picker: ${e.message}');
+        } catch (e) {
+          debugPrint('🖼️ FilePicker general error: $e');
+          AppSnackbar.showSnackbarError('Error selecting image: $e');
+        }
+      } else {
+        debugPrint('🖼️ Using image_picker for mobile platform');
+        ImagePicker imagePicker = ImagePicker();
+        var file = await imagePicker.pickImage(source: ImageSource.gallery);
+        if (file != null) {
+          debugPrint('🖼️ Image picked successfully via image_picker: ${file.path}');
+          imageFile = File(file.path);
+          debugPrint('🖼️ Image file set, notifying listeners...');
+        } else {
+          debugPrint('🖼️ No image selected by user via image_picker');
+        }
+      }
+
+      notifyListeners();
+    } on PlatformException catch (e) {
+      debugPrint('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
+      if (e.code == 'photo_access_denied') {
+        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
+      } else {
+        AppSnackbar.showSnackbarError('Error selecting image: ${e.message ?? e.code}');
+      }
+    } catch (e) {
+      debugPrint('🖼️ General exception during image picking: $e');
+      AppSnackbar.showSnackbarError('Error selecting image. Please try again.');
+    }
+    checkValidity();
+    notifyListeners();
+  }
+
+  Future<void> pickThumbnail() async {
+    try {
+      debugPrint('🖼️ Attempting to pick thumbnail from gallery...');
+
+      File? thumbnailFile;
+
+      // Use file_picker for desktop platforms, image_picker for mobile
+      if (kIsWeb || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        debugPrint('🖼️ Using file_picker for desktop platform (thumbnail)');
+        try {
+          FilePickerResult? result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+            allowMultiple: false,
+            dialogTitle: 'Select a thumbnail image',
+            withData: false,
+            withReadStream: false,
+          );
+
+          if (result != null && result.files.isNotEmpty && result.files.single.path != null) {
+            debugPrint('🖼️ Thumbnail picked successfully via file_picker: ${result.files.single.path}');
+            thumbnailFile = File(result.files.single.path!);
+          } else {
+            debugPrint('🖼️ No thumbnail selected by user via file_picker');
+            return;
+          }
+        } on PlatformException catch (e) {
+          debugPrint('🖼️ FilePicker PlatformException (thumbnail): ${e.code} - ${e.message}');
+          AppSnackbar.showSnackbarError('Error opening file picker: ${e.message}');
+          return;
+        } catch (e) {
+          debugPrint('🖼️ FilePicker general error (thumbnail): $e');
+          AppSnackbar.showSnackbarError('Error selecting thumbnail: $e');
+          return;
+        }
+      } else {
+        debugPrint('🖼️ Using image_picker for mobile platform (thumbnail)');
+        ImagePicker imagePicker = ImagePicker();
+        var file = await imagePicker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 85,
+        );
+        if (file != null) {
+          debugPrint('🖼️ Thumbnail picked successfully via image_picker: ${file.path}');
+          thumbnailFile = File(file.path);
+        } else {
+          debugPrint('🖼️ No thumbnail selected by user via image_picker');
+          return;
+        }
+      }
+
+      if (thumbnailFile != null) {
         setIsUploadingThumbnail(true);
-        var thumbnailFile = File(file.path);
 
         // Upload thumbnail
+        debugPrint('🖼️ Uploading thumbnail...');
         var result = await uploadAppThumbnail(thumbnailFile);
         if (result.isNotEmpty) {
           thumbnailUrls.add(result['thumbnail_url']!);
           thumbnailIds.add(result['thumbnail_id']!);
+          debugPrint('🖼️ Thumbnail uploaded successfully');
         }
         setIsUploadingThumbnail(false);
       }
     } on PlatformException catch (e) {
+      debugPrint('🖼️ PlatformException during thumbnail picking: ${e.code} - ${e.message}');
       if (e.code == 'photo_access_denied') {
         AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
+      } else {
+        AppSnackbar.showSnackbarError('Error selecting thumbnail: ${e.message ?? e.code}');
       }
+      setIsUploadingThumbnail(false);
+    } catch (e) {
+      debugPrint('🖼️ General exception during thumbnail picking: $e');
+      AppSnackbar.showSnackbarError('Error selecting thumbnail. Please try again.');
       setIsUploadingThumbnail(false);
     }
     checkValidity();
@@ -641,34 +755,38 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future pickImage() async {
-    ImagePicker imagePicker = ImagePicker();
-    try {
-      var file = await imagePicker.pickImage(source: ImageSource.gallery);
-      if (file != null) {
-        imageFile = File(file.path);
-      }
-      notifyListeners();
-    } on PlatformException catch (e) {
-      if (e.code == 'photo_access_denied') {
-        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
-      }
-    }
-    checkValidity();
-    notifyListeners();
-  }
-
   Future updateImage() async {
-    ImagePicker imagePicker = ImagePicker();
     try {
-      var file = await imagePicker.pickImage(source: ImageSource.gallery);
-      if (file != null) {
-        imageFile = File(file.path);
-        if (imageUrl != null) {
-          await CachedNetworkImage.evictFromCache(imageUrl!, cacheKey: imageUrl);
+      // Use file_picker for desktop platforms, image_picker for mobile
+      if (kIsWeb || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        FilePickerResult? result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+          allowMultiple: false,
+          dialogTitle: 'Select an image file',
+          withData: false,
+          withReadStream: false,
+        );
+
+        if (result != null && result.files.isNotEmpty && result.files.single.path != null) {
+          imageFile = File(result.files.single.path!);
+          if (imageUrl != null) {
+            await CachedNetworkImage.evictFromCache(imageUrl!, cacheKey: imageUrl);
+          }
+          imageUrl = null;
         }
-        imageUrl = null;
+      } else {
+        ImagePicker imagePicker = ImagePicker();
+        var file = await imagePicker.pickImage(source: ImageSource.gallery);
+        if (file != null) {
+          imageFile = File(file.path);
+          if (imageUrl != null) {
+            await CachedNetworkImage.evictFromCache(imageUrl!, cacheKey: imageUrl);
+          }
+          imageUrl = null;
+        }
       }
+
       notifyListeners();
     } on PlatformException catch (e) {
       if (e.code == 'photo_access_denied') {

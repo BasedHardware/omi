@@ -90,7 +90,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
 
       setIsLoading(false);
-      if (mounted){
+      if (mounted) {
         context.read<AppProvider>().checkIsAppOwner(app.uid);
         context.read<AppProvider>().setIsAppPublicToggled(!app.private);
       }

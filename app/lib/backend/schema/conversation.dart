@@ -79,6 +79,35 @@ enum ServerProcessingConversationStatus {
   }
 }
 
+class ConversationPhoto {
+  String id;
+  final String base64;
+  String? description;
+  final DateTime createdAt;
+  bool discarded;
+
+  ConversationPhoto(
+      {required this.id, required this.base64, this.description, required this.createdAt, this.discarded = false});
+
+  factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
+    return ConversationPhoto(
+      id: json['id'] ?? '',
+      base64: json['base64'] ?? '',
+      description: json['description'],
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : DateTime.now(),
+      discarded: json['discarded'] ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'base64': base64,
+        'description': description,
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'discarded': discarded,
+      };
+}
+
 class ServerConversation {
   final String id;
   final DateTime createdAt;
@@ -190,7 +219,7 @@ class ServerConversation {
 
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
-    if (source == ConversationSource.openglass) return 'Openglass';
+    if (source == ConversationSource.openglass) return 'OmiGlass';
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);

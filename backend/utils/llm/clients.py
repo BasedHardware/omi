@@ -7,6 +7,7 @@ import tiktoken
 
 from models.conversation import Structured
 
+
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
@@ -42,6 +43,7 @@ def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
     num_tokens = len(encoding.encode(string))
     return num_tokens
+
 
 def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]
