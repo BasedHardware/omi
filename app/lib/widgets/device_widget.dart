@@ -75,10 +75,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
   }
 
   String _getImagePath() {
-    if (!widget.isConnected) {
-      return Assets.images.herologo.path;
-    }
-
+    // Show device image for both connected and paired devices
     if (widget.deviceName != null && widget.deviceName!.contains('Glass')) {
       return 'assets/images/omi-glass.png';
     }
@@ -87,6 +84,11 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
       return 'assets/images/omi-devkit-without-rope.png';
     }
 
-    return 'assets/images/omi-without-rope.png';
+    // Default to omi device image, fallback to hero logo only if no device name
+    if (widget.deviceName != null && widget.deviceName!.isNotEmpty) {
+      return 'assets/images/omi-without-rope.png';
+    }
+
+    return Assets.images.herologo.path;
   }
 }

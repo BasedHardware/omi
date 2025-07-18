@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -24,12 +25,15 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
   MemoryCategory? selectedCategory;
   bool isReviewing = false;
   bool _isProcessing = false;
-  bool _isCardView = false; // Default to list view
+  bool _isCardView = true; // Default to card view
+  int currentCardIndex = 0;
 
   // Card swipe state
   double _cardOffset = 0;
   double _cardRotation = 0;
   bool _isDragging = false;
+
+  // Animation controllers
   late AnimationController _animationController;
   late Animation<double> _animation;
 
@@ -63,9 +67,11 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
     setState(() {
       selectedCategory = category;
       displayedMemories = category == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == category).toList();
-      // Reset card position when filtering
+      currentCardIndex = 0;
+      // Reset swipe state
       _cardOffset = 0;
       _cardRotation = 0;
+      _isDragging = false;
     });
   }
 
@@ -96,6 +102,11 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
       remainingMemories.removeWhere((f) => memoriesToProcess.contains(f));
       displayedMemories = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
       _isProcessing = false;
+      currentCardIndex = 0;
+      // Reset swipe state
+      _cardOffset = 0;
+      _cardRotation = 0;
+      _isDragging = false;
     });
 
     // Show feedback
@@ -134,6 +145,16 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
       remainingMemories.remove(memory);
       displayedMemories = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
       _isProcessing = false;
+
+      // Adjust current card index if we're in card view
+      if (_isCardView && currentCardIndex >= displayedMemories.length && displayedMemories.isNotEmpty) {
+        currentCardIndex = displayedMemories.length - 1;
+      }
+
+      // Reset swipe state
+      _cardOffset = 0;
+      _cardRotation = 0;
+      _isDragging = false;
     });
 
     // Show feedback
@@ -160,6 +181,47 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
     }
   }
 
+  void _animateButtonPress(bool approve) async {
+    if (_isProcessing || displayedMemories.isEmpty) return;
+
+    // Set the swipe animation state
+    setState(() {
+      _cardOffset = approve ? 200.0 : -200.0; // Simulate swipe direction
+      _cardRotation = (approve ? 200.0 : -200.0) / 300 * 0.1; // Same rotation calculation as swipe
+      _isDragging = true;
+    });
+
+    // Wait a bit for the animation to be visible
+    await Future.delayed(const Duration(milliseconds: 250));
+
+    // Animate the card away
+    await _animationController.forward();
+
+    // Process the memory
+    if (currentCardIndex < displayedMemories.length) {
+      _processSingleMemory(displayedMemories[currentCardIndex], approve);
+    }
+
+    // Reset animation
+    _animationController.reset();
+  }
+
+  void _nextCard() {
+    if (currentCardIndex < displayedMemories.length - 1) {
+      setState(() {
+        currentCardIndex++;
+      });
+    }
+  }
+
+  void _previousCard() {
+    if (currentCardIndex > 0) {
+      setState(() {
+        currentCardIndex--;
+      });
+    }
+  }
+
   void _onPanUpdate(DragUpdateDetails details) {
     if (_isProcessing || displayedMemories.isEmpty) return;
 
@@ -179,8 +241,8 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
       // Swipe detected
       final bool approve = _cardOffset > 0; // Right swipe = approve
 
-      if (displayedMemories.isNotEmpty) {
-        _processSingleMemory(displayedMemories.first, approve);
+      if (currentCardIndex < displayedMemories.length) {
+        _processSingleMemory(displayedMemories[currentCardIndex], approve);
       }
 
       // Animate card away
@@ -205,6 +267,16 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
     }
   }
 
+  String _getFilterSubtitle() {
+    final totalCount = remainingMemories.length;
+    final displayedCount = displayedMemories.length;
+
+    if (selectedCategory != null) {
+      return '$displayedCount of $totalCount memories';
+    }
+    return '$totalCount memories to review';
+  }
+
   Widget _buildCardView() {
     if (displayedMemories.isEmpty) {
       return Center(
@@ -225,208 +297,258 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
       );
     }
 
-    return Stack(
-      children: [
-        // Instructions
-        Positioned(
-          top: 20,
-          left: 16,
-          right: 16,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.swipe_left, color: Colors.red.shade300, size: 20),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Swipe left to discard',
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text(
-                    'Swipe right to save',
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.swipe_right, color: Colors.green.shade300, size: 20),
-                ],
-              ),
-            ],
-          ),
-        ),
+    final currentMemory = displayedMemories[currentCardIndex];
 
-        // Cards stack
-        Center(
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.9,
-            height: MediaQuery.of(context).size.height * 0.6,
-            child: Stack(
-              children: [
-                // Background cards (for depth effect)
-                if (displayedMemories.length > 1)
-                  Positioned(
-                    left: 4,
-                    top: 4,
-                    right: -4,
-                    bottom: -4,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade700,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-                if (displayedMemories.length > 2)
-                  Positioned(
-                    left: 8,
-                    top: 8,
-                    right: -8,
-                    bottom: -8,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade600,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-
-                // Main card
-                AnimatedBuilder(
-                  animation: _animation,
-                  builder: (context, child) {
-                    // Safety check to prevent null reference errors
-                    if (displayedMemories.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
-
-                    final double animatedOffset = _isDragging ? _cardOffset : _cardOffset * (1 - _animation.value);
-                    final double animatedRotation = _isDragging ? _cardRotation : _cardRotation * (1 - _animation.value);
-
-                    return Transform.translate(
-                      offset: Offset(animatedOffset, 0),
-                      child: Transform.rotate(
-                        angle: animatedRotation,
-                        child: GestureDetector(
-                          onPanUpdate: _onPanUpdate,
-                          onPanEnd: _onPanEnd,
-                          child: Stack(
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade900,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
+      child: Column(
+        children: [
+          // Card content with swipe gestures
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0), // Extra padding to prevent clipping
+              child: Center(
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.95,
+                  height: MediaQuery.of(context).size.height * 0.55,
+                  child: Stack(
+                    clipBehavior: Clip.none, // Allow overflow
+                    children: [
+                      // Background cards (stack effect) - positioned to be visible
+                      if (currentCardIndex + 2 < displayedMemories.length)
+                        Positioned(
+                          left: 12,
+                          top: 16,
+                          right: -12,
+                          bottom: -20,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade600,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
                                 ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      if (displayedMemories.isNotEmpty) ...[
-                                        CategoryChip(
-                                          category: displayedMemories.first.category,
-                                          showIcon: true,
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Second card (next card) - positioned to be visible
+                      if (currentCardIndex + 1 < displayedMemories.length)
+                        Positioned(
+                          left: 6,
+                          top: 8,
+                          right: -6,
+                          bottom: -10,
+                          child: Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade700,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.25),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // Next memory content (preview)
+                                Expanded(
+                                  child: Center(
+                                    child: SingleChildScrollView(
+                                      child: Text(
+                                        displayedMemories[currentCardIndex + 1].content.decodeString,
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.8),
+                                          fontSize: 20,
+                                          height: 1.5,
                                         ),
-                                        const SizedBox(height: 16),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // Next category chip
+                                CategoryChip(
+                                  category: displayedMemories[currentCardIndex + 1].category,
+                                  showIcon: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Top card (current card with swipe) - positioned normally
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: AnimatedBuilder(
+                          animation: _animation,
+                          builder: (context, child) {
+                            final double animatedOffset = _isDragging ? _cardOffset : _cardOffset * (1 - _animation.value);
+                            final double animatedRotation = _isDragging ? _cardRotation : _cardRotation * (1 - _animation.value);
+
+                            return Transform.translate(
+                              offset: Offset(animatedOffset, 0),
+                              child: Transform.rotate(
+                                angle: animatedRotation,
+                                child: GestureDetector(
+                                  onPanUpdate: _onPanUpdate,
+                                  onPanEnd: _onPanEnd,
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(24),
+                                    decoration: BoxDecoration(
+                                      color: _isDragging ? (_cardOffset > 0 ? const Color(0xFF08A25C) : const Color(0xFFE0582F)) : Colors.grey.shade800,
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.3),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        // Memory content
                                         Expanded(
-                                          child: SingleChildScrollView(
-                                            child: Text(
-                                              displayedMemories.first.content.decodeString,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                height: 1.5,
+                                          child: Center(
+                                            child: SingleChildScrollView(
+                                              child: Text(
+                                                currentMemory.content.decodeString,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 20,
+                                                  height: 1.5,
+                                                ),
+                                                textAlign: TextAlign.center,
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ] else ...[
-                                        const Expanded(
-                                          child: Center(
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                            ),
-                                          ),
+
+                                        const SizedBox(height: 16),
+
+                                        // Category chip
+                                        CategoryChip(
+                                          category: currentMemory.category,
+                                          showIcon: true,
                                         ),
                                       ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                              // Swipe overlay
-                              if (_isDragging)
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: _cardOffset > 0 ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Center(
-                                    child: Icon(
-                                      _cardOffset > 0 ? Icons.check : Icons.close,
-                                      size: 80,
-                                      color: _cardOffset > 0 ? Colors.green : Colors.red,
                                     ),
                                   ),
                                 ),
-                            ],
-                          ),
+                              ),
+                            );
+                          },
                         ),
                       ),
-                    );
-                  },
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Action buttons with centered progress indicator
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Discard button
+                Column(
+                  children: [
+                    Container(
+                      width: 70,
+                      height: 70,
+                      child: FloatingActionButton(
+                        onPressed: _isProcessing ? null : () => _animateButtonPress(false),
+                        backgroundColor: const Color(0xFFE0582F),
+                        heroTag: "discard",
+                        elevation: 4,
+                        child: FaIcon(
+                          FontAwesomeIcons.trashCan,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Discard',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Progress indicator (centered)
+                Text(
+                  '${currentCardIndex + 1} / ${displayedMemories.length}',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+
+                // Save button
+                Column(
+                  children: [
+                    Container(
+                      width: 70,
+                      height: 70,
+                      child: FloatingActionButton(
+                        onPressed: _isProcessing ? null : () => _animateButtonPress(true),
+                        backgroundColor: const Color(0xFF08A25C),
+                        heroTag: "save",
+                        elevation: 4,
+                        child: FaIcon(
+                          FontAwesomeIcons.check,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Save',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-        ),
 
-        // Action buttons
-        Positioned(
-          bottom: 40,
-          left: 16,
-          right: 16,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              FloatingActionButton(
-                onPressed: () {
-                  if (displayedMemories.isNotEmpty) {
-                    _processSingleMemory(displayedMemories.first, false);
-                  }
-                },
-                backgroundColor: Colors.red.shade600,
-                child: const Icon(Icons.close, color: Colors.white),
-              ),
-              FloatingActionButton(
-                onPressed: () {
-                  if (displayedMemories.isNotEmpty) {
-                    _processSingleMemory(displayedMemories.first, true);
-                  }
-                },
-                backgroundColor: Colors.green.shade600,
-                child: const Icon(Icons.check, color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-      ],
+          // Bottom spacing
+          const SizedBox(height: 30),
+        ],
+      ),
     );
   }
 
@@ -448,113 +570,176 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
               ],
             ),
           )
-        : ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-            itemCount: displayedMemories.length,
-            itemBuilder: (context, index) {
-              final memory = displayedMemories[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CategoryChip(
-                            category: memory.category,
-                            showIcon: true,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            memory.content.decodeString,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
+        : Column(
+            children: [
+              // Memory list
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: displayedMemories.length,
+                  itemBuilder: (context, index) {
+                    final memory = displayedMemories[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade800,
-                        borderRadius: const BorderRadius.vertical(
-                          bottom: Radius.circular(12),
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => _processSingleMemory(memory, false),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.delete_outline, size: 16, color: Colors.white70),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'Discard',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => _processSingleMemory(memory, true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.shade700,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.check, size: 16, color: Colors.white),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'Save',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
                           ),
                         ],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Memory content
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  memory.content.decodeString,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                CategoryChip(
+                                  category: memory.category,
+                                  showIcon: true,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          // Action buttons
+                          Row(
+                            children: [
+                              // Discard button
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade700,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: IconButton(
+                                  onPressed: _isProcessing ? null : () => _processSingleMemory(memory, false),
+                                  icon: FaIcon(
+                                    FontAwesomeIcons.trashCan,
+                                    color: const Color(0xFFE0582F),
+                                    size: 16,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+
+                              const SizedBox(width: 8),
+
+                              // Save button
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade700,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: IconButton(
+                                  onPressed: _isProcessing ? null : () => _processSingleMemory(memory, true),
+                                  icon: FaIcon(
+                                    FontAwesomeIcons.check,
+                                    color: const Color(0xFF08A25C),
+                                    size: 16,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Bottom action buttons
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.grey.shade700,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Discard all button
+                    Expanded(
+                      child: Container(
+                        height: 56,
+                        margin: const EdgeInsets.only(right: 8),
+                        child: ElevatedButton(
+                          onPressed: _isProcessing ? null : () => _processBatchAction(false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE0582F),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                          ),
+                          child: Text(
+                            'Discard all',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Save all button
+                    Expanded(
+                      child: Container(
+                        height: 56,
+                        margin: const EdgeInsets.only(left: 8),
+                        child: ElevatedButton(
+                          onPressed: _isProcessing ? null : () => _processBatchAction(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF08A25C),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                          ),
+                          child: Text(
+                            'Save all',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-              );
-            },
+              ),
+            ],
           );
   }
 
@@ -562,31 +747,88 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
   Widget build(BuildContext context) {
     return Consumer<MemoriesProvider>(builder: (context, provider, child) {
       return Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: _isDragging ? (_cardOffset > 0 ? const Color(0xFFC8D8B2) : const Color(0xFFD2B6AD)) : Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Text('Review Memories'),
-              Text(
-                _getFilterSubtitle(),
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade400,
-                  fontWeight: FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: const Text('Facts review'),
           actions: [
+            // Filter selector
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'all':
+                    _filterByCategory(null);
+                    break;
+                  case 'system':
+                    _filterByCategory(MemoryCategory.system);
+                    break;
+                  case 'interesting':
+                    _filterByCategory(MemoryCategory.interesting);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'all',
+                  child: Row(
+                    children: [
+                      Icon(
+                        selectedCategory == null ? Icons.check : Icons.circle_outlined,
+                        color: selectedCategory == null ? Colors.blue : Colors.grey,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text('All (${remainingMemories.length})'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'system',
+                  child: Row(
+                    children: [
+                      Icon(
+                        selectedCategory == MemoryCategory.system ? Icons.check : Icons.circle_outlined,
+                        color: selectedCategory == MemoryCategory.system ? Colors.blue : Colors.grey,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text('System (${categoryCounts[MemoryCategory.system] ?? 0})'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'interesting',
+                  child: Row(
+                    children: [
+                      Icon(
+                        selectedCategory == MemoryCategory.interesting ? Icons.check : Icons.circle_outlined,
+                        color: selectedCategory == MemoryCategory.interesting ? Colors.blue : Colors.grey,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text('Interesting (${categoryCounts[MemoryCategory.interesting] ?? 0})'),
+                    ],
+                  ),
+                ),
+              ],
+              icon: Icon(
+                Icons.filter_list,
+                color: Colors.white,
+              ),
+              tooltip: 'Filter memories',
+            ),
+
+            // View toggle
             IconButton(
               onPressed: () {
                 setState(() {
                   _isCardView = !_isCardView;
-                  // Reset card position when switching views
+                  currentCardIndex = 0;
+                  // Reset swipe state when switching views
                   _cardOffset = 0;
                   _cardRotation = 0;
+                  _isDragging = false;
                 });
               },
               icon: Icon(
@@ -597,174 +839,16 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
             ),
           ],
         ),
-        body: Column(
-          children: [
-            // Category filter chips
-            Container(
-              height: 46,
-              margin: const EdgeInsets.only(top: 4, bottom: 8),
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(
-                        'All (${remainingMemories.length})',
-                        style: TextStyle(
-                          color: selectedCategory == null ? Colors.black : Colors.white70,
-                          fontWeight: selectedCategory == null ? FontWeight.w600 : FontWeight.normal,
-                          fontSize: 13,
-                        ),
-                      ),
-                      selected: selectedCategory == null,
-                      onSelected: (_) => _filterByCategory(null),
-                      backgroundColor: Colors.grey.shade800,
-                      selectedColor: Colors.white,
-                      checkmarkColor: Colors.black,
-                      showCheckmark: false,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    ),
-                  ),
-                  ...categoryCounts.entries.map((entry) {
-                    final category = entry.key;
-                    final count = entry.value;
-
-                    // Format category name to be more concise
-                    String categoryName = category.toString().split('.').last;
-                    // Capitalize first letter only
-                    categoryName = categoryName[0].toUpperCase() + categoryName.substring(1);
-
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(
-                          '$categoryName ($count)',
-                          style: TextStyle(
-                            color: selectedCategory == category ? Colors.black : Colors.white70,
-                            fontWeight: selectedCategory == category ? FontWeight.w600 : FontWeight.normal,
-                            fontSize: 13,
-                          ),
-                        ),
-                        selected: selectedCategory == category,
-                        onSelected: (_) => _filterByCategory(category),
-                        backgroundColor: Colors.grey.shade800,
-                        selectedColor: Colors.white,
-                        checkmarkColor: Colors.black,
-                        showCheckmark: false,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-
-            // Main content area
-            Expanded(
-              child: _isCardView ? _buildCardView() : _buildListView(),
-            ),
-
-            // Batch actions (only show in list view)
-            if (!_isCardView && displayedMemories.isNotEmpty)
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  border: Border(
-                    top: BorderSide(
-                      color: Colors.white.withOpacity(0.1),
-                      width: 1,
-                    ),
-                  ),
+        body: _isProcessing
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
                 ),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                child: _isProcessing
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 3,
-                          ),
-                        ),
-                      )
-                    : Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => _processBatchAction(false),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                alignment: Alignment.center,
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.delete_outline, size: 18, color: Colors.white70),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Discard All',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => _processBatchAction(true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.shade700,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                alignment: Alignment.center,
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.check, size: 18, color: Colors.white),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Save All',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-          ],
-        ),
+              )
+            : _isCardView
+                ? _buildCardView()
+                : _buildListView(),
       );
     });
-  }
-
-  String _getFilterSubtitle() {
-    if (selectedCategory == null) {
-      return '${displayedMemories.length} memories to review';
-    }
-
-    String categoryName = selectedCategory.toString().split('.').last;
-    categoryName = categoryName[0].toUpperCase() + categoryName.substring(1);
-
-    return '${displayedMemories.length} ${categoryName} memories';
   }
 }

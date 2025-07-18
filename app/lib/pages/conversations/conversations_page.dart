@@ -6,7 +6,9 @@ import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_conversations.dart';
@@ -35,6 +37,75 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     super.initState();
   }
 
+  Widget _buildConversationShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Date header shimmer
+          Shimmer.fromColors(
+            baseColor: AppStyles.backgroundSecondary,
+            highlightColor: AppStyles.backgroundTertiary,
+            child: Container(
+              width: 100,
+              height: 16,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundSecondary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Conversation items shimmer
+          ...List.generate(
+              3,
+              (index) => Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Shimmer.fromColors(
+                      baseColor: AppStyles.backgroundSecondary,
+                      highlightColor: AppStyles.backgroundTertiary,
+                      child: Container(
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: AppStyles.backgroundSecondary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingShimmer() {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) => _buildConversationShimmer(),
+        childCount: 3, // Show 3 shimmer conversation groups
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreShimmer() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0),
+      child: Shimmer.fromColors(
+        baseColor: AppStyles.backgroundSecondary,
+        highlightColor: AppStyles.backgroundTertiary,
+        child: Container(
+          height: 60,
+          margin: const EdgeInsets.symmetric(horizontal: 16.0),
+          decoration: BoxDecoration(
+            color: AppStyles.backgroundSecondary,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     debugPrint('building conversations page');
@@ -50,13 +121,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         },
         child: CustomScrollView(
           slivers: [
-            const SliverToBoxAdapter(child: SizedBox(height: 26)),
+            // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)), // above search widget
             const SliverToBoxAdapter(child: SearchWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
@@ -69,16 +140,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
               )
             else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
-              const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                ),
-              )
+              _buildLoadingShimmer()
             else
               SliverList(
                 delegate: SliverChildBuilderDelegate(
@@ -87,14 +149,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     if (index == convoProvider.groupedConversations.length) {
                       debugPrint('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.only(top: 32.0),
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          ),
-                        );
+                        return _buildLoadMoreShimmer();
                       }
                       // widget.loadMoreMemories(); // CALL this only when visible
                       return VisibilityDetector(

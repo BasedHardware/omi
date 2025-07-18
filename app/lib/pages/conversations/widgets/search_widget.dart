@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -170,14 +171,14 @@ class _SearchWidgetState extends State<SearchWidget> {
             ),
           ),
           const SizedBox(
-            width: 12,
+            width: 8,
           ),
           // Calendar button
           Consumer<ConversationProvider>(
             builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
               return Container(
                 decoration: BoxDecoration(
-                  color: convoProvider.selectedDate != null ? Colors.deepPurple : Colors.grey.shade900,
+                  color: convoProvider.selectedDate != null ? Colors.deepPurple.withOpacity(0.5) : Colors.grey.shade900,
                   borderRadius: const BorderRadius.all(Radius.circular(16)),
                 ),
                 child: IconButton(
@@ -191,9 +192,9 @@ class _SearchWidgetState extends State<SearchWidget> {
                     }
                   },
                   icon: Icon(
-                    convoProvider.selectedDate != null ? Icons.calendar_today : Icons.calendar_month,
+                    convoProvider.selectedDate != null ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
                     color: Colors.white,
-                    size: 20,
+                    size: 18,
                   ),
                   tooltip: convoProvider.selectedDate != null ? 'Filtered by ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)} - Tap to clear' : 'Filter by date',
                 ),
@@ -201,21 +202,21 @@ class _SearchWidgetState extends State<SearchWidget> {
             },
           ),
           const SizedBox(
-            width: 12,
+            width: 8,
           ),
           // Filter button
           Consumer<ConversationProvider>(builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
             return Container(
               decoration: BoxDecoration(
-                color: Colors.grey.shade900,
+                color: convoProvider.showDiscardedConversations ? Colors.red.withOpacity(0.5) : Colors.grey.shade900,
                 borderRadius: const BorderRadius.all(Radius.circular(16)),
               ),
               child: IconButton(
                 onPressed: convoProvider.toggleDiscardConversations,
                 icon: Icon(
-                  convoProvider.showDiscardedConversations ? Icons.filter_alt_off_sharp : Icons.filter_alt_sharp,
+                  FontAwesomeIcons.trashCan,
                   color: Colors.white,
-                  size: 20,
+                  size: 18,
                 ),
               ),
             );
