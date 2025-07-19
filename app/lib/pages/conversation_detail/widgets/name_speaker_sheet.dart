@@ -333,7 +333,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   Widget _buildUntaggedSegments() {
     final untaggedSegments = widget.segments
-        .where((s) => s.speakerId == widget.speakerId && s.personId == null && s.id != widget.segmentId)
+        .where((s) => s.speakerId == widget.speakerId && s.personId == null && !s.isUser && s.id != widget.segmentId)
         .toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
