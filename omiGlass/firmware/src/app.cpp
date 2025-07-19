@@ -7,6 +7,8 @@
 #include "esp_camera.h"
 #include "esp_sleep.h"
 #include "config.h"  // Use config.h for all configurations
+#include <Update.h>
+#include <esp_partition.h>
 
 // Battery state
 float batteryVoltage = 0.0f;
@@ -45,10 +47,22 @@ static BLEUUID serviceUUID(OMI_SERVICE_UUID);
 static BLEUUID photoDataUUID(PHOTO_DATA_UUID);
 static BLEUUID photoControlUUID(PHOTO_CONTROL_UUID);
 
+// OTA Service UUIDs
+static BLEUUID otaServiceUUID(OTA_SERVICE_UUID);
+static BLEUUID otaDataUUID(OTA_DATA_UUID);
+static BLEUUID otaControlUUID(OTA_CONTROL_UUID);
+
+// BLE Server
+BLEServer *bleServer = nullptr;
+
 // Characteristics
 BLECharacteristic *photoDataCharacteristic;
 BLECharacteristic *photoControlCharacteristic;
 BLECharacteristic *batteryLevelCharacteristic;
+
+// OTA Characteristics
+BLECharacteristic *otaDataCharacteristic;
+BLECharacteristic *otaControlCharacteristic;
 
 // State
 bool connected = false;
@@ -59,6 +73,14 @@ unsigned long lastCaptureTime = 0;
 size_t sent_photo_bytes = 0;
 size_t sent_photo_frames = 0;
 bool photoDataUploading = false;
+
+// OTA State
+ota_state_t otaState = OTA_IDLE;
+uint8_t *otaBuffer = nullptr;
+size_t otaBufferSize = 0;
+size_t otaReceivedBytes = 0;
+size_t otaTotalBytes = 0;
+bool otaUpdateStarted = false;
 
 // -------------------------------------------------------------------------
 // Camera Frame
@@ -77,6 +99,11 @@ void enterPowerSave();
 void exitPowerSave();
 void shutdownDevice();
 void enableLightSleep();
+void handleOtaControl(uint8_t command);
+void handleOtaData(uint8_t* data, size_t length);
+void otaStart();
+void otaEnd();
+void otaAbort();
 
 // -------------------------------------------------------------------------
 // Button ISR
@@ -232,6 +259,166 @@ void enableLightSleep() {
   }
 }
 
+// -------------------------------------------------------------------------
+// OTA Functions
+// -------------------------------------------------------------------------
+
+void handleOtaControl(uint8_t command) {
+  switch (command) {
+    case OTA_CMD_START:
+      Serial.println("OTA: Starting firmware update");
+      otaStart();
+      break;
+    case OTA_CMD_END:
+      if (otaState == OTA_RECEIVING) {
+        // Arduino Update library handles validation internally
+        Serial.print("OTA: Received end command. Total bytes received: ");
+        Serial.println(otaReceivedBytes);
+        otaEnd();
+      } else {
+        Serial.println("Ignoring OTA_CMD_END, not in receiving state.");
+      }
+      break;
+    case OTA_CMD_ABORT:
+      if (otaState == OTA_RECEIVING) {
+        otaAbort();
+      } else {
+        Serial.println("Ignoring OTA_CMD_ABORT, not in an OTA session.");
+      }
+      break;
+    default:
+      Serial.print("Unknown OTA command: ");
+      Serial.println(command);
+      break;
+  }
+}
+
+void handleOtaData(uint8_t* data, size_t length) {
+  if (otaState != OTA_RECEIVING) {
+    Serial.println("Ignoring OTA data, not in receiving state.");
+    return;
+  }
+
+  if (!data || length == 0) return;
+  
+  // Update activity timestamp to prevent power save mode during OTA
+  lastActivity = millis();
+
+  if (length > 0) {
+    // Validate we don't exceed maximum firmware size
+    if (otaReceivedBytes + length > OTA_MAX_FIRMWARE_SIZE) {
+        Serial.println("OTA Error: Firmware too large. Aborting.");
+        otaAbort();
+        return;
+    }
+
+    // Write data using Arduino Update library
+    size_t written = Update.write(data, length);
+    if (written != length) {
+      Serial.print("OTA: Update.write failed. Expected: ");
+      Serial.print(length);
+      Serial.print(", Written: ");
+      Serial.println(written);
+      Serial.print("Error: ");
+      Serial.println(Update.errorString());
+      otaAbort();
+      return;
+    }
+    otaReceivedBytes += length;
+    
+    // progress report every 10KB
+    static size_t lastReportedBytes = 0;
+    if (otaReceivedBytes - lastReportedBytes >= 10240) {
+      Serial.print("OTA Progress: ");
+      Serial.print(otaReceivedBytes);
+      Serial.println(" bytes received");
+      lastReportedBytes = otaReceivedBytes;
+    }
+  }
+}
+
+void otaStart() {
+  // Stop photo capture during OTA
+  isCapturingPhotos = false;
+  photoDataUploading = false;
+  
+  // Disable power save mode during OTA for maximum stability
+  if (powerSaveMode) exitPowerSave();
+  lightSleepEnabled = false;
+  
+  if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+    Serial.print("OTA: Update.begin failed: ");
+    Serial.println(Update.errorString());
+    otaState = OTA_ERROR;
+    return;
+  }
+
+  Serial.println("OTA: Update library initialized successfully");
+
+  otaUpdateStarted = true;
+  otaState = OTA_RECEIVING;
+  otaReceivedBytes = 0;
+  otaTotalBytes = 0;
+  
+  Serial.println("OTA: Ready to receive firmware data");
+}
+
+void otaEnd() {
+  Serial.println("OTA: Ending firmware update");
+
+  if (!otaUpdateStarted) {
+    Serial.println("OTA Error: Update not started.");
+    otaAbort();
+    return;
+  }
+
+  Serial.println("OTA: Finalizing update");
+  
+  // Finalize the update
+  if (!Update.end(true)) {
+    Serial.print("OTA: Update.end failed: ");
+    Serial.println(Update.errorString());
+    otaAbort();
+    return;
+  }
+
+  // Verify the update
+  if (!Update.isFinished()) {
+    Serial.println("OTA Error: Update not finished properly.");
+    otaAbort();
+    return;
+  }
+
+  otaUpdateStarted = false;
+  otaState = OTA_SUCCESS;
+  ledMode = LED_ON;  // Set LED to solid on for success indication
+  
+  Serial.println("OTA update successful! Rebooting in 3 seconds...");
+  uint8_t success_cmd = (uint8_t)OTA_SUCCESS;
+  otaControlCharacteristic->setValue(&success_cmd, 1);
+  otaControlCharacteristic->notify();
+
+  delay(3000);
+  esp_restart();
+}
+
+void otaAbort() {
+  if (otaUpdateStarted) {
+    Update.abort();
+    otaUpdateStarted = false;
+  }
+  
+  otaState = OTA_IDLE;
+  otaReceivedBytes = 0;
+  otaTotalBytes = 0;
+  
+  // Re-enable power saving features
+  lightSleepEnabled = true;
+  isCapturingPhotos = true;
+  
+  Serial.println("OTA: Update aborted");
+}
+
 void shutdownDevice() {
   Serial.println("Shutting down device...");
   
@@ -276,6 +463,30 @@ class PhotoControlCallback : public BLECharacteristicCallbacks {
       Serial.println(received);
       lastActivity = millis(); // Register activity - prevents sleep
       handlePhotoControl(received);
+    }
+  }
+};
+
+class OtaDataCallback : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *characteristic) override {
+    uint8_t* data = characteristic->getData();
+    size_t length = characteristic->getLength();
+    if (otaReceivedBytes == 0) {
+      Serial.println("OTA: Started receiving firmware update");
+    }
+    lastActivity = millis(); // Register activity - prevents sleep
+    handleOtaData(data, length);
+  }
+};
+
+class OtaControlCallback : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *characteristic) override {
+    if (characteristic->getLength() == 1) {
+      uint8_t command = characteristic->getData()[0];
+      Serial.print("OTA Control received: ");
+      Serial.println(command);
+      lastActivity = millis(); // Register activity - prevents sleep
+      handleOtaControl(command);
     }
   }
 };
@@ -356,12 +567,18 @@ void updateBatteryService() {
 // -------------------------------------------------------------------------
 void configure_ble() {
   Serial.println("Initializing BLE...");
+  
+  // Increase BLE stack size to prevent stack corruption
+  // esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+  // bt_cfg.controller_task_stack_size = 4096; // Increase from default (typically 3072)
+  // esp_bt_controller_init(&bt_cfg);
+  
   BLEDevice::init(BLE_DEVICE_NAME);
-  BLEServer *server = BLEDevice::createServer();
-  server->setCallbacks(new ServerHandler());
+  bleServer = BLEDevice::createServer();
+  bleServer->setCallbacks(new ServerHandler());
 
   // Main service
-  BLEService *service = server->createService(serviceUUID);
+  BLEService *service = bleServer->createService(serviceUUID);
 
   // Photo Data characteristic
   photoDataCharacteristic = service->createCharacteristic(
@@ -380,7 +597,7 @@ void configure_ble() {
   photoControlCharacteristic->setValue(&controlValue, 1);
 
   // Battery Service
-  BLEService *batteryService = server->createService(BATTERY_SERVICE_UUID);
+  BLEService *batteryService = bleServer->createService(BATTERY_SERVICE_UUID);
   batteryLevelCharacteristic = batteryService->createCharacteristic(
       BATTERY_LEVEL_UUID,
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
@@ -393,8 +610,25 @@ void configure_ble() {
   uint8_t initialBatteryLevel = (uint8_t)batteryPercentage;
   batteryLevelCharacteristic->setValue(&initialBatteryLevel, 1);
 
+  // OTA Service
+  BLEService *otaService = bleServer->createService(otaServiceUUID);
+  otaDataCharacteristic = otaService->createCharacteristic(
+      otaDataUUID,
+      BLECharacteristic::PROPERTY_WRITE);
+  otaDataCharacteristic->setCallbacks(new OtaDataCallback());
+  otaControlCharacteristic = otaService->createCharacteristic(
+      otaControlUUID,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
+  otaControlCharacteristic->setCallbacks(new OtaControlCallback());
+  uint8_t command = 0;
+  otaControlCharacteristic->setValue(&command, 1);
+  
+  BLE2902 *otaCcc = new BLE2902();
+  otaCcc->setNotifications(false); // Start with notifications disabled
+  otaControlCharacteristic->addDescriptor(otaCcc);
+
   // Device Information Service
-  BLEService *deviceInfoService = server->createService(DEVICE_INFORMATION_SERVICE_UUID);
+  BLEService *deviceInfoService = bleServer->createService(DEVICE_INFORMATION_SERVICE_UUID);
   BLECharacteristic *manufacturerNameCharacteristic =
       deviceInfoService->createCharacteristic(MANUFACTURER_NAME_STRING_CHAR_UUID,
                                               BLECharacteristic::PROPERTY_READ);
@@ -417,12 +651,14 @@ void configure_ble() {
   service->start();
   batteryService->start();
   deviceInfoService->start();
+  otaService->start();
 
   // Start advertising
   BLEAdvertising *advertising = BLEDevice::getAdvertising();
   advertising->addServiceUUID(deviceInfoService->getUUID());
   advertising->addServiceUUID(service->getUUID());
   advertising->addServiceUUID(batteryService->getUUID());
+  advertising->addServiceUUID(otaService->getUUID());
   advertising->setScanResponse(true);
   advertising->setMinPreferred(BLE_ADV_MIN_INTERVAL);
   advertising->setMaxPreferred(BLE_ADV_MAX_INTERVAL);
@@ -502,8 +738,8 @@ void configure_camera() {
   config.pin_pclk     = PCLK_GPIO_NUM;
   config.pin_vsync    = VSYNC_GPIO_NUM;
   config.pin_href     = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_sccb_sda = SIOD_GPIO_NUM;
+  config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
   config.xclk_freq_hz = CAMERA_XCLK_FREQ;
@@ -515,7 +751,7 @@ void configure_camera() {
   config.jpeg_quality = CAMERA_JPEG_QUALITY;
   config.fb_location  = CAMERA_FB_IN_PSRAM;
   config.grab_mode    = CAMERA_GRAB_LATEST;
-
+  
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x\n", err);
@@ -535,7 +771,7 @@ static uint8_t *s_compressed_frame_2 = nullptr;
 void setup_app() {
   Serial.begin(921600);
   Serial.println("Setup started...");
-
+  
   // Initialize GPIO
   pinMode(POWER_BUTTON_PIN, INPUT_PULLUP);
   pinMode(STATUS_LED_PIN, OUTPUT);
@@ -616,77 +852,79 @@ void loop_app() {
     firstBatteryUpdate = false;
   }
 
-  // Check if it's time to capture a photo
-  if (isCapturingPhotos && !photoDataUploading && connected) {
-    if ((captureInterval == 0) || (now - lastCaptureTime >= (unsigned long)captureInterval)) {
-      if (captureInterval == 0) {
-        // Single shot if interval=0
-        isCapturingPhotos = false;
+  if (false) {
+    // Check if it's time to capture a photo
+    if (isCapturingPhotos && !photoDataUploading && connected) {
+      if ((captureInterval == 0) || (now - lastCaptureTime >= (unsigned long)captureInterval)) {
+        if (captureInterval == 0) {
+          // Single shot if interval=0
+          isCapturingPhotos = false;
+        }
+        Serial.println("Interval reached. Capturing photo...");
+        if (take_photo()) {
+          Serial.println("Photo capture successful. Starting upload...");
+          photoDataUploading = true;
+          sent_photo_bytes = 0;
+          sent_photo_frames = 0;
+          lastCaptureTime = now;
+        }
       }
-      Serial.println("Interval reached. Capturing photo...");
-      if (take_photo()) {
-        Serial.println("Photo capture successful. Starting upload...");
-        photoDataUploading = true;
-        sent_photo_bytes = 0;
-        sent_photo_frames = 0;
-        lastCaptureTime = now;
-      }
     }
-  }
-
-  // If uploading, send chunks over BLE
-  if (photoDataUploading && fb) {
-    size_t remaining = fb->len - sent_photo_bytes;
-    if (remaining > 0) {
-      // Prepare chunk
-      s_compressed_frame_2[0] = (uint8_t)(sent_photo_frames & 0xFF);
-      s_compressed_frame_2[1] = (uint8_t)((sent_photo_frames >> 8) & 0xFF);
-      size_t bytes_to_copy = (remaining > 200) ? 200 : remaining;
-      memcpy(&s_compressed_frame_2[2], &fb->buf[sent_photo_bytes], bytes_to_copy);
-
-      photoDataCharacteristic->setValue(s_compressed_frame_2, bytes_to_copy + 2);
-      photoDataCharacteristic->notify();
-
-      sent_photo_bytes += bytes_to_copy;
-      sent_photo_frames++;
-
-      Serial.print("Uploading chunk ");
-      Serial.print(sent_photo_frames);
-      Serial.print(" (");
-      Serial.print(bytes_to_copy);
-      Serial.print(" bytes), ");
-      Serial.print(remaining - bytes_to_copy);
-      Serial.println(" bytes remaining.");
-      
-      lastActivity = now; // Register activity
-    }
-    else {
-      // End of photo marker
-      s_compressed_frame_2[0] = 0xFF;
-      s_compressed_frame_2[1] = 0xFF;
-      photoDataCharacteristic->setValue(s_compressed_frame_2, 2);
-      photoDataCharacteristic->notify();
-      Serial.println("Photo upload complete.");
-
-      photoDataUploading = false;
-      // Free camera buffer
-      esp_camera_fb_return(fb);
-      fb = nullptr;
-      Serial.println("Camera frame buffer freed.");
-    }
-  }
-
-  // Light sleep optimization - major power savings while maintaining BLE
-  if (!photoDataUploading) {
-    enableLightSleep();
-  }
   
-  // Adaptive delays for power saving (gentle optimization)
-  if (photoDataUploading) {
-    delay(20);  // Fast during upload
-  } else if (powerSaveMode) {
-    delay(50);  // Reduced delay with light sleep
-  } else {
-    delay(50);  // Reduced delay with light sleep
+    // If uploading, send chunks over BLE
+    if (photoDataUploading && fb) {
+      size_t remaining = fb->len - sent_photo_bytes;
+      if (remaining > 0) {
+        // Prepare chunk
+        s_compressed_frame_2[0] = (uint8_t)(sent_photo_frames & 0xFF);
+        s_compressed_frame_2[1] = (uint8_t)((sent_photo_frames >> 8) & 0xFF);
+        size_t bytes_to_copy = (remaining > 200) ? 200 : remaining;
+        memcpy(&s_compressed_frame_2[2], &fb->buf[sent_photo_bytes], bytes_to_copy);
+  
+        photoDataCharacteristic->setValue(s_compressed_frame_2, bytes_to_copy + 2);
+        photoDataCharacteristic->notify();
+  
+        sent_photo_bytes += bytes_to_copy;
+        sent_photo_frames++;
+  
+        Serial.print("Uploading chunk ");
+        Serial.print(sent_photo_frames);
+        Serial.print(" (");
+        Serial.print(bytes_to_copy);
+        Serial.print(" bytes), ");
+        Serial.print(remaining - bytes_to_copy);
+        Serial.println(" bytes remaining.");
+        
+        lastActivity = now; // Register activity
+      }
+      else {
+        // End of photo marker
+        s_compressed_frame_2[0] = 0xFF;
+        s_compressed_frame_2[1] = 0xFF;
+        photoDataCharacteristic->setValue(s_compressed_frame_2, 2);
+        photoDataCharacteristic->notify();
+        Serial.println("Photo upload complete.");
+  
+        photoDataUploading = false;
+        // Free camera buffer
+        esp_camera_fb_return(fb);
+        fb = nullptr;
+        Serial.println("Camera frame buffer freed.");
+      }
+    }
+  
+    // Light sleep optimization - major power savings while maintaining BLE
+    if (!photoDataUploading) {
+      enableLightSleep();
+    }
+    
+    // Adaptive delays for power saving (gentle optimization)
+    if (photoDataUploading) {
+      delay(20);  // Fast during upload
+    } else if (powerSaveMode) {
+      delay(50);  // Reduced delay with light sleep
+    } else {
+      delay(50);  // Reduced delay with light sleep
+    }
   }
 }
