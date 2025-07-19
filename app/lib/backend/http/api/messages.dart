@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
@@ -12,12 +13,18 @@ import 'package:path/path.dart';
 
 Future<List<ServerMessage>> getMessagesServer({
   String? pluginId,
+  String? chatSessionId,
   bool dropdownSelected = false,
 }) async {
   if (pluginId == 'no_selected') pluginId = null;
-  // TODO: Add pagination
+  
+  var url = '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}&dropdown_selected=$dropdownSelected';
+  if (chatSessionId != null) {
+    url += '&chat_session_id=$chatSessionId';
+  }
+  
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}&dropdown_selected=$dropdownSelected',
+    url: url,
     headers: {},
     method: 'GET',
     body: '',
@@ -36,10 +43,16 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
+Future<List<ServerMessage>> clearChatServer({String? pluginId, String? chatSessionId}) async {
   if (pluginId == 'no_selected') pluginId = null;
+  
+  var url = '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}';
+  if (chatSessionId != null) {
+    url += '&chat_session_id=$chatSessionId';
+  }
+  
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}',
+    url: url,
     headers: {},
     method: 'DELETE',
     body: '',
@@ -76,10 +89,15 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
+Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, String? chatSessionId, List<String>? filesId}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
+  }
+  if (chatSessionId != null) {
+    // Check if URL already has query parameters
+    var separator = url.contains('?') ? '&' : '?';
+    url += '${separator}chat_session_id=$chatSessionId';
   }
 
   try {
@@ -283,4 +301,105 @@ Future<String> transcribeVoiceMessage(File audioFile) async {
     debugPrint('Error transcribing voice message: $e');
     throw Exception('Error transcribing voice message: $e');
   }
+}
+
+
+Future<List<ChatSession>> getChatSessions({String? appId}) async {
+  if (appId == 'no_selected') appId = null;
+  
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/chat-sessions?app_id=${appId ?? ''}',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var decodedBody = jsonDecode(body) as List<dynamic>;
+    return decodedBody.map((session) => ChatSession.fromJson(session)).toList();
+  }
+  return [];
+}
+
+Future<ChatSession?> createChatSession({String? appId, String? title}) async {
+  if (appId == 'no_selected') appId = null;
+  
+  var url = '${Env.apiBaseUrl}v2/chat-sessions?app_id=${appId ?? ''}';
+  if (title != null) {
+    url += '&title=${Uri.encodeComponent(title)}';
+  }
+  
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return ChatSession.fromJson(jsonDecode(body));
+  }
+  return null;
+}
+
+Future<ChatSession?> getChatSessionById(String sessionId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/chat-sessions/$sessionId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return ChatSession.fromJson(jsonDecode(body));
+  }
+  return null;
+}
+
+Future<bool> updateChatSessionTitle(String sessionId, String title) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/chat-sessions/$sessionId/title',
+    headers: {},
+    method: 'PUT',
+    body: jsonEncode({'title': title}),
+  );
+  
+  return response?.statusCode == 200;
+}
+
+Future<bool> deleteChatSession(String sessionId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/chat-sessions/$sessionId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  
+  return response?.statusCode == 200;
+}
+
+Future<ServerMessage?> createInitialMessage({String? appId, String? chatSessionId}) async {
+  var url = '${Env.apiBaseUrl}v2/initial-message?app_id=${appId ?? ''}';
+  if (chatSessionId != null) {
+    url += '&chat_session_id=$chatSessionId';
+  }
+  
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return ServerMessage.fromJson(jsonDecode(response.body));
+  }
+  return null;
 }

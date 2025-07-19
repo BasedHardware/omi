@@ -20,6 +20,7 @@ from models.chat import (
     ResponseMessage,
     MessageConversation,
     FileChat,
+    UpdateChatSessionTitleRequest,
 )
 from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
@@ -30,7 +31,7 @@ from utils.chat import (
     transcribe_voice_message_segment,
 )
 from utils.llm.persona import initial_persona_chat_message
-from utils.llm.chat import initial_chat_message
+from utils.llm.chat import initial_chat_message, generate_session_title
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
@@ -50,7 +51,12 @@ def filter_messages(messages, app_id):
     return collected
 
 
-def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
+def acquire_chat_session(uid: str, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None):
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if chat_session:
+            return chat_session
+    
     chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     if chat_session is None:
         cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=plugin_id)
@@ -60,7 +66,7 @@ def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
 
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
-    data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    data: SendMessageRequest, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
 
@@ -68,8 +74,12 @@ def send_message(
         plugin_id = None
 
     # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
-    chat_session = ChatSession(**chat_session) if chat_session else None
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        chat_session = ChatSession(**chat_session) if chat_session else None
+    else:
+        chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
+        chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
         id=str(uuid.uuid4()),
@@ -98,6 +108,26 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
+
+    # Auto-generate title for new sessions based on first user message
+    if (chat_session and 
+        hasattr(chat_session, 'title') and 
+        chat_session.title and 
+        (chat_session.title.startswith('New Chat') or not chat_session.title.strip()) and
+        data.text and len(data.text.strip()) > 5):
+        
+        try:
+            session_messages = chat_db.get_messages(uid, limit=10, chat_session_id=chat_session.id)
+            user_messages = [msg for msg in session_messages if msg.get('sender') == 'human']
+            
+            if len(user_messages) <= 1:
+                new_title = generate_session_title(data.text)
+                if new_title and new_title != "New Chat":
+                    chat_db.update_chat_session_title(uid, chat_session.id, new_title)
+                    print(f"Auto-generated title for session {chat_session.id}: '{new_title}'")
+                    
+        except Exception as e:
+            print(f"Failed to generate title for session {chat_session.id}: {e}")
 
     app = get_available_app_by_id(plugin_id, uid)
     app = App(**app) if app else None
@@ -182,13 +212,14 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 
 @router.delete('/v2/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+def clear_chat_messages(app_id: Optional[str] = None, chat_session_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if app_id in ['null', '']:
         app_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    if not chat_session_id:
+        chat_session = chat_db.get_chat_session(uid, app_id=app_id)
+        chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=app_id, chat_session_id=chat_session_id)
     if err:
@@ -205,11 +236,11 @@ def clear_chat_messages(app_id: Optional[str] = None, uid: str = Depends(auth.ge
     return initial_message_util(uid, app_id)
 
 
-def initial_message_util(uid: str, app_id: Optional[str] = None):
+def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
     print('initial_message_util', app_id)
 
     # init chat session
-    chat_session = acquire_chat_session(uid, plugin_id=app_id)
+    chat_session = acquire_chat_session(uid, plugin_id=app_id, chat_session_id=chat_session_id)
 
     prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
     print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
@@ -246,24 +277,25 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(app_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
-    return initial_message_util(uid, app_id)
+def create_initial_message(app_id: Optional[str], chat_session_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    return initial_message_util(uid, app_id, chat_session_id)
 
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
-def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+def get_messages(plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id in ['null', '']:
         plugin_id = None
 
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    if not chat_session_id:
+        chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
+        chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
         uid, limit=100, include_conversations=True, app_id=plugin_id, chat_session_id=chat_session_id
     )
     print('get_messages', len(messages), plugin_id)
     if not messages:
-        return [initial_message_util(uid, plugin_id)]
+        return [initial_message_util(uid, plugin_id, chat_session_id)]
     return messages
 
 
@@ -527,3 +559,55 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
     return initial_message_util(uid, plugin_id)
+
+
+@router.get('/v2/chat-sessions', response_model=List[ChatSession], tags=['chat'])
+def get_chat_sessions(app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    """Get all chat sessions for a user and app"""
+    if app_id in ['null', '']:
+        app_id = None
+    sessions = chat_db.get_chat_sessions(uid, app_id=app_id)
+    return [ChatSession(**session) for session in sessions]
+
+
+@router.post('/v2/chat-sessions', response_model=ChatSession, tags=['chat'])
+def create_chat_session(app_id: Optional[str] = None, title: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    """Create a new chat session"""
+    if app_id in ['null', '']:
+        app_id = None
+    session = chat_db.create_new_chat_session(uid, app_id, title)
+    return ChatSession(**session)
+
+
+@router.get('/v2/chat-sessions/{session_id}', response_model=ChatSession, tags=['chat'])
+def get_chat_session_by_id(session_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get a specific chat session by ID"""
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+    return ChatSession(**session)
+
+
+@router.put('/v2/chat-sessions/{session_id}/title', response_model=dict, tags=['chat'])
+def update_chat_session_title(session_id: str, request: UpdateChatSessionTitleRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Update the title of a chat session"""
+    # Verify session exists
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+    
+    chat_db.update_chat_session_title(uid, session_id, request.title)
+    return {'message': 'Title updated successfully'}
+
+
+@router.delete('/v2/chat-sessions/{session_id}', response_model=dict, tags=['chat'])
+def delete_chat_session(session_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Delete a chat session"""
+    # Verify session exists
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+    
+    # Delete the session
+    chat_db.delete_chat_session(uid, session_id)
+    return {'message': 'Chat session deleted successfully'}
