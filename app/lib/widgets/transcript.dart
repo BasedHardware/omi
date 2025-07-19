@@ -142,16 +142,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   style: TextStyle(
                     color: person == null && !data.isUser && !isTagging ? Colors.grey.shade400 : Colors.white,
                     fontSize: 18,
-                    fontStyle: person == null && !data.isUser && !isTagging ? FontStyle.italic : FontStyle.normal,
                   ),
                 ),
                 if (!data.speechProfileProcessed && !data.isUser && (data.personId ?? "").isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8.0),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
                     child: Tooltip(
-                      message: 'Speaker identification calibrating',
-                      child: Icon(
-                        Icons.warning_rounded,
+                      message: 'Low confidence speaker identification',
+                      triggerMode: TooltipTriggerMode.tap,
+                      child: const Icon(
+                        Icons.help_outline,
                         color: Colors.orange,
                         size: 16,
                       ),
