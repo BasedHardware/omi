@@ -54,7 +54,7 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
           // Bottom drawer card - wraps content
           Container(
             width: double.infinity,
-            padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
+            padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
             decoration: const BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.only(
@@ -82,21 +82,7 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                     textAlign: TextAlign.center,
                   ),
 
-                  const SizedBox(height: 8),
-
-                  // Subtitle
-                  Text(
-                    'Enable these permissions for the best\nOmi experience.',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 16,
-                      fontFamily: 'Manrope',
-                      height: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
 
                   // Permissions checkboxes
                   Column(
@@ -205,7 +191,7 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                     ],
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 18),
 
                   // Continue button
                   provider.isLoading
@@ -281,25 +267,7 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                           ),
                         ),
 
-                  const SizedBox(height: 24),
-
-                  // Need Help link
-                  PlatformService.isIntercomSupported
-                      ? InkWell(
-                          onTap: () {
-                            Intercom.instance.displayMessenger();
-                          },
-                          child: Text(
-                            'Need Help?',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 14,
-                              fontFamily: 'Manrope',
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
