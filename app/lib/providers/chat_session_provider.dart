@@ -75,7 +75,7 @@ class ChatSessionProvider extends ChangeNotifier {
   Future<void> createNewSession({String? title}) async {
     try {
       final appId = appProvider?.selectedChatAppId;
-      final newSession = await createChatSession(appId: appId, title: title);
+      final newSession = await createChatSession(appId: appId);
       
       if (newSession != null) {
         sessions.insert(0, newSession);

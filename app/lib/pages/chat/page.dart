@@ -18,6 +18,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -85,8 +86,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
+      var sessionProvider = context.read<ChatSessionProvider>();
+      
+      // Initialize sessions
+      await sessionProvider.loadSessions();
+      
+      // Refresh messages for the current session
       if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+        provider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
       }
       scrollToBottom();
     });
@@ -100,12 +107,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
-  @override
+
+
+    @override
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer2<MessageProvider, ConnectivityProvider>(
-      builder: (context, provider, connectivityProvider, child) {
+    return Consumer3<MessageProvider, ConnectivityProvider, ChatSessionProvider>(
+      builder: (context, provider, connectivityProvider, sessionProvider, child) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: provider.isLoadingMessages
@@ -605,11 +614,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   _sendMessageUtil(String text) {
     var provider = context.read<MessageProvider>();
+    var sessionProvider = context.read<ChatSessionProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     scrollToBottom();
     textController.clear();
-    provider.sendMessageStreamToServer(text, context: context);
+    provider.sendMessageStreamToServer(text, chatSessionId: sessionProvider.currentSessionId, context: context);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }

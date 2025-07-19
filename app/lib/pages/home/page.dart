@@ -14,6 +14,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/chat/sessions_history_page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
@@ -22,6 +23,7 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -645,37 +647,63 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               }
             },
           ),
-          Row(
-            children: [
-              Container(
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.transparent,
-                ),
-                child: IconButton(
-                  padding: const EdgeInsets.fromLTRB(2.0, 2.0, 0, 2.0),
-                  icon: SvgPicture.asset(
-                    Assets.images.icSettingPersona,
-                    width: 36,
-                    height: 36,
+          Consumer<HomeProvider>(
+            builder: (context, homeProvider, child) {
+              return Row(
+                children: [
+                  Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.transparent,
+                    ),
+                    child: homeProvider.selectedIndex == 1  // Chat tab selected
+                        ? Consumer<ChatSessionProvider>(
+                            builder: (context, sessionProvider, child) {
+                              return IconButton(
+                                padding: const EdgeInsets.fromLTRB(2.0, 2.0, 0, 2.0),
+                                icon: const Icon(
+                                  FontAwesomeIcons.clockRotateLeft,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  MixpanelManager().pageOpened('Chat Sessions');
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => const MobileSessionsHistoryPage(),
+                                    ),
+                                  );
+                                },
+                                tooltip: 'Chat History',
+                              );
+                            },
+                          )
+                        : IconButton(
+                            padding: const EdgeInsets.fromLTRB(2.0, 2.0, 0, 2.0),
+                            icon: SvgPicture.asset(
+                              Assets.images.icSettingPersona,
+                              width: 36,
+                              height: 36,
+                            ),
+                            onPressed: () {
+                              MixpanelManager().pageOpened('Settings');
+                              String language = SharedPreferencesUtil().userPrimaryLanguage;
+                              bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                              String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                              routeToPage(context, const SettingsPage());
+                              if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                                  hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                                  transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                                if (context.mounted) {
+                                  context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                                }
+                              }
+                            },
+                          ),
                   ),
-                  onPressed: () {
-                    MixpanelManager().pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    routeToPage(context, const SettingsPage());
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
-                    }
-                  },
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ],
       ),
