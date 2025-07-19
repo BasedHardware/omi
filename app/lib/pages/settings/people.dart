@@ -102,7 +102,12 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
   }) {
     onPressed() async {
       if (formKey.currentState!.validate()) {
-        provider.addOrUpdatePersonProvider(person, nameController);
+        String name = nameController.text.toString()[0].toUpperCase() + nameController.text.toString().substring(1);
+        if (person == null) {
+          provider.createPersonProvider(name);
+        } else {
+          provider.updatePersonProvider(person, name);
+        }
         Navigator.pop(context);
       }
     }

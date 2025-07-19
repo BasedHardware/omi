@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -17,7 +18,10 @@ class TranscriptWidget extends StatefulWidget {
   final bool canDisplaySeconds;
   final bool isConversationDetail;
   final double bottomMargin;
-  final Function(int, int)? editSegment;
+  final Function(String, int)? editSegment;
+  final Map<String, SpeakerLabelSuggestionEvent> suggestions;
+  final List<String> taggingSegmentIds;
+  final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
 
   const TranscriptWidget({
     super.key,
@@ -29,6 +33,9 @@ class TranscriptWidget extends StatefulWidget {
     this.isConversationDetail = false,
     this.bottomMargin = 200,
     this.editSegment,
+    this.suggestions = const {},
+    this.taggingSegmentIds = const [],
+    this.onAcceptSuggestion,
   });
 
   @override
@@ -96,6 +103,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
+    final suggestion = widget.suggestions[data.id];
+    final isTagging = widget.taggingSegmentIds.contains(data.id);
 
     return Padding(
       padding:
@@ -105,8 +114,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         children: [
           GestureDetector(
             onTap: () {
-              widget.editSegment?.call(segmentIdx, data.speakerId);
-              MixpanelManager().assignSheetOpened();
+              widget.editSegment?.call(data.id, data.speakerId);
+              MixpanelManager().tagSheetOpened();
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -117,7 +126,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ? Assets.images.speaker0Icon.path
                       : person != null
                           ? speakerImagePath[person.colorIdx!]
-                          : Assets.images.speaker1Icon.path,
+                          : speakerImagePath[data.speakerId % speakerImagePath.length],
                   width: 26,
                   height: 26,
                 ),
@@ -127,11 +136,58 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ? SharedPreferencesUtil().givenName.isNotEmpty
                           ? SharedPreferencesUtil().givenName
                           : 'You'
-                      : data.personId != null
-                          ? person?.name ?? 'Deleted Person'
-                          : 'Speaker ${data.speakerId}',
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                      : suggestion != null && person == null && !data.isUser
+                          ? '${suggestion.personName}?'
+                          : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
+                  style: TextStyle(
+                    color: person == null && !data.isUser && !isTagging ? Colors.grey.shade400 : Colors.white,
+                    fontSize: 18,
+                  ),
                 ),
+                if (!data.speechProfileProcessed && !data.isUser && (data.personId ?? "").isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Tooltip(
+                      message: 'Low confidence speaker identification',
+                      triggerMode: TooltipTriggerMode.tap,
+                      child: const Icon(
+                        Icons.help_outline,
+                        color: Colors.orange,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                if (isTagging) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                ] else if (suggestion != null && person == null && !data.isUser) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => widget.onAcceptSuggestion?.call(suggestion),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      alignment: Alignment.centerLeft,
+                    ),
+                    child: const Text(
+                      'Tag',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white,
+                      ),
+                    ),
+                  )
+                ],
                 if (widget.canDisplaySeconds) ...[
                   const SizedBox(width: 12),
                   Text(

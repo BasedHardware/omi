@@ -33,6 +33,7 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -200,15 +201,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => ConversationProvider()),
           ListenableProvider(create: (context) => AppProvider()),
+          ChangeNotifierProvider(create: (context) => PeopleProvider()),
+          ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider3<ConversationProvider, MessageProvider, PeopleProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, people, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message, people)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
@@ -241,6 +244,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
+          ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UserProvider()),
         ],
         builder: (context, child) {
@@ -360,6 +364,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   @override
   void initState() {
     initDeepLinks();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();
@@ -369,6 +374,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         context.read<UserProvider>().initialize();
+        context.read<PeopleProvider>().initialize();
         try {
           await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
