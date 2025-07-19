@@ -409,6 +409,12 @@ class SetConversationActionItemsStateRequest(BaseModel):
     values: List[bool]
 
 
+class BulkAssignSegmentsRequest(BaseModel):
+    segment_ids: List[str]
+    assign_type: str
+    value: Optional[str] = None
+
+
 class DeleteActionItemRequest(BaseModel):
     description: str
     completed: bool

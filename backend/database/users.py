@@ -51,6 +51,15 @@ def get_people(uid: str):
     return [person.to_dict() for person in people]
 
 
+def get_person_by_name(uid: str, name: str):
+    people_ref = db.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
+    docs = list(query.stream())
+    if docs:
+        return docs[0].to_dict()
+    return None
+
+
 def get_people_by_ids(uid: str, person_ids: list[str]):
     if not person_ids:
         return []

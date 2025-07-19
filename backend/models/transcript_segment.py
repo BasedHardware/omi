@@ -22,6 +22,7 @@ class TranscriptSegment(BaseModel):
     start: float
     end: float
     translations: Optional[List[Translation]] = []
+    speech_profile_processed: bool = False
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -108,12 +109,22 @@ class TranscriptSegment(BaseModel):
         def _merge(a, b: TranscriptSegment):
             if not a or not b:
                 return a, b
-            if (a.speaker == b.speaker or (a.is_user and b.is_user)) and (b.start - b.end < 30):
+            if (
+                (a.speaker == b.speaker or (a.is_user and b.is_user))
+                and (b.start - a.end < 30)
+                and a.speech_profile_processed == b.speech_profile_processed
+            ):
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None
 
-            if a.text and b.text and not a.text[-1] in [".", "?", "!"] and b.text[0].islower():
+            if (
+                a.text
+                and b.text
+                and not a.text[-1] in [".", "?", "!"]
+                and b.text[0].islower()
+                and a.speech_profile_processed == b.speech_profile_processed
+            ):
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None

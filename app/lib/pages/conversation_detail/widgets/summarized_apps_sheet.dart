@@ -220,7 +220,7 @@ class _AppListItem extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             )
           : null,
-      trailing: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : trailingIcon,
+      trailing: isSelected ? const Icon(Icons.autorenew, color: Colors.white, size: 20) : trailingIcon,
       selected: isSelected,
       onTap: onTap,
     );

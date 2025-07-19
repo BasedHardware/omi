@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:provider/provider.dart';
 
@@ -25,13 +31,25 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
+  late AnimationController _animationController;
 
   @override
   void initState() {
     _controller = TabController(length: 2, vsync: this, initialIndex: 0);
     _controller!.addListener(() => setState(() {}));
     showSummarizeConfirmation = SharedPreferencesUtil().showSummarizeConfirmation;
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    _animationController.dispose();
+    super.dispose();
   }
 
   int convertDateTimeToSeconds(DateTime dateTime) {
@@ -88,7 +106,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   const SizedBox(width: 4),
                   Text(provider.photos.isNotEmpty ? "📸" : "🎙️"),
                   const SizedBox(width: 4),
-                  const Expanded(child: Text("In progress")),
+                  const Expanded(child: Text("Listening")),
                 ],
               ),
             ),
@@ -114,6 +132,49 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 provider.segments,
                                 provider.photos,
                                 deviceProvider.connectedDevice,
+                                bottomMargin: 150,
+                                suggestions: provider.suggestionsBySegmentId,
+                                taggingSegmentIds: provider.taggingSegmentIds,
+                                onAcceptSuggestion: (suggestion) {
+                                  provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
+                                      suggestion.personName, [suggestion.segmentId]);
+                                },
+                                editSegment: (segmentId, speakerId) {
+                                  final connectivityProvider =
+                                      Provider.of<ConnectivityProvider>(context, listen: false);
+                                  if (!connectivityProvider.isConnected) {
+                                    ConnectivityProvider.showNoInternetDialog(context);
+                                    return;
+                                  }
+                                  showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: Colors.black,
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                      ),
+                                      builder: (context) {
+                                        final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                            (s) => s.speakerId == speakerId,
+                                            orElse: () => SpeakerLabelSuggestionEvent.empty());
+                                        return Consumer<PeopleProvider>(
+                                          builder: (context, peopleProvider, child) {
+                                            return NameSpeakerBottomSheet(
+                                              speakerId: speakerId,
+                                              segmentId: segmentId,
+                                              segments: provider.segments,
+                                              suggestion: suggestion,
+                                              people: peopleProvider.people,
+                                              userName: SharedPreferencesUtil().givenName,
+                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                                await provider.assignSpeakerToConversation(
+                                                    speakerId, personId, personName, segmentIds);
+                                              },
+                                            );
+                                          },
+                                        );
+                                      });
+                                },
                               ),
                         // Summary Tab
                         Center(

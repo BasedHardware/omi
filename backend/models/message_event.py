@@ -140,3 +140,17 @@ class PhotoDescribedEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+
+class SpeakerLabelSuggestionEvent(MessageEvent):
+    event_type: str = "speaker_label_suggestion"
+    speaker_id: int
+    person_id: str
+    person_name: str
+    segment_id: str
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j

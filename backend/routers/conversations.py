@@ -362,6 +362,43 @@ def set_assignee_conversation_segment(
     return conversation
 
 
+@router.patch(
+    '/v1/conversations/{conversation_id}/segments/assign-bulk',
+    response_model=Conversation,
+    tags=['conversations'],
+)
+def assign_segments_bulk(
+    conversation_id: str,
+    data: BulkAssignSegmentsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = Conversation(**conversation)
+
+    value = data.value
+    if value == 'null':
+        value = None
+
+    segment_map = {segment.id: segment for segment in conversation.transcript_segments}
+
+    for segment_id in data.segment_ids:
+        if segment_id in segment_map:
+            segment = segment_map[segment_id]
+            if data.assign_type == 'is_user':
+                segment.is_user = bool(value) if value is not None else False
+                segment.person_id = None
+            elif data.assign_type == 'person_id':
+                segment.is_user = False
+                segment.person_id = value
+            else:
+                raise HTTPException(status_code=400, detail="Invalid assign type")
+
+    conversations_db.update_conversation_segments(
+        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+    )
+    return conversation
+
+
 # *********************************************
 # *********** SHARING conversations ***********
 # *********************************************
