@@ -5,7 +5,7 @@ import struct
 import json
 from datetime import datetime, timezone, timedelta, time
 from enum import Enum
-from typing import Dict, Tuple, List, Optional
+from typing import Dict, Tuple, List, Optional, Set
 
 import opuslib
 import webrtcvad
@@ -108,6 +108,7 @@ async def _listen(
     segment_person_assignment_map: Dict[str, str] = {}
     speech_profile_processed = False
     current_session_segments: Dict[str, TranscriptSegment] = {}
+    suggested_segments: Set[str] = set()
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
@@ -692,7 +693,7 @@ async def _listen(
 
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
-        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map
+        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
             await asyncio.sleep(0.3)
@@ -754,7 +755,7 @@ async def _listen(
 
                 # Speaker detection
                 for segment in conversation.transcript_segments[starts:ends]:
-                    if segment.person_id or segment.is_user:
+                    if segment.person_id or segment.is_user or segment.id in suggested_segments:
                         continue
 
                     if speech_profile_processed:
@@ -769,6 +770,8 @@ async def _listen(
                                     segment_id=segment.id,
                                 )
                             )
+                            suggested_segments.add(segment.id)
+                            continue
 
                     # Text-based detection
                     detected_name = detect_speaker_from_text(segment.text)
@@ -783,6 +786,7 @@ async def _listen(
                                 segment_id=segment.id,
                             )
                         )
+                        suggested_segments.add(segment.id)
 
     image_chunks = {}  # A temporary in-memory cache for image chunks
 
