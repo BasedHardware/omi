@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class NameWidget extends StatefulWidget {
@@ -88,7 +88,7 @@ class _NameWidgetState extends State<NameWidget> {
                         );
                       } else {
                         FocusManager.instance.primaryFocus?.unfocus();
-                        updateGivenName(nameController.text);
+                        AuthService.instance.updateGivenName(nameController.text);
                         widget.goNext();
                       }
                     },
