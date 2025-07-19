@@ -19,6 +19,11 @@ class PermissionsMobileWidget extends StatefulWidget {
 }
 
 class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
+  String _getButtonText(OnboardingProvider provider) {
+    bool allPermissionsGranted = provider.hasLocationPermission && provider.hasNotificationPermission && (Platform.isAndroid ? provider.hasBackgroundPermission : true);
+    return allPermissionsGranted ? 'Continue' : 'Allow All';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(builder: (context, provider, child) {
@@ -256,9 +261,9 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                               ),
                               elevation: 0,
                             ),
-                            child: const Text(
-                              'Continue',
-                              style: TextStyle(
+                            child: Text(
+                              _getButtonText(provider),
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 fontFamily: 'Manrope',
