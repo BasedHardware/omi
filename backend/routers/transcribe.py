@@ -105,6 +105,7 @@ async def _listen(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
+    segment_person_assignment_map: Dict[str, str] = {}
     speech_profile_processed = False
     current_session_segments: Dict[str, TranscriptSegment] = {}
 
@@ -324,6 +325,17 @@ async def _listen(
     )
     _process_in_progess_memories()
 
+    def _process_speaker_assigned_segments(transcript_segments: List[TranscriptSegment]):
+        for segment in transcript_segments:
+            if segment.id in segment_person_assignment_map and not segment.is_user and not segment.person_id:
+                person_id = segment_person_assignment_map[segment.id]
+                if person_id == 'user':
+                    segment.is_user = True
+                    segment.person_id = None
+                else:
+                    segment.is_user = False
+                    segment.person_id = person_id
+
     def _upsert_in_progress_conversation(
         segments: List[TranscriptSegment], photos: List[ConversationPhoto], finished_at: datetime
     ):
@@ -334,6 +346,7 @@ async def _listen(
                 conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
                     conversation.transcript_segments, segments
                 )
+                _process_speaker_assigned_segments(conversation.transcript_segments[starts:ends])
                 conversations_db.update_conversation_segments(
                     uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
                 )
@@ -901,6 +914,8 @@ async def _listen(
                                 person_name = json_data.get('person_name')
                                 if speaker_id is not None and person_id is not None and person_name is not None:
                                     speaker_to_person_map[speaker_id] = (person_id, person_name)
+                                    for sid in segment_ids:
+                                        segment_person_assignment_map[sid] = person_id
                                     print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid)
                             else:
                                 print(

@@ -118,7 +118,7 @@ class SharedPreferencesUtil {
 
   set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
 
-  bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled') ?? false;
+  bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled') ?? true;
 
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
