@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -48,7 +49,7 @@ class _AuthComponentState extends State<AuthComponent> {
                   children: [
                     // Loading indicator or spacing
                     SizedBox(
-                      height: 32,
+                      height: 20,
                       child: provider.loading
                           ? const Center(
                               child: CircularProgressIndicator(
@@ -80,6 +81,7 @@ class _AuthComponentState extends State<AuthComponent> {
                         height: 56,
                         child: ElevatedButton(
                           onPressed: () {
+                            HapticFeedback.mediumImpact();
                             ConsentBottomSheet.show(
                               context,
                               authMethod: 'apple',
@@ -131,6 +133,7 @@ class _AuthComponentState extends State<AuthComponent> {
                       height: 56,
                       child: ElevatedButton(
                         onPressed: () {
+                          HapticFeedback.mediumImpact();
                           ConsentBottomSheet.show(
                             context,
                             authMethod: 'google',
@@ -182,7 +185,7 @@ class _AuthComponentState extends State<AuthComponent> {
                       text: TextSpan(
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.6),
-                          fontSize: 12,
+                          fontSize: 11,
                           fontFamily: 'Manrope',
                         ),
                         children: [

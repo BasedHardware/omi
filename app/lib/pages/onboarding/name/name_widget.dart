@@ -83,7 +83,7 @@ class _NameWidgetState extends State<NameWidget> {
                   'What\'s your name?',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 32,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
                     fontFamily: 'Manrope',
@@ -93,19 +93,19 @@ class _NameWidgetState extends State<NameWidget> {
 
                 const SizedBox(height: 8),
 
-                // Subtitle
-                Text(
-                  'Tell us how you\'d like to be addressed.\nThis helps personalize your Omi experience.',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 16,
-                    fontFamily: 'Manrope',
-                    height: 1.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                // // Subtitle
+                // Text(
+                //   'Tell us how you\'d like to be addressed.\nThis helps personalize your Omi experience.',
+                //   style: TextStyle(
+                //     color: Colors.white.withOpacity(0.6),
+                //     fontSize: 16,
+                //     fontFamily: 'Manrope',
+                //     height: 1.5,
+                //   ),
+                //   textAlign: TextAlign.center,
+                // ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 28),
 
                 // Name input field
                 Container(
@@ -183,23 +183,23 @@ class _NameWidgetState extends State<NameWidget> {
 
                 const SizedBox(height: 24),
 
-                // Need Help link
-                PlatformService.isIntercomSupported
-                    ? InkWell(
-                        onTap: () {
-                          Intercom.instance.displayMessenger();
-                        },
-                        child: Text(
-                          'Need Help?',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
-                            fontSize: 14,
-                            fontFamily: 'Manrope',
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+                // // Need Help link
+                // PlatformService.isIntercomSupported
+                //     ? InkWell(
+                //         onTap: () {
+                //           Intercom.instance.displayMessenger();
+                //         },
+                //         child: Text(
+                //           'Need Help?',
+                //           style: TextStyle(
+                //             color: Colors.white.withOpacity(0.6),
+                //             fontSize: 14,
+                //             fontFamily: 'Manrope',
+                //             decoration: TextDecoration.underline,
+                //           ),
+                //         ),
+                //       )
+                //     : const SizedBox.shrink(),
               ],
             ),
           ),

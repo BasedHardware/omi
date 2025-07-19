@@ -304,7 +304,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                   'What\'s your primary language?',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 32,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
                     fontFamily: 'Manrope',
@@ -312,21 +312,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                   textAlign: TextAlign.center,
                 ),
 
-                const SizedBox(height: 8),
-
-                // Subtitle
-                Text(
-                  'Set your language for sharper transcriptions\nand a personalized experience.',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 16,
-                    fontFamily: 'Manrope',
-                    height: 1.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 40),
+                const SizedBox(height: 28),
 
                 // Language selection field
                 InkWell(
@@ -410,24 +396,6 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                 ),
 
                 const SizedBox(height: 24),
-
-                // Need Help link
-                PlatformService.isIntercomSupported
-                    ? InkWell(
-                        onTap: () {
-                          Intercom.instance.displayMessenger();
-                        },
-                        child: Text(
-                          'Need Help?',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
-                            fontSize: 14,
-                            fontFamily: 'Manrope',
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
               ],
             ),
           ),

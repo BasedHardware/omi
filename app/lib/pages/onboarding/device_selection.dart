@@ -100,12 +100,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             ),
                           )
                         : Container(
-                            decoration: const BoxDecoration(
-                              image: DecorationImage(
-                                image: AssetImage('assets/images/onboarding-bg-1.png'),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
+                            color: Colors.white,
                           ),
                   ),
                 ),
@@ -158,7 +153,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                           height: 56,
                           child: ElevatedButton(
                             onPressed: () async {
-                              HapticFeedback.heavyImpact();
+                              HapticFeedback.mediumImpact();
                               await Posthog().capture(
                                 eventName: 'clicked_get_started',
                               );
