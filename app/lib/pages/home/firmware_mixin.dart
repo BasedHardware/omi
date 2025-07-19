@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
-import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/manifest/manifest.dart';
 import 'package:path_provider/path_provider.dart';
@@ -79,7 +80,11 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  Future<void> startDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+  Future<void> updateFirmware(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (btDevice.type == DeviceType.openglass) {
+      return startOpenGlassOta(btDevice, zipFilePath);
+    }
+    
     if (isLegacySecureDFU) {
       return startLegacyDfu(btDevice, fileInAssets: fileInAssets);
     }
@@ -190,6 +195,195 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     );
   }
 
+  Future<void> startOpenGlassOta(BtDevice btDevice, String? zipFilePath) async {
+    debugPrint('Starting OpenGlass OTA with file: $zipFilePath');
+    setState(() {
+      isInstalling = true;
+      installProgress = 0;
+    });
+
+    // Check if firmware file exists and is valid
+    final zipFile = File(zipFilePath!);
+    if (!await zipFile.exists()) {
+      setState(() {
+        isInstalling = false;
+      });
+      throw Exception('Firmware file not found at $zipFilePath');
+    }
+
+    // Check file size to ensure it's not empty
+    final fileSize = await zipFile.length();
+    if (fileSize == 0) {
+      setState(() {
+        isInstalling = false;
+      });
+      throw Exception('Firmware file is empty');
+    }
+
+    try {
+      // Extract the zip and locate the bin
+      final tempDir = await getTemporaryDirectory();
+      final extractDir = Directory('${tempDir.path}/glass_ota');
+     await extractFirmware(zipFilePath, extractDir.path);
+     final extractedFiles = await extractDir.list().toList();
+      final binFile = extractedFiles.firstWhere(
+        (file) => file.path.toLowerCase().endsWith('.bin'),
+        orElse: () => throw Exception('No .bin file found in the ZIP archive'),
+      );
+      final binFilePath = binFile.path;
+
+      // connect to device
+      final deviceConnection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+      if (deviceConnection == null) {
+        throw Exception('Failed to connect to device');
+      }
+      
+      // discover services and characteristics
+      final services = await deviceConnection.bleDevice.discoverServices();
+      const otaServiceUuid = '0000ffe5-0000-1000-8000-00805f9b34fb';
+      const otaServiceShortUuid = 'ffe5';
+      const dataCharacteristicUuid = '0000ffe9-0000-1000-8000-00805f9b34fb';
+      const dataCharacteristicShortUuid = 'ffe9';
+      const controlCharacteristicUuid = '0000ffe4-0000-1000-8000-00805f9b34fb';
+      const controlCharacteristicShortUuid = 'ffe4';
+      
+      final otaService = services.firstWhere(
+        (service) => service.uuid.toString().toLowerCase() == otaServiceShortUuid || 
+                     service.uuid.toString().toLowerCase().contains(otaServiceUuid),
+        orElse: () => throw Exception('OTA service not found on device'),
+      );
+      
+      final dataCharacteristic = otaService.characteristics.firstWhere(
+        (char) => char.uuid.toString().toLowerCase() == dataCharacteristicShortUuid || 
+                  char.uuid.toString().toLowerCase().contains(dataCharacteristicUuid),
+        orElse: () => throw Exception('OTA data characteristic not found'),
+      );
+      
+      final controlCharacteristic = otaService.characteristics.firstWhere(
+        (char) => char.uuid.toString().toLowerCase() == controlCharacteristicShortUuid || 
+                  char.uuid.toString().toLowerCase().contains(controlCharacteristicUuid),
+        orElse: () => throw Exception('OTA control characteristic not found'),
+      );
+
+      // send chunks of data to the device
+      const chunkSize = 480;
+      int sentBytes = 0;
+      int chunkIndex = 0;
+      
+      // read the binary file once before the loop
+      final binFileBytes = await File(binFilePath).readAsBytes();
+      final fileSize = binFileBytes.length;
+      
+      try {
+
+        // write and wait for device to initialize
+        await controlCharacteristic.write([0x01], withoutResponse: false);
+        await Future.delayed(const Duration(milliseconds: 1000));
+
+        // send chunks 
+        while (sentBytes < fileSize) {
+          // check if device is still connected
+          if (!deviceConnection.bleDevice.isConnected) {
+            throw Exception('Device disconnected during OTA transfer');
+          }
+          
+          // calculate chunk size, extract chunk from binary and send to device
+          final remainingBytes = fileSize - sentBytes;
+          final currentChunkSize = remainingBytes > chunkSize ? chunkSize : remainingBytes;
+          final chunk = binFileBytes.sublist(sentBytes, sentBytes + currentChunkSize);
+          
+          // retry mechanism for chunk writing
+          bool chunkSent = false;
+          int retryCount = 0;
+          const maxRetries = 3;
+          
+          while (!chunkSent && retryCount < maxRetries) {
+            try {
+              await dataCharacteristic.write(chunk, withoutResponse: false);
+              chunkSent = true;
+            } catch (e) {
+              retryCount++;
+              debugPrint('Chunk write failed (attempt $retryCount/$maxRetries): $e');
+              
+              if (retryCount < maxRetries) {
+                await Future.delayed(Duration(milliseconds: 100 * retryCount));
+                if (!deviceConnection.bleDevice.isConnected) {
+                  throw Exception('Device disconnected during retry');
+                }
+              } else {
+                throw Exception('Failed to send chunk after $maxRetries attempts: $e');
+              }
+            }
+          }
+          
+          // update progress
+          sentBytes += currentChunkSize;
+          final progress = (sentBytes / fileSize * 100).round();
+          debugPrint('Sent chunk $chunkIndex: $currentChunkSize bytes, total: $sentBytes/$fileSize ($progress%)');
+          setState(() {
+            installProgress = progress;
+          });
+          
+          // small delay to prevent overwhelming the device
+          await Future.delayed(const Duration(milliseconds: 10));
+          chunkIndex++;
+          debugPrint('Sent bytes: $sentBytes/$fileSize ($progress%)');
+        }
+        
+        // send OTA end command (0x03)
+        await controlCharacteristic.write([0x03], withoutResponse: false);
+        debugPrint('Sent OTA end command');
+        
+        // wait for device to process the update
+        await Future.delayed(const Duration(seconds: 2));
+
+        // TODO: add more checks
+        // 1. wait for device to connect
+        // 2. check the device firmware version
+
+        setState(() {
+          isInstalling = false;
+          isInstalled = true;
+          installProgress = 100;
+        });
+        
+        debugPrint('OTA update completed successfully');
+      } catch (e) {
+        if (e.toString().contains('Device is disconnected') && 
+            installProgress >= 99) {
+          
+          setState(() {
+            isInstalling = false;
+            isInstalled = true;
+            installProgress = 100;
+          });
+          
+          return;
+        }
+        
+        debugPrint('OTA update failed: $e');
+        throw Exception('OTA update failed: $e');
+      }
+      
+      // clean up extracted files
+      await extractDir.delete(recursive: true);
+      
+      setState(() {
+        isInstalling = false;
+        isInstalled = true;
+        installProgress = 100;
+      });
+      
+      debugPrint('OTA update completed successfully');
+    } catch (e) {
+      setState(() {
+        isInstalling = false;
+      });
+      debugPrint('OTA update failed: $e');
+      throw Exception('OTA update failed: $e');
+    }
+  }
+
   Future getLatestVersion(
       {required String deviceModelNumber,
       required String firmwareRevision,
@@ -214,7 +408,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         currentFirmware: currentFirmware, latestFirmwareDetails: latestFirmwareDetails);
   }
 
-  Future downloadFirmware() async {
+  Future downloadFirmware(String savePath) async {
     final zipUrl = latestFirmwareDetails['zip_url'];
     if (zipUrl == null) {
       debugPrint('Error: zip_url is null in latestFirmwareDetails');
@@ -227,8 +421,17 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       return;
     }
 
-    var response = makeRawApiCall(method: 'GET', url: zipUrl);
-    String dir = (await getApplicationDocumentsDirectory()).path;
+    debugPrint('Downloading firmware from: $zipUrl');
+    var httpClient = http.Client();
+    var request = http.Request('GET', Uri.parse(zipUrl));
+    var response = httpClient.send(request);
+    
+    // Delete existing file if it exists
+    final existingFile = File(savePath);
+    if (await existingFile.exists()) {
+      await existingFile.delete();
+      debugPrint('Deleted existing firmware file');
+    }
 
     List<List<int>> chunks = [];
     int downloaded = 0;
@@ -236,6 +439,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       isDownloading = true;
       isDownloaded = false;
     });
+
+    final Completer<void> completer = Completer<void>();
+    
     response.asStream().listen((http.StreamedResponse r) {
       r.stream.listen((List<int> chunk) {
         // Display percentage of completion
@@ -246,31 +452,37 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         chunks.add(chunk);
         downloaded += chunk.length;
       }, onDone: () async {
-        // Display percentage of completion
-        debugPrint('downloadPercentage: ${downloaded / r.contentLength! * 100}');
+        try {
+          // Display percentage of completion
+          debugPrint('downloadPercentage: ${downloaded / r.contentLength! * 100}');
 
-        // Save the file
-        File file = File('$dir/firmware.zip');
-        final Uint8List bytes = Uint8List(r.contentLength!);
-        int offset = 0;
-        for (List<int> chunk in chunks) {
-          bytes.setRange(offset, offset + chunk.length, chunk);
-          offset += chunk.length;
+          // Save the file
+          File file = File(savePath);
+          final Uint8List bytes = Uint8List(r.contentLength!);
+          int offset = 0;
+          for (List<int> chunk in chunks) {
+            bytes.setRange(offset, offset + chunk.length, chunk);
+            offset += chunk.length;
+          }
+          await file.writeAsBytes(bytes);
+          setState(() {
+            isDownloading = false;
+            isDownloaded = true;
+          });
+          completer.complete();
+        } catch (e) {
+          setState(() {
+            isDownloading = false;
+            isDownloaded = false;
+          });
+          completer.completeError(e);
         }
-        await file.writeAsBytes(bytes);
-        setState(() {
-          isDownloading = false;
-          isDownloaded = true;
-        });
-        return;
       }, onError: (error) {
-        debugPrint('Download error: $error');
         setState(() {
           isDownloading = false;
+          isDownloaded = false;
         });
-        // Reset firmware update state on error
-        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-        deviceProvider.resetFirmwareUpdateState();
+        completer.completeError(error);
       });
     }, onError: (error) {
       debugPrint('Download error: $error');
@@ -281,5 +493,54 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.resetFirmwareUpdateState();
     });
+
+    await completer.future;
+  }
+
+  Future<void> extractFirmware(String zipFilePath, String extractPath) async {
+    debugPrint('Extracting firmware from: $zipFilePath to: $extractPath');
+    
+    // Ensure extract directory exists
+    final extractDir = Directory(extractPath);
+    if (!await extractDir.exists()) {
+      await extractDir.create(recursive: true);
+    }
+
+    try {
+      // Extract the ZIP file to a temporary location first
+      final tempDir = await getTemporaryDirectory();
+      final tempExtractDir = Directory('${tempDir.path}/temp_extract_${DateTime.now().millisecondsSinceEpoch}');
+      await tempExtractDir.create();
+
+      final zipFile = File(zipFilePath);
+      await ZipFile.extractToDirectory(
+        zipFile: zipFile,
+        destinationDir: tempExtractDir,
+      );
+
+      // Now move all files from the temporary extraction to the target path
+      // This flattens the directory structure
+      await _flattenDirectory(tempExtractDir, extractDir);
+
+      // Clean up temporary directory
+      await tempExtractDir.delete(recursive: true);
+      
+      debugPrint('Firmware extraction completed successfully');
+    } catch (e) {
+      debugPrint('Error extracting firmware: $e');
+      throw Exception('Failed to extract firmware: $e');
+    }
+  }
+
+  // Helper function to flatten directory structure
+  Future<void> _flattenDirectory(Directory sourceDir, Directory targetDir) async {
+    await for (final entity in sourceDir.list(recursive: true)) {
+      if (entity is File) {
+        final fileName = entity.path.split('/').last;
+        final targetFile = File('${targetDir.path}/$fileName');
+        await entity.copy(targetFile.path);
+        debugPrint('Extracted file: $fileName');
+      }
+    }
   }
 }

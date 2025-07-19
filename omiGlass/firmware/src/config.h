@@ -92,6 +92,12 @@ typedef enum {
 #define BLE_TASK_STACK_SIZE 2048
 #define BLE_TASK_PRIORITY 1
 
+// OTA-specific BLE parameters for maximum stability
+#define OTA_CONNECTION_INTERVAL_MIN 6       // 7.5ms minimum connection interval for OTA
+#define OTA_CONNECTION_INTERVAL_MAX 12      // 15ms maximum connection interval for OTA
+#define OTA_CONNECTION_LATENCY 0            // No latency for OTA transfers
+#define OTA_SUPERVISION_TIMEOUT 100         // 1 second supervision timeout
+
 // Connection Parameters for Stable Connections with Power Optimization
 #define BLE_CONN_MIN_INTERVAL 20 // 25ms minimum connection interval (was 20ms)
 #define BLE_CONN_MAX_INTERVAL 40 // 50ms maximum connection interval (was 40ms)
@@ -131,6 +137,18 @@ typedef enum {
 // Battery Service UUID - Cast to uint16_t for BLE compatibility
 #define BATTERY_SERVICE_UUID (uint16_t) 0x180F
 #define BATTERY_LEVEL_UUID (uint16_t) 0x2A19
+
+// =============================================================================
+// OTA UPDATE SERVICE - ESP32 Firmware Update via BLE
+// =============================================================================
+#define OTA_SERVICE_UUID "0000ffe5-0000-1000-8000-00805f9b34fb"
+#define OTA_DATA_UUID "0000ffe9-0000-1000-8000-00805f9b34fb"
+#define OTA_CONTROL_UUID "0000ffe4-0000-1000-8000-00805f9b34fb"
+
+// OTA Configuration
+#define OTA_BUFFER_SIZE 1024              // Buffer size for OTA data chunks
+#define OTA_MAX_FIRMWARE_SIZE 2097152     // 2MB maximum firmware size
+#define OTA_CHUNK_SIZE 480                // Maximum chunk size per BLE packet
 
 // =============================================================================
 // PIN DEFINITIONS (from camera_pins.h integration)
@@ -201,4 +219,24 @@ typedef enum {
     DEVICE_SLEEP
 } device_state_t;
 
-#endif // CONFIG_H
+// OTA Update States
+typedef enum {
+    OTA_IDLE,
+    OTA_READY,
+    OTA_RECEIVING,
+    OTA_VALIDATING,
+    OTA_UPDATING,
+    OTA_SUCCESS,
+    OTA_ERROR
+} ota_state_t;
+
+// OTA Control Commands
+typedef enum {
+    OTA_CMD_START = 0x01,
+    OTA_CMD_DATA = 0x02,
+    OTA_CMD_END = 0x03,
+    OTA_CMD_ABORT = 0x04,
+    OTA_CMD_RESET = 0x05
+} ota_command_t;
+
+#endif // CONFIG_H 

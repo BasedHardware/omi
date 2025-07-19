@@ -205,10 +205,17 @@ packages:
     dependency: transitive
     description:
       name: built_value
+<<<<<<< HEAD
       sha256: a30f0a0e38671e89a492c44d005b5545b830a961575bbd8336d42869ff71066d
       url: "https://pub.dev"
     source: hosted
     version: "8.12.0"
+=======
+      sha256: "0b1b12a0a549605e5f04476031cd0bc91ead1d7c8e830773a18ee54179b3cb62"
+      url: "https://pub.dev"
+    source: hosted
+    version: "8.11.0"
+>>>>>>> 0713f3b9e (add ota updates for omi glass)
   cached_network_image:
     dependency: "direct main"
     description:
@@ -1083,10 +1090,17 @@ packages:
     dependency: transitive
     description:
       name: image_picker_android
+<<<<<<< HEAD
       sha256: a45bef33deb24839a51fb85a4d9e504ead2b1ad1c4779d02d09bf6a8857cdd52
       url: "https://pub.dev"
     source: hosted
     version: "0.8.13+2"
+=======
+      sha256: "6fae381e6af2bbe0365a5e4ce1db3959462fa0c4d234facf070746024bb80c8d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.12+24"
+>>>>>>> 0713f3b9e (add ota updates for omi glass)
   image_picker_for_web:
     dependency: transitive
     description:
@@ -2368,10 +2382,17 @@ packages:
     dependency: transitive
     description:
       name: webview_flutter_android
+<<<<<<< HEAD
       sha256: "3c4eb4fcc252b40c2b5ce7be20d0481428b70f3ff589b0a8b8aaeb64c6bed701"
       url: "https://pub.dev"
     source: hosted
     version: "4.10.2"
+=======
+      sha256: "9573ad97890d199ac3ab32399aa33a5412163b37feb573eb5b0a76b35e9ffe41"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.8.2"
+>>>>>>> 0713f3b9e (add ota updates for omi glass)
   webview_flutter_platform_interface:
     dependency: transitive
     description:
@@ -2384,10 +2405,17 @@ packages:
     dependency: transitive
     description:
       name: webview_flutter_wkwebview
+<<<<<<< HEAD
       sha256: fb46db8216131a3e55bcf44040ca808423539bc6732e7ed34fb6d8044e3d512f
       url: "https://pub.dev"
     source: hosted
     version: "3.23.0"
+=======
+      sha256: "71523b9048cf510cfa1fd4e0a3fa5e476a66e0884d5df51d59d5023dba237107"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.22.1"
+>>>>>>> 0713f3b9e (add ota updates for omi glass)
   win32:
     dependency: transitive
     description:

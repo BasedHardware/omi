@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'firmware_update_dialog.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
@@ -66,7 +67,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
       if (result != null) {
         String filePath = result.files.single.path!;
-        await startDfu(widget.device!, zipFilePath: filePath);
+        await updateFirmware(widget.device!, zipFilePath: filePath);
       }
     } catch (e) {
       debugPrint('Error selecting firmware file: $e');
@@ -455,17 +456,19 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
                       deviceProvider.setFirmwareUpdateInProgress(true);
 
+                      String dir = (await getApplicationDocumentsDirectory()).path;
+                      String downloadPath = '$dir/firmware.zip';
                       if (otaUpdateSteps.isEmpty) {
-                        await downloadFirmware();
-                        await startDfu(widget.device!);
+                        await downloadFirmware(downloadPath);
+                        await updateFirmware(widget.device!, zipFilePath: downloadPath);
                       } else {
                         showDialog(
                           context: context,
                           builder: (context) => FirmwareUpdateDialog(
                             steps: otaUpdateSteps,
                             onUpdateStart: () async {
-                              await downloadFirmware();
-                              await startDfu(widget.device!);
+                              await downloadFirmware(downloadPath);
+                              await updateFirmware(widget.device!, zipFilePath: downloadPath);
                             },
                           ),
                         );
