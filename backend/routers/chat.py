@@ -31,7 +31,7 @@ from utils.chat import (
     transcribe_voice_message_segment,
 )
 from utils.llm.persona import initial_persona_chat_message
-from utils.llm.chat import initial_chat_message
+from utils.llm.chat import initial_chat_message, generate_session_title
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
@@ -108,6 +108,26 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
+
+    # Auto-generate title for new sessions based on first user message
+    if (chat_session and 
+        hasattr(chat_session, 'title') and 
+        chat_session.title and 
+        (chat_session.title.startswith('New Chat') or not chat_session.title.strip()) and
+        data.text and len(data.text.strip()) > 5):
+        
+        try:
+            session_messages = chat_db.get_messages(uid, limit=10, chat_session_id=chat_session.id)
+            user_messages = [msg for msg in session_messages if msg.get('sender') == 'human']
+            
+            if len(user_messages) <= 1:
+                new_title = generate_session_title(data.text)
+                if new_title and new_title != "New Chat":
+                    chat_db.update_chat_session_title(uid, chat_session.id, new_title)
+                    print(f"Auto-generated title for session {chat_session.id}: '{new_title}'")
+                    
+        except Exception as e:
+            print(f"Failed to generate title for session {chat_session.id}: {e}")
 
     app = get_available_app_by_id(plugin_id, uid)
     app = App(**app) if app else None
