@@ -986,8 +986,6 @@ class CaptureProvider extends ChangeNotifier
       return; // Segment exists and is already assigned, so ignore.
     }
 
-    debugPrint("adsasd ${SharedPreferencesUtil().autoCreateSpeakersEnabled}");
-
     // Auto-accept if enabled for new person suggestions
     if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
       assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);

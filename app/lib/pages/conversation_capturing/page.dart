@@ -132,6 +132,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 provider.segments,
                                 provider.photos,
                                 deviceProvider.connectedDevice,
+                                bottomMargin: 150,
                                 suggestions: provider.suggestionsBySegmentId,
                                 taggingSegmentIds: provider.taggingSegmentIds,
                                 onAcceptSuggestion: (suggestion) {
@@ -163,7 +164,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                               segmentId: segmentId,
                                               segments: provider.segments,
                                               suggestion: suggestion,
-                                              isCapturing: true,
                                               people: peopleProvider.people,
                                               userName: SharedPreferencesUtil().givenName,
                                               onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {

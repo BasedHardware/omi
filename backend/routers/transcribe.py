@@ -3,7 +3,6 @@ import uuid
 import asyncio
 import struct
 import json
-import re
 from datetime import datetime, timezone, timedelta, time
 from enum import Enum
 from typing import Dict, Tuple, List, Optional
@@ -56,6 +55,7 @@ from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
+from utils.speaker_identification import detect_speaker_from_text
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
@@ -264,18 +264,6 @@ async def _listen(
         if not conversation or (not conversation.get('transcript_segments') and not conversation.get('photos')):
             return
         await _create_conversation(conversation)
-
-    def _detect_speaker_from_text(text: str) -> Optional[str]:
-        patterns = [
-            r"\b(I am|I'm|my name is|My name is)\s+([A-Z][a-z]+)\b",
-            r"\b([A-Z][a-z]+)\s+(is my name)\b",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                # Return the name, which is in the last captured group
-                return match.groups()[-1].capitalize()
-        return None
 
     conversation_creation_task_lock = asyncio.Lock()
     conversation_creation_task = None
@@ -764,11 +752,12 @@ async def _listen(
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
-                if speech_profile_processed:
-                    for segment in conversation.transcript_segments[starts:ends]:
-                        if segment.person_id or segment.is_user:
-                            continue
+                # Speaker detection
+                for segment in conversation.transcript_segments[starts:ends]:
+                    if segment.person_id or segment.is_user:
+                        continue
 
+                    if speech_profile_processed:
                         # Session consistency
                         if segment.speaker_id in speaker_to_person_map:
                             person_id, person_name = speaker_to_person_map[segment.speaker_id]
@@ -780,21 +769,20 @@ async def _listen(
                                     segment_id=segment.id,
                                 )
                             )
-                            continue
 
-                        # Text-based detection
-                        detected_name = _detect_speaker_from_text(segment.text)
-                        if detected_name:
-                            person = user_db.get_person_by_name(uid, detected_name)
-                            person_id = person['id'] if person else ''
-                            _send_message_event(
-                                SpeakerLabelSuggestionEvent(
-                                    speaker_id=segment.speaker_id,
-                                    person_id=person_id,
-                                    person_name=detected_name,
-                                    segment_id=segment.id,
-                                )
+                    # Text-based detection
+                    detected_name = detect_speaker_from_text(segment.text)
+                    if detected_name:
+                        person = user_db.get_person_by_name(uid, detected_name)
+                        person_id = person['id'] if person else ''
+                        _send_message_event(
+                            SpeakerLabelSuggestionEvent(
+                                speaker_id=segment.speaker_id,
+                                person_id=person_id,
+                                person_name=detected_name,
+                                segment_id=segment.id,
                             )
+                        )
 
     image_chunks = {}  # A temporary in-memory cache for image chunks
 

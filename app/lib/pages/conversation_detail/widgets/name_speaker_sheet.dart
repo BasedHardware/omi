@@ -13,7 +13,6 @@ class NameSpeakerBottomSheet extends StatefulWidget {
   final Function(int speakerId, String personId, String personName, List<String> segmentIds) onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
-  final bool isCapturing;
   final List<Person> people;
   final String userName;
 
@@ -26,7 +25,6 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.people,
     required this.userName,
     this.suggestion,
-    this.isCapturing = false,
   });
 
   @override
@@ -334,8 +332,6 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    if (widget.isCapturing) return const SizedBox.shrink();
-
     final untaggedSegments = widget.segments
         .where((s) => s.speakerId == widget.speakerId && s.personId == null && s.id != widget.segmentId)
         .toList();
