@@ -498,9 +498,16 @@ class MessageProvider extends ChangeNotifier {
 
     setShowTypingIndicator(false);
     
-    // Update session title if this is the first user message and we have a context
     if (messageSuccessful && chatSessionId != null && context != null) {
-      await _updateSessionTitleIfNeeded(chatSessionId, text, context);
+      List<ServerMessage> userMessages = messages.where((m) => m.sender == MessageSender.human).toList();
+      
+      if (userMessages.length <= 2) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (context.mounted) {
+            _refreshSessionTitleFromBackend(chatSessionId, context);
+          }
+        });
+      }
     }
   }
 
@@ -516,60 +523,25 @@ class MessageProvider extends ChangeNotifier {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
   }
 
-  String _generateTitleFromMessage(String message) {
-    // Remove extra whitespace and split into words
-    List<String> words = message.trim().split(RegExp(r'\s+'));
+  Future<void> _refreshSessionTitleFromBackend(String chatSessionId, flutter.BuildContext? context) async {
+    if (context == null) return;
     
-    // Filter out very short words and common words
-    List<String> meaningfulWords = words
-        .where((word) => word.length > 2)
-        .where((word) => !['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use'].contains(word.toLowerCase()))
-        .toList();
-    
-    // Take first 3-5 meaningful words
-    List<String> titleWords = meaningfulWords.take(4).toList();
-    
-    // If we don't have enough meaningful words, use the first few words
-    if (titleWords.length < 2) {
-      titleWords = words.take(4).toList();
-    }
-    
-    // Capitalize first letter of each word
-    titleWords = titleWords.map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase()).toList();
-    
-    String title = titleWords.join(' ');
-    
-    // Limit length to 50 characters
-    if (title.length > 50) {
-      title = title.substring(0, 47) + '...';
-    }
-    
-    return title;
-  }
-
-  Future<void> _updateSessionTitleIfNeeded(String chatSessionId, String messageText, flutter.BuildContext context) async {
     try {
-      // Check if this is the first user message in the session
-      List<ServerMessage> userMessages = messages.where((m) => m.sender == MessageSender.human).toList();
+      final sessionProvider = context.read<ChatSessionProvider>();
+      final currentSession = sessionProvider.currentSession;
       
-      if (userMessages.length == 1) {
-        // This is the first user message, generate and update title
-        String title = _generateTitleFromMessage(messageText);
+      if (currentSession != null && currentSession.id == chatSessionId) {
+        final updatedSession = await getChatSessionById(chatSessionId);
         
-        // Update title in backend
-        bool success = await updateChatSessionTitle(chatSessionId, title);
-        
-        if (success) {
-          // Update title in session provider
-          final sessionProvider = context.read<ChatSessionProvider>();
-          final currentSession = sessionProvider.currentSession;
-          if (currentSession != null && currentSession.id == chatSessionId) {
-            await sessionProvider.updateSessionTitle(currentSession, title);
-          }
+        if (updatedSession != null && updatedSession.title != null && 
+            updatedSession.title!.isNotEmpty && !updatedSession.title!.startsWith('New Chat')) {
+          // Update the session in the provider with the AI-generated title
+          await sessionProvider.updateSessionTitle(currentSession, updatedSession.title!);
+          debugPrint('Refreshed session title from backend: ${updatedSession.title}');
         }
       }
     } catch (e) {
-      debugPrint('Error updating session title: $e');
+      debugPrint('Error refreshing session title from backend: $e');
     }
   }
 }
