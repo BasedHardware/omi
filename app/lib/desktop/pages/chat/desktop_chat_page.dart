@@ -36,6 +36,8 @@ import 'package:omi/ui/atoms/omi_message_input.dart';
 import 'package:omi/ui/atoms/omi_send_button.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_section_header.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/ui/molecules/omi_session_tile.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -1759,11 +1761,40 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     );
   }
 
+  void _showDeleteSessionDialog(BuildContext context, ChatSessionProvider sessionProvider, ChatSession session) async {
+    final confirmed = await OmiConfirmDialog.show(
+      context,
+      title: 'Delete Session?',
+      message: 'Are you sure you want to delete the chat session "${session.displayTitle}"? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      confirmColor: ResponsiveHelper.errorColor,
+    );
+
+    if (confirmed == true) {
+      await sessionProvider.deleteSession(session);
+      
+      // Refresh messages for the new current session
+      final messageProvider = context.read<MessageProvider>();
+      await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+      scrollToBottom();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Chat session "${session.displayTitle}" deleted'),
+          backgroundColor: ResponsiveHelper.backgroundTertiary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   Widget _buildSessionsSidebar(ChatSessionProvider sessionProvider, AppProvider appProvider) {
     return Column(
       children: [
         // Header with new session button
-        Container(
+        Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
@@ -1776,30 +1807,18 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ),
               ),
               const Spacer(),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () async {
-                    await sessionProvider.createNewSession();
-                    // Refresh messages for the new session
-                    final messageProvider = context.read<MessageProvider>();
-                    await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
-                    scrollToBottom();
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.add,
-                      color: ResponsiveHelper.purplePrimary,
-                      size: 16,
-                    ),
-                  ),
-                ),
+              OmiIconButton(
+                icon: Icons.add,
+                onPressed: () async {
+                  await sessionProvider.createNewSession();
+                  // Refresh messages for the new session
+                  final messageProvider = context.read<MessageProvider>();
+                  await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+                  scrollToBottom();
+                },
+                style: OmiIconButtonStyle.filled,
+                size: 32,
+                iconSize: 16,
               ),
             ],
           ),
@@ -1820,85 +1839,15 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     final session = sessionProvider.sessions[index];
                     final isActive = session.id == sessionProvider.currentSessionId;
                     
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => _handleSessionSwitch(sessionProvider, session),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isActive
-                                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isActive
-                                    ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
-                                    : Colors.transparent,
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  color: ResponsiveHelper.textSecondary,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        session.displayTitle,
-                                        style: TextStyle(
-                                          color: isActive
-                                              ? ResponsiveHelper.purplePrimary
-                                              : ResponsiveHelper.textPrimary,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        _formatSessionTime(session.createdAt),
-                                        style: const TextStyle(
-                                          color: ResponsiveHelper.textTertiary,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (sessionProvider.sessions.length > 1) ...[
-                                  const SizedBox(width: 8),
-                                  Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      onTap: () => sessionProvider.deleteSession(session),
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        child: const Icon(
-                                          Icons.delete_outline,
-                                          color: ResponsiveHelper.textTertiary,
-                                          size: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                    return OmiSessionTile(
+                      title: session.displayTitle,
+                      subtitle: _formatSessionTime(session.createdAt),
+                      isActive: isActive,
+                      onTap: () => _handleSessionSwitch(sessionProvider, session),
+                      onDelete: sessionProvider.sessions.length > 1
+                          ? () => _showDeleteSessionDialog(context, sessionProvider, session)
+                          : null,
+                      showDeleteButton: sessionProvider.sessions.length > 1,
                     );
                   },
                 ),

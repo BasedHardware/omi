@@ -634,42 +634,48 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             borderRadius: BorderRadius.circular(8),
               child: Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: _isSidebarCollapsed ? 18 : 16,
+                  horizontal: _isSidebarCollapsed ? 0 : 16,
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
                   color: isSelected ? ResponsiveHelper.backgroundTertiary.withOpacity(0.8) : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      icon,
-                      color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                      size: 18,
-                    ),
-                    if (!_isSidebarCollapsed) ...[
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: AnimatedOpacity(
-                          opacity: _isSidebarCollapsed ? 0.0 : 1.0,
-                          duration: const Duration(milliseconds: 150),
-                          curve: Curves.easeOut,
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                              color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
+                child: _isSidebarCollapsed
+                    ? Center(
+                        child: Icon(
+                          icon,
+                          color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                          size: 18,
                         ),
+                      )
+                    : Row(
+                        children: [
+                          Icon(
+                            icon,
+                            color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: AnimatedOpacity(
+                              opacity: 1.0,
+                              duration: const Duration(milliseconds: 150),
+                              curve: Curves.easeOut,
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
+                                  color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ],
-                ),
               ),
             ),
           ),
@@ -851,7 +857,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     }
   }
 
-  // Legacy Flutter floating widget removed - now using native macOS overlay
 
   Widget _buildWindowControls() {
     return Container(
@@ -939,26 +944,20 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   }
 
   Widget _buildWindowCollapseButton() {
-    return MouseRegion(
-      onEnter: (_) => setState(() {}),
-      onExit: (_) => setState(() {}),
-      child: GestureDetector(
-        onTap: _toggleSidebarCollapse,
-        child: Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: ResponsiveHelper.textSecondary.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: Icon(
-            _isSidebarCollapsed ? FontAwesomeIcons.chevronRight : FontAwesomeIcons.chevronLeft,
-            color: ResponsiveHelper.textSecondary,
-            size: 12,
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: _isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar',
+        child: InkWell(
+          onTap: _toggleSidebarCollapse,
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+                          child: Icon(
+                _isSidebarCollapsed ? FontAwesomeIcons.indent : FontAwesomeIcons.outdent,
+                color: ResponsiveHelper.textSecondary,
+                size: 14,
+              ),
           ),
         ),
       ),
