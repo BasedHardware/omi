@@ -1,19 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -24,7 +29,6 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -34,6 +38,8 @@ class CaptureProvider extends ChangeNotifier
     implements ITransctipSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
+  PeopleProvider? peopleProvider;
+
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
@@ -112,15 +118,19 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp) {
     conversationProvider = cp;
-    messageProvider = p;
+    messageProvider = mp;
+    peopleProvider = pp;
     notifyListeners();
   }
 
   BtDevice? _recordingDevice;
+  ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
+  Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
 
@@ -179,6 +189,9 @@ class CaptureProvider extends ChangeNotifier
     segments = [];
     photos = [];
     hasTranscripts = false;
+    suggestionsBySegmentId = {};
+    _conversation = null;
+    taggingSegmentIds = [];
     notifyListeners();
   }
 
@@ -831,10 +844,10 @@ class CaptureProvider extends ChangeNotifier
 
   Future _loadInProgressConversation() async {
     var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    var convo = convos.isNotEmpty ? convos.first : null;
-    if (convo != null) {
-      segments = convo.transcriptSegments;
-      photos = convo.photos;
+    _conversation = convos.isNotEmpty ? convos.first : null;
+    if (_conversation != null) {
+      segments = _conversation!.transcriptSegments;
+      photos = _conversation!.photos;
     } else {
       segments = [];
       photos = [];
@@ -860,6 +873,11 @@ class CaptureProvider extends ChangeNotifier
 
     if (event is LastConversationEvent) {
       _handleLastConvoEvent(event.memoryId);
+      return;
+    }
+
+    if (event is SpeakerLabelSuggestionEvent) {
+      _handleSpeakerLabelSuggestionEvent(event);
       return;
     }
 
@@ -958,6 +976,86 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
+    // Tagging
+    if (taggingSegmentIds.contains(event.segmentId)) {
+      return;
+    }
+    // If segment already exists, check if it's assigned. If so, ignore suggestion.
+    var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
+    if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
+      return;
+    }
+
+    // Auto-accept if enabled for new person suggestions
+    if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
+      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);
+    } else {
+      // Otherwise, store suggestion to be displayed.
+      suggestionsBySegmentId[event.segmentId] = event;
+      notifyListeners();
+    }
+  }
+
+  Future<void> assignSpeakerToConversation(
+      int speakerId, String personId, String personName, List<String> segmentIds) async {
+    if (segmentIds.isEmpty) return;
+
+    taggingSegmentIds = List.from(segmentIds);
+    notifyListeners();
+
+    try {
+      String finalPersonId = personId;
+
+      // Create person if new
+      if (finalPersonId.isEmpty) {
+        Person? newPerson = await peopleProvider?.createPersonProvider(personName);
+        if (newPerson != null) {
+          finalPersonId = newPerson.id;
+        }
+      }
+
+      // Find conversation id
+      if (_conversation == null) return;
+
+      final isAssigningToUser = finalPersonId == 'user';
+
+      // Update local state for all segments with this speakerId
+      for (var segment in segments) {
+        if (segmentIds.contains(segment.id)) {
+          segment.isUser = isAssigningToUser;
+          segment.personId = isAssigningToUser ? null : finalPersonId;
+        }
+      }
+
+      // Persist change
+      await assignBulkConversationTranscriptSegments(
+        _conversation!.id,
+        segmentIds,
+        isUser: isAssigningToUser,
+        personId: isAssigningToUser ? null : finalPersonId,
+      );
+
+      // Notify backend session
+      if (_socket?.state == SocketServiceState.connected) {
+        final payload = jsonEncode({
+          'type': 'speaker_assigned',
+          'speaker_id': speakerId,
+          'person_id': finalPersonId,
+          'person_name': personName,
+          'segment_ids': segmentIds,
+        });
+        _socket?.send(payload);
+      }
+
+      // Remove all suggestions for this speakerId
+      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == speakerId);
+    } finally {
+      taggingSegmentIds = [];
+      notifyListeners();
+    }
+  }
+
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     _processNewSegmentReceived(newSegments);
@@ -974,7 +1072,7 @@ class CaptureProvider extends ChangeNotifier
       await _loadInProgressConversation();
     }
     var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
-    TranscriptSegment.combineSegments(segments, remainSegments);
+    segments.addAll(remainSegments);
 
     hasTranscripts = true;
     notifyListeners();

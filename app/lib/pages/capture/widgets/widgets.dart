@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
@@ -183,7 +184,10 @@ getTranscriptWidget(
   bool canDisplaySeconds = true,
   bool isConversationDetail = false,
   double bottomMargin = 100.0,
-  Function(int, int)? editSegment,
+  Function(String, int)? editSegment,
+  Map<String, SpeakerLabelSuggestionEvent> suggestions = const {},
+  List<String> taggingSegmentIds = const [],
+  Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -210,6 +214,9 @@ getTranscriptWidget(
       isConversationDetail: isConversationDetail,
       bottomMargin: bottomMargin,
       editSegment: editSegment,
+      suggestions: suggestions,
+      taggingSegmentIds: taggingSegmentIds,
+      onAcceptSuggestion: onAcceptSuggestion,
     );
   }
 
