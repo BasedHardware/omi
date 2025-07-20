@@ -1,17 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -27,7 +29,6 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -981,9 +982,9 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     // If segment already exists, check if it's assigned. If so, ignore suggestion.
-    var segment = segments.firstWhere((s) => s.id == event.segmentId, orElse: () => TranscriptSegment.empty());
-    if (segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
-      return; // Segment exists and is already assigned, so ignore.
+    var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
+    if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
+      return;
     }
 
     // Auto-accept if enabled for new person suggestions

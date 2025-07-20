@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
@@ -8,11 +8,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/people_provider.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
-import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/widgets/photos_grid.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -157,20 +154,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                         final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
                                             (s) => s.speakerId == speakerId,
                                             orElse: () => SpeakerLabelSuggestionEvent.empty());
-                                        return Consumer<PeopleProvider>(
-                                          builder: (context, peopleProvider, child) {
-                                            return NameSpeakerBottomSheet(
-                                              speakerId: speakerId,
-                                              segmentId: segmentId,
-                                              segments: provider.segments,
-                                              suggestion: suggestion,
-                                              people: peopleProvider.people,
-                                              userName: SharedPreferencesUtil().givenName,
-                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                                await provider.assignSpeakerToConversation(
-                                                    speakerId, personId, personName, segmentIds);
-                                              },
-                                            );
+                                        return NameSpeakerBottomSheet(
+                                          speakerId: speakerId,
+                                          segmentId: segmentId,
+                                          segments: provider.segments,
+                                          suggestion: suggestion,
+                                          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                            await provider.assignSpeakerToConversation(
+                                                speakerId, personId, personName, segmentIds);
                                           },
                                         );
                                       });
