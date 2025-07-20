@@ -45,7 +45,7 @@ scaling:
 
     engine:
       # -- Minimum number of Engine replicas.
-      minReplicas: 5
+      minReplicas: 4
       # -- Maximum number of Engine replicas.
       maxReplicas: 20
       metrics:
