@@ -16,10 +16,7 @@ class UserPeoplePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => PeopleProvider(),
-      child: const _UserPeoplePage(),
-    );
+    return const _UserPeoplePage();
   }
 }
 

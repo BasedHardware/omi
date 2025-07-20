@@ -2,26 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
-import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/widgets/photos_grid.dart';
-import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
@@ -424,7 +417,7 @@ class TranscriptWidgets extends StatelessWidget {
           topMargin: false,
           canDisplaySeconds: provider.canDisplaySeconds,
           isConversationDetail: true,
-          bottomMargin: 0, // Removed extra bottom margin
+          bottomMargin: 150,
           editSegment: (segmentId, speakerId) {
             final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
             if (!connectivityProvider.isConnected) {
@@ -444,8 +437,6 @@ class TranscriptWidgets extends StatelessWidget {
                     speakerId: speakerId,
                     segmentId: segmentId,
                     segments: provider.conversation.transcriptSegments,
-                    people: peopleProvider.people,
-                    userName: SharedPreferencesUtil().givenName,
                     onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
                       provider.toggleEditSegmentLoading(true);
                       String finalPersonId = personId;

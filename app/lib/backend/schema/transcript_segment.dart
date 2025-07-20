@@ -56,19 +56,6 @@ class TranscriptSegment {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
   }
 
-  factory TranscriptSegment.empty() {
-    return TranscriptSegment(
-      id: '',
-      text: '',
-      speaker: null,
-      isUser: false,
-      personId: null,
-      start: 0,
-      end: 0,
-      translations: [],
-    );
-  }
-
   @override
   String toString() {
     return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';

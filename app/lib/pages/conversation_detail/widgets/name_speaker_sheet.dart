@@ -5,7 +5,9 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/person_chip.dart';
+import 'package:provider/provider.dart';
 
 class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
@@ -13,8 +15,6 @@ class NameSpeakerBottomSheet extends StatefulWidget {
   final Function(int speakerId, String personId, String personName, List<String> segmentIds) onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
-  final List<Person> people;
-  final String userName;
 
   const NameSpeakerBottomSheet({
     super.key,
@@ -22,8 +22,6 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.segmentId,
     required this.onSpeakerAssigned,
     required this.segments,
-    required this.people,
-    required this.userName,
     this.suggestion,
   });
 
@@ -78,6 +76,10 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     super.initState();
     _selectedSegmentIds.add(widget.segmentId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final peopleProvider = context.read<PeopleProvider>();
+      final people = peopleProvider.people;
+      final userName = SharedPreferencesUtil().givenName;
+
       final currentSegment = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
       final sample = currentSegment?.text ?? "";
       setState(() {
@@ -95,19 +97,19 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       }
 
       // Predict selected person
-      if ((currentSegment != null && currentSegment.isUser) || widget.people.isEmpty) {
+      if ((currentSegment != null && currentSegment.isUser) || people.isEmpty) {
         setSelectedPerson('user');
-        setSelectedPersonName(widget.userName);
-      } else if (widget.people.isNotEmpty) {
+        setSelectedPersonName(userName);
+      } else if (people.isNotEmpty) {
         final personFrequencies = <String, int>{};
         for (final segment in widget.segments) {
           if (segment.personId != null) {
             personFrequencies.update(segment.personId!, (count) => count + 1, ifAbsent: () => 1);
           }
         }
-        final people = List.from(widget.people);
+        final peopleList = List.from(people);
         final currentPersonId = currentSegment?.personId;
-        people.sort((a, b) {
+        peopleList.sort((a, b) {
           final suggestionId = widget.suggestion?.personId;
 
           final aIsCurrent = a.id == currentPersonId;
@@ -125,14 +127,18 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           }
           return a.name.compareTo(b.name);
         });
-        setSelectedPerson(people[0].id);
-        setSelectedPersonName(people[0].name);
+        setSelectedPerson(peopleList[0].id);
+        setSelectedPersonName(peopleList[0].name);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final peopleProvider = context.watch<PeopleProvider>();
+    final people = peopleProvider.people;
+    final userName = SharedPreferencesUtil().givenName;
+
     return Padding(
       padding: MediaQuery.of(context).viewInsets,
       child: SingleChildScrollView(
@@ -156,7 +162,10 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                       children: [
                         _buildHeader(),
                         const SizedBox(height: 16),
-                        if (_isCreatingNewPerson) _buildNewPersonInput() else _buildPersonSelector(),
+                        if (_isCreatingNewPerson)
+                          _buildNewPersonInput(people, userName)
+                        else
+                          _buildPersonSelector(people, userName),
                         const SizedBox(height: 16),
                         _buildUntaggedSegments(),
                         const SizedBox(height: 8),
@@ -202,7 +211,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     );
   }
 
-  Widget _buildNewPersonInput() {
+  Widget _buildNewPersonInput(List<Person> people, String userName) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -211,9 +220,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           autofocus: true,
           onChanged: (value) {
             final trimmedValue = value.trim();
-            final existingPeople = widget.people;
-            final isDuplicate = existingPeople.any((p) => p.name.toLowerCase() == trimmedValue.toLowerCase());
-            final isOwnName = trimmedValue.toLowerCase() == widget.userName.toLowerCase();
+            final isDuplicate = people.any((p) => p.name.toLowerCase() == trimmedValue.toLowerCase());
+            final isOwnName = trimmedValue.toLowerCase() == userName.toLowerCase();
 
             setState(() {
               selectedPerson = ''; // When typing, deselect any chosen person.
@@ -260,7 +268,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     );
   }
 
-  Widget _buildPersonSelector() {
+  Widget _buildPersonSelector(List<Person> ppl, String userName) {
     final personFrequencies = <String, int>{};
     for (final segment in widget.segments) {
       if (segment.personId != null) {
@@ -271,7 +279,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     final currentSegment = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
     final currentPersonId = currentSegment?.personId;
 
-    final List<Person> cachedPeople = List.from(widget.people);
+    final List<Person> cachedPeople = List.from(ppl);
     cachedPeople.sort((a, b) {
       final suggestionId = widget.suggestion?.personId;
 
@@ -292,12 +300,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     });
 
     final List<Person> people = [
-      Person(
-          id: 'user',
-          name: '${widget.userName} (You)',
-          colorIdx: 0,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now())
+      Person(id: 'user', name: '$userName (You)', colorIdx: 0, createdAt: DateTime.now(), updatedAt: DateTime.now())
     ];
     people.addAll(cachedPeople);
 
@@ -320,7 +323,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           isSelected: selectedPerson == person.id,
           onSelected: (bool selected) {
             setSelectedPerson(person.id);
-            setSelectedPersonName(person.id == 'user' ? widget.userName : person.name);
+            setSelectedPersonName(person.id == 'user' ? userName : person.name);
           },
         )));
 
