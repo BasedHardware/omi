@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/desktop/desktop_app.dart';
+import 'package:omi/desktop/widgets/hotkey_wrapper.dart';
 
 class AppShell extends StatelessWidget {
   const AppShell({super.key});

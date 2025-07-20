@@ -1,0 +1,3 @@
+- Planning to reuse existing voice recording components
+  - Wants voice recorder similar to @lib/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart
+  - Likely implementation in Swift, similar to @macos/Runner/FloatingRecordingOverlay.swift
