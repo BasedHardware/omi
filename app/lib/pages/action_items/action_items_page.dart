@@ -297,7 +297,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     child: Container(
                       height: 52,
                       decoration: BoxDecoration(
-                        color: Colors.grey[900],
+                        color: const Color(0xFF1F1F25),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Center(

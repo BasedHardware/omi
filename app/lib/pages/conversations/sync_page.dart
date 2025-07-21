@@ -52,7 +52,7 @@ class _WalListItemState extends State<WalListItem> {
         child: Container(
           width: double.maxFinite,
           decoration: BoxDecoration(
-            color: Colors.grey.shade900,
+            color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: ClipRRect(
@@ -79,8 +79,7 @@ class _WalListItemState extends State<WalListItem> {
                     ListTile(
                       leading: Padding(
                         padding: const EdgeInsets.only(top: 6.0),
-                        child: Text(widget.wal.device == "phone" ? "📱" : "💾",
-                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
+                        child: Text(widget.wal.device == "phone" ? "📱" : "💾", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
                       ),
                       title: Text(
                         secondsToHumanReadable(widget.wal.seconds),
@@ -104,8 +103,7 @@ class _WalListItemState extends State<WalListItem> {
                     ),
                     if (widget.wal.isSyncing)
                       LinearProgressIndicator(
-                        value: calculateProgress(
-                            widget.wal.syncStartedAt ?? DateTime.now(), widget.wal.syncEtaSeconds ?? 0),
+                        value: calculateProgress(widget.wal.syncStartedAt ?? DateTime.now(), widget.wal.syncEtaSeconds ?? 0),
                         backgroundColor: Colors.grey[800],
                         color: Colors.white,
                         minHeight: 4,
@@ -265,12 +263,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                     decoration: BoxDecoration(
                       border: const GradientBoxBorder(
-                        gradient: LinearGradient(colors: [
-                          Color.fromARGB(127, 208, 208, 208),
-                          Color.fromARGB(127, 188, 99, 121),
-                          Color.fromARGB(127, 86, 101, 182),
-                          Color.fromARGB(127, 126, 190, 236)
-                        ]),
+                        gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                         width: 2,
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -310,7 +303,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                               padding: const EdgeInsets.all(12.0),
                               margin: const EdgeInsets.only(left: 16.0, right: 16.0, top: 12),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade900,
+                                color: const Color(0xFF1F1F25),
                                 borderRadius: BorderRadius.circular(16.0),
                               ),
                               child: const ListTile(
@@ -361,8 +354,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                     textAlign: TextAlign.center,
                                   ),
                                 )
-                          : conversationProvider.syncCompleted &&
-                                  conversationProvider.syncedConversationsPointers.isNotEmpty
+                          : conversationProvider.syncCompleted && conversationProvider.syncedConversationsPointers.isNotEmpty
                               ? Column(
                                   children: [
                                     const Text(
@@ -377,12 +369,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                             decoration: BoxDecoration(
                                               border: const GradientBoxBorder(
-                                                gradient: LinearGradient(colors: [
-                                                  Color.fromARGB(127, 208, 208, 208),
-                                                  Color.fromARGB(127, 188, 99, 121),
-                                                  Color.fromARGB(127, 86, 101, 182),
-                                                  Color.fromARGB(127, 126, 190, 236)
-                                                ]),
+                                                gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                                                 width: 2,
                                               ),
                                               borderRadius: BorderRadius.circular(12),

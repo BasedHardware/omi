@@ -64,9 +64,7 @@ class AppMetadataWidget extends StatelessWidget {
                     ),
                     child: imageFile != null || imageUrl != null
                         ? (imageUrl == null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(30.0),
-                                child: Image.file(imageFile!, fit: BoxFit.cover))
+                            ? ClipRRect(borderRadius: BorderRadius.circular(30.0), child: Image.file(imageFile!, fit: BoxFit.cover))
                             : ClipRRect(
                                 borderRadius: BorderRadius.circular(30.0),
                                 child: CachedNetworkImage(imageUrl: imageUrl!),
@@ -101,7 +99,7 @@ class AppMetadataWidget extends StatelessWidget {
             ),
             Container(
               decoration: BoxDecoration(
-                color: Colors.grey.shade900,
+                color: const Color(0xFF1F1F25),
                 borderRadius: BorderRadius.circular(12.0),
               ),
               padding: const EdgeInsets.all(14.0),
@@ -143,8 +141,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   ),
                                   GestureDetector(
                                     onTap: () {
-                                      Clipboard.setData(
-                                          ClipboardData(text: context.read<AddAppProvider>().updateAppId!));
+                                      Clipboard.setData(ClipboardData(text: context.read<AddAppProvider>().updateAppId!));
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
                                           content: Text('App ID copied to clipboard'),
@@ -309,8 +306,7 @@ class AppMetadataWidget extends StatelessWidget {
                           ),
                           Text(
                             (category?.isNotEmpty == true ? category : 'Select Category') ?? 'Select Category',
-                            style: TextStyle(
-                                color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                            style: TextStyle(color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                           ),
                           const Spacer(),
                           Icon(
@@ -376,8 +372,7 @@ class AppMetadataWidget extends StatelessWidget {
                                         contentPadding: EdgeInsets.only(top: 6, bottom: 2),
                                         isDense: true,
                                         border: InputBorder.none,
-                                        hintText:
-                                            'My Awesome App is a great app that does amazing things. It is the best app ever!',
+                                        hintText: 'My Awesome App is a great app that does amazing things. It is the best app ever!',
                                         hintMaxLines: 4,
                                       ),
                                     ),
@@ -502,9 +497,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 ),
                                 Text(
                                   (appPricing?.isNotEmpty == true ? appPricing : 'None Selected') ?? 'None Selected',
-                                  style: TextStyle(
-                                      color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
-                                      fontSize: 16),
+                                  style: TextStyle(color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                                 ),
                                 const Spacer(),
                                 Icon(

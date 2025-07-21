@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -32,9 +33,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-class CaptureProvider extends ChangeNotifier
-    with MessageNotifierMixin
-    implements ITransctipSegmentSocketServiceListener {
+class CaptureProvider extends ChangeNotifier with MessageNotifierMixin implements ITransctipSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   TranscriptSegmentSocketService? _socket;
@@ -97,13 +96,53 @@ class CaptureProvider extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
+  // Audio level tracking for waveform visualization
+  final List<double> _audioLevels = List.generate(8, (_) => 0.15);
+  List<double> get audioLevels => List.from(_audioLevels);
+
+  void _processAudioBytesForVisualization(List<int> bytes) {
+    if (bytes.isEmpty) return;
+
+    double rms = 0;
+
+    // Process bytes as 16-bit samples (2 bytes per sample)
+    for (int i = 0; i < bytes.length - 1; i += 2) {
+      // Convert two bytes to a 16-bit signed integer
+      int sample = bytes[i] | (bytes[i + 1] << 8);
+
+      // Convert to signed value (if high bit is set)
+      if (sample > 32767) {
+        sample = sample - 65536;
+      }
+
+      // Square the sample and add to sum
+      rms += sample * sample;
+    }
+
+    // Calculate RMS and normalize to 0.0-1.0 range
+    int sampleCount = bytes.length ~/ 2;
+    if (sampleCount > 0) {
+      rms = math.sqrt(rms / sampleCount) / 32768.0;
+    } else {
+      rms = 0;
+    }
+
+    // Apply non-linear scaling for better dynamic range - quieter on silence, same on noise
+    final level = (math.pow(rms, 0.3).toDouble() * 2.1).clamp(0.15, 1.6);
+
+    // Shift all values left and add new level
+    for (int i = 0; i < _audioLevels.length - 1; i++) {
+      _audioLevels[i] = _audioLevels[i + 1];
+    }
+    _audioLevels[_audioLevels.length - 1] = level;
+
+    notifyListeners(); // Notify UI to update waveform
+  }
+
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
   // having a connected device or using the phone's mic for recording
-  bool get recordingDeviceServiceReady =>
-      _recordingDevice != null ||
-      recordingState == RecordingState.record ||
-      recordingState == RecordingState.systemAudioRecord;
+  bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record || recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
 
@@ -167,12 +206,9 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Connect to the transcript socket
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
 
-    _socket = await ServiceManager.instance()
-        .socket
-        .conversation(codec: codec, sampleRate: sampleRate!, language: language, force: force);
+    _socket = await ServiceManager.instance().socket.conversation(codec: codec, sampleRate: sampleRate!, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -267,10 +303,7 @@ class CaptureProvider extends ChangeNotifier
 
       // Support: opus codec, 1m from the first device connects
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
-      var checkWalSupported = codec.isOpusSupported() &&
-          (deviceFirstConnectedAt != null &&
-              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
-          SharedPreferencesUtil().localSyncEnabled;
+      var checkWalSupported = codec.isOpusSupported() && (deviceFirstConnectedAt != null && deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) && SharedPreferencesUtil().localSyncEnabled;
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
@@ -282,6 +315,9 @@ class CaptureProvider extends ChangeNotifier
       if (_socket?.state == SocketServiceState.connected) {
         final trimmedValue = value.sublist(3);
         _socket?.send(trimmedValue);
+
+        // Process audio bytes for waveform visualization
+        _processAudioBytesForVisualization(trimmedValue);
 
         // synced
         if (_isWalSupported) {
@@ -380,8 +416,7 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    var language = SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
@@ -487,6 +522,8 @@ class CaptureProvider extends ChangeNotifier
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(bytes);
       }
+      // Process audio bytes for waveform visualization
+      _processAudioBytesForVisualization(bytes);
     }, onRecording: () {
       updateRecordingState(RecordingState.record);
     }, onStop: () {
@@ -545,6 +582,8 @@ class CaptureProvider extends ChangeNotifier
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(bytes);
         }
+        // Process audio bytes for waveform visualization
+        _processAudioBytesForVisualization(bytes);
       }, onRecording: () {
         recordingStarted = true;
         updateRecordingState(RecordingState.systemAudioRecord);
@@ -582,11 +621,9 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('System audio failed with error: $error');
 
     if (error.contains('MIC_PERMISSION_REQUIRED') || error.contains('microphone')) {
-      AppSnackbar.showSnackbarError(
-          'Microphone permission is required. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+      AppSnackbar.showSnackbarError('Microphone permission is required. Please grant permission in System Preferences > Privacy & Security > Microphone.');
     } else if (error.contains('SCREEN_PERMISSION_REQUIRED') || error.contains('screen')) {
-      AppSnackbar.showSnackbarError(
-          'Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
+      AppSnackbar.showSnackbarError('Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
     } else {
       // Generic permission error - try the full permission check
       await _checkAndRequestPermissions();
@@ -610,8 +647,7 @@ class CaptureProvider extends ChangeNotifier
             return;
           }
         } else if (micStatus == 'denied') {
-          AppSnackbar.showSnackbarError(
-              'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+          AppSnackbar.showSnackbarError('Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
           updateRecordingState(RecordingState.stop);
           return;
         }
@@ -664,8 +700,7 @@ class CaptureProvider extends ChangeNotifier
         // Only request permission if both attempts failed
         bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
         if (!screenGranted) {
-          AppSnackbar.showSnackbarError(
-              'Screen recording permission is required. The app is already granted permission in System Preferences, but you may need to restart the app due to a macOS bug.');
+          AppSnackbar.showSnackbarError('Screen recording permission is required. The app is already granted permission in System Preferences, but you may need to restart the app due to a macOS bug.');
           updateRecordingState(RecordingState.stop);
           return;
         }
@@ -829,8 +864,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
-      ServerConversation(
-          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
+      ServerConversation(id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
     processInProgressConversation().then((result) {
       if (result == null || result.conversation == null) {
@@ -852,8 +886,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {
-    bool conversationExists =
-        conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
+    bool conversationExists = conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
     if (conversationExists) {
       return;
     }

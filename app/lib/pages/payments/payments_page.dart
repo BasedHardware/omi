@@ -30,7 +30,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: Colors.grey.shade800,
@@ -98,10 +98,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
-                          if (hasActiveMethod) ...[
-                            _buildActiveMethodCard(activeMethod, provider),
-                            const SizedBox(height: 24)
-                          ],
+                          if (hasActiveMethod) ...[_buildActiveMethodCard(activeMethod, provider), const SizedBox(height: 24)],
                           const Text(
                             'Available Payment Methods',
                             style: TextStyle(

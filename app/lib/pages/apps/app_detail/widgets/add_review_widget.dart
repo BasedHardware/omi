@@ -76,7 +76,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
       padding: const EdgeInsets.all(16.0),
       margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -86,8 +86,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 6.0),
-                child: Text(widget.app.userReview?.score == null ? 'Rate and Review this App' : 'Your Review',
-                    style: const TextStyle(color: Colors.white, fontSize: 16)),
+                child: Text(widget.app.userReview?.score == null ? 'Rate and Review this App' : 'Your Review', style: const TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ],
           ),
@@ -118,13 +117,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
           ClipRRect(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              height: showReviewField
-                  ? (showButton
-                      ? (MediaQuery.sizeOf(context).height < 680
-                          ? MediaQuery.sizeOf(context).height * 0.28
-                          : MediaQuery.sizeOf(context).height * 0.2)
-                      : MediaQuery.sizeOf(context).height * 0.132)
-                  : 0,
+              height: showReviewField ? (showButton ? (MediaQuery.sizeOf(context).height < 680 ? MediaQuery.sizeOf(context).height * 0.28 : MediaQuery.sizeOf(context).height * 0.2) : MediaQuery.sizeOf(context).height * 0.132) : 0,
               child: !showReviewField
                   ? null
                   : SingleChildScrollView(
@@ -178,15 +171,13 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                   textStyle: const TextStyle(color: Colors.black, fontSize: 16),
                                   onPressed: () async {
                                     FocusScope.of(context).unfocus();
-                                    if (rating == widget.app.userReview?.score &&
-                                        reviewController.text == widget.app.userReview?.review) {
+                                    if (rating == widget.app.userReview?.score && reviewController.text == widget.app.userReview?.review) {
                                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                         content: Text("No changes in review to update."),
                                       ));
                                       return;
                                     }
-                                    final connectivityProvider =
-                                        Provider.of<ConnectivityProvider>(context, listen: false);
+                                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                                     if (connectivityProvider.isConnected) {
                                       bool isSuccessful = false;
                                       var rev = AppReview(

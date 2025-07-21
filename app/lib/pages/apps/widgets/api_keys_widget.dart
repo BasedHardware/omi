@@ -40,7 +40,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     try {
       await Provider.of<AddAppProvider>(context, listen: false).loadApiKeys(widget.appId);
     } finally {
-      if(mounted){
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });
@@ -77,7 +77,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: const Color(0xFF1F1F25),
         title: const Text('Create a Key', textAlign: TextAlign.center),
         content: _buildNewKeyContent(),
         contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
@@ -131,7 +131,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(12.0),
       ),
       padding: const EdgeInsets.all(14.0),
@@ -162,7 +162,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                         showDialog(
                           context: context,
                           builder: (context) => AlertDialog(
-                            backgroundColor: Colors.grey.shade900,
+                            backgroundColor: const Color(0xFF1F1F25),
                             title: const Text('Omi API Keys'),
                             content: const Text(
                               'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.',
@@ -365,7 +365,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: const Color(0xFF1F1F25),
         title: const Text('Revoke API Key?'),
         content: const Text(
           'This action cannot be undone. Any applications using this key will no longer be able to access the API.',

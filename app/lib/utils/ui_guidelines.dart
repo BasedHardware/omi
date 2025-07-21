@@ -40,7 +40,7 @@ class AppStyles {
 
   // Colors
   static final Color backgroundPrimary = Colors.black;
-  static final Color backgroundSecondary = Colors.grey.shade900;
+  static final Color backgroundSecondary = const Color(0xFF1F1F25);
   static final Color backgroundTertiary = Colors.grey.shade800;
 
   static const Color textPrimary = Colors.white;

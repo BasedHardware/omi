@@ -524,7 +524,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
                 width: double.maxFinite,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
+                  color: const Color(0xFF1F1F25),
                   borderRadius: BorderRadius.circular(12.0),
                 ),
                 child: Row(
@@ -639,7 +639,7 @@ class InitialOptionWidget extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
         width: double.maxFinite,
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(12.0),
         ),
         child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),

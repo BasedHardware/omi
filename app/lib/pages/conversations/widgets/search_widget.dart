@@ -49,7 +49,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
+                    color: const Color(0xFF1F1F25),
                     border: Border(
                       bottom: BorderSide(
                         color: Colors.grey.shade800,
@@ -96,7 +96,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 // Date picker
                 Expanded(
                   child: Container(
-                    color: Colors.grey.shade900,
+                    color: const Color(0xFF1F1F25),
                     child: CupertinoDatePicker(
                       mode: CupertinoDatePickerMode.date,
                       initialDateTime: DateTime.now(),
@@ -138,7 +138,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 hintText: 'Search Conversations',
                 hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
                 filled: true,
-                fillColor: Colors.grey.shade900,
+                fillColor: const Color(0xFF1F1F25),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -179,7 +179,7 @@ class _SearchWidgetState extends State<SearchWidget> {
             builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
               return Container(
                 decoration: BoxDecoration(
-                  color: convoProvider.selectedDate != null ? Colors.deepPurple.withOpacity(0.5) : Colors.grey.shade900,
+                  color: convoProvider.selectedDate != null ? Colors.deepPurple.withOpacity(0.5) : const Color(0xFF1F1F25),
                   borderRadius: const BorderRadius.all(Radius.circular(16)),
                 ),
                 child: IconButton(
@@ -210,7 +210,7 @@ class _SearchWidgetState extends State<SearchWidget> {
           Consumer<ConversationProvider>(builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
             return Container(
               decoration: BoxDecoration(
-                color: convoProvider.showDiscardedConversations ? Colors.red.withOpacity(0.5) : Colors.grey.shade900,
+                color: convoProvider.showDiscardedConversations ? Colors.red.withOpacity(0.5) : const Color(0xFF1F1F25),
                 borderRadius: const BorderRadius.all(Radius.circular(16)),
               ),
               child: IconButton(

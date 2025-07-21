@@ -45,7 +45,7 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade900,
+                      color: const Color(0xFF1F1F25),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Row(
@@ -93,7 +93,7 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
+                    color: const Color(0xFF1F1F25),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Row(
@@ -141,7 +141,7 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
+                    color: const Color(0xFF1F1F25),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(

@@ -66,8 +66,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
       }
 
       // timer
-      if ((_status == LocalSyncStatus.inProgress || _status == LocalSyncStatus.flush) &&
-          (!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady)) {
+      if ((_status == LocalSyncStatus.inProgress || _status == LocalSyncStatus.flush) && (!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady)) {
         _missSecondsInEstTimerEnabled = true;
       } else {
         _missSecondsInEstTimerEnabled = false;
@@ -77,7 +76,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
       if (_status == LocalSyncStatus.inProgress) {
         return Container(
           decoration: BoxDecoration(
-            color: Colors.grey.shade900,
+            color: const Color(0xFF1F1F25),
             borderRadius: const BorderRadius.all(Radius.circular(12)),
           ),
           margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -99,7 +98,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
         //   },
         //   child: Container(
         //     decoration: BoxDecoration(
-        //       color: Colors.grey.shade900,
+        //       color: const Color(0xFF1F1F25),
         //       borderRadius: const BorderRadius.all(Radius.circular(12)),
         //     ),
         //     padding: const EdgeInsets.all(16),
