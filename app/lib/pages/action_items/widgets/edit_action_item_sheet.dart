@@ -77,7 +77,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          color: const Color(0xFF1F1F25),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -140,7 +140,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        backgroundColor: Colors.grey.shade900,
+                        backgroundColor: const Color(0xFF1F1F25),
                         title: const Text(
                           'Delete Action Item',
                           style: TextStyle(color: Colors.white),

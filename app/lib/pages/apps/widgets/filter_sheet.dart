@@ -216,7 +216,7 @@ class FilterBottomSheet extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.grey.shade900.withOpacity(0.5),
+          color: const Color(0xFF1F1F25).withOpacity(0.5),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -334,7 +334,7 @@ class FilterBottomSheet extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade900.withOpacity(0.5),
+                color: const Color(0xFF1F1F25).withOpacity(0.5),
                 borderRadius: BorderRadius.circular(12),
                 border: isSelected ? Border.all(color: Colors.blue.shade600, width: 2) : null,
               ),
@@ -392,7 +392,7 @@ class FilterBottomSheet extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade900.withOpacity(0.5),
+                color: const Color(0xFF1F1F25).withOpacity(0.5),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(

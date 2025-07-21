@@ -9,7 +9,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/photos_grid.dart';
-import 'package:omi/widgets/recording_waveform.dart';
+
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {

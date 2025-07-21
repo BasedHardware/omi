@@ -789,7 +789,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       itemBuilder: (BuildContext context) {
         return _getAppsDropdownItems(context, provider);
       },
-      color: Colors.grey.shade900,
+      color: const Color(0xFF1F1F25),
     );
   }
 

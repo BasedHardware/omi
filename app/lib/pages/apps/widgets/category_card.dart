@@ -108,7 +108,7 @@ class CategoryCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey.shade900.withOpacity(0.3),
+          color: const Color(0xFF1F1F25).withOpacity(0.3),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Padding(

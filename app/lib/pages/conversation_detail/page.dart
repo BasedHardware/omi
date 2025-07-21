@@ -383,7 +383,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               //        ),
               //        decoration: BoxDecoration(
               //          borderRadius: BorderRadius.circular(16),
-              //          color: Colors.grey.shade900,
+              //          color: const Color(0xFF1F1F25),
               //          boxShadow: [
               //            BoxShadow(
               //              color: Colors.black.withOpacity(0.3),

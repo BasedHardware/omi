@@ -60,7 +60,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: const Color(0xFF1F1F25),
         borderRadius: borderRadius,
         boxShadow: [
           BoxShadow(

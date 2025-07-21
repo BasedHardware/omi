@@ -97,7 +97,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               padding: const EdgeInsets.all(12.0),
                               margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 12, bottom: 14),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade900,
+                                color: const Color(0xFF1F1F25),
                                 borderRadius: BorderRadius.circular(16.0),
                               ),
                               child: const ListTile(
@@ -132,7 +132,7 @@ class _AddAppPageState extends State<AddAppPage> {
                           const SizedBox(height: 18),
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade900,
+                              color: const Color(0xFF1F1F25),
                               borderRadius: BorderRadius.circular(12.0),
                             ),
                             padding: const EdgeInsets.all(14.0),
@@ -268,7 +268,7 @@ class _AddAppPageState extends State<AddAppPage> {
                           const SizedBox(height: 18),
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade900,
+                              color: const Color(0xFF1F1F25),
                               borderRadius: BorderRadius.circular(12.0),
                             ),
                             padding: const EdgeInsets.all(14.0),
@@ -289,8 +289,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               ],
                             ),
                           ),
-                          if (provider.isCapabilitySelectedById('chat') ||
-                              provider.isCapabilitySelectedById('memories'))
+                          if (provider.isCapabilitySelectedById('chat') || provider.isCapabilitySelectedById('memories'))
                             Column(
                               children: [
                                 const SizedBox(
@@ -307,7 +306,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                     },
                                     child: Container(
                                       decoration: BoxDecoration(
-                                        color: Colors.grey.shade900,
+                                        color: const Color(0xFF1F1F25),
                                         borderRadius: BorderRadius.circular(12.0),
                                       ),
                                       padding: const EdgeInsets.all(14.0),
@@ -317,11 +316,9 @@ class _AddAppPageState extends State<AddAppPage> {
                                             PromptTextField(
                                               controller: provider.chatPromptController,
                                               label: 'Chat Prompt',
-                                              hint:
-                                                  'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                              hint: 'You are an awesome app, your job is to respond to the user queries and make them feel good...',
                                             ),
-                                          if (provider.isCapabilitySelectedById('memories') &&
-                                              provider.isCapabilitySelectedById('chat'))
+                                          if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat'))
                                             const SizedBox(
                                               height: 20,
                                             ),
@@ -329,8 +326,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                             PromptTextField(
                                               controller: provider.conversationPromptController,
                                               label: 'Conversation Prompt',
-                                              hint:
-                                                  'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                              hint: 'You are an awesome app, you will be given transcript and summary of a conversation...',
                                             ),
                                         ],
                                       ),
@@ -348,7 +344,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                 ),
                                 Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.shade900,
+                                    color: const Color(0xFF1F1F25),
                                     borderRadius: BorderRadius.circular(12.0),
                                   ),
                                   padding: const EdgeInsets.all(14.0),
@@ -409,8 +405,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                 shape: const CircleBorder(),
                               ),
                               const Expanded(
-                                child: Text(
-                                    "By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
+                                child: Text("By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
                               ),
                             ],
                           ),
@@ -429,7 +424,7 @@ class _AddAppPageState extends State<AddAppPage> {
                 padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12.0),
-                  color: Colors.grey.shade900,
+                  color: const Color(0xFF1F1F25),
                   gradient: LinearGradient(
                     colors: [Colors.black, Colors.black.withValues(alpha: 0)],
                     begin: Alignment.bottomCenter,
@@ -447,9 +442,8 @@ class _AddAppPageState extends State<AddAppPage> {
                               builder: (ctx) {
                                 return ConfirmationDialog(
                                   title: 'Submit App?',
-                                  description: provider.makeAppPublic
-                                      ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
-                                      : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
+                                  description:
+                                      provider.makeAppPublic ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!' : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
                                   checkboxText: "Don't show it again",
                                   checkboxValue: !showSubmitAppConfirmation,
                                   onCheckboxChanged: (value) {
@@ -490,7 +484,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                           builder: (ctx) => Container(
                                             padding: const EdgeInsets.all(20),
                                             decoration: BoxDecoration(
-                                              color: Colors.grey.shade900,
+                                              color: const Color(0xFF1F1F25),
                                               borderRadius: const BorderRadius.vertical(
                                                 top: Radius.circular(20),
                                               ),

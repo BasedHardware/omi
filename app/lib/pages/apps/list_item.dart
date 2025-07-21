@@ -44,7 +44,7 @@ class AppListItem extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             margin: EdgeInsets.only(bottom: 8, top: index == 0 ? 16 : 0),
             decoration: BoxDecoration(
-              color: Colors.grey.shade900.withOpacity(0.3),
+              color: const Color(0xFF1F1F25).withOpacity(0.3),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(

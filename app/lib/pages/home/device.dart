@@ -241,7 +241,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade900,
+                              color: const Color(0xFF1F1F25),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Row(
@@ -280,7 +280,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                         // Controllable Items Section
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
+                            color: const Color(0xFF1F1F25),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Column(
@@ -350,7 +350,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                         // Info Only Section
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
+                            color: const Color(0xFF1F1F25),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Column(
@@ -401,7 +401,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     ),
                   ),
 
-                  const SizedBox(height: 100), // Extra padding to ensure scrollable content
+                  const SizedBox(height: 64), // Extra padding to ensure scrollable content
                 ],
               ),
             ),

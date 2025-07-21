@@ -14,8 +14,8 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:omi/widgets/dialog.dart';
-import 'package:omi/widgets/recording_waveform.dart';
+
+import 'package:omi/widgets/gradient_waveform.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
@@ -47,50 +47,19 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           width: double.maxFinite,
           decoration: BoxDecoration(
-            color: Colors.grey.shade900,
-            borderRadius: BorderRadius.circular(16.0),
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(24),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 18, 10, 12),
+            padding: const EdgeInsets.fromLTRB(10, 18, 10, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                header,
-                // Show content when recording is active OR when there are segments/photos
-                (provider.recordingState == RecordingState.record ||
-                        provider.recordingState == RecordingState.systemAudioRecord ||
-                        provider.recordingState == RecordingState.deviceRecord ||
-                        provider.recordingState == RecordingState.initialising ||
-                        provider.recordingState == RecordingState.pause ||
-                        provider.havingRecordingDevice ||
-                        provider.segments.isNotEmpty ||
-                        provider.photos.isNotEmpty ||
-                        _isPhoneMicPaused)
-                    ? Column(
-                        children: [
-                          const SizedBox(height: 8),
-                          // Only show transcript widget when there are segments or photos
-                          if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) const LiteCaptureWidget(),
-                          // Show waveform when recording is active (including paused state)
-                          if (provider.recordingState == RecordingState.record ||
-                              provider.recordingState == RecordingState.systemAudioRecord ||
-                              provider.recordingState == RecordingState.deviceRecord ||
-                              provider.recordingState == RecordingState.initialising ||
-                              provider.recordingState == RecordingState.pause ||
-                              provider.havingRecordingDevice ||
-                              _isPhoneMicPaused) ...[
-                            const SizedBox(height: 8),
-                            RecordingWaveform(
-                              segments: provider.segments,
-                              isRecording: provider.recordingState == RecordingState.record || provider.recordingState == RecordingState.systemAudioRecord || provider.recordingState == RecordingState.deviceRecord || provider.havingRecordingDevice,
-                              height: 60,
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
+                // Check if recording with device vs phone
+                (provider.recordingState == RecordingState.deviceRecord || provider.havingRecordingDevice)
+                    ? _buildDeviceRecordingUI(provider) // Special UI for device recording
+                    : _buildPhoneRecordingUI(provider, header), // Original UI for phone recording
               ],
             ),
           ),
@@ -288,6 +257,174 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           left,
           right,
         ],
+      ),
+    );
+  }
+
+  Widget _buildDeviceRecordingUI(CaptureProvider provider) {
+    return Column(
+      children: [
+        const SizedBox(height: 8), // Space above listening chip
+        // Listening chip at top
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF35343B),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Listening',
+                style: TextStyle(
+                  color: Color(0xFFC9CBCF),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFE5D50),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12), // Reduced space above waveform
+
+        // Waveform in center
+        SizedBox(
+          height: 160,
+          child: Center(
+            child: GradientWaveform(
+              width: 380,
+              height: 120,
+              barCount: 8,
+              barWidth: 28,
+              spacing: 4,
+              audioLevels: null, // No real audio for device recording
+              animated: true,
+              isDeviceRecording: true,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12), // Reduced space below waveform
+
+        // Transcript below (if available)
+        if (provider.segments.isNotEmpty) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _AutoScrollingText(
+              text: provider.segments.map((segment) => segment.text).join(' '),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16), // Bottom padding
+      ],
+    );
+  }
+
+  Widget _buildPhoneRecordingUI(CaptureProvider provider, Widget? header) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (header != null) header,
+        // Show content when recording is active OR when there are segments/photos
+        (provider.recordingState == RecordingState.record ||
+                provider.recordingState == RecordingState.systemAudioRecord ||
+                provider.recordingState == RecordingState.initialising ||
+                provider.recordingState == RecordingState.pause ||
+                provider.segments.isNotEmpty ||
+                provider.photos.isNotEmpty ||
+                _isPhoneMicPaused)
+            ? Column(
+                children: [
+                  const SizedBox(height: 8),
+                  // Only show transcript widget when there are segments or photos
+                  if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) const LiteCaptureWidget(),
+                  // Show waveform when recording is active (including paused state)
+                  if (provider.recordingState == RecordingState.record || provider.recordingState == RecordingState.systemAudioRecord || provider.recordingState == RecordingState.initialising || provider.recordingState == RecordingState.pause || _isPhoneMicPaused) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 160,
+                      child: Center(
+                        child: GradientWaveform(
+                          width: 380,
+                          height: 120,
+                          barCount: 8,
+                          barWidth: 28,
+                          spacing: 4,
+                          audioLevels: provider.recordingState == RecordingState.record ? provider.audioLevels : null,
+                          animated: true,
+                          isDeviceRecording: false, // Phone recording
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                ],
+              )
+            : const SizedBox.shrink(),
+      ],
+    );
+  }
+}
+
+class _AutoScrollingText extends StatefulWidget {
+  final String text;
+
+  const _AutoScrollingText({required this.text});
+
+  @override
+  State<_AutoScrollingText> createState() => _AutoScrollingTextState();
+}
+
+class _AutoScrollingTextState extends State<_AutoScrollingText> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_AutoScrollingText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text != oldWidget.text) {
+      // Auto scroll to the end when text changes
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      scrollDirection: Axis.horizontal,
+      child: Text(
+        widget.text,
+        style: const TextStyle(
+          color: Color(0xFF6A6B71),
+          fontSize: 16,
+          height: 1.4,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.visible,
       ),
     );
   }
@@ -516,7 +653,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
             margin: const EdgeInsets.symmetric(horizontal: 16),
             width: double.maxFinite,
             decoration: BoxDecoration(
-              color: Colors.grey.shade900,
+              color: const Color(0xFF1F1F25),
               borderRadius: BorderRadius.circular(16.0),
             ),
             child: Padding(

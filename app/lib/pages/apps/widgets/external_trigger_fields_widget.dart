@@ -30,7 +30,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
               },
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
+                  color: const Color(0xFF1F1F25),
                   borderRadius: BorderRadius.circular(12.0),
                 ),
                 padding: const EdgeInsets.all(14.0),
@@ -141,8 +141,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                                                   ),
                                                   const Spacer(),
                                                   Checkbox(
-                                                    value:
-                                                        provider.triggerEvent == provider.getTriggerEvents()[index].id,
+                                                    value: provider.triggerEvent == provider.getTriggerEvents()[index].id,
                                                     onChanged: (value) {
                                                       provider.setTriggerEvent(provider.getTriggerEvents()[index].id);
                                                     },
@@ -178,9 +177,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             ),
                             Text(
                               provider.mapTriggerEventIdToName(provider.triggerEvent) ?? 'None Selected',
-                              style: TextStyle(
-                                  color: provider.triggerEvent != null ? Colors.grey.shade100 : Colors.grey.shade400,
-                                  fontSize: 16),
+                              style: TextStyle(color: provider.triggerEvent != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                             ),
                             const Spacer(),
                             Icon(
@@ -254,7 +251,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             showDialog(
                               context: context,
                               builder: (context) => AlertDialog(
-                                backgroundColor: Colors.grey.shade900,
+                                backgroundColor: const Color(0xFF1F1F25),
                                 title: Text(
                                   'App Home URL (Optional)',
                                   style: TextStyle(color: Colors.grey.shade100),

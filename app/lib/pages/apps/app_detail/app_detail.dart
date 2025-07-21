@@ -90,7 +90,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
 
       setIsLoading(false);
-      if (mounted){
+      if (mounted) {
         context.read<AppProvider>().checkIsAppOwner(app.uid);
         context.read<AppProvider>().setIsAppPublicToggled(!app.private);
       }
@@ -503,8 +503,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                           return StatefulBuilder(builder: (ctx, setState) {
                                             return ConfirmationDialog(
                                               title: 'Data Access Notice',
-                                              description:
-                                                  'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                              description: 'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
                                               onConfirm: () {
                                                 _toggleApp(app.id, true);
                                                 Navigator.pop(context);
@@ -542,9 +541,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             const SizedBox(width: 10),
                             SizedBox(
                               width: MediaQuery.of(context).size.width * 0.78,
-                              child: const Text(
-                                  'You are a beta tester for this app. It is not public yet. It will be public once approved.',
-                                  style: TextStyle(color: Colors.grey)),
+                              child: const Text('You are a beta tester for this app. It is not public yet. It will be public once approved.', style: TextStyle(color: Colors.grey)),
                             ),
                           ],
                         ),
@@ -568,9 +565,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             const SizedBox(width: 10),
                             SizedBox(
                               width: MediaQuery.of(context).size.width * 0.78,
-                              child: const Text(
-                                  'Your app is under review and visible only to you. It will be public once approved.',
-                                  style: TextStyle(color: Colors.grey)),
+                              child: const Text('Your app is under review and visible only to you. It will be public once approved.', style: TextStyle(color: Colors.grey)),
                             ),
                           ],
                         ),
@@ -651,9 +646,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ? ListTile(
                       onTap: () async {
                         if (app.externalIntegration != null) {
-                          if (app.externalIntegration!.setupInstructionsFilePath
-                                  ?.contains('raw.githubusercontent.com') ==
-                              true) {
+                          if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
                             await routeToPage(
                               context,
                               MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
@@ -772,20 +765,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
               InfoCardWidget(
                 onTap: () {
                   if (app.description.decodeString.characters.length > 200) {
-                    routeToPage(
-                        context,
-                        MarkdownViewer(
-                            title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
-                            markdown: app.description.decodeString));
+                    routeToPage(context, MarkdownViewer(title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}', markdown: app.description.decodeString));
                   }
                 },
                 title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                 description: app.description,
                 showChips: true,
-                capabilityChips: app
-                    .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
-                    .map((e) => e.title)
-                    .toList(),
+                capabilityChips: app.getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities).map((e) => e.title).toList(),
                 connectionChips: app.getConnectedAccountNames(),
               ),
               _buildPermissionsCard(app),
@@ -793,10 +779,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ? InfoCardWidget(
                       onTap: () {
                         if (app.conversationPrompt!.decodeString.characters.length > 200) {
-                          routeToPage(
-                              context,
-                              MarkdownViewer(
-                                  title: 'Conversation Prompt', markdown: app.conversationPrompt!.decodeString));
+                          routeToPage(context, MarkdownViewer(title: 'Conversation Prompt', markdown: app.conversationPrompt!.decodeString));
                         }
                       },
                       title: 'Conversation Prompt',
@@ -809,8 +792,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ? InfoCardWidget(
                       onTap: () {
                         if (app.chatPrompt!.decodeString.characters.length > 200) {
-                          routeToPage(context,
-                              MarkdownViewer(title: 'Chat Personality', markdown: app.chatPrompt!.decodeString));
+                          routeToPage(context, MarkdownViewer(title: 'Chat Personality', markdown: app.chatPrompt!.decodeString));
                         }
                       },
                       title: 'Chat Personality',
@@ -829,7 +811,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   padding: const EdgeInsets.all(16.0),
                   margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
+                    color: const Color(0xFF1F1F25),
                     borderRadius: BorderRadius.circular(16.0),
                   ),
                   child: Column(
@@ -851,8 +833,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       const SizedBox(height: 20),
                       Row(
                         children: [
-                          Text(app.getRatingAvg() ?? '0.0',
-                              style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold)),
+                          Text(app.getRatingAvg() ?? '0.0', style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold)),
                           const Spacer(),
                           Column(
                             children: [
@@ -887,9 +868,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ),
                 ),
               ),
-              !app.isOwner(SharedPreferencesUtil().uid) && (app.enabled || app.userReview != null)
-                  ? AddReviewWidget(app: app)
-                  : const SizedBox.shrink(),
+              !app.isOwner(SharedPreferencesUtil().uid) && (app.enabled || app.userReview != null) ? AddReviewWidget(app: app) : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // app.private
@@ -978,11 +957,7 @@ class RecentReviewsSection extends StatelessWidget {
         const SizedBox(height: 16),
         ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: reviews.any((e) => e.response.isNotEmpty)
-                ? MediaQuery.of(context).size.height * 0.24
-                : (MediaQuery.of(context).size.height < 680
-                    ? MediaQuery.of(context).size.height * 0.2
-                    : MediaQuery.of(context).size.height * 0.138),
+            maxHeight: reviews.any((e) => e.response.isNotEmpty) ? MediaQuery.of(context).size.height * 0.24 : (MediaQuery.of(context).size.height < 680 ? MediaQuery.of(context).size.height * 0.2 : MediaQuery.of(context).size.height * 0.138),
           ),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
@@ -990,9 +965,7 @@ class RecentReviewsSection extends StatelessWidget {
             itemCount: reviews.length,
             itemBuilder: (context, index) {
               return Container(
-                width: reviews.length == 1
-                    ? MediaQuery.of(context).size.width * 0.84
-                    : MediaQuery.of(context).size.width * 0.78,
+                width: reviews.length == 1 ? MediaQuery.of(context).size.width * 0.84 : MediaQuery.of(context).size.width * 0.78,
                 padding: const EdgeInsets.all(16.0),
                 margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 0, bottom: 6),
                 decoration: BoxDecoration(
@@ -1032,9 +1005,7 @@ class RecentReviewsSection extends StatelessWidget {
                       height: 8,
                     ),
                     Text(
-                      reviews[index].review.length > 100
-                          ? '${reviews[index].review.characters.take(100).toString().decodeString.trim()}...'
-                          : reviews[index].review.decodeString,
+                      reviews[index].review.length > 100 ? '${reviews[index].review.characters.take(100).toString().decodeString.trim()}...' : reviews[index].review.decodeString,
                       style: const TextStyle(
                         color: Colors.white,
                       ),
@@ -1070,9 +1041,7 @@ class RecentReviewsSection extends StatelessWidget {
                                 height: 8,
                               ),
                               Text(
-                                reviews[index].response.length > 100
-                                    ? '${reviews[index].response.characters.take(100).toString().decodeString.trim()}...'
-                                    : reviews[index].response.decodeString,
+                                reviews[index].response.length > 100 ? '${reviews[index].response.characters.take(100).toString().decodeString.trim()}...' : reviews[index].response.decodeString,
                                 style: const TextStyle(
                                   color: Colors.white,
                                 ),

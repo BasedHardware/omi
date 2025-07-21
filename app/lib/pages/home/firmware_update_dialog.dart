@@ -41,20 +41,17 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
     final stepMap = {
       'no_usb': FirmwareUpdateStep(
         title: 'No USB',
-        description:
-            "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
+        description: "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
         icon: Icons.usb_off,
       ),
       'battery': FirmwareUpdateStep(
         title: 'Battery > 15%',
-        description:
-            "Ensure your Omi device has at least 15% battery remaining for a safe update.",
+        description: "Ensure your Omi device has at least 15% battery remaining for a safe update.",
         icon: Icons.battery_5_bar,
       ),
       'internet': FirmwareUpdateStep(
         title: 'Stable Internet',
-        description:
-            'Connect to a stable WiFi or cellular network for reliable firmware download.',
+        description: 'Connect to a stable WiFi or cellular network for reliable firmware download.',
         icon: Icons.wifi,
       ),
     };
@@ -72,7 +69,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
           maxHeight: 500,
         ),
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Padding(
@@ -128,9 +125,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
                   ),
                   Expanded(
                     child: Text(
-                      hasUsbStep 
-                          ? "I've disconnected USB and understand the risks."
-                          : "I confirm I want to update my device firmware.",
+                      hasUsbStep ? "I've disconnected USB and understand the risks." : "I confirm I want to update my device firmware.",
                       style: TextStyle(
                         color: Colors.grey.shade300,
                         fontSize: 14,
@@ -143,19 +138,21 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
               const SizedBox(height: 16),
               // Update button (disabled until confirmed)
               TextButton(
-                onPressed: isConfirmed ? () {
-                  Navigator.of(context).pop();
-                  try {
-                    widget.onUpdateStart();
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to start update: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                } : null,
+                onPressed: isConfirmed
+                    ? () {
+                        Navigator.of(context).pop();
+                        try {
+                          widget.onUpdateStart();
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to start update: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.white,
                   backgroundColor: isConfirmed ? Colors.deepPurple : Colors.grey.shade800,
@@ -179,7 +176,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
       ),
     );
   }
-  
+
   Widget _buildStepItem(FirmwareUpdateStep step) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),

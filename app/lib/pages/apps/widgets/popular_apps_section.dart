@@ -89,7 +89,7 @@ class PopularAppsSection extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900.withOpacity(0.3),
+                  color: const Color(0xFF1F1F25).withOpacity(0.3),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(

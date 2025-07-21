@@ -760,7 +760,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
+                  color: const Color(0xFF1F1F25),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
