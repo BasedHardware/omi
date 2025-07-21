@@ -404,7 +404,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     child: const Text(
                       'Done',
                       style: TextStyle(
-                        color: Color(0xFF007AFF),
+                        color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w400,
                       ),
