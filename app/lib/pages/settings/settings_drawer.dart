@@ -15,6 +15,7 @@ import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'device_settings.dart';
 
 enum SettingsMode {
@@ -150,19 +151,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           children: [
             _buildSettingsItem(
               title: 'Share Omi for iPhone',
-              icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Color(0xFF007AFF), size: 20),
+              icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Colors.white, size: 20),
               onTap: () async {
                 Navigator.pop(context);
-                // TODO: Add share functionality
+                await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
               },
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildSettingsItem(
-              title: 'Get Omi for Mac',
+              title: 'Share Omi for Mac',
               icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
                 Navigator.pop(context);
-                // TODO: Add Mac app download link
+                await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
               },
             ),
           ],
@@ -178,7 +179,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);
-                  await Intercom.instance.displayMessenger();
+                  final Uri url = Uri.parse('https://feedback.omi.me/');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                  }
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -187,7 +191,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);
-                  await Intercom.instance.displayMessenger();
+                  final Uri url = Uri.parse('https://feedback.omi.me/');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                  }
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -196,7 +203,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);
-                  await Intercom.instance.displayHelpCenter();
+                  final Uri url = Uri.parse('https://help.omi.me/en/');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                  }
                 },
               ),
             ],
