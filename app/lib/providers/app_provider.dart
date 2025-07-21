@@ -35,8 +35,7 @@ class AppProvider extends BaseProvider {
 
   List<App> get userPrivateApps => apps.where((app) => app.private).toList();
 
-  List<App> get userPublicApps =>
-      apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
+  List<App> get userPublicApps => apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
 
   Future<App?> getAppFromId(String id) async {
     if (apps.isEmpty) {
@@ -228,8 +227,13 @@ class AppProvider extends BaseProvider {
   }
 
   void setSelectedChatAppId(String? appId) {
-    selectedChatAppId = appId ?? "";
-    notifyListeners();
+    final newAppId = appId ?? "";
+    if (selectedChatAppId != newAppId) {
+      selectedChatAppId = newAppId;
+      // Only notify if there are listeners specifically for chat app selection
+      // Apps page doesn't need to rebuild for this change
+      // notifyListeners(); // Commented out to prevent apps page rebuilds
+    }
   }
 
   App? getSelectedApp() {
@@ -239,8 +243,10 @@ class AppProvider extends BaseProvider {
   void setAppLoading(int index, bool value) {
     if (index >= 0 && index < appLoading.length) {
       // Boundary check
-      appLoading[index] = value;
-      notifyListeners();
+      if (appLoading[index] != value) {
+        appLoading[index] = value;
+        notifyListeners(); // This should notify as it affects UI state
+      }
     } else {
       print("Error: Attempted to set loading state for invalid index $index");
     }
@@ -325,6 +331,7 @@ class AppProvider extends BaseProvider {
   }
 
   void checkIsAppOwner(String? appUid) {
+    final wasAppOwner = isAppOwner;
     if (appUid != null) {
       if (appUid == SharedPreferencesUtil().uid) {
         isAppOwner = true;
@@ -334,12 +341,17 @@ class AppProvider extends BaseProvider {
     } else {
       isAppOwner = false;
     }
-    notifyListeners();
+    // Only notify if the ownership state actually changed
+    if (wasAppOwner != isAppOwner) {
+      notifyListeners();
+    }
   }
 
   void setIsAppPublicToggled(bool value) {
-    appPublicToggled = value;
-    notifyListeners();
+    if (appPublicToggled != value) {
+      appPublicToggled = value;
+      notifyListeners();
+    }
   }
 
   Future deleteApp(String appId) async {

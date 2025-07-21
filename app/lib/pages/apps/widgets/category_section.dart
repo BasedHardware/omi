@@ -138,104 +138,115 @@ class SectionAppItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppProvider>(builder: (context, provider, child) {
-      return GestureDetector(
-        onTap: () async {
-          MixpanelManager().pageOpened('App Detail');
-          await routeToPage(context, AppDetailPage(app: app));
-          provider.setApps();
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12.0),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              CachedNetworkImage(
-                imageUrl: app.getImageUrl(),
-                httpHeaders: const {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                },
-                imageBuilder: (context, imageProvider) => Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.rectangle,
-                    borderRadius: BorderRadius.circular(8),
-                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                  ),
-                ),
-                placeholder: (context, url) => Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade800,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade800,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      app.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 17),
+    // Use Selector instead of Consumer to only rebuild when this specific app's enabled state changes
+    return Selector<AppProvider, bool>(
+      selector: (context, provider) {
+        // Only select the enabled state of this specific app
+        final currentApp = provider.apps.firstWhere(
+          (a) => a.id == app.id,
+          orElse: () => app,
+        );
+        return currentApp.enabled;
+      },
+      builder: (context, isEnabled, child) {
+        return GestureDetector(
+          onTap: () async {
+            MixpanelManager().pageOpened('App Detail');
+            await routeToPage(context, AppDetailPage(app: app));
+            context.read<AppProvider>().setApps();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12.0),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: app.getImageUrl(),
+                  httpHeaders: const {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                  },
+                  imageBuilder: (context, imageProvider) => Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.rectangle,
+                      borderRadius: BorderRadius.circular(8),
+                      image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2.0),
-                      child: Text(
-                        app.description.decodeString,
-                        maxLines: 1,
+                  ),
+                  placeholder: (context, url) => Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        app.name,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.grey, fontSize: 13),
+                        style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 17),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: Text(
+                          app.description.decodeString,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Action button - Apple style
+                Container(
+                  width: 60,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: isEnabled ? Colors.grey.shade700 : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: Text(
+                      isEnabled ? 'Open' : 'Install',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isEnabled ? Colors.white : Colors.black,
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // Action button - Apple style
-              Container(
-                width: 60,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: app.enabled ? Colors.grey.shade700 : Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(
-                  child: Text(
-                    app.enabled ? 'Open' : 'Install',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: app.enabled ? Colors.white : Colors.black,
-                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

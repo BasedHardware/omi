@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/app_section_card.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/pages/apps/widgets/category_apps_page.dart';
-import 'package:omi/pages/apps/widgets/category_card.dart';
 import 'package:omi/pages/apps/widgets/category_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -40,6 +38,10 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
   late TextEditingController searchController;
   Debouncer debouncer = Debouncer(delay: const Duration(milliseconds: 500));
 
+  // Cache grouped apps to avoid recomputing on every rebuild
+  Map<String, List<App>>? _cachedGroupedApps;
+  List<App>? _cachedAllApps;
+
   @override
   void initState() {
     searchController = TextEditingController();
@@ -56,6 +58,11 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
   }
 
   Map<String, List<App>> _groupAppsByCategory(List<App> apps) {
+    // Use cached result if apps haven't changed
+    if (_cachedAllApps != null && _cachedGroupedApps != null && apps.length == _cachedAllApps!.length) {
+      return _cachedGroupedApps!;
+    }
+
     Map<String, List<App>> groupedApps = {};
     for (var app in apps) {
       String categoryName = app.getCategoryName();
@@ -64,16 +71,25 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
       }
       groupedApps[categoryName]!.add(app);
     }
+
+    // Cache the result
+    _cachedAllApps = List.from(apps);
+    _cachedGroupedApps = groupedApps;
+
     return groupedApps;
   }
 
   Widget _buildAppsView() {
-    return Consumer<AppProvider>(
-      builder: (context, provider, child) {
-        if (provider.isFilterActive() || provider.isSearchActive()) {
-          return _buildFilteredAppsView(provider);
+    return Selector<AppProvider, ({bool isFilterActive, bool isSearchActive})>(
+      selector: (context, provider) => (
+        isFilterActive: provider.isFilterActive(),
+        isSearchActive: provider.isSearchActive(),
+      ),
+      builder: (context, state, child) {
+        if (state.isFilterActive || state.isSearchActive) {
+          return _buildFilteredAppsView();
         }
-        return _buildCategorizedAppsView(provider);
+        return _buildCategorizedAppsView();
       },
     );
   }
@@ -291,146 +307,168 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
     );
   }
 
-  Widget _buildFilteredAppsView(AppProvider provider) {
-    return CustomScrollView(
-      slivers: [
-        const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        if (provider.filteredApps.isEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.3),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.search_off,
-                    size: 64,
-                    color: Colors.grey.shade600,
+  Widget _buildFilteredAppsView() {
+    return Selector<AppProvider, List<App>>(
+      selector: (context, provider) => provider.filteredApps,
+      builder: (context, filteredApps, child) {
+        return CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            if (filteredApps.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.3),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.search_off,
+                        size: 64,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No apps found',
+                        style: TextStyle(fontSize: 18, color: Colors.white70),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Try adjusting your search or filters',
+                        style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No apps found',
-                    style: TextStyle(fontSize: 18, color: Colors.white70),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Try adjusting your search or filters',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20),
+                sliver: SliverList.separated(
+                  itemCount: filteredApps.length,
+                  itemBuilder: (context, index) {
+                    return Selector<AppProvider, List<App>>(
+                      selector: (context, provider) => provider.apps,
+                      builder: (context, allApps, child) {
+                        final originalIndex = allApps.indexWhere(
+                          (app) => app.id == filteredApps[index].id,
+                        );
+                        return AppListItem(
+                          app: filteredApps[index],
+                          index: originalIndex,
+                        );
+                      },
+                    );
+                  },
+                  separatorBuilder: (context, index) => const SizedBox(height: 8),
+                ),
               ),
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20),
-            sliver: SliverList.separated(
-              itemCount: provider.filteredApps.length,
-              itemBuilder: (context, index) {
-                final originalIndex = provider.apps.indexWhere((app) => app.id == provider.filteredApps[index].id);
-                return AppListItem(
-                  app: provider.filteredApps[index],
-                  index: originalIndex,
-                );
-              },
-              separatorBuilder: (context, index) => const SizedBox(height: 8),
-            ),
-          ),
-      ],
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildCategorizedAppsView(AppProvider provider) {
-    final groupedApps = _groupAppsByCategory(provider.apps);
+  Widget _buildCategorizedAppsView() {
+    return Selector<AppProvider, List<App>>(
+      selector: (context, provider) => provider.apps,
+      builder: (context, apps, child) {
+        final groupedApps = _groupAppsByCategory(apps);
 
-    // Get most downloaded apps overall (sorted by installs)
-    final allApps = List<App>.from(provider.apps);
-    allApps.sort((a, b) => (b.installs ?? 0).compareTo(a.installs ?? 0));
-    final mostDownloadedApps = allApps.take(20).toList(); // Get top 20 most downloaded
+        // Get most downloaded apps overall (sorted by installs)
+        final allApps = List<App>.from(apps);
+        allApps.sort((a, b) => (b.installs ?? 0).compareTo(a.installs ?? 0));
+        final mostDownloadedApps = allApps.take(20).toList(); // Get top 20 most downloaded
 
-    return CustomScrollView(
-      slivers: [
-        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        return CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-        // Popular Apps Section - First category, no view all
-        if (mostDownloadedApps.isNotEmpty)
-          SliverToBoxAdapter(
-            child: CategorySection(
-              categoryName: 'Popular Apps',
-              apps: mostDownloadedApps,
-              showViewAll: false,
-              onViewAll: () {}, // Not used since showViewAll is false
-            ),
-          ),
+            // Popular Apps Section - First category, no view all
+            if (mostDownloadedApps.isNotEmpty)
+              SliverToBoxAdapter(
+                child: CategorySection(
+                  categoryName: 'Popular Apps',
+                  apps: mostDownloadedApps,
+                  showViewAll: false,
+                  onViewAll: () {}, // Not used since showViewAll is false
+                ),
+              ),
 
-        // Other categories sections - sorted alphabetically
-        ...(() {
-          final sortedEntries = groupedApps.entries.where((entry) => entry.key != 'Popular').toList();
+            // Other categories sections - sorted alphabetically
+            ...(() {
+              final sortedEntries = groupedApps.entries.where((entry) => entry.key != 'Popular').toList();
 
-          // Custom sorting: alphabetical but with blank/empty and "Other" at the end
-          sortedEntries.sort((a, b) {
-            final aKey = a.key.trim();
-            final bKey = b.key.trim();
+              // Custom sorting: alphabetical but with blank/empty and "Other" at the end
+              sortedEntries.sort((a, b) {
+                final aKey = a.key.trim();
+                final bKey = b.key.trim();
 
-            // Handle blank/empty categories
-            if (aKey.isEmpty && bKey.isEmpty) return 0;
-            if (aKey.isEmpty) return 1; // a goes to end
-            if (bKey.isEmpty) return -1; // b goes to end
+                // Handle blank/empty categories
+                if (aKey.isEmpty && bKey.isEmpty) return 0;
+                if (aKey.isEmpty) return 1; // a goes to end
+                if (bKey.isEmpty) return -1; // b goes to end
 
-            // Handle "Other" category
-            if (aKey.toLowerCase() == 'other' && bKey.toLowerCase() == 'other') return 0;
-            if (aKey.toLowerCase() == 'other') return 1; // a goes to end
-            if (bKey.toLowerCase() == 'other') return -1; // b goes to end
+                // Handle "Other" category
+                if (aKey.toLowerCase() == 'other' && bKey.toLowerCase() == 'other') return 0;
+                if (aKey.toLowerCase() == 'other') return 1; // a goes to end
+                if (bKey.toLowerCase() == 'other') return -1; // b goes to end
 
-            // Normal alphabetical sorting
-            return aKey.compareTo(bKey);
-          });
+                // Normal alphabetical sorting
+                return aKey.compareTo(bKey);
+              });
 
-          return sortedEntries;
-        })()
-            .map((entry) {
-          final categoryName = entry.key;
-          final categoryApps = entry.value;
+              return sortedEntries;
+            })()
+                .map((entry) {
+              final categoryName = entry.key;
+              final categoryApps = entry.value;
 
-          return SliverToBoxAdapter(
-            child: CategorySection(
-              categoryName: categoryName,
-              apps: categoryApps,
-              onViewAll: () {
-                final category = context.read<AddAppProvider>().categories.firstWhere(
-                      (cat) => cat.title == categoryName,
-                      orElse: () => Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
+              return SliverToBoxAdapter(
+                child: CategorySection(
+                  categoryName: categoryName,
+                  apps: categoryApps,
+                  onViewAll: () {
+                    final category = context.read<AddAppProvider>().categories.firstWhere(
+                          (cat) => cat.title == categoryName,
+                          orElse: () => Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
+                        );
+                    routeToPage(
+                      context,
+                      CategoryAppsPage(
+                        category: category,
+                        apps: categoryApps,
+                      ),
                     );
-                routeToPage(
-                  context,
-                  CategoryAppsPage(
-                    category: category,
-                    apps: categoryApps,
-                  ),
-                );
-              },
-            ),
-          );
-        }),
+                  },
+                ),
+              );
+            }),
 
-        const SliverToBoxAdapter(child: SizedBox(height: 100)),
-      ],
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<AppProvider>(
-      builder: (context, provider, child) {
+    return Selector<AppProvider, ({bool isLoading, Map<String, dynamic> filters, bool isSearchActive})>(
+      selector: (context, provider) => (
+        isLoading: provider.isLoading,
+        filters: provider.filters,
+        isSearchActive: provider.isSearchActive(),
+      ),
+      builder: (context, state, child) {
         return CustomScrollView(
           slivers: [
             const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
             // Create your own app section - show shimmer when loading
             SliverToBoxAdapter(
-              child: provider.isLoading
+              child: state.isLoading
                   ? _buildShimmerCreateButton()
                   : GestureDetector(
                       onTap: () async {
@@ -487,7 +525,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                 ],
                               ),
                             ),
-                            Icon(
+                            const Icon(
                               Icons.chevron_right,
                               color: Colors.black,
                               size: 24,
@@ -500,7 +538,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
 
             // Top bar with search and filters - show shimmer when loading
             SliverToBoxAdapter(
-              child: provider.isLoading
+              child: state.isLoading
                   ? _buildShimmerSearchBar()
                   : Container(
                       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -508,7 +546,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                         children: [
                           // Search bar
                           Expanded(
-                            child: provider.isFilterActive()
+                            child: state.filters.isNotEmpty
                                 ? ListView.separated(
                                     scrollDirection: Axis.horizontal,
                                     itemBuilder: (ctx, idx) {
@@ -520,7 +558,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                         ),
                                         child: TextButton.icon(
                                           onPressed: () {
-                                            provider.removeFilter(provider.filters.keys.elementAt(idx));
+                                            context.read<AppProvider>().removeFilter(state.filters.keys.elementAt(idx));
                                           },
                                           icon: const Icon(
                                             Icons.close,
@@ -528,7 +566,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                             color: Colors.white70,
                                           ),
                                           label: Text(
-                                            filterValueToString(provider.filters.values.elementAt(idx)),
+                                            filterValueToString(state.filters.values.elementAt(idx)),
                                             style: const TextStyle(
                                               fontSize: 14,
                                               color: Colors.white,
@@ -543,7 +581,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                       );
                                     },
                                     separatorBuilder: (ctx, idx) => const SizedBox(width: 8),
-                                    itemCount: provider.filters.length,
+                                    itemCount: state.filters.length,
                                   )
                                 : SizedBox(
                                     height: 44,
@@ -560,7 +598,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                       ),
                                       focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
                                       controller: searchController,
-                                      trailing: provider.isSearchActive()
+                                      trailing: state.isSearchActive
                                           ? [
                                               IconButton(
                                                 icon: const Icon(Icons.close, color: Colors.white70, size: 16),
@@ -571,7 +609,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                                 ),
                                                 onPressed: () {
                                                   searchController.clear();
-                                                  provider.searchApps('');
+                                                  context.read<AppProvider>().searchApps('');
                                                 },
                                               )
                                             ]
@@ -589,7 +627,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                       ),
                                       onChanged: (value) {
                                         debouncer.run(() {
-                                          provider.searchApps(value);
+                                          context.read<AppProvider>().searchApps(value);
                                         });
                                       },
                                     ),
@@ -638,7 +676,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
 
             // Main content - show shimmer when loading
             SliverFillRemaining(
-              child: provider.isLoading ? _buildShimmerAppsView() : _buildAppsView(),
+              child: state.isLoading ? _buildShimmerAppsView() : _buildAppsView(),
             ),
           ],
         );
