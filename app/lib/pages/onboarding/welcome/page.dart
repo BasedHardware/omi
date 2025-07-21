@@ -177,9 +177,13 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                       height: _isExpandingTop ? MediaQuery.of(context).size.height : MediaQuery.of(context).size.height * _expansionAnimation.value,
                       child: Container(
                         width: double.infinity,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           image: DecorationImage(
-                            image: AssetImage('assets/images/onboarding-bg-5-1.jpg'),
+                            image: ResizeImage(
+                              const AssetImage('assets/images/onboarding-bg-5-1.jpg'),
+                              width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                              height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                            ),
                             fit: BoxFit.cover,
                           ),
                         ),
@@ -260,9 +264,13 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                         height: MediaQuery.of(context).size.height * (1 - _expansionAnimation.value),
                         child: Container(
                           width: double.infinity,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             image: DecorationImage(
-                              image: AssetImage('assets/images/onboarding-bg-5-2.png'),
+                              image: ResizeImage(
+                                const AssetImage('assets/images/onboarding-bg-5-2.jpg'),
+                                width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                                height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                              ),
                               fit: BoxFit.cover,
                             ),
                           ),

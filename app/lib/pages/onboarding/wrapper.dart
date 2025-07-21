@@ -50,7 +50,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
   late Animation<double> _backgroundFadeAnimation;
-  String _currentBackgroundImage = 'assets/images/onboarding-bg-2.png';
+  String _currentBackgroundImage = 'assets/images/onboarding-bg-2.jpg';
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
@@ -60,6 +60,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       setState(() {});
       // Update background image when page changes
       _updateBackgroundImage(_controller!.index);
+      // Precache next image for smoother transitions
+      _precacheNextImage(_controller!.index);
     });
 
     // Initialize animation controllers
@@ -119,22 +121,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
     switch (pageIndex) {
       case kAuthPage:
-        newImage = 'assets/images/onboarding-bg-2.png';
+        newImage = 'assets/images/onboarding-bg-2.jpg';
         break;
       case kNamePage:
-        newImage = 'assets/images/onboarding-bg-1.png';
+        newImage = 'assets/images/onboarding-bg-1.jpg';
         break;
       case kPrimaryLanguagePage:
-        newImage = 'assets/images/onboarding-bg-4.png';
+        newImage = 'assets/images/onboarding-bg-4.jpg';
         break;
       case kPermissionsPage:
-        newImage = 'assets/images/onboarding-bg-3.png';
+        newImage = 'assets/images/onboarding-bg-3.jpg';
         break;
       case kUserReviewPage:
-        newImage = 'assets/images/onboarding-bg-6.png';
+        newImage = 'assets/images/onboarding-bg-6.jpg';
         break;
       default:
-        newImage = 'assets/images/onboarding-bg-1.png';
+        newImage = 'assets/images/onboarding-bg-1.jpg';
         break;
     }
 
@@ -144,6 +146,39 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       });
       _backgroundAnimationController.reset();
       _backgroundAnimationController.forward();
+    }
+  }
+
+  void _precacheNextImage(int currentIndex) {
+    // Get the next background image path
+    String? nextImagePath = _getBackgroundImageForIndex(currentIndex + 1);
+    if (nextImagePath != null && mounted) {
+      // Precache the next image
+      precacheImage(
+        ResizeImage(
+          AssetImage(nextImagePath),
+          width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+          height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+        ),
+        context,
+      );
+    }
+  }
+
+  String? _getBackgroundImageForIndex(int pageIndex) {
+    switch (pageIndex) {
+      case kAuthPage:
+        return 'assets/images/onboarding-bg-2.jpg';
+      case kNamePage:
+        return 'assets/images/onboarding-bg-1.jpg';
+      case kPrimaryLanguagePage:
+        return 'assets/images/onboarding-bg-4.jpg';
+      case kPermissionsPage:
+        return 'assets/images/onboarding-bg-3.jpg';
+      case kUserReviewPage:
+        return 'assets/images/onboarding-bg-6.jpg';
+      default:
+        return null;
     }
   }
 
@@ -266,7 +301,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                       height: MediaQuery.of(context).size.height,
                       decoration: BoxDecoration(
                         image: DecorationImage(
-                          image: AssetImage(_currentBackgroundImage),
+                          image: ResizeImage(
+                            AssetImage(_currentBackgroundImage),
+                            width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                            height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                          ),
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -287,7 +326,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             height: MediaQuery.of(context).size.height,
                             decoration: BoxDecoration(
                               image: DecorationImage(
-                                image: AssetImage(_currentBackgroundImage),
+                                image: ResizeImage(
+                                  AssetImage(_currentBackgroundImage),
+                                  width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                                  height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                                ),
                                 fit: BoxFit.cover,
                               ),
                             ),

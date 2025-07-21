@@ -67,6 +67,10 @@ class $AssetsFontsGen {
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
+  /// File path: assets/images/Logo Text White.png
+  AssetGenImage get logoTextWhite =>
+      const AssetGenImage('assets/images/Logo Text White.png');
+
   /// File path: assets/images/ai_magic.svg
   String get aiMagic => 'assets/images/ai_magic.svg';
 
@@ -211,17 +215,41 @@ class $AssetsImagesGen {
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
 
+  /// File path: assets/images/omi-without-rope-turned-off.png
+  AssetGenImage get omiWithoutRopeTurnedOff =>
+      const AssetGenImage('assets/images/omi-without-rope-turned-off.png');
+
   /// File path: assets/images/omi-without-rope.png
   AssetGenImage get omiWithoutRope =>
       const AssetGenImage('assets/images/omi-without-rope.png');
 
-  /// File path: assets/images/onboarding-bg-1.png
+  /// File path: assets/images/onboarding-bg-1.jpg
   AssetGenImage get onboardingBg1 =>
-      const AssetGenImage('assets/images/onboarding-bg-1.png');
+      const AssetGenImage('assets/images/onboarding-bg-1.jpg');
 
-  /// File path: assets/images/onboarding-bg-2.png
+  /// File path: assets/images/onboarding-bg-2.jpg
   AssetGenImage get onboardingBg2 =>
-      const AssetGenImage('assets/images/onboarding-bg-2.png');
+      const AssetGenImage('assets/images/onboarding-bg-2.jpg');
+
+  /// File path: assets/images/onboarding-bg-3.jpg
+  AssetGenImage get onboardingBg3 =>
+      const AssetGenImage('assets/images/onboarding-bg-3.jpg');
+
+  /// File path: assets/images/onboarding-bg-4.jpg
+  AssetGenImage get onboardingBg4 =>
+      const AssetGenImage('assets/images/onboarding-bg-4.jpg');
+
+  /// File path: assets/images/onboarding-bg-5-1.jpg
+  AssetGenImage get onboardingBg51 =>
+      const AssetGenImage('assets/images/onboarding-bg-5-1.jpg');
+
+  /// File path: assets/images/onboarding-bg-5-2.jpg
+  AssetGenImage get onboardingBg52 =>
+      const AssetGenImage('assets/images/onboarding-bg-5-2.jpg');
+
+  /// File path: assets/images/onboarding-bg-6.jpg
+  AssetGenImage get onboardingBg6 =>
+      const AssetGenImage('assets/images/onboarding-bg-6.jpg');
 
   /// File path: assets/images/onboarding-language-grey.png
   AssetGenImage get onboardingLanguageGrey =>
@@ -242,6 +270,9 @@ class $AssetsImagesGen {
   /// File path: assets/images/onboarding-permissions.png
   AssetGenImage get onboardingPermissions =>
       const AssetGenImage('assets/images/onboarding-permissions.png');
+
+  /// File path: assets/images/onboarding.mp4
+  String get onboarding => 'assets/images/onboarding.mp4';
 
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
@@ -309,6 +340,7 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
+        logoTextWhite,
         aiMagic,
         appLauncherIcon,
         appLauncherIconV1,
@@ -348,14 +380,21 @@ class $AssetsImagesGen {
         notionLogo,
         omiDevkitWithoutRope,
         omiGlass,
+        omiWithoutRopeTurnedOff,
         omiWithoutRope,
         onboardingBg1,
         onboardingBg2,
+        onboardingBg3,
+        onboardingBg4,
+        onboardingBg51,
+        onboardingBg52,
+        onboardingBg6,
         onboardingLanguageGrey,
         onboardingNameGrey,
         onboardingNameWhite,
         onboardingName,
         onboardingPermissions,
+        onboarding,
         recordingGreenCircleIcon,
         slackLogo,
         speaker0Icon,
