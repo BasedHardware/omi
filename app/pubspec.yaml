@@ -112,6 +112,7 @@ dependencies:
   file_picker: 8.3.2
   photo_view: ^0.15.0
   font_awesome_flutter: ^10.8.0
+  in_app_review: ^2.0.9
 
 dependency_overrides:
   uuid: ^4.4.0

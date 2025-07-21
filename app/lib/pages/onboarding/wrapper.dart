@@ -14,6 +14,7 @@ import 'package:omi/pages/onboarding/permissions/permissions_mobile_widget.dart'
 import 'package:omi/pages/onboarding/permissions/permissions_desktop_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
+import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -38,20 +39,46 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kNamePage = 1;
   static const int kPrimaryLanguagePage = 2;
   static const int kPermissionsPage = 3;
-  static const int kWelcomePage = 4;
-  static const int kFindDevicesPage = 5;
-  static const int kSpeechProfilePage = 6; // Now always the last index
+  static const int kUserReviewPage = 4;
+  static const int kWelcomePage = 5;
+  static const int kFindDevicesPage = 6;
+  static const int kSpeechProfilePage = 7; // Now always the last index
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7];
 
   TabController? _controller;
+  late AnimationController _backgroundAnimationController;
+  late Animation<double> _backgroundFadeAnimation;
+  String _currentBackgroundImage = 'assets/images/onboarding-bg-2.png';
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
   void initState() {
-    _controller = TabController(length: 7, vsync: this);
-    _controller!.addListener(() => setState(() {}));
+    _controller = TabController(length: 8, vsync: this);
+    _controller!.addListener(() {
+      setState(() {});
+      // Update background image when page changes
+      _updateBackgroundImage(_controller!.index);
+    });
+
+    // Initialize animation controllers
+    _backgroundAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+
+    // Initialize animations
+    _backgroundFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _backgroundAnimationController,
+      curve: Curves.easeInOut,
+    ));
+
+    // Start initial animations
+    _backgroundAnimationController.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Let's not update permissions here because of Apple's review process
       // if (mounted) {
@@ -77,12 +104,46 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void dispose() {
     _controller?.dispose();
+    _backgroundAnimationController.dispose();
     super.dispose();
   }
 
   _goNext() {
     if (_controller!.index < _controller!.length - 1) {
       _controller!.animateTo(_controller!.index + 1);
+    }
+  }
+
+  void _updateBackgroundImage(int pageIndex) {
+    String newImage = _currentBackgroundImage;
+
+    switch (pageIndex) {
+      case kAuthPage:
+        newImage = 'assets/images/onboarding-bg-2.png';
+        break;
+      case kNamePage:
+        newImage = 'assets/images/onboarding-bg-1.png';
+        break;
+      case kPrimaryLanguagePage:
+        newImage = 'assets/images/onboarding-bg-4.png';
+        break;
+      case kPermissionsPage:
+        newImage = 'assets/images/onboarding-bg-3.png';
+        break;
+      case kUserReviewPage:
+        newImage = 'assets/images/onboarding-bg-6.png';
+        break;
+      default:
+        newImage = 'assets/images/onboarding-bg-1.png';
+        break;
+    }
+
+    if (_currentBackgroundImage != newImage) {
+      setState(() {
+        _currentBackgroundImage = newImage;
+      });
+      _backgroundAnimationController.reset();
+      _backgroundAnimationController.forward();
     }
   }
 
@@ -128,16 +189,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       PlatformService.isDesktop
           ? PermissionsDesktopWidget(
               goNext: () {
-                _goNext(); // Go to Welcome page
+                _goNext(); // Go to User Review page
                 MixpanelManager().onboardingStepCompleted('Permissions');
               },
             )
           : PermissionsMobileWidget(
               goNext: () {
-                _goNext(); // Go to Welcome page
+                _goNext(); // Go to User Review page
                 MixpanelManager().onboardingStepCompleted('Permissions');
               },
             ),
+      UserReviewPage(
+        goNext: () {
+          _goNext(); // Go to Welcome page
+          MixpanelManager().onboardingStepCompleted('User Review');
+        },
+      ),
       WelcomePage(
         goNext: () {
           _goNext(); // Go to Find Devices page
@@ -192,49 +259,51 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         body: _controller!.index == kAuthPage
             ? Stack(
                 children: [
-                  // Background image for auth page
-                  Container(
-                    height: MediaQuery.of(context).size.height,
-                    decoration: const BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage('assets/images/onboarding-bg-2.png'),
-                        fit: BoxFit.cover,
+                  // Animated background image for auth page
+                  FadeTransition(
+                    opacity: _backgroundFadeAnimation,
+                    child: Container(
+                      height: MediaQuery.of(context).size.height,
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: AssetImage(_currentBackgroundImage),
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
-                  // Auth component
+                  // Auth component (no transition for content)
                   pages[kAuthPage],
                 ],
               )
-            : _controller!.index == kNamePage || _controller!.index == kPrimaryLanguagePage || _controller!.index == kPermissionsPage || _controller!.index == kWelcomePage
+            : _controller!.index == kNamePage || _controller!.index == kPrimaryLanguagePage || _controller!.index == kPermissionsPage || _controller!.index == kUserReviewPage || _controller!.index == kWelcomePage
                 ? Stack(
                     children: [
-                      // Background image for name, language, and permissions pages (not welcome page)
+                      // Animated background image for name, language, permissions, and user review pages (not welcome page)
                       if (_controller!.index != kWelcomePage)
-                        Container(
-                          height: MediaQuery.of(context).size.height,
-                          decoration: BoxDecoration(
-                            image: DecorationImage(
-                              image: AssetImage(_controller!.index == kNamePage
-                                  ? 'assets/images/onboarding-bg-1.png'
-                                  : _controller!.index == kPrimaryLanguagePage
-                                      ? 'assets/images/onboarding-bg-4.png'
-                                      : 'assets/images/onboarding-bg-3.png'),
-                              fit: BoxFit.cover,
+                        FadeTransition(
+                          opacity: _backgroundFadeAnimation,
+                          child: Container(
+                            height: MediaQuery.of(context).size.height,
+                            decoration: BoxDecoration(
+                              image: DecorationImage(
+                                image: AssetImage(_currentBackgroundImage),
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
                         ),
-                      // Page component
+                      // Page component (no transition for content)
                       pages[_controller!.index],
-                      // Progress dots for name, language, permissions, and welcome pages
+                      // Progress dots for name, language, permissions, user review, and welcome pages
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
-                            6,
+                            7,
                             (index) {
-                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=6
+                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
                               return Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 4.0),
                                 width: pageIndex == _controller!.index ? 12.0 : 8.0,
