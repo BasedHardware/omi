@@ -159,7 +159,7 @@ class BatteryInfoWidget extends StatelessWidget {
                             )
                           : isMemoriesPage
                               ? Text(
-                                  "No device found",
+                                  "Connect Device",
                                   style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
                                 )
                               : const SizedBox.shrink(),
