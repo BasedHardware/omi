@@ -24,40 +24,18 @@ class _NameWidgetState extends State<NameWidget> {
     super.initState();
 
     // Auto-focus the name input field after the widget is built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      focusNode.requestFocus();
-    });
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   focusNode.requestFocus();
+    // });
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Background area with image
+        // Background area - takes remaining space
         Expanded(
-          child: Stack(
-            children: [
-              Container(),
-              // Onboarding name image positioned 100px from top
-              Positioned(
-                top: 100,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    width: 400,
-                    height: 400,
-                    child: Image.asset(
-                      'assets/images/onboarding-name-grey.png',
-                      width: 200,
-                      height: 200,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: Container(), // Just takes up space for background image
         ),
 
         // Bottom drawer card - wraps content
@@ -76,7 +54,7 @@ class _NameWidgetState extends State<NameWidget> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 32),
+                const SizedBox(height: 16),
 
                 // Main title
                 const Text(
@@ -181,7 +159,7 @@ class _NameWidgetState extends State<NameWidget> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                // const SizedBox(height: 24),
 
                 // // Need Help link
                 // PlatformService.isIntercomSupported

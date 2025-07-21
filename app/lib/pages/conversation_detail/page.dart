@@ -229,6 +229,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           onPressed: provider.loadingReprocessConversation
                               ? null
                               : () {
+                                  HapticFeedback.mediumImpact();
                                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                                   if (connectivityProvider.isConnected) {
                                     showDialog(

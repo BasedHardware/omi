@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -428,6 +429,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
+                                              HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Home');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 0) {
@@ -458,6 +460,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
+                                              HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Action Items');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 1) {
@@ -490,6 +493,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
+                                              HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Memories');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 2) {
@@ -520,6 +524,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
+                                              HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Explore');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 3) {
@@ -561,6 +566,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         bool isInitializing = captureProvider.recordingState == RecordingState.initialising;
                                         return GestureDetector(
                                           onTap: () async {
+                                            HapticFeedback.heavyImpact();
                                             if (isInitializing) return;
                                             await _handleRecordButtonPress(context, captureProvider);
                                           },
@@ -597,6 +603,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     bottom: 110, // Position above the bottom navbar
                                     child: GestureDetector(
                                       onTap: () {
+                                        HapticFeedback.mediumImpact();
                                         // Navigate to chat page
                                         Navigator.push(
                                           context,
@@ -800,6 +807,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     color: Colors.white70,
                   ),
                   onPressed: () {
+                    HapticFeedback.mediumImpact();
                     MixpanelManager().pageOpened('Settings');
                     String language = SharedPreferencesUtil().userPrimaryLanguage;
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;

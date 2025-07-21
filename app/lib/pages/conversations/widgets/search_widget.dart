@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -183,6 +184,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 ),
                 child: IconButton(
                   onPressed: () async {
+                    HapticFeedback.mediumImpact();
                     if (convoProvider.selectedDate != null) {
                       // Clear date filter
                       await convoProvider.clearDateFilter();

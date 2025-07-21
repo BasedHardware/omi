@@ -29,31 +29,9 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
     return Consumer<OnboardingProvider>(builder: (context, provider, child) {
       return Column(
         children: [
-          // Background area with image
+          // Background area - takes remaining space
           Expanded(
-            child: Stack(
-              children: [
-                Container(),
-                // Onboarding permissions image positioned 100px from top
-                Positioned(
-                  top: 100,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      width: 400,
-                      height: 400,
-                      child: Image.asset(
-                        'assets/images/onboarding-permissions.png',
-                        width: 200,
-                        height: 200,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: Container(), // Just takes up space for background image
           ),
 
           // Bottom drawer card - wraps content
@@ -196,7 +174,7 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                     ],
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 8),
 
                   // Continue button
                   provider.isLoading
@@ -271,8 +249,6 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                             ),
                           ),
                         ),
-
-                  const SizedBox(height: 8),
                 ],
               ),
             ),
@@ -290,7 +266,7 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(16),
@@ -319,7 +295,7 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                   subtitle,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.6),
-                    fontSize: 14,
+                    fontSize: 12,
                     fontFamily: 'Manrope',
                   ),
                 ),
