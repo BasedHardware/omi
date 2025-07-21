@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -307,6 +308,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 // Send message area - fixed at bottom
                 Container(
                   margin: const EdgeInsets.only(top: 10),
+                  decoration: BoxDecoration(
+                    color: Color(0xFF1f1e1f),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(22),
+                      topRight: Radius.circular(22),
+                    ),
+                  ),
                   child: Consumer<HomeProvider>(builder: (context, home, child) {
                     bool shouldShowSendButton(MessageProvider p) {
                       return !p.sendingMessage && !_showVoiceRecorder;
@@ -326,7 +334,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         Consumer<MessageProvider>(builder: (context, provider, child) {
                           if (provider.selectedFiles.isNotEmpty) {
                             return Container(
-                              margin: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                              margin: const EdgeInsets.only(top: 16, bottom: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
                               height: 70,
                               child: ListView.builder(
                                 scrollDirection: Axis.horizontal,
@@ -338,7 +347,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                     height: 60,
                                     decoration: BoxDecoration(
                                       color: Colors.grey[800],
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(16),
                                       image: provider.selectedFileTypes[idx] == 'image'
                                           ? DecorationImage(
                                               image: FileImage(provider.selectedFiles[idx]),
@@ -362,7 +371,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           Container(
                                             decoration: BoxDecoration(
                                               color: Colors.black.withOpacity(0.5),
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius: BorderRadius.circular(16),
                                             ),
                                             child: const Center(
                                               child: SizedBox(
@@ -377,23 +386,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           ),
                                         // Close button
                                         Positioned(
-                                          top: 2,
-                                          right: 2,
+                                          top: 4,
+                                          right: 4,
                                           child: GestureDetector(
                                             onTap: () {
                                               provider.clearSelectedFile(idx);
                                             },
                                             child: Container(
-                                              width: 20,
-                                              height: 20,
+                                              width: 16,
+                                              height: 16,
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(0.7),
+                                                color: Colors.white,
                                                 borderRadius: BorderRadius.circular(10),
                                               ),
                                               child: const Icon(
-                                                Icons.close,
-                                                size: 14,
-                                                color: Colors.white,
+                                                FontAwesomeIcons.xmark,
+                                                size: 10,
+                                                color: Colors.black,
                                               ),
                                             ),
                                           ),
@@ -411,117 +420,115 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         // Send bar
                         Padding(
                           padding: EdgeInsets.only(
-                            left: 16,
+                            left: 0,
                             right: 16,
+                            top: provider.selectedFiles.isNotEmpty ? 0 : 16,
                             bottom: widget.isPivotBottom ? 20 : (textFieldFocusNode.hasFocus ? 20 : 40),
                           ),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Expanded(
                                 child: Container(
                                   height: 44,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(22),
-                                  ),
-                                  child: Container(
-                                    height: 44,
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        if (shouldShowMenuButton())
-                                          GestureDetector(
-                                            onTap: () {
-                                              // Hide keyboard when attach is clicked
-                                              FocusScope.of(context).unfocus();
-                                              if (provider.selectedFiles.length > 3) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text('You can only upload 4 files at a time'),
-                                                    duration: Duration(seconds: 2),
-                                                  ),
-                                                );
-                                                return;
-                                              }
-                                              _showIOSStyleActionSheet(context);
-                                            },
-                                            child: SizedBox(
-                                              height: 44,
-                                              width: 32,
-                                              child: Icon(
-                                                Icons.add,
-                                                color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white70,
-                                                size: 20.0,
-                                              ),
-                                            ),
-                                          ),
-                                        Expanded(
-                                          child: _showVoiceRecorder
-                                              ? VoiceRecorderWidget(
-                                                  onTranscriptReady: (transcript) {
-                                                    setState(() {
-                                                      textController.text = transcript;
-                                                      _showVoiceRecorder = false;
-                                                      context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                                    });
-                                                  },
-                                                  onClose: () {
-                                                    setState(() {
-                                                      _showVoiceRecorder = false;
-                                                    });
-                                                  },
-                                                )
-                                              : Container(
-                                                  height: 44,
-                                                  alignment: Alignment.centerLeft,
-                                                  child: TextField(
-                                                    enabled: true,
-                                                    controller: textController,
-                                                    focusNode: textFieldFocusNode,
-                                                    obscureText: false,
-                                                    textAlign: TextAlign.start,
-                                                    textAlignVertical: TextAlignVertical.center,
-                                                    decoration: const InputDecoration(
-                                                      hintText: 'Message',
-                                                      hintStyle: TextStyle(fontSize: 14.0, color: Colors.white54),
-                                                      focusedBorder: InputBorder.none,
-                                                      enabledBorder: InputBorder.none,
-                                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                                                      isDense: true,
-                                                    ),
-                                                    maxLines: 1,
-                                                    keyboardType: TextInputType.text,
-                                                    style: const TextStyle(fontSize: 14.0, color: Colors.white, height: 1.0),
-                                                  ),
+                                  padding: const EdgeInsets.only(left: 16, right: 8),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      if (shouldShowMenuButton())
+                                        GestureDetector(
+                                          onTap: () {
+                                            // Hide keyboard when attach is clicked
+                                            FocusScope.of(context).unfocus();
+                                            if (provider.selectedFiles.length > 3) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('You can only upload 4 files at a time'),
+                                                  duration: Duration(seconds: 2),
                                                 ),
-                                        ),
-                                        if (shouldShowVoiceRecorderButton())
-                                          GestureDetector(
-                                            child: SizedBox(
-                                              height: 44,
-                                              width: 32,
-                                              child: Icon(
-                                                Icons.mic_outlined,
-                                                color: Colors.white70,
-                                                size: 20.0,
-                                              ),
+                                              );
+                                              return;
+                                            }
+                                            _showIOSStyleActionSheet(context);
+                                          },
+                                          child: Container(
+                                            margin: const EdgeInsets.only(right: 8),
+                                            height: 44,
+                                            width: 32,
+                                            alignment: Alignment.center,
+                                            child: FaIcon(
+                                              FontAwesomeIcons.plus,
+                                              color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
+                                              size: 20,
                                             ),
-                                            onTap: () {
-                                              // Hide keyboard when mic is clicked
-                                              FocusScope.of(context).unfocus();
-                                              setState(() {
-                                                _showVoiceRecorder = true;
-                                              });
-                                            },
                                           ),
-                                      ],
-                                    ),
+                                        ),
+                                      Expanded(
+                                        child: _showVoiceRecorder
+                                            ? VoiceRecorderWidget(
+                                                onTranscriptReady: (transcript) {
+                                                  setState(() {
+                                                    textController.text = transcript;
+                                                    _showVoiceRecorder = false;
+                                                    context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
+                                                  });
+                                                },
+                                                onClose: () {
+                                                  setState(() {
+                                                    _showVoiceRecorder = false;
+                                                  });
+                                                },
+                                              )
+                                            : Container(
+                                                height: 44,
+                                                alignment: Alignment.centerLeft,
+                                                child: TextField(
+                                                  enabled: true,
+                                                  controller: textController,
+                                                  focusNode: textFieldFocusNode,
+                                                  obscureText: false,
+                                                  textAlign: TextAlign.start,
+                                                  textAlignVertical: TextAlignVertical.center,
+                                                  decoration: const InputDecoration(
+                                                    hintText: 'Ask Anything',
+                                                    hintStyle: TextStyle(fontSize: 16.0, color: Colors.white54),
+                                                    focusedBorder: InputBorder.none,
+                                                    enabledBorder: InputBorder.none,
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                                    isDense: true,
+                                                  ),
+                                                  maxLines: 1,
+                                                  keyboardType: TextInputType.text,
+                                                  textCapitalization: TextCapitalization.sentences,
+                                                  style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.0),
+                                                ),
+                                              ),
+                                      ),
+                                      if (shouldShowVoiceRecorderButton())
+                                        GestureDetector(
+                                          child: Container(
+                                            height: 44,
+                                            width: 32,
+                                            alignment: Alignment.center,
+                                            child: FaIcon(
+                                              FontAwesomeIcons.microphone,
+                                              color: Colors.white,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          onTap: () {
+                                            // Hide keyboard when mic is clicked
+                                            FocusScope.of(context).unfocus();
+                                            setState(() {
+                                              _showVoiceRecorder = true;
+                                            });
+                                          },
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              // const SizedBox(width: 8),
                               !shouldShowSendButton(provider)
                                   ? const SizedBox.shrink()
                                   : GestureDetector(
@@ -543,30 +550,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               }
                                             },
                                       child: Container(
-                                        height: 44, // Same height as textbox
-                                        width: 44,
+                                        height: 32,
+                                        width: 32,
                                         decoration: BoxDecoration(
-                                          gradient: const LinearGradient(
-                                            colors: [
-                                              Color(0xFF6366F1), // Indigo
-                                              Color(0xFF8B5CF6), // Purple
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
+                                          color: Colors.white,
                                           borderRadius: BorderRadius.circular(22),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: const Color(0xFF6366F1).withOpacity(0.3),
+                                              color: Colors.black.withOpacity(0.1),
                                               blurRadius: 8,
                                               offset: const Offset(0, 2),
                                             ),
                                           ],
                                         ),
-                                        child: const Icon(
-                                          Icons.arrow_upward_rounded,
-                                          color: Colors.white,
-                                          size: 20.0,
+                                        child: Icon(
+                                          FontAwesomeIcons.arrowUp,
+                                          color: Colors.grey.shade800,
+                                          size: 18,
                                         ),
                                       ),
                                     ),
@@ -1089,61 +1089,146 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   }
 
   Widget _buildHistoryDrawer(BuildContext context) {
-    return SizedBox(
-      width: MediaQuery.of(context).size.width * 0.6,
-      child: Drawer(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 20,
-                left: 20,
-                right: 20,
-                bottom: 20,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'History',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white24),
-            // Content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
+    // Dummy chat history data
+    final List<Map<String, dynamic>> chatHistory = [
+      {
+        'title': 'Travel Planning Discussion',
+        'subtitle': 'Help me plan a trip to Japan...',
+        'timestamp': 'Today 2:30 PM',
+        'appName': 'Travel Assistant',
+        'appColor': Colors.blue,
+        'isSelected': true,
+      },
+      {
+        'title': 'Code Review Session',
+        'subtitle': 'Can you review my Flutter code?',
+        'timestamp': 'Today 10:45 AM',
+        'appName': 'Code Helper',
+        'appColor': Colors.green,
+        'isSelected': false,
+      },
+      {
+        'title': 'Recipe Suggestions',
+        'subtitle': 'What can I cook with chicken?',
+        'timestamp': 'Yesterday 6:20 PM',
+        'appName': 'Chef Bot',
+        'appColor': Colors.orange,
+        'isSelected': false,
+      },
+      {
+        'title': 'Learning Discussion',
+        'subtitle': 'Explain machine learning basics',
+        'timestamp': 'Yesterday 2:15 PM',
+        'appName': 'Omi',
+        'appColor': Colors.purple,
+        'isSelected': false,
+      },
+      {
+        'title': 'Book Recommendations',
+        'subtitle': 'Suggest some sci-fi novels',
+        'timestamp': '2 days ago',
+        'appName': 'Book Guru',
+        'appColor': Colors.red,
+        'isSelected': false,
+      },
+      {
+        'title': 'Workout Planning',
+        'subtitle': 'Create a weekly exercise routine',
+        'timestamp': '3 days ago',
+        'appName': 'Fitness Pro',
+        'appColor': Colors.teal,
+        'isSelected': false,
+      },
+      {
+        'title': 'Career Advice Chat',
+        'subtitle': 'Should I switch to tech?',
+        'timestamp': '1 week ago',
+        'appName': 'Career Coach',
+        'appColor': Colors.indigo,
+        'isSelected': false,
+      },
+      {
+        'title': 'Creative Writing Help',
+        'subtitle': 'Help with story plot ideas',
+        'timestamp': '1 week ago',
+        'appName': 'Story Helper',
+        'appColor': Colors.pink,
+        'isSelected': false,
+      },
+    ];
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        canvasColor: Colors.white.withOpacity(0.1),
+      ),
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.85,
+        child: Drawer(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          child: Column(
+            children: [
+              // Search bar
+              Container(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + 16,
+                  left: 12,
+                  right: 12,
+                  bottom: 6,
+                ),
+                child: Row(
                   children: [
-                    // Placeholder content - replace with actual history implementation
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          enabled: false,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Search chats...',
+                            hintStyle: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 16,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              color: Colors.white.withOpacity(0.6),
+                              size: 20,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
                       ),
-                      child: const Center(
-                        child: Text(
-                          'History feature\ncoming soon!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
+                    ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('New chat functionality coming soon!'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Color(0xFF151415),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
+                          child: FaIcon(
+                            FontAwesomeIcons.plus,
+                            color: Colors.white,
+                            size: 18,
                           ),
                         ),
                       ),
@@ -1151,8 +1236,95 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   ],
                 ),
               ),
-            ),
-          ],
+              // Content
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  itemCount: chatHistory.length,
+                  itemBuilder: (context, index) {
+                    final chat = chatHistory[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            // TODO: Navigate to specific chat
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Opening: ${chat['title']}'),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: chat['isSelected'] ? Color(0xFF2A282A) : Color(0xFF151415),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: chat['appColor'],
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          chat['appName'][0].toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        chat['title'],
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 32),
+                                  child: Text(
+                                    chat['timestamp'],
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.5),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

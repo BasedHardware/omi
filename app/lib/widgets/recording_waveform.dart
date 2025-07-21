@@ -25,7 +25,7 @@ class _RecordingWaveformState extends State<RecordingWaveform> {
   void initState() {
     super.initState();
     _controller = IOS9SiriWaveformController(
-      amplitude: 1.0, // Start with higher amplitude (10x more)
+      amplitude: 1.0, // Start with moderate amplitude
       color1: const Color(0xFF00FFFF), // Cyan for futuristic feel
       color2: const Color(0xFF8B5CF6),
       color3: const Color(0xFFFF00FF), // Magenta for vibrancy
@@ -44,21 +44,13 @@ class _RecordingWaveformState extends State<RecordingWaveform> {
 
   void _updateWaveformAmplitude() {
     if (!widget.isRecording) {
-      // Not recording - low amplitude (10x more visible)
+      // Not recording - low amplitude
       _controller.amplitude = 0.3;
       return;
     }
 
-    // Check if there's speech activity - if we have segments, assume active speech
-    bool hasRecentSpeech = widget.segments.isNotEmpty;
-
-    if (hasRecentSpeech) {
-      // Active speech - much higher amplitude with variation (10x more visible)
-      _controller.amplitude = 10.0 + (DateTime.now().millisecond % 100) * 0.03;
-    } else {
-      // Recording but no recent speech - medium amplitude (10x more visible)
-      _controller.amplitude = 1.5;
-    }
+    // Recording - consistent amplitude with subtle variation regardless of segments
+    _controller.amplitude = 2.0 + (DateTime.now().millisecond % 50) * 0.01;
   }
 
   @override

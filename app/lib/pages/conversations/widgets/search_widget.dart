@@ -214,7 +214,10 @@ class _SearchWidgetState extends State<SearchWidget> {
                 borderRadius: const BorderRadius.all(Radius.circular(16)),
               ),
               child: IconButton(
-                onPressed: convoProvider.toggleDiscardConversations,
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  convoProvider.toggleDiscardConversations();
+                },
                 icon: Icon(
                   FontAwesomeIcons.trashCan,
                   color: Colors.white,
