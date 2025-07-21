@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -42,7 +43,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kSpeechProfilePage = 6; // Now always the last index
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 5, 6];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6];
 
   TabController? _controller;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
@@ -142,6 +143,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           _goNext(); // Go to Find Devices page
           MixpanelManager().onboardingStepCompleted('Welcome');
         },
+        onSkip: () {
+          // Complete onboarding and go to homepage
+          SharedPreferencesUtil().onboardingCompleted = true;
+          MixpanelManager().onboardingStepCompleted('Welcome Skipped');
+          routeToPage(context, const HomePageWrapper(), replace: true);
+        },
       ),
       FindDevicesPage(
         isFromOnboarding: true,
@@ -199,17 +206,27 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   pages[kAuthPage],
                 ],
               )
-            : _controller!.index == kNamePage || _controller!.index == kPrimaryLanguagePage || _controller!.index == kPermissionsPage
+            : _controller!.index == kNamePage || _controller!.index == kPrimaryLanguagePage || _controller!.index == kPermissionsPage || _controller!.index == kWelcomePage
                 ? Stack(
                     children: [
-                      // Plain black background for name, language, and permissions pages
-                      Container(
-                        height: MediaQuery.of(context).size.height,
-                        color: Colors.black,
-                      ),
+                      // Background image for name, language, and permissions pages (not welcome page)
+                      if (_controller!.index != kWelcomePage)
+                        Container(
+                          height: MediaQuery.of(context).size.height,
+                          decoration: BoxDecoration(
+                            image: DecorationImage(
+                              image: AssetImage(_controller!.index == kNamePage
+                                  ? 'assets/images/onboarding-bg-1.png'
+                                  : _controller!.index == kPrimaryLanguagePage
+                                      ? 'assets/images/onboarding-bg-4.png'
+                                      : 'assets/images/onboarding-bg-3.png'),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
                       // Page component
                       pages[_controller!.index],
-                      // Progress dots for name, language, and permissions pages
+                      // Progress dots for name, language, permissions, and welcome pages
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
                         child: Row(
@@ -237,15 +254,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
                           child: Align(
                             alignment: Alignment.topLeft,
-                            child: TextButton(
-                              onPressed: () {
-                                if (_controller!.index > kNamePage) {
-                                  _controller!.animateTo(_controller!.index - 1);
-                                }
-                              },
-                              child: Text(
-                                'Back',
-                                style: TextStyle(color: Colors.grey.shade200),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              margin: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.3),
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: () {
+                                  if (_controller!.index > kNamePage) {
+                                    _controller!.animateTo(_controller!.index - 1);
+                                  }
+                                },
+                                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
                               ),
                             ),
                           ),
@@ -297,40 +321,27 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             ],
                           ),
                         ),
-                        if (_controller!.index == kWelcomePage)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(0, 40, 16, 0),
-                            child: Align(
-                              alignment: Alignment.topRight,
-                              child: TextButton(
-                                onPressed: () {
-                                  if (_controller!.index == kPermissionsPage) {
-                                    _controller!.animateTo(_controller!.index + 1);
-                                  } else {
-                                    routeToPage(context, const HomePageWrapper(), replace: true);
-                                  }
-                                },
-                                child: Text(
-                                  'Skip',
-                                  style: TextStyle(color: Colors.grey.shade200),
-                                ),
-                              ),
-                            ),
-                          ),
                         if (_controller!.index > kNamePage)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
                             child: Align(
                               alignment: Alignment.topLeft,
-                              child: TextButton(
-                                onPressed: () {
-                                  if (_controller!.index > kNamePage) {
-                                    _controller!.animateTo(_controller!.index - 1);
-                                  }
-                                },
-                                child: Text(
-                                  'Back',
-                                  style: TextStyle(color: Colors.grey.shade200),
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                margin: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withOpacity(0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () {
+                                    if (_controller!.index > kNamePage) {
+                                      _controller!.animateTo(_controller!.index - 1);
+                                    }
+                                  },
+                                  icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
                                 ),
                               ),
                             ),

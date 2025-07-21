@@ -254,31 +254,9 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Background area with image
+        // Background area - takes remaining space
         Expanded(
-          child: Stack(
-            children: [
-              Container(),
-              // Onboarding language image positioned 100px from top
-              Positioned(
-                top: 100,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    width: 400,
-                    height: 400,
-                    child: Image.asset(
-                      'assets/images/onboarding-language-grey.png',
-                      width: 200,
-                      height: 200,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: Container(), // Just takes up space for background image
         ),
 
         // Bottom drawer card - wraps content
@@ -297,7 +275,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 32),
+                const SizedBox(height: 16),
 
                 // Main title
                 const Text(
@@ -395,7 +373,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                // const SizedBox(height: 24),
               ],
             ),
           ),

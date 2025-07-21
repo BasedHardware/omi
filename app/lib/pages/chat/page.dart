@@ -528,7 +528,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       onTap: provider.sendingMessage || provider.isUploadingFiles
                                           ? null
                                           : () {
-                                              HapticFeedback.lightImpact(); // Add haptic feedback
+                                              HapticFeedback.mediumImpact(); // Changed from lightImpact to mediumImpact
                                               String message = textController.text;
                                               if (message.isEmpty) return;
                                               if (connectivityProvider.isConnected) {
@@ -725,6 +725,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         IconButton(
           icon: const Icon(Icons.history, color: Colors.white),
           onPressed: () {
+            HapticFeedback.mediumImpact();
             scaffoldKey.currentState?.openEndDrawer();
           },
         ),

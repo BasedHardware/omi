@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/widgets/conversation_bottom_bar/app_image.dart';
 
 class TabButton extends StatelessWidget {
@@ -40,7 +41,10 @@ class TabButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: onTap, // Always use onTap for tab selection
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            onTap();
+          }, // Always use onTap for tab selection
           child: Center(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,

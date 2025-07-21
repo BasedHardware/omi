@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -102,35 +103,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   color: Colors.red,
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
-                confirmDismiss: (direction) {
+                confirmDismiss: (direction) async {
+                  HapticFeedback.mediumImpact();
                   bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
                   if (!showDeleteConfirmation) return Future.value(true);
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (connectivityProvider.isConnected) {
-                    return showDialog(
-                        context: context,
-                        builder: (context) {
-                          return StatefulBuilder(
-                            builder: (context, setState) {
-                              return ConfirmationDialog(
-                                title: "Delete Conversation?",
-                                description: "Are you sure you want to delete this conversation? This action cannot be undone.",
-                                checkboxValue: !showDeleteConfirmation,
-                                checkboxText: "Don't ask me again",
-                                onCheckboxChanged: (value) {
-                                  setState(() {
-                                    showDeleteConfirmation = !value;
-                                  });
-                                },
-                                onCancel: () => Navigator.of(context).pop(),
-                                onConfirm: () {
-                                  SharedPreferencesUtil().showConversationDeleteConfirmation = showDeleteConfirmation;
-                                  return Navigator.pop(context, true);
-                                },
-                              );
-                            },
-                          );
-                        });
+                    return await showDialog(
+                      context: context,
+                      builder: (ctx) => getDialog(
+                        context,
+                        () => Navigator.of(context).pop(false),
+                        () => Navigator.of(context).pop(true),
+                        'Delete Conversation?',
+                        'Are you sure you want to delete this conversation? This action cannot be undone.',
+                        okButtonText: 'Confirm',
+                      ),
+                    );
                   } else {
                     return showDialog(
                       builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),

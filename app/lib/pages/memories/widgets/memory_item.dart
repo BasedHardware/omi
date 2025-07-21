@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -55,6 +56,7 @@ class MemoryItem extends StatelessWidget {
       key: Key(memory.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (direction) async {
+        HapticFeedback.mediumImpact();
         final shouldDelete = await DeleteConfirmation.show(context);
         return shouldDelete;
       },
