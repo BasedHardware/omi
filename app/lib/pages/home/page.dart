@@ -541,7 +541,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
                                                     Icon(
-                                                      FontAwesomeIcons.search,
+                                                      FontAwesomeIcons.puzzlePiece,
                                                       color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
@@ -733,47 +733,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               return const SizedBox.shrink();
             }
           }),
-          // Top Title App Bar
+          // Top Title App Bar - titles removed for Actions, Memories, and Apps pages
           Consumer<HomeProvider>(
             builder: (context, provider, child) {
-              if (provider.selectedIndex == 1) {
-                return const Expanded(
-                  child: Center(
-                    child: Text(
-                      'Actions',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                );
-              } else if (provider.selectedIndex == 2) {
-                return const Expanded(
-                  child: Center(
-                    child: Text(
-                      'Memories',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                );
-              } else if (provider.selectedIndex == 3) {
-                return Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
-                    child: const Text('Apps',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w600,
-                        )),
-                  ),
-                );
+              if (provider.selectedIndex == 1 || provider.selectedIndex == 2 || provider.selectedIndex == 3) {
+                return const SizedBox.shrink();
               } else {
                 return const Expanded(
                   child: Center(
