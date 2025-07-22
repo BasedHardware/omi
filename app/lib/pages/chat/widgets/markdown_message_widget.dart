@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 Widget getMarkdownWidget(BuildContext context, String content) {
-  var style = TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3);
+  var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
   return MarkdownBody(
     shrinkWrap: true,
     styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
       a: style,
-      p: style,
+      p: style.copyWith(
+        height: 1.5,
+      ),
+      pPadding: const EdgeInsets.only(bottom: 12),
       blockquote: style.copyWith(
         backgroundColor: Colors.transparent,
-        color: Colors.black,
+        color: Colors.white,
       ),
       blockquoteDecoration: BoxDecoration(
         color: Colors.grey.shade800,
