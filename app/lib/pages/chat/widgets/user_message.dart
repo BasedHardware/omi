@@ -32,18 +32,18 @@ class HumanMessage extends StatelessWidget {
             children: [
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFF1f1f25),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16.0),
-                    topRight: Radius.circular(2.0),
+                    topRight: Radius.circular(16),
                     bottomRight: Radius.circular(16.0),
                     bottomLeft: Radius.circular(16.0),
                   ),
                 ),
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Text(
                   message.text.decodeString,
-                  style: const TextStyle(color: Colors.black, fontSize: 16),
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ),
             ],

@@ -309,7 +309,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 Container(
                   margin: const EdgeInsets.only(top: 10),
                   decoration: BoxDecoration(
-                    color: Color(0xFF1f1e1f),
+                    color: Color(0xFF1f1f25),
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(22),
                       topRight: Radius.circular(22),
@@ -586,10 +586,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   }
 
   _sendMessageUtil(String text) {
+    // Remove focus from text field
+    textFieldFocusNode.unfocus();
+
     var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
-    scrollToBottom();
+
+    // Scroll to align user's message to top of screen
+    _scrollToAlignUserMessageToTop();
+
     textController.clear();
     provider.sendMessageStreamToServer(text);
     provider.clearSelectedFiles();
@@ -605,6 +611,42 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     }
     scrollToBottom();
     context.read<MessageProvider>().setSendingMessage(false);
+  }
+
+  void _scrollToAlignUserMessageToTop() {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (scrollController.hasClients) {
+        // Calculate scroll position to show only user's message with empty space below
+        double viewportHeight = scrollController.position.viewportDimension;
+
+        // Estimate heights:
+        // - User message height (including padding): ~80px
+        // - AI typing indicator/generation UI: ~60px
+        // - Send message area: ~100px (approximate)
+        // - Extra buffer: ~50px
+        double userMessageHeight = 80;
+        double aiGenerationHeight = 60;
+        double sendAreaHeight = 100;
+        double buffer = 50;
+
+        // Total content we want to show
+        double visibleContentHeight = userMessageHeight + aiGenerationHeight + sendAreaHeight + buffer;
+
+        // Calculate target scroll position to leave empty space at bottom
+        // We want to scroll past older messages so only the new content is visible
+        double targetOffset = viewportHeight - visibleContentHeight;
+
+        // Ensure we don't scroll beyond bounds
+        double maxOffset = scrollController.position.maxScrollExtent;
+        double finalOffset = targetOffset.clamp(0.0, maxOffset);
+
+        scrollController.animateTo(
+          finalOffset,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
   }
 
   void _moveListToBottom() {
