@@ -36,7 +36,7 @@ class FilterBottomSheet extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade600,
+                          color: Color(0xFF8B5CF6),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -232,7 +232,7 @@ class FilterBottomSheet extends StatelessWidget {
             Switch(
               value: isSelected,
               onChanged: (value) => onTap(),
-              activeColor: Colors.blue.shade600,
+              activeColor: Color(0xFF8B5CF6),
               inactiveThumbColor: Colors.grey.shade400,
               inactiveTrackColor: Colors.grey.shade700,
             ),
@@ -260,7 +260,7 @@ class FilterBottomSheet extends StatelessWidget {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.blue.shade600 : Colors.grey.shade800,
+                color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade800,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
@@ -295,7 +295,7 @@ class FilterBottomSheet extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.blue.shade600 : Colors.grey.shade800,
+              color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade800,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -336,7 +336,7 @@ class FilterBottomSheet extends StatelessWidget {
               decoration: BoxDecoration(
                 color: const Color(0xFF1F1F25).withOpacity(0.5),
                 borderRadius: BorderRadius.circular(12),
-                border: isSelected ? Border.all(color: Colors.blue.shade600, width: 2) : null,
+                border: isSelected ? Border.all(color: Color(0xFF8B5CF6), width: 2) : null,
               ),
               child: Row(
                 children: [
@@ -345,9 +345,9 @@ class FilterBottomSheet extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isSelected ? Colors.blue.shade600 : Colors.transparent,
+                      color: isSelected ? Color(0xFF8B5CF6) : Colors.transparent,
                       border: Border.all(
-                        color: isSelected ? Colors.blue.shade600 : Colors.grey.shade500,
+                        color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade500,
                         width: 2,
                       ),
                     ),
@@ -402,9 +402,9 @@ class FilterBottomSheet extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(4),
-                      color: isSelected ? Colors.blue.shade600 : Colors.transparent,
+                      color: isSelected ? Color(0xFF8B5CF6) : Colors.transparent,
                       border: Border.all(
-                        color: isSelected ? Colors.blue.shade600 : Colors.grey.shade500,
+                        color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade500,
                         width: 2,
                       ),
                     ),

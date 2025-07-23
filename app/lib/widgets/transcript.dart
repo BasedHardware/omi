@@ -63,7 +63,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Colors.blue.shade600.withOpacity(0.8);
+      return Color(0xFF8B5CF6).withOpacity(0.8);
     }
     // Use speakerId to get consistent color for each speaker
     final colorIndex = speakerId % _speakerColors.length;
@@ -72,7 +72,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Color _getSpeakerAvatarColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Colors.blue.shade600.withOpacity(0.3);
+      return Color(0xFF8B5CF6).withOpacity(0.3);
     }
     final colorIndex = speakerId % _speakerColors.length;
     return _speakerColors[colorIndex].withOpacity(0.3);
