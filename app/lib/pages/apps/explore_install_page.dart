@@ -492,12 +492,12 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Color(0xFF1F1F25),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(
                                 Icons.add,
-                                color: Colors.black,
+                                color: Colors.white,
                                 size: 20,
                               ),
                             ),
