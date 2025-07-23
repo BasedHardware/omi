@@ -41,7 +41,7 @@ export type TwitterProfile = {
 /**
  * LinkedIn Profile type definition
  * @description Represents comprehensive LinkedIn user profile and posts data
- * @property {number} connection - Number of LinkedIn connections 
+ * @property {number} connection - Number of LinkedIn connections
  * @property {Object} data - Core profile information including personal details, experience, education
  * @property {number} follower - Number of LinkedIn followers
  * @property {Array} posts - Array of LinkedIn posts with engagement metrics
@@ -163,4 +163,4 @@ export type LinkedinProfile = {
       url: string;
     }[];
   }[];
-};  
+};

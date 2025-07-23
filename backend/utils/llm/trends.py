@@ -1,7 +1,9 @@
 from typing import List
 from pydantic import BaseModel, Field
 
+import database.users as users_db
 from models.conversation import Conversation
+from models.other import Person
 from models.trend import (
     TrendEnum,
     ceo_options,
@@ -24,8 +26,14 @@ class ExpectedOutput(BaseModel):
     items: List[Item] = Field(default=[], description="List of items.")
 
 
-def trends_extractor(memory: Conversation) -> List[Item]:
-    transcript = memory.get_transcript(False)
+def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
+    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = memory.get_transcript(False, people=people)
     if len(transcript) == 0:
         return []
 

@@ -12,6 +12,7 @@ from database import redis_db
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
+import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
@@ -26,6 +27,7 @@ from models.conversation import (
     CreateConversation,
     ConversationSource,
 )
+from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
@@ -59,6 +61,7 @@ def _get_structured(
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     force_process: bool = False,
+    people: List[Person] = None,
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
@@ -83,7 +86,7 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        transcript_text = conversation.get_transcript(False)
+        transcript_text = conversation.get_transcript(False, people=people)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -175,6 +178,7 @@ def _trigger_apps(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
     language_code: str = 'en',
+    people: List[Person] = None,
 ):
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
@@ -219,7 +223,7 @@ def _trigger_apps(
 
     def execute_app(app):
         result = get_app_result(
-            conversation.get_transcript(False), conversation.photos, app, language_code=language_code
+            conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code
         ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
@@ -275,8 +279,8 @@ def send_new_memories_notification(token: str, memories: [MemoryDB]):
     send_notification(token, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _extract_trends(conversation: Conversation):
-    extracted_items = trends_extractor(conversation)
+def _extract_trends(uid: str, conversation: Conversation):
+    extracted_items = trends_extractor(uid, conversation)
     parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
     trends_db.save_trends(conversation, parsed)
 
@@ -337,11 +341,19 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
 ) -> Conversation:
-    structured, discarded = _get_structured(uid, language_code, conversation, force_process)
+    person_ids = [segment.person_id for segment in conversation.transcript_segments if segment.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     if not discarded:
-        _trigger_apps(uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code)
+        _trigger_apps(
+            uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
+        )
         (
             threading.Thread(
                 target=save_structured_vector,
@@ -354,6 +366,7 @@ def process_conversation(
             else None
         )
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
+        threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())

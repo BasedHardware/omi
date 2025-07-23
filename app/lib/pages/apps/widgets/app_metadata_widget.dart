@@ -60,13 +60,11 @@ class AppMetadataWidget extends StatelessWidget {
                     height: MediaQuery.of(context).size.width * 0.28,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(30.0),
-                      border: Border.all(color: Colors.grey.shade800, width: 2.0),
+                      border: Border.all(color: Color(0xFF35343B), width: 2.0),
                     ),
                     child: imageFile != null || imageUrl != null
                         ? (imageUrl == null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(30.0),
-                                child: Image.file(imageFile!, fit: BoxFit.cover))
+                            ? ClipRRect(borderRadius: BorderRadius.circular(30.0), child: Image.file(imageFile!, fit: BoxFit.cover))
                             : ClipRRect(
                                 borderRadius: BorderRadius.circular(30.0),
                                 child: CachedNetworkImage(imageUrl: imageUrl!),
@@ -83,7 +81,7 @@ class AppMetadataWidget extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.all(8.0),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade800,
+                              color: Color(0xFF35343B),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -101,7 +99,7 @@ class AppMetadataWidget extends StatelessWidget {
             ),
             Container(
               decoration: BoxDecoration(
-                color: Colors.grey.shade900,
+                color: const Color(0xFF1F1F25),
                 borderRadius: BorderRadius.circular(12.0),
               ),
               padding: const EdgeInsets.all(14.0),
@@ -128,7 +126,7 @@ class AppMetadataWidget extends StatelessWidget {
                               margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade800,
+                                color: Color(0xFF35343B),
                                 borderRadius: BorderRadius.circular(10.0),
                               ),
                               width: double.infinity,
@@ -143,8 +141,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   ),
                                   GestureDetector(
                                     onTap: () {
-                                      Clipboard.setData(
-                                          ClipboardData(text: context.read<AddAppProvider>().updateAppId!));
+                                      Clipboard.setData(ClipboardData(text: context.read<AddAppProvider>().updateAppId!));
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
                                           content: Text('App ID copied to clipboard'),
@@ -184,7 +181,7 @@ class AppMetadataWidget extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
                     margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
+                      color: Color(0xFF35343B),
                       borderRadius: BorderRadius.circular(10.0),
                     ),
                     width: double.infinity,
@@ -298,7 +295,7 @@ class AppMetadataWidget extends StatelessWidget {
                       margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                       padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
+                        color: Color(0xFF35343B),
                         borderRadius: BorderRadius.circular(10.0),
                       ),
                       width: double.infinity,
@@ -309,8 +306,7 @@ class AppMetadataWidget extends StatelessWidget {
                           ),
                           Text(
                             (category?.isNotEmpty == true ? category : 'Select Category') ?? 'Select Category',
-                            style: TextStyle(
-                                color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                            style: TextStyle(color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                           ),
                           const Spacer(),
                           Icon(
@@ -338,7 +334,7 @@ class AppMetadataWidget extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
                     margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
+                      color: Color(0xFF35343B),
                       borderRadius: BorderRadius.circular(10.0),
                     ),
                     width: double.infinity,
@@ -376,8 +372,7 @@ class AppMetadataWidget extends StatelessWidget {
                                         contentPadding: EdgeInsets.only(top: 6, bottom: 2),
                                         isDense: true,
                                         border: InputBorder.none,
-                                        hintText:
-                                            'My Awesome App is a great app that does amazing things. It is the best app ever!',
+                                        hintText: 'My Awesome App is a great app that does amazing things. It is the best app ever!',
                                         hintMaxLines: 4,
                                       ),
                                     ),
@@ -491,7 +486,7 @@ class AppMetadataWidget extends StatelessWidget {
                             margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade800,
+                              color: Color(0xFF35343B),
                               borderRadius: BorderRadius.circular(10.0),
                             ),
                             width: double.infinity,
@@ -502,9 +497,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 ),
                                 Text(
                                   (appPricing?.isNotEmpty == true ? appPricing : 'None Selected') ?? 'None Selected',
-                                  style: TextStyle(
-                                      color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
-                                      fontSize: 16),
+                                  style: TextStyle(color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                                 ),
                                 const Spacer(),
                                 Icon(

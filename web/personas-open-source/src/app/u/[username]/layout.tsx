@@ -14,28 +14,28 @@ const formatTwitterAvatarUrl = (url: string): string => {
 };
 
 type Props = {
-  params: Promise<{ username: string }>
-  children: React.ReactNode
-}
+  params: Promise<{ username: string }>;
+  children: React.ReactNode;
+};
 
 export async function generateMetadata(
   { params }: Props,
-  parent: ResolvingMetadata
+  parent: ResolvingMetadata,
 ): Promise<Metadata> {
   const { username } = await params;
-  
+
   try {
     // First try Firestore
     const q = query(
       collection(db, 'plugins_data'),
-      where('username', '==', username.toLowerCase())
+      where('username', '==', username.toLowerCase()),
     );
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
       const botDoc = querySnapshot.docs[0];
       const botData = botDoc.data();
-      
+
       return {
         metadataBase: new URL('https://personas.omi.me'),
         title: `${botData.name} | Ask me anything`,
@@ -50,7 +50,7 @@ export async function generateMetadata(
               width: 400,
               height: 400,
               alt: `${botData.name}'s profile picture`,
-            }
+            },
           ],
         },
         twitter: {
@@ -59,24 +59,27 @@ export async function generateMetadata(
           description: botData.profile || 'Ask me anything on Omi',
           images: [botData.image || '/omidevice.webp'],
           creator: '@omiai',
-          site: '@omiai'
-        }
+          site: '@omiai',
+        },
       };
     }
 
     // If not in Firestore, try Twitter API
-    const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${username}`, {
-      headers: {
-        'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-        'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
+    const profileResponse = await fetch(
+      `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${username}`,
+      {
+        headers: {
+          'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
+          'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
+        },
       },
-    });
+    );
 
     const profileData: TwitterProfile = await profileResponse.json();
-    
+
     if (profileData && profileData.name) {
       const formattedAvatarUrl = formatTwitterAvatarUrl(profileData.avatar);
-      
+
       return {
         metadataBase: new URL('https://personas.omi.me'),
         title: `${profileData.name} | Ask me anything`,
@@ -91,7 +94,7 @@ export async function generateMetadata(
               width: 400,
               height: 400,
               alt: `${profileData.name}'s profile picture`,
-            }
+            },
           ],
         },
         twitter: {
@@ -100,8 +103,8 @@ export async function generateMetadata(
           description: profileData.desc || 'Ask me anything on Omi',
           images: [formattedAvatarUrl],
           creator: '@omiai',
-          site: '@omiai'
-        }
+          site: '@omiai',
+        },
       };
     }
   } catch (error) {
@@ -123,7 +126,7 @@ export async function generateMetadata(
           width: 400,
           height: 400,
           alt: 'Omi Profile Picture',
-        }
+        },
       ],
     },
     twitter: {
@@ -132,11 +135,11 @@ export async function generateMetadata(
       description: 'Ask me anything on Omi',
       images: ['/omidevice.webp'],
       creator: '@omiai',
-      site: '@omiai'
-    }
+      site: '@omiai',
+    },
   };
 }
 
 export default function Layout({ children }: Props) {
   return children;
-} 
+}

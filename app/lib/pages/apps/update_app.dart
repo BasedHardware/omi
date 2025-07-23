@@ -127,7 +127,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         const SizedBox(height: 18),
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
+                            color: const Color(0xFF1F1F25),
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                           padding: const EdgeInsets.all(14.0),
@@ -160,7 +160,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                           height: height,
                                           margin: const EdgeInsets.only(right: 8),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey.shade800,
+                                            color: Color(0xFF35343B),
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: provider.isUploadingThumbnail
@@ -263,7 +263,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         const SizedBox(height: 18),
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
+                            color: const Color(0xFF1F1F25),
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                           padding: const EdgeInsets.all(14.0),
@@ -299,7 +299,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                   },
                                   child: Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.grey.shade900,
+                                      color: const Color(0xFF1F1F25),
                                       borderRadius: BorderRadius.circular(12.0),
                                     ),
                                     padding: const EdgeInsets.all(14.0),
@@ -309,11 +309,9 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                           PromptTextField(
                                             controller: provider.chatPromptController,
                                             label: 'Chat Prompt',
-                                            hint:
-                                                'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                            hint: 'You are an awesome app, your job is to respond to the user queries and make them feel good...',
                                           ),
-                                        if (provider.isCapabilitySelectedById('memories') &&
-                                            provider.isCapabilitySelectedById('chat'))
+                                        if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat'))
                                           const SizedBox(
                                             height: 20,
                                           ),
@@ -321,8 +319,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                           PromptTextField(
                                             controller: provider.conversationPromptController,
                                             label: 'Conversation Prompt',
-                                            hint:
-                                                'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                            hint: 'You are an awesome app, you will be given transcript and summary of a conversation...',
                                           ),
                                       ],
                                     ),
@@ -338,7 +335,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                               const SizedBox(height: 18),
                               Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade900,
+                                  color: const Color(0xFF1F1F25),
                                   borderRadius: BorderRadius.circular(12.0),
                                 ),
                                 padding: const EdgeInsets.all(14.0),
@@ -385,7 +382,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                   padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12.0),
-                    color: Colors.grey.shade900,
+                    color: const Color(0xFF1F1F25),
                     gradient: LinearGradient(
                       colors: [Colors.black, Colors.black.withValues(alpha: 0)],
                       begin: Alignment.bottomCenter,

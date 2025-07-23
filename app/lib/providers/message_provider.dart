@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -360,8 +361,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
-      {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
+  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes, {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -473,6 +473,10 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.data) {
           message.text += chunk.text;
+          // Add haptic feedback for each character chunk received during streaming
+          if (chunk.text.isNotEmpty) {
+            HapticFeedback.lightImpact();
+          }
           notifyListeners();
           continue;
         }

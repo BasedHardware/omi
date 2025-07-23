@@ -109,7 +109,7 @@ class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> wit
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: Colors.grey.shade800.withOpacity(0.3),
+                color: Color(0xFF35343B).withOpacity(0.3),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: const Color.fromARGB(255, 188, 99, 121).withOpacity(0.3),
@@ -144,8 +144,7 @@ class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> wit
                   if (s) {
                     _showPermissionDialog(
                       title: 'Bluetooth Access',
-                      description:
-                          'This app uses Bluetooth to connect and communicate with your device. Your device data stays private and secure.',
+                      description: 'This app uses Bluetooth to connect and communicate with your device. Your device data stays private and secure.',
                       onContinue: () async {
                         await provider.askForBluetoothPermissions();
                       },
@@ -169,8 +168,7 @@ class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> wit
                   if (s) {
                     _showPermissionDialog(
                       title: 'Location Services',
-                      description:
-                          'This app may use your location to tag your conversations and improve your experience.',
+                      description: 'This app may use your location to tag your conversations and improve your experience.',
                       onContinue: () async {
                         await provider.askForLocationPermissions();
                       },
@@ -194,8 +192,7 @@ class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> wit
                   if (s) {
                     _showPermissionDialog(
                       title: 'Notifications',
-                      description:
-                          'This app would like to send you notifications to keep you informed about important updates and activities. If permission is denied, we\'ll redirect you to System Preferences.',
+                      description: 'This app would like to send you notifications to keep you informed about important updates and activities. If permission is denied, we\'ll redirect you to System Preferences.',
                       onContinue: () async {
                         await provider.askForNotificationPermissions();
                       },
@@ -224,12 +221,7 @@ class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> wit
                           width: double.infinity,
                           decoration: BoxDecoration(
                             border: const GradientBoxBorder(
-                              gradient: LinearGradient(colors: [
-                                Color.fromARGB(127, 208, 208, 208),
-                                Color.fromARGB(127, 188, 99, 121),
-                                Color.fromARGB(127, 86, 101, 182),
-                                Color.fromARGB(127, 126, 190, 236)
-                              ]),
+                              gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                               width: 2,
                             ),
                             borderRadius: BorderRadius.circular(12),
@@ -241,11 +233,7 @@ class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> wit
                               widget.goNext();
                             },
                             child: Text(
-                              (provider.hasBluetoothPermission ||
-                                      provider.hasLocationPermission ||
-                                      provider.hasNotificationPermission)
-                                  ? 'Continue'
-                                  : 'Skip',
+                              (provider.hasBluetoothPermission || provider.hasLocationPermission || provider.hasNotificationPermission) ? 'Continue' : 'Skip',
                               style: const TextStyle(
                                 decoration: TextDecoration.none,
                               ),

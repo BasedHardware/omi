@@ -92,7 +92,7 @@ class DesktopActionItemsSection extends StatelessWidget {
     final newValue = !item.completed;
     context.read<ConversationProvider>().updateGlobalActionItemState(
           conversation,
-          itemIndex,
+          item.description,
           newValue,
         );
   }

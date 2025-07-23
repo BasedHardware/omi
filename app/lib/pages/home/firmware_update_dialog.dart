@@ -41,8 +41,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
     final stepMap = {
       'no_usb': FirmwareUpdateStep(
         title: 'No USB',
-        description:
-            "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
+        description: "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
         icon: Icons.usb_off,
       ),
       'battery': FirmwareUpdateStep(
@@ -70,7 +69,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
           maxHeight: 500,
         ),
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Padding(
@@ -158,7 +157,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
                     : null,
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.white,
-                  backgroundColor: isConfirmed ? Colors.deepPurple : Colors.grey.shade800,
+                  backgroundColor: isConfirmed ? Colors.deepPurple : Color(0xFF35343B),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),

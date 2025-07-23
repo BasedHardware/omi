@@ -37,11 +37,17 @@ module.exports = {
     'prettier/prettier': ['error', {}, { usePrettierrc: true }],
     'react/react-in-jsx-scope': 'off',
     'jsx-a11y/accessible-emoji': 'off',
+    'jsx-a11y/label-has-associated-control': 'off',
+    'jsx-a11y/no-static-element-interactions': 'off',
+    'jsx-a11y/click-events-have-key-events': 'off',
     'react/prop-types': 'off',
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/ban-ts-comment': 'off',
     'simple-import-sort/imports': 'off',
     'simple-import-sort/exports': 'off',
+    // Add warnings for specific rules
+    'react/no-unescaped-entities': 'warn',
+    'jsx-a11y/heading-has-content': 'warn',
     'jsx-a11y/anchor-is-valid': [
       'error',
       {

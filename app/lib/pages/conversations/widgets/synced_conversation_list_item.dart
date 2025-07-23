@@ -71,7 +71,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
         child: Container(
           width: double.maxFinite,
           decoration: BoxDecoration(
-            color: Colors.grey.shade900,
+            color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Padding(
@@ -150,13 +150,8 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          conversation.discarded
-              ? const SizedBox.shrink()
-              : Text(conversation.structured.getEmoji(),
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
-          conversation.structured.category.isNotEmpty && !conversation.discarded
-              ? const SizedBox(width: 12)
-              : const SizedBox.shrink(),
+          conversation.discarded ? const SizedBox.shrink() : Text(conversation.structured.getEmoji(), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
+          conversation.structured.category.isNotEmpty && !conversation.discarded ? const SizedBox(width: 12) : const SizedBox.shrink(),
           conversation.structured.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(
@@ -180,7 +175,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
               children: [
                 Text(
                   dateTimeFormat('MMM d, h:mm a', conversation.startedAt ?? conversation.createdAt),
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                   maxLines: 1,
                   textAlign: TextAlign.end,
                 ),
@@ -190,12 +185,12 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
+                        color: const Color(0xFF35343B),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         _getConversationDuration(),
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 11),
+                        style: const TextStyle(color: Colors.white, fontSize: 11),
                         maxLines: 1,
                         textAlign: TextAlign.end,
                       ),

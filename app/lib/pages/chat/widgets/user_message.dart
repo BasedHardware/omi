@@ -16,34 +16,34 @@ class HumanMessage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0, bottom: 4.0),
-            child: Text(
-              formatChatTimestamp(message.createdAt),
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 12,
-              ),
-            ),
-          ),
+          // Padding(
+          //   padding: const EdgeInsets.only(right: 8.0, bottom: 4.0),
+          //   child: Text(
+          //     formatChatTimestamp(message.createdAt),
+          //     style: TextStyle(
+          //       color: Colors.grey.shade500,
+          //       fontSize: 12,
+          //     ),
+          //   ),
+          // ),
           FilesHandlerWidget(message: message),
           Wrap(
             alignment: WrapAlignment.end,
             children: [
               Container(
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
+                  color: const Color(0xFF1f1f25),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16.0),
-                    topRight: Radius.circular(2.0),
+                    topRight: Radius.circular(16),
                     bottomRight: Radius.circular(16.0),
                     bottomLeft: Radius.circular(16.0),
                   ),
                 ),
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Text(
                   message.text.decodeString,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ),
             ],

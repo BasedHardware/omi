@@ -4,6 +4,8 @@ import uuid
 import re
 from pydantic import BaseModel, Field
 
+from models.other import Person
+
 
 class Translation(BaseModel):
     lang: str
@@ -20,6 +22,7 @@ class TranscriptSegment(BaseModel):
     start: float
     end: float
     translations: Optional[List[Translation]] = []
+    speech_profile_processed: bool = False
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -33,15 +36,23 @@ class TranscriptSegment(BaseModel):
         return f'{str(start_duration).split(".")[0]} - {str(end_duration).split(".")[0]}'
 
     @staticmethod
-    def segments_as_string(segments, include_timestamps=False, user_name: str = None):
+    def segments_as_string(segments, include_timestamps=False, user_name: str = None, people: List[Person] = None):
         if not user_name:
             user_name = 'User'
         transcript = ''
+        people_map = {person.id: person.name for person in people} if people else {}
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
             timestamp_str = f'[{segment.get_timestamp_string()}] ' if include_timestamps else ''
-            transcript += f'{timestamp_str}{user_name if segment.is_user else f"Speaker {segment.speaker_id}"}: {segment_text}\n\n'
+            speaker_name = user_name
+            if not segment.is_user:
+                if segment.person_id and segment.person_id in people_map:
+                    speaker_name = people_map[segment.person_id]
+                else:
+                    speaker_name = f'Speaker {segment.speaker_id}'
+            transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
+
         return transcript.strip()
 
     @staticmethod
@@ -98,12 +109,22 @@ class TranscriptSegment(BaseModel):
         def _merge(a, b: TranscriptSegment):
             if not a or not b:
                 return a, b
-            if (a.speaker == b.speaker or (a.is_user and b.is_user)) and (b.start - b.end < 30):
+            if (
+                (a.speaker == b.speaker or (a.is_user and b.is_user))
+                and (b.start - a.end < 30)
+                and a.speech_profile_processed == b.speech_profile_processed
+            ):
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None
 
-            if a.text and b.text and not a.text[-1] in [".", "?", "!"] and b.text[0].islower():
+            if (
+                a.text
+                and b.text
+                and not a.text[-1] in [".", "?", "!"]
+                and b.text[0].islower()
+                and a.speech_profile_processed == b.speech_profile_processed
+            ):
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None

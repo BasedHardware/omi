@@ -1,11 +1,11 @@
 import { Topic, Trend } from '@/src/types/trends/trends.types';
 import capitalizeFirstLetter from '@/src/utils/capitalize-first-letter';
-import { motion } from 'framer-motion';
+import { motion, type MotionProps } from 'framer-motion';
 
 interface TrendTopicItemProps {
   topic: Topic;
   trend: Trend;
-  variants: any;
+  variants: MotionProps['variants'];
   index: number;
 }
 

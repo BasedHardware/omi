@@ -22,7 +22,7 @@ export async function generateMetadata(
         revalidate: 60,
       },
     })
-  ).json()) as any;
+  ).json()) as { structured?: { title?: string; overview?: string } };
 
   const title = !memory
     ? 'Memory Not Found'
