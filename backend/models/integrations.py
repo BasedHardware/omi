@@ -32,12 +32,14 @@ class ExternalIntegrationMemory(BaseModel):
 
 class ExternalIntegrationCreateMemory(BaseModel):
     text: Optional[str] = Field(description="The original text from which the fact was extracted")
-    text_source: ExternalIntegrationMemorySource = Field(description="The source of the text",
-                                                         default=ExternalIntegrationMemorySource.other)
+    text_source: ExternalIntegrationMemorySource = Field(
+        description="The source of the text", default=ExternalIntegrationMemorySource.other
+    )
     text_source_spec: Optional[str] = Field(description="Additional specification about the source", default=None)
     app_id: Optional[str] = None
     memories: Optional[List[ExternalIntegrationMemory]] = Field(
-        description="List of explicit memories(facts) to be created", default=None)
+        description="List of explicit memories(facts) to be created", default=None
+    )
 
 
 class EmptyResponse(BaseModel):
@@ -127,8 +129,11 @@ class ConversationItem(BaseModel):
 
     class Config:
         json_encoders = {
-            datetime: lambda v: v.isoformat() + 'Z' if v.tzinfo is None else v.astimezone(
-                timezone.utc).isoformat().replace('+00:00', 'Z')
+            datetime: lambda v: (
+                v.isoformat() + 'Z'
+                if v.tzinfo is None
+                else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+            )
         }
 
 

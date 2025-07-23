@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 /// A utility class to handle platform-specific service availability
 class PlatformService {
   static bool get isMacOS => Platform.isMacOS;
@@ -12,7 +14,7 @@ class PlatformService {
   static bool get isAnalyticsSupported => !(isMacOS || isWindows);
   static bool get isNotificationSupported => !(isMacOS || isWindows);
   static bool get isIntercomSupported => !(isMacOS || isWindows);
-  static bool get isMixpanelSupported => !(isMacOS || isWindows);
+  static bool get isMixpanelSupported => !(kIsWeb);
   static bool get isInstabugSupported => !(isMacOS || isWindows);
 
   /// Execute a function only if the platform supports it

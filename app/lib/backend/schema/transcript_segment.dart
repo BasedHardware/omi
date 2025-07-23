@@ -30,6 +30,7 @@ class Translation {
 
 class TranscriptSegment {
   String id;
+  late int idx;
 
   String text;
   String? speaker;
@@ -39,6 +40,7 @@ class TranscriptSegment {
   double start;
   double end;
   List<Translation> translations = [];
+  bool speechProfileProcessed;
 
   TranscriptSegment({
     required this.id,
@@ -49,6 +51,7 @@ class TranscriptSegment {
     required this.start,
     required this.end,
     required this.translations,
+    this.speechProfileProcessed = true,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
   }
@@ -75,6 +78,7 @@ class TranscriptSegment {
       start: double.tryParse(json['start'].toString()) ?? 0.0,
       end: double.tryParse(json['end'].toString()) ?? 0.0,
       translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
+      speechProfileProcessed: (json['speech_profile_processed'] ?? true) as bool,
     );
   }
 
@@ -92,7 +96,13 @@ class TranscriptSegment {
   }
 
   static List<TranscriptSegment> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => TranscriptSegment.fromJson(e)).toList();
+    final List<TranscriptSegment> segments = [];
+    for (int i = 0; i < jsonList.length; i++) {
+      final segment = TranscriptSegment.fromJson(jsonList[i]);
+      segment.idx = i;
+      segments.add(segment);
+    }
+    return segments;
   }
 
   static List<TranscriptSegment> updateSegments(
@@ -172,6 +182,9 @@ class TranscriptSegment {
   }) {
     String transcript = '';
     var userName = SharedPreferencesUtil().givenName;
+    var people = SharedPreferencesUtil().cachedPeople;
+    var peopleMap = {for (var p in people) p.id: p.name};
+
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (var segment in segments) {
       var segmentText = segment.text.trim();
@@ -179,7 +192,13 @@ class TranscriptSegment {
       if (segment.isUser) {
         transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: $segmentText ';
       } else {
-        transcript += '$timestampStr Speaker ${segment.speakerId}: $segmentText ';
+        String speakerName;
+        if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
+          speakerName = peopleMap[segment.personId]!;
+        } else {
+          speakerName = 'Speaker ${segment.speakerId}';
+        }
+        transcript += '$timestampStr $speakerName: $segmentText ';
       }
       transcript += '\n\n';
     }

@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 import json
 from typing import List, Optional
@@ -57,10 +58,9 @@ class ConversationCategory(str, Enum):
     environment = "environment"
     other = "other"
 
-
-base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
-# base_url = "http://127.0.0.1:8000/v1/mcp/"
-
+base_url = os.getenv("OMI_API_BASE_URL", "https://api.omi.me/v1/mcp/")
+if not base_url or base_url == "":
+    raise Exception("Base URL not found")
 
 class OmiTools(str, Enum):
     GET_MEMORIES = "get_memories"
@@ -69,17 +69,13 @@ class OmiTools(str, Enum):
     EDIT_MEMORY = "edit_memory"
     GET_CONVERSATIONS = "get_conversations"
     GET_CONVERSATION_BY_ID = "get_conversation_by_id"
-    CREATE_USER = "create_user"
-
-
-class UserCredentials(BaseModel):
-    email: str = Field(description="The user's email address.")
-    password: str = Field(description="The user's password.")
-    name: str = Field(description="The user's name.", default=None)
 
 
 class GetMemories(BaseModel):
-    uid: str = Field(description="The user's unique identifier.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
     categories: List[MemoryCategory] = Field(
         description="The categories of memories to filter by.", default=[]
     )
@@ -88,7 +84,10 @@ class GetMemories(BaseModel):
 
 
 class CreateMemory(BaseModel):
-    uid: str = Field(description="The user's unique identifier.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
     content: str = Field(description="The content of the memory.")
     category: MemoryCategory = Field(
         description="The category of the memory to create."
@@ -96,18 +95,27 @@ class CreateMemory(BaseModel):
 
 
 class DeleteMemory(BaseModel):
-    uid: str = Field(description="The user's unique identifier.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
     memory_id: str = Field(description="The ID of the memory to delete.")
 
 
 class EditMemory(BaseModel):
-    uid: str = Field(description="The user's unique identifier.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
     memory_id: str = Field(description="The ID of the memory to edit.")
     content: str = Field(description="The new content for the memory.")
 
 
 class GetConversations(BaseModel):
-    uid: str = Field(description="The user's unique identifier.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
     start_date: Optional[str] = Field(
         description="Filter conversations after this date (yyyy-mm-dd)", default=None
     )
@@ -122,21 +130,16 @@ class GetConversations(BaseModel):
 
 
 class GetConversationById(BaseModel):
-    uid: str = Field(description="The user's unique identifier.")
-    conversation_id: str = Field(description="The ID of the conversation to retrieve.")
-
-
-def create_user(email: str, password: str, name: str) -> dict:
-    response = requests.post(
-        f"{base_url}users",
-        json={"email": email, "password": password, "name": name},
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
     )
-    return response.json()
+    conversation_id: str = Field(description="The ID of the conversation to retrieve.")
 
 
 def get_memories(
     logger: logging.Logger,
-    uid: str,
+    api_key: str,
     offset: int = 0,
     limit: int = 100,
     categories: List[MemoryCategory] = [],
@@ -147,7 +150,11 @@ def get_memories(
         params["categories"] = ",".join([c.value for c in categories])
     logger.info(f"get_memories params: {params}")
     try:
-        response = requests.get(f"{base_url}memories", params=params, headers={"uid": uid})
+        response = requests.get(
+            f"{base_url}memories",
+            params=params,
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
         logger.info(f"get_memories response: {response.json()}")
         return response.json()
     except Exception as e:
@@ -155,24 +162,27 @@ def get_memories(
         raise e
 
 
-def create_memory(uid: str, content: str, category: MemoryCategory) -> dict:
+def create_memory(api_key: str, content: str, category: MemoryCategory) -> dict:
     response = requests.post(
         f"{base_url}memories",
-        headers={"uid": uid},
+        headers={"Authorization": f"Bearer {api_key}"},
         json={"content": content, "category": category},
     )
     return response.json()
 
 
-def delete_memory(uid: str, memory_id: str) -> dict:
-    response = requests.delete(f"{base_url}memories/{memory_id}", headers={"uid": uid})
+def delete_memory(api_key: str, memory_id: str) -> dict:
+    response = requests.delete(
+        f"{base_url}memories/{memory_id}",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
     return response.json()
 
 
-def edit_memory(uid: str, memory_id: str, content: str) -> dict:
+def edit_memory(api_key: str, memory_id: str, content: str) -> dict:
     response = requests.patch(
         f"{base_url}memories/{memory_id}",
-        headers={"uid": uid},
+        headers={"Authorization": f"Bearer {api_key}"},
         params={"value": content},
     )
     return response.json()
@@ -180,7 +190,7 @@ def edit_memory(uid: str, memory_id: str, content: str) -> dict:
 
 def get_conversations(
     logger: logging.Logger,
-    uid: str,
+    api_key: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     categories: List[ConversationCategory] = [],
@@ -199,18 +209,21 @@ def get_conversations(
         except ValueError:
             logger.warning(f"Could not parse end date: {end_date}")
     if categories:
-        params["categories"] = ",".join(categories)
+        params["categories"] = ",".join([c.value for c in categories])
 
     logger.info(f"Getting conversations with params: {params}")
     response = requests.get(
-        f"{base_url}conversations", params=params, headers={"uid": uid}
+        f"{base_url}conversations",
+        params=params,
+        headers={"Authorization": f"Bearer {api_key}"},
     )
     return response.json()
 
 
-def get_conversation_by_id(uid: str, conversation_id: str) -> dict:
+def get_conversation_by_id(api_key: str, conversation_id: str) -> dict:
     response = requests.get(
-        f"{base_url}conversations/{conversation_id}", headers={"uid": uid}
+        f"{base_url}conversations/{conversation_id}",
+        headers={"Authorization": f"Bearer {api_key}"},
     )
     return response.json()
 
@@ -226,11 +239,6 @@ async def serve(uid: str | None) -> None:
     @server.list_tools()
     async def list_tools() -> list[Tool]:
         return [
-            Tool(
-                name=OmiTools.CREATE_USER,
-                description="Create a new user",
-                inputSchema=UserCredentials.model_json_schema(),
-            ),
             Tool(
                 name=OmiTools.GET_MEMORIES,
                 description="Retrieve a list of memories. A memory is a known fact about the user across multiple domains.",
@@ -253,7 +261,7 @@ async def serve(uid: str | None) -> None:
             ),
             Tool(
                 name=OmiTools.GET_CONVERSATIONS,
-                description="Retrieve a list of conversations. A conversation is the voice transcript recording of a conversation the user had.",
+                description="Retrieve a list of conversation metadata. To get full transcripts, use get_conversation_by_id.",
                 inputSchema=GetConversations.model_json_schema(),
             ),
             Tool(
@@ -267,18 +275,12 @@ async def serve(uid: str | None) -> None:
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         logger.info(f"Calling tool: {name} with arguments: {arguments}")
 
-        if name == OmiTools.CREATE_USER:
-            result = create_user(
-                email=arguments["email"],
-                password=arguments["password"],
-                name=arguments.get("name"),
+        api_key = arguments.get("api_key") or os.getenv("OMI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "API key not provided and OMI_API_KEY environment variable not set."
             )
-            return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-        # _uid = arguments["uid"] if not uid else uid
-        # if _uid is None:
-        #     raise ValueError(f"uid is required {arguments}")
-        _uid = arguments["uid"]
         if name == OmiTools.GET_MEMORIES:
             # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]
             categories: List[str] = arguments.get("categories", [])
@@ -293,7 +295,7 @@ async def serve(uid: str | None) -> None:
             
             result = get_memories(
                 logger,
-                _uid,
+                api_key,
                 offset=arguments.get("offset", 0),
                 limit=arguments.get("limit", 100),
                 categories=categories_enum,
@@ -303,19 +305,19 @@ async def serve(uid: str | None) -> None:
         elif name == OmiTools.CREATE_MEMORY:
             # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]
             result = create_memory(
-                _uid,
+                api_key,
                 content=arguments["content"],
                 category=arguments["category"],
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == OmiTools.DELETE_MEMORY:
-            result = delete_memory(_uid, memory_id=arguments["memory_id"])
+            result = delete_memory(api_key, memory_id=arguments["memory_id"])
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == OmiTools.EDIT_MEMORY:
             result = edit_memory(
-                _uid,
+                api_key,
                 memory_id=arguments["memory_id"],
                 content=arguments["content"],
             )
@@ -324,7 +326,7 @@ async def serve(uid: str | None) -> None:
         elif name == OmiTools.GET_CONVERSATIONS:
             result = get_conversations(
                 logger,
-                _uid,
+                api_key,
                 start_date=arguments.get("start_date"),
                 end_date=arguments.get("end_date"),
                 categories=arguments.get("categories", []),
@@ -335,7 +337,7 @@ async def serve(uid: str | None) -> None:
 
         elif name == OmiTools.GET_CONVERSATION_BY_ID:
             result = get_conversation_by_id(
-                _uid, conversation_id=arguments["conversation_id"]
+                api_key, conversation_id=arguments["conversation_id"]
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 

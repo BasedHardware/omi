@@ -14,8 +14,11 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
-    chat_messages.append(HumanMessage(
-        content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
+    chat_messages.append(
+        HumanMessage(
+            content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'
+        )
+    )
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
@@ -191,8 +194,10 @@ Tweets:
 def generate_persona_intro_message(prompt: str, name: str):
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user",
-         "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
+        {
+            "role": "user",
+            "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you.",
+        },
     ]
 
     response = llm_medium.invoke(messages)

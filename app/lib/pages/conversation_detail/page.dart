@@ -8,20 +8,17 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
-import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/widgets/photos_grid.dart';
-import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
@@ -672,172 +669,73 @@ class TranscriptWidgets extends StatelessWidget {
           );
         }
 
-        return Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: getTranscriptWidget(
-            false,
-            segments,
-            photos,
-            null,
-            horizontalMargin: false,
-            topMargin: false,
-            canDisplaySeconds: provider.canDisplaySeconds,
-            isConversationDetail: true,
-            bottomMargin: 0, // Removed extra bottom margin
-            editSegment: (i, j) {
-              final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-              if (!connectivityProvider.isConnected) {
-                ConnectivityProvider.showNoInternetDialog(context);
-                return;
-              }
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.black,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                builder: (context) {
+        return getTranscriptWidget(
+          false,
+          segments,
+          photos,
+          null,
+          horizontalMargin: false,
+          topMargin: false,
+          canDisplaySeconds: provider.canDisplaySeconds,
+          isConversationDetail: true,
+          bottomMargin: 150,
+          editSegment: (segmentId, speakerId) {
+            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+            if (!connectivityProvider.isConnected) {
+              ConnectivityProvider.showNoInternetDialog(context);
+              return;
+            }
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.black,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              builder: (context) {
+                return Consumer<PeopleProvider>(builder: (context, peopleProvider, child) {
                   return NameSpeakerBottomSheet(
-                    speakerId: j,
-                    segmentIdx: i,
+                    speakerId: speakerId,
+                    segmentId: segmentId,
+                    segments: provider.conversation.transcriptSegments,
+                    onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                      provider.toggleEditSegmentLoading(true);
+                      String finalPersonId = personId;
+                      if (personId.isEmpty) {
+                        Person? newPerson = await peopleProvider.createPersonProvider(personName);
+                        if (newPerson != null) {
+                          finalPersonId = newPerson.id;
+                        } else {
+                          provider.toggleEditSegmentLoading(false);
+                          return; // Failed to create person
+                        }
+                      }
+
+                      MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+                      for (final segmentId in segmentIds) {
+                        final segmentIndex =
+                            provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+                        if (segmentIndex == -1) continue;
+                        provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
+                        provider.conversation.transcriptSegments[segmentIndex].personId =
+                            finalPersonId == 'user' ? null : finalPersonId;
+                      }
+                      await assignBulkConversationTranscriptSegments(
+                        provider.conversation.id,
+                        segmentIds,
+                        isUser: finalPersonId == 'user',
+                        personId: finalPersonId == 'user' ? null : finalPersonId,
+                      );
+                      provider.toggleEditSegmentLoading(false);
+                    },
                   );
-                },
-              );
-            },
-          ),
+                });
+              },
+            );
+          },
         );
       },
     );
-  }
-}
-
-class EditSegmentWidget extends StatelessWidget {
-  final int segmentIdx;
-  final List<Person> people;
-
-  const EditSegmentWidget({super.key, required this.segmentIdx, required this.people});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-      return Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-        ),
-        height: 320,
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-              child: ListView(
-                children: [
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Row(
-                      children: [
-                        Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () {
-                            MixpanelManager().unassignedSegment();
-                            provider.unassignConversationTranscriptSegment(provider.conversation.id, segmentIdx);
-                            Navigator.pop(context);
-                          },
-                          child: const Text(
-                            'Un-assign',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  CheckboxListTile(
-                    title: const Text('Yours'),
-                    value: provider.conversation.transcriptSegments[segmentIdx].isUser,
-                    checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-                    onChanged: (bool? value) async {
-                      if (provider.editSegmentLoading) return;
-                      // setModalState(() => loading = true);
-                      provider.toggleEditSegmentLoading(true);
-                      MixpanelManager().assignedSegment('User');
-                      provider.conversation.transcriptSegments[segmentIdx].isUser = true;
-                      provider.conversation.transcriptSegments[segmentIdx].personId = null;
-                      bool result = await assignConversationTranscriptSegment(
-                        provider.conversation.id,
-                        segmentIdx,
-                        isUser: true,
-                        useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
-                      );
-                      try {
-                        provider.toggleEditSegmentLoading(false);
-                        Navigator.pop(context);
-                        if (SharedPreferencesUtil().hasSpeakerProfile) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(result ? 'Segment assigned, and speech profile updated!' : 'Segment assigned, but speech profile failed to update. Please try again later.'),
-                            ),
-                          );
-                        }
-                      } catch (e) {}
-                    },
-                  ),
-                  for (var person in people)
-                    CheckboxListTile(
-                      title: Text('${person.name}\'s'),
-                      value: provider.conversation.transcriptSegments[segmentIdx].personId == person.id,
-                      checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-                      onChanged: (bool? value) async {
-                        if (provider.editSegmentLoading) return;
-                        provider.toggleEditSegmentLoading(true);
-                        MixpanelManager().assignedSegment('User Person');
-                        provider.conversation.transcriptSegments[segmentIdx].isUser = false;
-                        provider.conversation.transcriptSegments[segmentIdx].personId = person.id;
-                        bool result = await assignConversationTranscriptSegment(provider.conversation.id, segmentIdx, personId: person.id);
-                        // TODO: make this un-closable or in a way that they receive the result
-                        try {
-                          provider.toggleEditSegmentLoading(false);
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(result ? 'Segment assigned, and ${person.name}\'s speech profile updated!' : 'Segment assigned, but speech profile failed to update. Please try again later.'),
-                            ),
-                          );
-                        } catch (e) {}
-                      },
-                    ),
-                  ListTile(
-                    title: const Text('Someone else\'s'),
-                    trailing: const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: Icon(Icons.add),
-                    ),
-                    onTap: () {
-                      Navigator.pop(context);
-                      routeToPage(context, const UserPeoplePage());
-                    },
-                  ),
-                ],
-              ),
-            ),
-            if (provider.editSegmentLoading)
-              Container(
-                color: Colors.black.withOpacity(0.3),
-                child: const Center(
-                    child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
-                )),
-              ),
-          ],
-        ),
-      );
-    });
   }
 }
 

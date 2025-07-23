@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DesktopLanguageScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -168,6 +169,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
     await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
 
+    MixpanelManager().onboardingStepCompleted('Primary Language');
     widget.onNext();
   }
 
@@ -203,9 +205,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                       size: 28,
                     ),
                   ),
-
                   SizedBox(height: responsive.spacing(baseSpacing: 24)),
-
                   const Text(
                     'Choose your language',
                     style: TextStyle(
@@ -216,9 +216,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     ),
                     textAlign: TextAlign.center,
                   ),
-
                   SizedBox(height: responsive.spacing(baseSpacing: 8)),
-
                   const Text(
                     'Select your preferred language for the best Omi experience',
                     style: TextStyle(
@@ -328,9 +326,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 8),
-
                 OmiButton(
                   label: 'Back',
                   type: OmiButtonType.text,

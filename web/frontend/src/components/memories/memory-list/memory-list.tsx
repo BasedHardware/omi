@@ -11,7 +11,7 @@ export default function MemoryList() {
           fallback={
             <div className="w-full px-4 text-center">
               <h3 className="text-lg font-semibold md:text-xl">
-                Sorry, we can't find any matches to your query!
+                Sorry, we can&apos;t find any matches to your query!
               </h3>
               <p className="mt-2 text-sm font-extralight md:text-base">
                 Try to another search query

@@ -16,6 +16,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
@@ -92,13 +93,28 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void captureImage() async {
-    var res = await ImagePicker().pickImage(source: ImageSource.camera);
-    if (res != null) {
-      selectedFiles.add(File(res.path));
-      selectedFileTypes.add('image');
-      var index = selectedFiles.length - 1;
-      await uploadFiles([selectedFiles[index]], appProvider?.selectedChatAppId);
-      notifyListeners();
+    if (PlatformService.isDesktop) {
+      AppSnackbar.showSnackbarError('Camera capture is not available on this platform');
+      return;
+    }
+
+    try {
+      var res = await ImagePicker().pickImage(source: ImageSource.camera);
+      if (res != null) {
+        selectedFiles.add(File(res.path));
+        selectedFileTypes.add('image');
+        var index = selectedFiles.length - 1;
+        await uploadFiles([selectedFiles[index]], appProvider?.selectedChatAppId);
+        notifyListeners();
+      }
+    } on PlatformException catch (e) {
+      if (e.code == 'camera_access_denied') {
+        AppSnackbar.showSnackbarError('Camera permission denied. Please allow access to camera');
+      } else {
+        AppSnackbar.showSnackbarError('Error accessing camera: ${e.message ?? e.code}');
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('Error taking photo. Please try again.');
     }
   }
 
@@ -107,40 +123,108 @@ class MessageProvider extends ChangeNotifier {
       AppSnackbar.showSnackbarError('You can only select up to 4 images');
       return;
     }
-    List res = [];
-    if (4 - selectedFiles.length == 1) {
-      res = [await ImagePicker().pickImage(source: ImageSource.gallery)];
-    } else {
-      res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
-    }
-    if (res.isNotEmpty) {
+
+    try {
       List<File> files = [];
-      for (var r in res) {
-        files.add(File(r.path));
+
+      if (PlatformService.isDesktop) {
+        try {
+          FilePickerResult? result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+            allowMultiple: true,
+            dialogTitle: 'Select image files',
+            withData: false,
+            withReadStream: false,
+          );
+
+          if (result != null && result.files.isNotEmpty) {
+            for (var file in result.files) {
+              if (file.path != null && files.length < (4 - selectedFiles.length)) {
+                files.add(File(file.path!));
+              }
+            }
+          } else {
+            return;
+          }
+        } on PlatformException catch (e) {
+          AppSnackbar.showSnackbarError('Error opening file picker: ${e.message}');
+          return;
+        } catch (e) {
+          debugPrint('FilePicker general error: $e');
+          AppSnackbar.showSnackbarError('Error selecting images: $e');
+          return;
+        }
+      } else {
+        List res = [];
+        if (4 - selectedFiles.length == 1) {
+          var image = await ImagePicker().pickImage(source: ImageSource.gallery);
+          if (image != null) {
+            res = [image];
+          }
+        } else {
+          res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+        }
+
+        for (var r in res) {
+          files.add(File(r.path));
+        }
       }
+
       if (files.isNotEmpty) {
         selectedFiles.addAll(files);
-        selectedFileTypes.addAll(res.map((e) => 'image'));
+        selectedFileTypes.addAll(files.map((e) => 'image'));
         await uploadFiles(files, appProvider?.selectedChatAppId);
       }
       notifyListeners();
+    } on PlatformException catch (e) {
+      debugPrint('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
+      if (e.code == 'photo_access_denied') {
+        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select images');
+      } else {
+        AppSnackbar.showSnackbarError('Error selecting images: ${e.message ?? e.code}');
+      }
+    } catch (e) {
+      debugPrint('🖼️ General exception during image picking: $e');
+      AppSnackbar.showSnackbarError('Error selecting images. Please try again.');
     }
   }
 
   void selectFile() async {
-    var res = await FilePicker.platform.pickFiles(type: FileType.custom, allowMultiple: true, allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp']);
-    if (res != null) {
-      List<File> files = [];
-      for (var r in res.files) {
-        files.add(File(r.path!));
-      }
-      if (files.isNotEmpty) {
-        selectedFiles.addAll(files);
-        selectedFileTypes.addAll(res.files.map((e) => 'file'));
-        await uploadFiles(files, appProvider?.selectedChatAppId);
-      }
+    if (selectedFiles.length >= 4) {
+      AppSnackbar.showSnackbarError('You can only select up to 4 files');
+      return;
+    }
 
-      notifyListeners();
+    try {
+      var res = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowMultiple: true,
+        allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp'],
+        dialogTitle: 'Select files',
+        withData: false,
+        withReadStream: false,
+      );
+
+      if (res != null && res.files.isNotEmpty) {
+        List<File> files = [];
+        for (var r in res.files) {
+          if (r.path != null && files.length < (4 - selectedFiles.length)) {
+            files.add(File(r.path!));
+          }
+        }
+
+        if (files.isNotEmpty) {
+          selectedFiles.addAll(files);
+          selectedFileTypes.addAll(files.map((e) => 'file'));
+          await uploadFiles(files, appProvider?.selectedChatAppId);
+        }
+        notifyListeners();
+      }
+    } on PlatformException catch (e) {
+      AppSnackbar.showSnackbarError('Error selecting files: ${e.message ?? e.code}');
+    } catch (e) {
+      AppSnackbar.showSnackbarError('Error selecting files. Please try again.');
     }
   }
 

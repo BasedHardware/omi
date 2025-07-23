@@ -19,8 +19,6 @@ def get_users_uid():
     return [str(doc.id) for doc in users_ref.stream()]
 
 
-
-
 def document_id_from_seed(seed: str) -> uuid.UUID:
     """Avoid repeating the same data"""
     seed_hash = hashlib.sha256(seed.encode('utf-8')).digest()

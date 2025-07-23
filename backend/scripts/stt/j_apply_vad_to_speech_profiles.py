@@ -1,5 +1,6 @@
 import os
 import threading
+
 # noinspection PyUnresolvedReferences
 from typing import List
 
@@ -36,7 +37,7 @@ def execute():
         threads.append(threading.Thread(target=single, args=(uid,)))
 
     count = 20
-    chunks = [threads[i:i + count] for i in range(0, len(threads), count)]
+    chunks = [threads[i : i + count] for i in range(0, len(threads), count)]
     for i, chunk in enumerate(chunks):
         [thread.start() for thread in chunk]
         [thread.join() for thread in chunk]

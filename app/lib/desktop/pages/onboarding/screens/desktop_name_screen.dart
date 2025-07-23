@@ -3,6 +3,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/atoms/omi_text_input.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DesktopNameScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -105,6 +106,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
       _errorMessage = '';
     });
 
+    MixpanelManager().onboardingStepCompleted('Name');
     widget.onNext();
   }
 
@@ -135,9 +137,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                       size: 28,
                     ),
                   ),
-
                   const SizedBox(height: 32),
-
                   const Text(
                     'What\'s your name?',
                     style: TextStyle(
@@ -148,9 +148,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                     ),
                     textAlign: TextAlign.center,
                   ),
-
                   const SizedBox(height: 8),
-
                   Container(
                     constraints: const BoxConstraints(maxWidth: 480),
                     padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -165,9 +163,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                       textAlign: TextAlign.center,
                     ),
                   ),
-
                   const SizedBox(height: 48),
-
                   Container(
                     constraints: const BoxConstraints(maxWidth: 400),
                     margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -182,7 +178,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                             if (_hasInteracted) setState(() {});
                           },
                         ),
-
                         if (_errorMessage.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Row(
@@ -203,7 +198,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                             ],
                           ),
                         ],
-
                         if (_nameController.text.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Align(
@@ -224,7 +218,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
               ),
             ),
           ),
-
           Container(
             padding: const EdgeInsets.fromLTRB(40, 24, 40, 40),
             child: Column(
@@ -238,9 +231,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 8),
-
                 OmiButton(
                   label: 'Back',
                   type: OmiButtonType.text,

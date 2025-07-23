@@ -30,8 +30,10 @@ import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -199,35 +201,45 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => ConversationProvider()),
           ListenableProvider(create: (context) => AppProvider()),
+          ChangeNotifierProvider(create: (context) => PeopleProvider()),
+          ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
-            update: (BuildContext context, value, MessageProvider? previous) => (previous?..updateAppProvider(value)) ?? MessageProvider(),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider3<ConversationProvider, MessageProvider, PeopleProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, CaptureProvider? previous) => (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, people, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message, people)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
-            update: (BuildContext context, captureProvider, DeviceProvider? previous) => (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
+            update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
+                (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
             create: (context) => OnboardingProvider(),
-            update: (BuildContext context, value, OnboardingProvider? previous) => (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
+            update: (BuildContext context, value, OnboardingProvider? previous) =>
+                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
           ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, SpeechProfileProvider? previous) => (previous?..setProviders(device)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, SpeechProfileProvider? previous) =>
+                (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
           ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
             create: (context) => ConversationDetailProvider(),
-            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) => (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
+            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
+                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
-            update: (BuildContext context, value, AddAppProvider? previous) => (previous?..setAppProvider(value)) ?? AddAppProvider(),
+            update: (BuildContext context, value, AddAppProvider? previous) =>
+                (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
@@ -238,7 +250,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           return WithForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
-                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null) PlatformManager.instance.instabug.getNavigatorObserver()!,
+                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null)
+                  PlatformManager.instance.instabug.getNavigatorObserver()!,
                 if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -350,6 +363,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   @override
   void initState() {
     initDeepLinks();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();
@@ -359,6 +373,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         context.read<UserProvider>().initialize();
+        context.read<PeopleProvider>().initialize();
         try {
           await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
@@ -388,7 +403,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
           } else {
             return const OnboardingWrapper();
           }
-        } else if (SharedPreferencesUtil().hasOmiDevice == false && SharedPreferencesUtil().hasPersonaCreated && SharedPreferencesUtil().verifiedPersonaId != null) {
+        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
+            SharedPreferencesUtil().hasPersonaCreated &&
+            SharedPreferencesUtil().verifiedPersonaId != null) {
           return const PersonaProfilePage();
         } else {
           return const DeviceSelectionPage();

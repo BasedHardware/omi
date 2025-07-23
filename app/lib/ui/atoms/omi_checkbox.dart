@@ -46,4 +46,4 @@ class OmiCheckbox extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

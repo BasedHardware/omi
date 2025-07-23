@@ -125,7 +125,9 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
                   ),
                   Expanded(
                     child: Text(
-                      hasUsbStep ? "I've disconnected USB and understand the risks." : "I confirm I want to update my device firmware.",
+                      hasUsbStep
+                          ? "I've disconnected USB and understand the risks."
+                          : "I confirm I want to update my device firmware.",
                       style: TextStyle(
                         color: Colors.grey.shade300,
                         fontSize: 14,

@@ -12,7 +12,7 @@ class MemoryCategory(str, Enum):
     # New primary categories
     interesting = "interesting"
     system = "system"
-    
+
     # Legacy categories for backward compatibility
     core = "core"
     hobbies = "hobbies"
@@ -26,18 +26,20 @@ class MemoryCategory(str, Enum):
 
 
 # Only define boosts for the primary categories
-CATEGORY_BOOSTS = {MemoryCategory.interesting.value: 1,
-                   MemoryCategory.system.value: 0,
-                   # Map legacy categories to appropriate new categories
-                   MemoryCategory.core.value: 1,
-                   MemoryCategory.hobbies.value: 1,
-                   MemoryCategory.lifestyle.value: 1,
-                   MemoryCategory.interests.value: 1,
-                   MemoryCategory.work.value: 1,
-                   MemoryCategory.skills.value: 1,
-                   MemoryCategory.learnings.value: 1,
-                   MemoryCategory.habits.value: 0,
-                   MemoryCategory.other.value: 0,}
+CATEGORY_BOOSTS = {
+    MemoryCategory.interesting.value: 1,
+    MemoryCategory.system.value: 0,
+    # Map legacy categories to appropriate new categories
+    MemoryCategory.core.value: 1,
+    MemoryCategory.hobbies.value: 1,
+    MemoryCategory.lifestyle.value: 1,
+    MemoryCategory.interests.value: 1,
+    MemoryCategory.work.value: 1,
+    MemoryCategory.skills.value: 1,
+    MemoryCategory.learnings.value: 1,
+    MemoryCategory.habits.value: 0,
+    MemoryCategory.other.value: 0,
+}
 
 
 class Memory(BaseModel):
@@ -51,7 +53,7 @@ class Memory(BaseModel):
         """Map legacy categories to new ones when creating memories"""
         if isinstance(v, MemoryCategory):
             return v
-            
+
         # If it's a string value
         legacy_to_new = {
             'core': 'system',
@@ -64,19 +66,19 @@ class Memory(BaseModel):
             'habits': 'system',
             'other': 'system',
         }
-        
+
         if isinstance(v, str):
             # If it's already one of our main categories, use it directly
             if v in ['interesting', 'system']:
                 return v
-                
+
             # For legacy categories, map them to new ones
             if v in legacy_to_new:
                 return legacy_to_new[v]
-            
+
             # For any unknown string value, default to "interesting"
             return 'interesting'
-        
+
         # For any other unexpected type, default to interesting
         return 'interesting'
 
@@ -131,8 +133,7 @@ class MemoryDB(Memory):
         return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(memory.created_at.timestamp()))
 
     @staticmethod
-    def from_memory(memory: Memory, uid: str, conversation_id: str,
-                    manually_added: bool) -> 'MemoryDB':
+    def from_memory(memory: Memory, uid: str, conversation_id: str, manually_added: bool) -> 'MemoryDB':
         memory_db = MemoryDB(
             id=document_id_from_seed(memory.content),
             uid=uid,

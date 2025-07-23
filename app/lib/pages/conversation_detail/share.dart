@@ -192,7 +192,7 @@ void showShareBottomSheet(
                               );
                               return;
                             }
-                            Clipboard.setData(ClipboardData(text: 'https://h.omi.me/memories/${conversation.id}'));
+                            Clipboard.setData(ClipboardData(text: 'https://h.omi.me/conversations/${conversation.id}'));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('URL Copied to Clipboard')),
                             );

@@ -225,7 +225,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         hintText: 'Search memories',
                                         leading: const Padding(
                                           padding: EdgeInsets.only(left: 6.0),
-                                          child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
+                                          child:
+                                              Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
                                         ),
                                         backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
                                         elevation: WidgetStateProperty.all(0),
@@ -296,7 +297,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                               style: TextStyle(color: Colors.white),
                                             ),
                                             const Spacer(),
-                                            if (_currentFilter == FilterOption.all) const Icon(Icons.check, size: 16, color: Colors.white),
+                                            if (_currentFilter == FilterOption.all)
+                                              const Icon(Icons.check, size: 16, color: Colors.white),
                                           ],
                                         ),
                                       ),
@@ -309,7 +311,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                               style: TextStyle(color: Colors.white),
                                             ),
                                             const Spacer(),
-                                            if (_currentFilter == FilterOption.interesting) const Icon(Icons.check, size: 16, color: Colors.white),
+                                            if (_currentFilter == FilterOption.interesting)
+                                              const Icon(Icons.check, size: 16, color: Colors.white),
                                           ],
                                         ),
                                       ),
@@ -322,7 +325,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                               style: TextStyle(color: Colors.white),
                                             ),
                                             const Spacer(),
-                                            if (_currentFilter == FilterOption.system) const Icon(Icons.check, size: 16, color: Colors.white),
+                                            if (_currentFilter == FilterOption.system)
+                                              const Icon(Icons.check, size: 16, color: Colors.white),
                                           ],
                                         ),
                                       ),
@@ -404,12 +408,15 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         Expanded(
                                           child: Row(
                                             children: [
-                                              Icon(FontAwesomeIcons.listCheck, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
+                                              Icon(FontAwesomeIcons.listCheck,
+                                                  color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
                                               const SizedBox(width: 12),
                                               Flexible(
                                                 child: Text(
                                                   '${provider.unreviewed.length} ${provider.unreviewed.length == 1 ? "memory" : "memories"} to review',
-                                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
+                                                  style: TextStyle(
+                                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                      fontWeight: FontWeight.w500),
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
@@ -418,7 +425,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         ),
                                         Padding(
                                           padding: const EdgeInsets.only(left: 8.0),
-                                          child: Text('Review', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                                          child: Text('Review',
+                                              style: TextStyle(
+                                                  color: Theme.of(context).colorScheme.primary,
+                                                  fontWeight: FontWeight.bold)),
                                         ),
                                       ],
                                     ),

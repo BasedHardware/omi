@@ -215,7 +215,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
                         const Spacer(),
                       ],
                     ),
-
                     Expanded(
                       child: Padding(
                         padding: EdgeInsets.symmetric(
@@ -224,7 +223,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
                         child: _buildAppInfo(),
                       ),
                     ),
-
                     _buildBottomSection(),
                   ],
                 ),
@@ -369,7 +367,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
           const Spacer(),
         ] else
           const Spacer(),
-
         _buildActionButton(),
       ],
     );

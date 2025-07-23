@@ -77,7 +77,9 @@ class DesktopConversationSummary extends StatelessWidget {
   }
 
   Widget _buildSummaryHeader(BuildContext context, ConversationDetailProvider provider, AppResponse? summarizedApp) {
-    final app = summarizedApp != null ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId) : null;
+    final app = summarizedApp != null
+        ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId)
+        : null;
     final isReprocessing = provider.loadingReprocessConversation;
     final reprocessingApp = provider.selectedAppForReprocessing;
 
@@ -622,10 +624,14 @@ class _AppSelectionItem extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              color: isSelected
+                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
+                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.3) : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                color: isSelected
+                    ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
+                    : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
                 width: 1,
               ),
             ),

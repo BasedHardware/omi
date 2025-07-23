@@ -201,10 +201,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     return Container(
       padding: EdgeInsets.all(responsive.spacing(baseSpacing: 24)),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
         border: Border(
           bottom: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -225,7 +225,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -236,7 +236,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               width: responsive.responsiveWidth(baseWidth: 56),
               height: responsive.responsiveWidth(baseWidth: 56),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Center(
@@ -250,7 +250,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               width: responsive.responsiveWidth(baseWidth: 56),
               height: responsive.responsiveWidth(baseWidth: 56),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -463,7 +463,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
         width: double.infinity,
         height: responsive.responsiveHeight(baseHeight: 48),
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
         ),
       );
@@ -482,7 +482,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
             ),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: ResponsiveHelper.errorColor.withOpacity(0.15),
+            backgroundColor: ResponsiveHelper.errorColor.withValues(alpha: 0.15),
             foregroundColor: ResponsiveHelper.errorColor,
             elevation: 0,
             padding: EdgeInsets.symmetric(
@@ -491,7 +491,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(
-                color: ResponsiveHelper.errorColor.withOpacity(0.3),
+                color: ResponsiveHelper.errorColor.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -520,7 +520,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
             ),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: ResponsiveHelper.successColor.withOpacity(0.15),
+            backgroundColor: ResponsiveHelper.successColor.withValues(alpha: 0.15),
             foregroundColor: ResponsiveHelper.successColor,
             elevation: 0,
             padding: EdgeInsets.symmetric(
@@ -529,7 +529,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(
-                color: ResponsiveHelper.successColor.withOpacity(0.3),
+                color: ResponsiveHelper.successColor.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -574,7 +574,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           ),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+          backgroundColor: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
           foregroundColor: ResponsiveHelper.purplePrimary,
           elevation: 0,
           padding: EdgeInsets.symmetric(
@@ -583,7 +583,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -641,10 +641,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
       margin: EdgeInsets.only(bottom: responsive.spacing(baseSpacing: 12)),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -686,7 +686,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   vertical: responsive.spacing(baseSpacing: 4),
                 ),
                 decoration: BoxDecoration(
-                  color: ResponsiveHelper.successColor.withOpacity(0.15),
+                  color: ResponsiveHelper.successColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -715,10 +715,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 child: Container(
                   padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+                    color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -779,10 +779,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
             child: Container(
               padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -849,7 +849,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                         width: 1,
                       ),
                       image: DecorationImage(
@@ -859,12 +859,12 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                     ),
                   ),
                   placeholder: (context, url) => Shimmer.fromColors(
-                    baseColor: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                    highlightColor: ResponsiveHelper.backgroundTertiary.withOpacity(0.1),
+                    baseColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                    highlightColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.1),
                     child: Container(
                       width: responsive.responsiveWidth(baseWidth: 120),
                       decoration: BoxDecoration(
-                        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
@@ -872,7 +872,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   errorWidget: (context, url, error) => Container(
                     width: responsive.responsiveWidth(baseWidth: 120),
                     decoration: BoxDecoration(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.error),
@@ -910,10 +910,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               width: double.infinity,
               padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -963,7 +963,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                                   vertical: responsive.spacing(baseSpacing: 4),
                                 ),
                                 decoration: BoxDecoration(
-                                  color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -1007,10 +1007,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               width: double.infinity,
               padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -1072,10 +1072,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               width: double.infinity,
               padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -1155,7 +1155,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                               margin: EdgeInsets.only(bottom: responsive.spacing(baseSpacing: 12)),
                               padding: EdgeInsets.all(responsive.spacing(baseSpacing: 12)),
                               decoration: BoxDecoration(
-                                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Column(

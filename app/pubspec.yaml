@@ -51,6 +51,10 @@ dependencies:
   intercom_flutter: 9.3.3
   mixpanel_flutter: ^2.4.4
   posthog_flutter: ^5.0.0
+  mixpanel_analytics:
+    git:
+      url: https://github.com/mdmohsin7/mixpanel_analytics.git
+      ref: master
 
   # Utils
   collection: ^1.19.1
@@ -80,7 +84,7 @@ dependencies:
   package_info_plus: ^8.0.1
   path_provider: 2.1.5
   flutter_foreground_task: 9.1.0
-  upgrader: ^10.3.0
+  upgrader: 11.4.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.7
   flutter_background_service: 5.1.0

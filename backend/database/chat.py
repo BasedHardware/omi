@@ -18,6 +18,7 @@ from .helpers import set_data_protection_level, prepare_for_write, prepare_for_r
 # ******* ENCRYPTION HELPERS ******
 # *********************************
 
+
 def _encrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(chat_data)
 
@@ -58,6 +59,7 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
 # *****************************
 # ********** CRUD *************
 # *****************************
+
 
 @set_data_protection_level(data_arg_name='message_data')
 @prepare_for_write(data_arg_name='message_data', prepare_func=_prepare_data_for_write)
@@ -135,8 +137,9 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
     # Attach conversations to messages
     for message in messages:
         message['memories'] = [
-            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
-            conversation_id in conversations
+            conversations[conversation_id]
+            for conversation_id in message.get('memories_id', [])
+            if conversation_id in conversations
         ]
 
     return messages
@@ -144,15 +147,17 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
 def get_messages(
-        uid: str, limit: int = 20, offset: int = 0, include_conversations: bool = False, app_id: Optional[str] = None,
-        chat_session_id: Optional[str] = None
-        # include_plugin_id_filter: bool = True,
+    uid: str,
+    limit: int = 20,
+    offset: int = 0,
+    include_conversations: bool = False,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    # include_plugin_id_filter: bool = True,
 ):
     print('get_messages', uid, limit, offset, app_id, include_conversations)
     user_ref = db.collection('users').document(uid)
-    messages_ref = (
-        user_ref.collection('messages')
-    )
+    messages_ref = user_ref.collection('messages')
     # if include_plugin_id_filter:
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
@@ -189,8 +194,9 @@ def get_messages(
     # Attach conversations to messages
     for message in messages:
         message['memories'] = [
-            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
-            conversation_id in conversations
+            conversations[conversation_id]
+            for conversation_id in message.get('memories_id', [])
+            if conversation_id in conversations
         ]
 
     # Fetch file chat
@@ -205,9 +211,7 @@ def get_messages(
 
     # Attach files to messages
     for message in messages:
-        message['files'] = [
-            files[file_id] for file_id in message.get('files_id', []) if file_id in files
-        ]
+        message['files'] = [files[file_id] for file_id in message.get('files_id', []) if file_id in files]
 
     return messages
 
@@ -240,11 +244,10 @@ def report_message(uid: str, msg_doc_id: str):
         return {"message": f"Update failed: {e}"}
 
 
-def batch_delete_messages(parent_doc_ref, batch_size=450, app_id: Optional[str] = None,
-                          chat_session_id: Optional[str] = None):
-    messages_ref = (
-        parent_doc_ref.collection('messages')
-    )
+def batch_delete_messages(
+    parent_doc_ref, batch_size=450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
+):
+    messages_ref = parent_doc_ref.collection('messages')
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
@@ -293,9 +296,7 @@ def add_multi_files(uid: str, files_data: list):
 
 
 def get_chat_files(uid: str, files_id: List[str] = []):
-    files_ref = (
-        db.collection('users').document(uid).collection('files')
-    )
+    files_ref = db.collection('users').document(uid).collection('files')
     if len(files_id) > 0:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
 
@@ -321,7 +322,9 @@ def add_chat_session(uid: str, chat_session_data: dict):
 
 def get_chat_session(uid: str, app_id: Optional[str] = None):
     session_ref = (
-        db.collection('users').document(uid).collection('chat_sessions')
+        db.collection('users')
+        .document(uid)
+        .collection('chat_sessions')
         .where(filter=FieldFilter('plugin_id', '==', app_id))
         .limit(1)
     )
@@ -357,6 +360,7 @@ def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str
 # **************************************
 # ********* MIGRATION HELPERS **********
 # **************************************
+
 
 def get_chats_to_migrate(uid: str, target_level: str) -> List[dict]:
     """
@@ -404,10 +408,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
             if isinstance(plain_text, str):
                 migrated_text = encryption.encrypt(plain_text, uid)
 
-        update_data = {
-            'data_protection_level': target_level,
-            'text': migrated_text
-        }
+        update_data = {'data_protection_level': target_level, 'text': migrated_text}
         batch.update(doc_snapshot.reference, update_data)
 
     batch.commit()

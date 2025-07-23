@@ -164,11 +164,7 @@ export function generateProductSchema() {
   };
 }
 
-export function generateCollectionPageSchema(
-  title: string,
-  description: string,
-  canonicalUrl: string,
-) {
+export function generateCollectionPageSchema() {
   return {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
@@ -198,7 +194,9 @@ export function generateOrganizationSchema() {
   };
 }
 
-export function generateAppListSchema(apps: any[]) {
+export function generateAppListSchema(
+  apps: { name: string; description: string; category: string }[],
+) {
   return {
     '@context': 'https://schema.org',
     '@type': 'ItemList',

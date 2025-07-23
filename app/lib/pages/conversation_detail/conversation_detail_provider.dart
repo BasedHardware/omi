@@ -260,10 +260,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
-  void unassignConversationTranscriptSegment(String conversationId, int segmentIdx) {
+  void unassignConversationTranscriptSegment(String conversationId, String segmentId) {
+    final segmentIdx = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+    if (segmentIdx == -1) return;
     conversation.transcriptSegments[segmentIdx].isUser = false;
     conversation.transcriptSegments[segmentIdx].personId = null;
-    assignConversationTranscriptSegment(conversationId, segmentIdx);
+    assignBulkConversationTranscriptSegments(conversationId, [segmentId]);
     notifyListeners();
   }
 

@@ -12,9 +12,7 @@ from database.chat import get_messages
 def process_user(uid: str) -> Dict:
     messages = get_messages(uid, limit=50)
     # Filter out day_summary messages
-    messages = [
-        m for m in messages if m["type"] != "day_summary" and m["sender"] != "ai"
-    ]
+    messages = [m for m in messages if m["type"] != "day_summary" and m["sender"] != "ai"]
 
     # Get timestamps for first and last message if any messages exist
     message_dates = [m["created_at"] for m in messages]
@@ -41,9 +39,7 @@ def process_user(uid: str) -> Dict:
         for week in range(4):
             week_start = first_message + timedelta(weeks=week)
             week_end = week_start + timedelta(weeks=1)
-            had_activity = any(
-                week_start <= msg["created_at"] < week_end for msg in messages
-            )
+            had_activity = any(week_start <= msg["created_at"] < week_end for msg in messages)
             weekly_activity.append(had_activity)
 
     # Get message sequence for retention
@@ -59,10 +55,11 @@ def process_user(uid: str) -> Dict:
         "first_message": first_message_text,
         "first_message_date": first_message,
         "weekly_activity": weekly_activity,
-        "has_recent_activity": last_message.replace(tzinfo=timezone.utc)
-        > (datetime.now(timezone.utc).replace(day=1))
-        if last_message
-        else False,
+        "has_recent_activity": (
+            last_message.replace(tzinfo=timezone.utc) > (datetime.now(timezone.utc).replace(day=1))
+            if last_message
+            else False
+        ),
         "message_sequence": message_sequence,
     }
 
@@ -72,9 +69,7 @@ def print_and_plot_message_distribution(results):
     count_distribution = Counter(message_counts)
 
     # Group counts over 100 together
-    total_over_100 = sum(
-        count for msgs, count in count_distribution.items() if msgs > 100
-    )
+    total_over_100 = sum(count for msgs, count in count_distribution.items() if msgs > 100)
 
     # Prepare data for plotting and printing
     x_values = []
@@ -118,9 +113,7 @@ def plot_retention_cohorts(results):
     # Calculate retention for each week
     for week in range(4):
         active_users = sum(
-            1
-            for r in users_with_activity
-            if len(r["weekly_activity"]) > week and r["weekly_activity"][week]
+            1 for r in users_with_activity if len(r["weekly_activity"]) > week and r["weekly_activity"][week]
         )
         retention_rate = (active_users / total_users) * 100
         weekly_retention.append(retention_rate)
@@ -211,9 +204,7 @@ def execute():
     message_percentage = (len(users_with_messages) / len(results)) * 100
 
     print(f"\nAnalyzed {len(uids)} users")
-    print(
-        f"Users who have sent at least one message: {len(users_with_messages)} ({message_percentage:.1f}%)"
-    )
+    print(f"Users who have sent at least one message: {len(users_with_messages)} ({message_percentage:.1f}%)")
 
     active_users = [r for r in results if r["has_recent_activity"]]
     print(f"Active users this month: {len(active_users)}")
@@ -241,9 +232,7 @@ def execute():
 
             # Store messages that don't fit other categories
             if first_word not in greetings:
-                message_categories["other_messages"].append(
-                    {"message": r["first_message"], "words": word_count}
-                )
+                message_categories["other_messages"].append({"message": r["first_message"], "words": word_count})
 
     print("\nFirst Message Categories:")
     print("-" * 40)

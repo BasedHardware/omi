@@ -15,14 +15,7 @@ db = firestore.Client()
 
 NUM_THREADS = 16
 
-USER_SUBCOLLECTIONS = [
-    'conversations',
-    'memories',
-    'messages',
-    'files',
-    'chat_sessions',
-    'people'
-]
+USER_SUBCOLLECTIONS = ['conversations', 'memories', 'messages', 'files', 'chat_sessions', 'people']
 
 ROOT_COLLECTIONS = ['plugins_data']
 
@@ -31,7 +24,7 @@ def get_users_uid():
     """Fetches all user UIDs from the 'users' collection."""
     users_ref = db.collection('users')
     return [str(doc.id) for doc in users_ref.stream()]
-    #return ['eLCxTds6QyUAHraZug48i8ZlGL23']
+    # return ['eLCxTds6QyUAHraZug48i8ZlGL23']
 
 
 def delete_documents_in_batch(query, batch_size=450):
@@ -55,7 +48,7 @@ def delete_documents_in_batch(query, batch_size=450):
         batch.commit()
         deleted_count += num_docs_in_batch
         processed_in_call += num_docs_in_batch
-        print(f"    Deleted {num_docs_in_batch} documents from a batch.") # Verbose
+        print(f"    Deleted {num_docs_in_batch} documents from a batch.")  # Verbose
     return deleted_count
 
 
@@ -74,6 +67,7 @@ def process_user_subcollections(user_id: str) -> int:
         user_deleted_count += deleted_in_subcollection
     return user_deleted_count
 
+
 def format_time(seconds):
     """Formats seconds into a human-readable string H:MM:SS."""
     hours = int(seconds // 3600)
@@ -81,11 +75,15 @@ def format_time(seconds):
     secs = int(seconds % 60)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
+
 def parse_arguments():
     """Parses command-line arguments."""
     parser = argparse.ArgumentParser(description="Remove soft-deleted documents from Firestore.")
-    parser.add_argument('--ignore-users-file', type=str, help='Path to a file containing user UIDs to ignore, one UID per line.')
+    parser.add_argument(
+        '--ignore-users-file', type=str, help='Path to a file containing user UIDs to ignore, one UID per line.'
+    )
     return parser.parse_args()
+
 
 def migrate_remove_soft_deleted_data(ignore_users_file=None):
     """
@@ -115,7 +113,9 @@ def migrate_remove_soft_deleted_data(ignore_users_file=None):
     if total_users == 0:
         print("No users found to process after applying ignore list (if any).")
     else:
-        print(f"Found {len(all_user_ids)} total users. Processing {total_users} users (after ignore list) with {NUM_THREADS} threads...")
+        print(
+            f"Found {len(all_user_ids)} total users. Processing {total_users} users (after ignore list) with {NUM_THREADS} threads..."
+        )
 
         processed_users_count = 0
         with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
@@ -136,10 +136,11 @@ def migrate_remove_soft_deleted_data(ignore_users_file=None):
                     remaining_users = total_users - processed_users_count
                     eta_seconds = remaining_users * avg_time_per_user if avg_time_per_user > 0 else 0
 
-                    print(f"Progress: {processed_users_count}/{total_users} users processed. "
-                          f"Elapsed: {format_time(elapsed_time)}. "
-                          f"ETA: {format_time(eta_seconds) if eta_seconds > 0 else 'Calculating...'}")
-
+                    print(
+                        f"Progress: {processed_users_count}/{total_users} users processed. "
+                        f"Elapsed: {format_time(elapsed_time)}. "
+                        f"ETA: {format_time(eta_seconds) if eta_seconds > 0 else 'Calculating...'}"
+                    )
 
     print("\nProcessing root collections (sequentially)...")
     for collection_name in ROOT_COLLECTIONS:
@@ -154,6 +155,7 @@ def migrate_remove_soft_deleted_data(ignore_users_file=None):
     end_time = time.time()
     total_duration = end_time - start_time
     print(f"\nMigration completed in {format_time(total_duration)}. Total documents removed: {total_deleted_count}")
+
 
 if __name__ == '__main__':
     args = parse_arguments()

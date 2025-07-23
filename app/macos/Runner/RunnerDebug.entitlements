@@ -16,7 +16,11 @@
 	<true/>
 	<key>com.apple.security.device.bluetooth</key>
 	<true/>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
 	<true/>
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
@@ -25,7 +29,5 @@
 		<string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
 		<string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
 	</array>
-	<key>com.apple.security.network.server</key>
-	<true/>
 </dict>
 </plist>

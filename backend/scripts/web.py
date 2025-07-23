@@ -11,6 +11,7 @@ from database.chat import get_messages
 
 import json
 
+
 def get_user_messages_with_bot_name():
     user_messages_with_bot_name = {}
     uids = get_users_uid()[:20]
