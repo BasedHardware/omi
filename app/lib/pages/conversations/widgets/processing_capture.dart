@@ -345,18 +345,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 _isPhoneMicPaused)
             ? Column(
                 children: [
-                  const SizedBox(height: 8),
-                  // Only show transcript widget when there are segments or photos
-                  if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) const LiteCaptureWidget(),
+                  const SizedBox(height: 24),
                   // Show waveform when recording is active (including paused state)
                   if (provider.recordingState == RecordingState.record || provider.recordingState == RecordingState.systemAudioRecord || provider.recordingState == RecordingState.initialising || provider.recordingState == RecordingState.pause || _isPhoneMicPaused) ...[
-                    const SizedBox(height: 8),
                     SizedBox(
-                      height: 160,
+                      height: 100,
                       child: Center(
                         child: GradientWaveform(
                           width: 380,
-                          height: 120,
+                          height: 80,
                           barCount: 8,
                           barWidth: 28,
                           spacing: 4,
@@ -366,6 +363,37 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 36), // Space below waveform
+                  ],
+                  // Show transcript below waveform during recording (same as device recording)
+                  if (provider.recordingState == RecordingState.record ||
+                      provider.recordingState == RecordingState.systemAudioRecord ||
+                      provider.recordingState == RecordingState.initialising ||
+                      provider.recordingState == RecordingState.pause ||
+                      _isPhoneMicPaused ||
+                      provider.segments.isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: provider.segments.isNotEmpty
+                          ? _AutoScrollingText(
+                              text: provider.segments.map((segment) => segment.text).join(' '),
+                            )
+                          : Text(
+                              'Listening for audio...',
+                              style: TextStyle(
+                                color: Colors.grey.shade400,
+                                fontSize: 14,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                    ),
+                  ],
+                  // Keep photos widget if needed
+                  if (provider.photos.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const LiteCaptureWidget(),
                   ],
                   const SizedBox(height: 8),
                 ],
