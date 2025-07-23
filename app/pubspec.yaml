@@ -36,6 +36,7 @@ dependencies:
   skeletonizer: 2.0.1
   shimmer: ^3.0.0
   siri_wave: 2.3.0
+  pull_down_button: ^0.10.2
 
   # Firebase
   firebase_core: 3.13.0
