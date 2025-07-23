@@ -725,14 +725,15 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     return result;
   }
 
-  Future<void> updateGlobalActionItemState(ServerConversation conversation, int itemIndexInConversation, bool newState) async {
+  Future<void> updateGlobalActionItemState(ServerConversation conversation, String actionItemDescription, bool newState) async {
     final convoId = conversation.id;
     bool conversationFoundAndUpdated = false;
 
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
-      if (conversations[originalConvoIndex].structured.actionItems.length > itemIndexInConversation) {
-        conversations[originalConvoIndex].structured.actionItems[itemIndexInConversation].completed = newState;
+      final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+      if (itemIndex != -1) {
+        conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
       }
     }
@@ -741,14 +742,19 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (groupedConversations.containsKey(dateKey)) {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
-        if (groupedConversations[dateKey]![groupIndex].structured.actionItems.length > itemIndexInConversation) {
-          groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndexInConversation].completed = newState;
+        final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+        if (itemIndex != -1) {
+          groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
       }
     }
 
     if (conversationFoundAndUpdated) {
-      await setConversationActionItemState(convoId, [itemIndexInConversation], [newState]);
+      // Find the item index for the server call
+      final itemIndex = conversation.structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+      if (itemIndex != -1) {
+        await setConversationActionItemState(convoId, [itemIndex], [newState]);
+      }
       notifyListeners();
     } else {
       debugPrint("Error: Conversation or action item not found for updateGlobalActionItemState.");

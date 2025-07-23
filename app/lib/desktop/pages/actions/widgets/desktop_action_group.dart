@@ -12,7 +12,6 @@ import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/atoms/omi_icon_badge.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 
-
 class DesktopActionGroup extends StatelessWidget {
   final ServerConversation conversation;
   final List<ActionItem> actionItems;
@@ -199,7 +198,7 @@ class DesktopActionGroup extends StatelessWidget {
     final newValue = !item.completed;
     context.read<ConversationProvider>().updateGlobalActionItemState(
           conversation,
-          itemIndex,
+          item.description,
           newValue,
         );
   }

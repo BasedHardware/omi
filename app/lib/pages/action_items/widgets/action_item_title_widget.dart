@@ -32,8 +32,14 @@ class ActionItemTileWidget extends StatefulWidget {
 }
 
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
-  bool? _localCompletionState; // Local state for immediate visual feedback
-  bool _isAnimating = false;
+  static final Map<String, bool> _pendingStates = {}; // Track pending states by description
+
+  @override
+  void dispose() {
+    // Clean up any pending state for this item when widget is disposed
+    _pendingStates.remove(widget.actionItem.description);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +49,8 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       orElse: () => provider.searchedConversations.firstWhere((c) => c.id == widget.conversationId),
     );
 
-    // Use local state if available, otherwise use the actual state
-    final isCompleted = _localCompletionState ?? widget.actionItem.completed;
+    // Check if this specific item has a pending state change
+    final isCompleted = _pendingStates.containsKey(widget.actionItem.description) ? _pendingStates[widget.actionItem.description]! : widget.actionItem.completed;
 
     BorderRadius borderRadius;
     if (widget.hasRoundedCorners) {
@@ -187,7 +193,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                       child: GestureDetector(
                         onTap: () => _toggleCompletion(context, conversation),
                         child: AnimatedOpacity(
-                          opacity: _isAnimating ? 0.7 : 1.0,
+                          opacity: 1.0,
                           duration: const Duration(milliseconds: 300),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
@@ -287,28 +293,26 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     HapticFeedback.lightImpact();
 
     final newValue = !widget.actionItem.completed;
+    final itemDescription = widget.actionItem.description;
 
-    // Update local state immediately for instant visual feedback
+    // Update pending state immediately for instant visual feedback
     setState(() {
-      _localCompletionState = newValue;
-      _isAnimating = true;
+      _pendingStates[itemDescription] = newValue;
     });
 
     try {
-      // Update global state immediately (this handles server + provider state)
+      // Update global state immediately
       await context.read<ConversationProvider>().updateGlobalActionItemState(
             conversation,
-            widget.itemIndexInConversation,
+            itemDescription,
             newValue,
           );
 
-      // Wait for 500ms before clearing local state (which will show the item in correct section)
-      Future.delayed(const Duration(milliseconds: 500), () {
+      // Wait for 200ms before clearing pending state (allows user to see the change before item moves)
+      Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted) {
-          // Clear local state so item shows in correct section
           setState(() {
-            _localCompletionState = null;
-            _isAnimating = false;
+            _pendingStates.remove(itemDescription); // Clear pending state so item moves to correct section
           });
         }
       });
@@ -316,15 +320,14 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       // Track analytics
       MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
         conversationId: widget.conversationId,
-        actionItemDescription: widget.actionItem.description,
+        actionItemDescription: itemDescription,
         isCompleted: newValue,
       );
     } catch (e) {
-      // If there's an error, revert local state
+      // If there's an error, revert pending state
       if (mounted) {
         setState(() {
-          _localCompletionState = null;
-          _isAnimating = false;
+          _pendingStates.remove(itemDescription);
         });
       }
       debugPrint('Error updating action item state: $e');
