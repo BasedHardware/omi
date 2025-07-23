@@ -19,6 +19,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/widgets/recording_waveform.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
@@ -33,9 +34,7 @@ class SpeechProfileCardWidget extends StatelessWidget {
         return provider.hasSpeakerProfile
             ? const SizedBox()
             : Consumer<DeviceProvider>(builder: (context, device, child) {
-                if (device.pairedDevice == null ||
-                    !device.isConnected ||
-                    device.pairedDevice?.firmwareRevision == '1.0.2') {
+                if (device.pairedDevice == null || !device.isConnected || device.pairedDevice?.firmwareRevision == '1.0.2') {
                   return const SizedBox();
                 }
                 return Stack(
@@ -53,7 +52,7 @@ class SpeechProfileCardWidget extends StatelessWidget {
                       },
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
+                          color: const Color(0xFF1F1F25),
                           borderRadius: const BorderRadius.all(Radius.circular(12)),
                         ),
                         margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -109,7 +108,7 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                     },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade900,
+                        color: const Color(0xFF1F1F25),
                         borderRadius: const BorderRadius.all(Radius.circular(12)),
                       ),
                       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -291,14 +290,10 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) 
                           color: Colors.white,
                         ),
                       )
-                    : (state == RecordingState.record
-                        ? const Icon(Icons.stop, color: Colors.red, size: 24)
-                        : const Icon(Icons.mic)),
+                    : (state == RecordingState.record ? const Icon(Icons.stop, color: Colors.red, size: 24) : const Icon(Icons.mic)),
                 const SizedBox(width: 8),
                 Text(
-                  state == RecordingState.initialising
-                      ? 'Initialising Recorder'
-                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+                  state == RecordingState.initialising ? 'Initialising Recorder' : (state == RecordingState.record ? 'Pause Recording' : 'Continue Recording'),
                   style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(width: 4),

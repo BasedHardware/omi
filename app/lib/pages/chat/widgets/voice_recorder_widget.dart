@@ -272,7 +272,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Shimmer.fromColors(
-                baseColor: Colors.grey.shade800,
+                baseColor: Color(0xFF35343B),
                 highlightColor: Colors.white,
                 child: const Text(
                   'Transcribing...',

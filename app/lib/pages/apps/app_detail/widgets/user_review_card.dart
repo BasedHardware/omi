@@ -16,7 +16,7 @@ class UserReviewCard extends StatelessWidget {
       padding: const EdgeInsets.all(16.0),
       margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -79,10 +79,7 @@ class UserReviewCard extends StatelessWidget {
                         const SizedBox(
                           width: 8,
                         ),
-                        review.respondedAt != null
-                            ? Text(timeago.format(review.respondedAt!),
-                                style: const TextStyle(color: Colors.grey, fontSize: 12))
-                            : const SizedBox(),
+                        review.respondedAt != null ? Text(timeago.format(review.respondedAt!), style: const TextStyle(color: Colors.grey, fontSize: 12)) : const SizedBox(),
                       ],
                     ),
                     const SizedBox(

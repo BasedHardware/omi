@@ -36,7 +36,7 @@ class DeleteConfirmation {
       return await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              backgroundColor: Colors.grey.shade900,
+              backgroundColor: const Color(0xFF1F1F25),
               surfaceTintColor: Colors.transparent,
               title: Text(
                 title!,

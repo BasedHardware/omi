@@ -41,7 +41,7 @@ class PhotosGridComponent extends StatelessWidget {
                     base64Decode(photo.base64),
                     fit: BoxFit.cover,
                     gaplessPlayback: true,
-                    color: photo.discarded ? Colors.grey.shade800 : null,
+                    color: photo.discarded ? Color(0xFF35343B) : null,
                     colorBlendMode: photo.discarded ? BlendMode.saturation : null,
                   ),
                   if (photo.discarded)

@@ -237,7 +237,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                                 : 'Untitled Conversation',
                             style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12),
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis))
+                            overflow: TextOverflow.ellipsis),),
                   ]),
                 ],
               ),
@@ -270,14 +270,14 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
               const SizedBox(width: 8),
               Text(widget.actionItem.completed ? 'Mark Incomplete' : 'Mark Complete',
                   style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
-            ])),
+            ],),),
         PopupMenuItem<String>(
             value: 'delete',
             child: Row(children: [
               Icon(FontAwesomeIcons.trash, color: Colors.red.shade400, size: 14),
               const SizedBox(width: 8),
               Text('Delete', style: TextStyle(color: Colors.red.shade400, fontSize: 14))
-            ])),
+            ],),),
       ],
       onSelected: (value) => _handleMenuSelection(value, context),
     );
@@ -302,7 +302,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       actionItemDescription: widget.actionItem.description,
       isCompleted: newValue,
     );
-    context.read<ConversationProvider>().updateGlobalActionItemState(widget.conversation, widget.itemIndex, newValue);
+    context.read<ConversationProvider>().updateGlobalActionItemState(widget.conversation, widget.actionItem.description, newValue);
   }
 
   void _showDeleteConfirmation(BuildContext context) {

@@ -62,8 +62,7 @@ class ManageCreatePage extends StatelessWidget {
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.only(left: 16.0),
-                          child: Text('Apps (${provider.apps.where((a) => a.enabled).length})',
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
+                          child: Text('Apps (${provider.apps.where((a) => a.enabled).length})', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
                         ),
                         Selector<AppProvider, List<App>>(
                           selector: (context, provider) => provider.apps.where((p) => p.enabled).toList(),
@@ -99,7 +98,7 @@ class ManageCreatePage extends StatelessWidget {
                             padding: const EdgeInsets.all(12.0),
                             margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 24),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade900,
+                              color: const Color(0xFF1F1F25),
                               borderRadius: BorderRadius.circular(16.0),
                             ),
                             child: const ListTile(
@@ -122,8 +121,7 @@ class ManageCreatePage extends StatelessWidget {
                             ? const SizedBox()
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text('Private Apps (${provider.userPrivateApps.length})',
-                                    style: const TextStyle(fontSize: 18)),
+                                child: Text('Private Apps (${provider.userPrivateApps.length})', style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPrivateApps.isEmpty
                             ? const SizedBox()
@@ -142,8 +140,7 @@ class ManageCreatePage extends StatelessWidget {
                             ? const SizedBox()
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text('Public Apps (${provider.userPublicApps.length})',
-                                    style: const TextStyle(fontSize: 18)),
+                                child: Text('Public Apps (${provider.userPublicApps.length})', style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPublicApps.isEmpty
                             ? const SizedBox()

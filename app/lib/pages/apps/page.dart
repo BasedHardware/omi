@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -13,7 +14,7 @@ class AppsPage extends StatefulWidget {
   State<AppsPage> createState() => _AppsPageState();
 }
 
-class _AppsPageState extends State<AppsPage> {
+class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -24,6 +25,7 @@ class _AppsPageState extends State<AppsPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: widget.showAppBar
@@ -69,6 +71,9 @@ class _AppsPageState extends State<AppsPage> {
       ),
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 class EmptyAppsWidget extends StatelessWidget {
@@ -76,23 +81,28 @@ class EmptyAppsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppProvider>(builder: (context, provider, child) {
-      return provider.apps.isEmpty
-          ? SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 64, left: 14, right: 14),
-                child: Center(
-                  child: Text(
-                    context.read<ConnectivityProvider>().isConnected
-                        ? 'No apps found'
-                        : 'Unable to fetch apps :(\n\nPlease check your internet connection and try again.',
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                    textAlign: TextAlign.center,
+    // Use Selector to only rebuild when apps list changes, not the entire provider
+    return Selector<AppProvider, ({List<App> apps, bool isConnected})>(
+      selector: (context, provider) => (
+        apps: provider.apps,
+        isConnected: context.read<ConnectivityProvider>().isConnected,
+      ),
+      builder: (context, state, child) {
+        return state.apps.isEmpty
+            ? SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 64, left: 14, right: 14),
+                  child: Center(
+                    child: Text(
+                      state.isConnected ? 'No apps found' : 'Unable to fetch apps :(\n\nPlease check your internet connection and try again.',
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
-              ),
-            )
-          : const SliverToBoxAdapter(child: SizedBox.shrink());
-    });
+              )
+            : const SliverToBoxAdapter(child: SizedBox.shrink());
+      },
+    );
   }
 }

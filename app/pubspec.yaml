@@ -35,6 +35,8 @@ dependencies:
   dotted_border: ^2.1.0
   skeletonizer: 2.0.1
   shimmer: ^3.0.0
+  siri_wave: 2.3.0
+  pull_down_button: ^0.10.2
 
   # Firebase
   firebase_core: 3.13.0
@@ -101,6 +103,7 @@ dependencies:
   webview_flutter: 4.13.0
   flutter_sound: ^9.10.0
   just_audio: ^0.9.39
+  video_player: ^2.8.2
   frame_sdk: ^0.0.7
   web_socket_channel: ^3.0.3
   talker_flutter: 4.5.0
@@ -114,6 +117,7 @@ dependencies:
   file_picker: 8.3.2
   photo_view: ^0.15.0
   font_awesome_flutter: ^10.8.0
+  in_app_review: ^2.0.9
 
 dependency_overrides:
   uuid: ^4.4.0
