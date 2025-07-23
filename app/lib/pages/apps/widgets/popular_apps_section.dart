@@ -163,7 +163,7 @@ class PopularAppsSection extends StatelessWidget {
                       width: 72,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: app.enabled ? Colors.grey.shade700 : Colors.blue.shade600,
+                        color: app.enabled ? Colors.grey.shade700 : Color(0xFF8B5CF6),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Center(

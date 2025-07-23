@@ -159,7 +159,7 @@ class AppListItem extends StatelessWidget {
                           width: 72,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: state.enabled ? Colors.grey.shade700 : Colors.blue.shade600,
+                            color: state.enabled ? Colors.grey.shade700 : Color(0xFF8B5CF6),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Center(
