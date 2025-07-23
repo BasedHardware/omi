@@ -60,9 +60,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool hasAudioRecording = false;
 
-  bool displayDevToolsInSheet = false;
-  bool displayShareOptionsInSheet = false;
-
   bool editSegmentLoading = false;
 
   bool showUnassignedFloatingButton = true;
@@ -79,16 +76,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   void toggleIsTranscriptExpanded() {
     isTranscriptExpanded = !isTranscriptExpanded;
-    notifyListeners();
-  }
-
-  void toggleDevToolsInSheet(bool value) {
-    displayDevToolsInSheet = value;
-    notifyListeners();
-  }
-
-  void toggleShareOptionsInSheet(bool value) {
-    displayShareOptionsInSheet = value;
     notifyListeners();
   }
 

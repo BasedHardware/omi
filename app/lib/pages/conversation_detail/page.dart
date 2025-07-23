@@ -23,11 +23,17 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
 import '../action_items/widgets/action_item_title_widget.dart';
+import 'share.dart';
+import 'test_prompts.dart';
+import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/backend/http/webhooks.dart';
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -45,6 +51,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final focusOverviewField = FocusNode();
   TabController? _controller;
   ConversationTab selectedTab = ConversationTab.summary;
+  bool _isSharing = false;
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -123,6 +130,83 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     }
   }
 
+  void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
+    switch (value) {
+      case 'copy_transcript':
+        _copyContent(context, provider.conversation.getTranscript(generate: true));
+        break;
+      case 'copy_summary':
+        _copyContent(context, provider.conversation.structured.toString());
+        break;
+      case 'export_transcript':
+        showShareBottomSheet(context, provider.conversation, (fn) {});
+        break;
+      case 'export_summary':
+        showShareBottomSheet(context, provider.conversation, (fn) {});
+        break;
+      case 'copy_raw_transcript':
+        _copyContent(context, provider.conversation.getTranscript());
+        break;
+      case 'copy_conversation_raw':
+        _copyContent(context, provider.conversation.toJson().toString());
+        break;
+      case 'trigger_integration':
+        _triggerWebhookIntegration(context, provider.conversation);
+        break;
+      case 'test_prompt':
+        routeToPage(context, TestPromptsPage(conversation: provider.conversation));
+        break;
+      case 'reprocess':
+        if (!provider.loadingReprocessConversation) {
+          await provider.reprocessConversation();
+        }
+        break;
+    }
+  }
+
+  void _copyContent(BuildContext context, String content) {
+    Clipboard.setData(ClipboardData(text: content));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Content copied to clipboard')),
+    );
+    HapticFeedback.lightImpact();
+  }
+
+  void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
+    if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () {
+            Navigator.pop(context);
+            routeToPage(context, const DeveloperSettingsPage());
+          },
+          'Webhook URL not set',
+          'Please set the webhook URL in developer settings to use this feature.',
+          okButtonText: 'Settings',
+        ),
+      );
+      return;
+    }
+
+    webhookOnConversationCreatedCall(conversation, returnRawBody: true).then((response) {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () => Navigator.pop(context),
+          'Result:',
+          response,
+          okButtonText: 'Ok',
+          singleButton: true,
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -152,6 +236,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               child: IconButton(
                 padding: EdgeInsets.zero,
                 onPressed: () {
+                  HapticFeedback.mediumImpact();
                   if (widget.isFromOnboarding) {
                     SchedulerBinding.instance.addPostFrameCallback((_) {
                       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
@@ -185,7 +270,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Developer Tools button (first)
+                      // Share button (first) - directly share summary link
                       Container(
                         width: 36,
                         height: 36,
@@ -196,30 +281,124 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         ),
                         child: IconButton(
                           padding: EdgeInsets.zero,
-                          onPressed: () {
-                            provider.toggleDevToolsInSheet(true);
-                            showModalBottomSheet(
-                              context: context,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(16),
-                                  topRight: Radius.circular(16),
-                                ),
-                              ),
-                              builder: (context) => const ShowOptionsBottomSheet(),
-                            ).whenComplete(() {
-                              provider.toggleShareOptionsInSheet(false);
-                              provider.toggleDevToolsInSheet(false);
-                            });
-                          },
-                          icon: const FaIcon(FontAwesomeIcons.code, size: 16.0, color: Colors.white),
+                          onPressed: _isSharing
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    _isSharing = true;
+                                  });
+                                  HapticFeedback.mediumImpact();
+                                  try {
+                                    // Directly share the summary link
+                                    bool shared = await setConversationVisibility(provider.conversation.id);
+                                    if (!shared) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Conversation URL could not be shared.')),
+                                      );
+                                      setState(() {
+                                        _isSharing = false;
+                                      });
+                                      return;
+                                    }
+                                    String content = 'https://h.omi.me/memories/${provider.conversation.id}';
+                                    // Start sharing and immediately clear loading state
+                                    Share.share(content);
+                                    // Small delay to let share sheet appear, then clear loading
+                                    await Future.delayed(const Duration(milliseconds: 150));
+                                    setState(() {
+                                      _isSharing = false;
+                                    });
+                                  } catch (e) {
+                                    setState(() {
+                                      _isSharing = false;
+                                    });
+                                  }
+                                },
+                          icon: _isSharing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                         ),
                       ),
-                      // Delete button (second)
+                      // Developer Tools button (second) - iOS style pull-down menu
                       Container(
                         width: 36,
                         height: 36,
                         margin: const EdgeInsets.only(right: 8),
+                        child: PullDownButton(
+                          itemBuilder: (context) => [
+                            PullDownMenuItem(
+                              title: 'Copy Transcript',
+                              iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
+                              onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
+                            ),
+                            PullDownMenuItem(
+                              title: 'Copy Summary',
+                              iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
+                              onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
+                            ),
+                            PullDownMenuItem(
+                              title: 'Export Transcript',
+                              iconWidget: FaIcon(FontAwesomeIcons.download, size: 16),
+                              onTap: () => _handleMenuSelection(context, 'export_transcript', provider),
+                            ),
+                            if (!provider.conversation.discarded)
+                              PullDownMenuItem(
+                                title: 'Export Summary',
+                                iconWidget: FaIcon(FontAwesomeIcons.fileExport, size: 16),
+                                onTap: () => _handleMenuSelection(context, 'export_summary', provider),
+                              ),
+                            PullDownMenuItem(
+                              title: 'Copy Raw Transcript',
+                              iconWidget: FaIcon(FontAwesomeIcons.fileCode, size: 16),
+                              onTap: () => _handleMenuSelection(context, 'copy_conversation_raw', provider),
+                            ),
+                            PullDownMenuItem(
+                              title: 'Trigger Integration',
+                              iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
+                              onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
+                            ),
+                            PullDownMenuItem(
+                              title: 'Test Prompt',
+                              iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
+                              onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
+                            ),
+                            if (!provider.conversation.discarded)
+                              PullDownMenuItem(
+                                title: 'Reprocess Conversation',
+                                iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+                                onTap: () => _handleMenuSelection(context, 'reprocess', provider),
+                              ),
+                          ],
+                          buttonBuilder: (context, showMenu) => GestureDetector(
+                            onTap: () {
+                              HapticFeedback.mediumImpact();
+                              showMenu();
+                            },
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.3),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Delete button (third)
+                      Container(
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
                           color: Colors.grey.withOpacity(0.3),
                           shape: BoxShape.circle,
@@ -255,35 +434,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   }
                                 },
                           icon: const FaIcon(FontAwesomeIcons.trashCan, size: 16.0, color: Colors.white),
-                        ),
-                      ),
-                      // Share button (third)
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () {
-                            provider.toggleShareOptionsInSheet(true);
-                            showModalBottomSheet(
-                              context: context,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(16),
-                                  topRight: Radius.circular(16),
-                                ),
-                              ),
-                              builder: (context) => const ShowOptionsBottomSheet(),
-                            ).whenComplete(() {
-                              provider.toggleShareOptionsInSheet(false);
-                              provider.toggleDevToolsInSheet(false);
-                            });
-                          },
-                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                         ),
                       ),
                     ],
