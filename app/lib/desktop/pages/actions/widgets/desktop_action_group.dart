@@ -388,7 +388,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     final newValue = !item.completed;
     context.read<ConversationProvider>().updateGlobalActionItemState(
           widget.conversation,
-          itemIndex,
+          item.description,
           newValue,
         );
   }
