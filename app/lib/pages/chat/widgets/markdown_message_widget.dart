@@ -16,7 +16,7 @@ Widget getMarkdownWidget(BuildContext context, String content) {
         color: Colors.white,
       ),
       blockquoteDecoration: BoxDecoration(
-        color: Colors.grey.shade800,
+        color: Color(0xFF35343B),
         borderRadius: BorderRadius.circular(4),
       ),
       code: style.copyWith(

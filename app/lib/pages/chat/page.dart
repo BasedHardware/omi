@@ -565,7 +565,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         ),
                                         child: Icon(
                                           FontAwesomeIcons.arrowUp,
-                                          color: Colors.grey.shade800,
+                                          color: Color(0xFF35343B),
                                           size: 18,
                                         ),
                                       ),

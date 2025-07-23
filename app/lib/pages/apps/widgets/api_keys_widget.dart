@@ -250,7 +250,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.grey.shade800,
+            color: Color(0xFF35343B),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -319,7 +319,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         final key = provider.apiKeys[index];
         return Container(
           decoration: BoxDecoration(
-            color: Colors.grey.shade800,
+            color: Color(0xFF35343B),
             borderRadius: BorderRadius.circular(10.0),
           ),
           child: ListTile(

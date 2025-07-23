@@ -118,7 +118,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
           approve ? 'Saved $count memories' : 'Discarded $count memories',
           style: const TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.grey.shade800,
+        backgroundColor: Color(0xFF35343B),
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
@@ -166,7 +166,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
           approve ? 'Memory saved' : 'Memory discarded',
           style: const TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.grey.shade800,
+        backgroundColor: Color(0xFF35343B),
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
@@ -412,7 +412,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(24),
                                     decoration: BoxDecoration(
-                                      color: _isDragging ? (_cardOffset > 0 ? const Color(0xFF08A25C) : const Color(0xFFE0582F)) : Colors.grey.shade800,
+                                      color: _isDragging ? (_cardOffset > 0 ? const Color(0xFF08A25C) : const Color(0xFFE0582F)) : Color(0xFF35343B),
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
@@ -583,7 +583,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
+                        color: Color(0xFF35343B),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(

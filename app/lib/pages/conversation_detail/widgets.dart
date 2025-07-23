@@ -667,7 +667,7 @@ class GetGeolocationWidgets extends StatelessWidget {
                         height: 200,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
-                          color: Colors.grey.shade800,
+                          color: Color(0xFF35343B),
                         ),
                         child: const Center(
                           child: Text(

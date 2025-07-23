@@ -252,7 +252,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade800,
+                                  color: Color(0xFF35343B),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Row(
