@@ -22,12 +22,7 @@ def get_data(topics: List[str], top_k: int = 1000) -> Dict[str, List]:
     memories = get_memories()
     memories = {memory['id']: memory for memory in memories}
     all_vectors = query_vectors('', uid, k=top_k)
-    all_vectors = {
-        mid: {
-            'vector': vector,
-            'topics': []
-        } for mid, vector in all_vectors
-    }
+    all_vectors = {mid: {'vector': vector, 'topics': []} for mid, vector in all_vectors}
     for topic in topics:
         vectors = query_vectors(topic, uid, k=5)
         for mid, vector in vectors:
@@ -39,11 +34,7 @@ def get_data(topics: List[str], top_k: int = 1000) -> Dict[str, List]:
         memory = memories.get(mid)
         if not memory:
             continue
-        result[mid] = {
-            'title': memory['structured']['title'],
-            'vector': data['vector'],
-            'topics': data['topics']
-        }
+        result[mid] = {'title': memory['structured']['title'], 'vector': data['vector'], 'topics': data['topics']}
 
     return result
 
@@ -62,7 +53,7 @@ def get_markers(data, data_points, color, name, show_top=None):
         marker=dict(size=8, opacity=0.7, color=color),
         text=[f"Title: {item[1]['title']}<br>Topics: {', '.join(item[1]['topics'])}" for item in data],
         hoverinfo='text',
-        name=name
+        name=name,
     )
 
 
@@ -85,8 +76,8 @@ def generate_topics_visualization(topics: List[str], file_path: str = 'embedding
     umap_transform = umap.UMAP(n_components=2, random_state=0, transform_seed=0)
     umap_embeddings = umap_transform.fit_transform(all_embeddings)
 
-    data_points = umap_embeddings[:-len(topics)]
-    topic_points = umap_embeddings[-len(topics):]
+    data_points = umap_embeddings[: -len(topics)]
+    topic_points = umap_embeddings[-len(topics) :]
 
     fig = make_subplots(rows=1, cols=1)
 
@@ -111,7 +102,7 @@ def generate_topics_visualization(topics: List[str], file_path: str = 'embedding
         width=800,
         height=600,
         showlegend=True,
-        hovermode='closest'
+        hovermode='closest',
     )
 
     generate_html_visualization(fig, file_name=file_path)
@@ -134,14 +125,14 @@ def get_data2(topics: List[str], retrieved_memories: List[Conversation]) -> Dict
         result[mid] = {
             'title': memory['structured']['title'],
             'vector': data['vector'],
-            'topics': [] if memory['id'] not in retrieved_memories_id else topics
+            'topics': [] if memory['id'] not in retrieved_memories_id else topics,
         }
 
     return result
 
 
 def generate_visualization(
-        topics: List[str], memories: List[Conversation], file_path: str = 'embedding_visualization_multi_topic.html'
+    topics: List[str], memories: List[Conversation], file_path: str = 'embedding_visualization_multi_topic.html'
 ):
     # TODO: combine in single function
     print('topics', topics)
@@ -158,8 +149,8 @@ def generate_visualization(
     umap_transform = umap.UMAP(n_components=2, random_state=0, transform_seed=0)
     umap_embeddings = umap_transform.fit_transform(all_embeddings)
 
-    data_points = umap_embeddings[:-len(topics)]
-    topic_points = umap_embeddings[-len(topics):]
+    data_points = umap_embeddings[: -len(topics)]
+    topic_points = umap_embeddings[-len(topics) :]
 
     fig = make_subplots(rows=1, cols=1)
 
@@ -184,7 +175,7 @@ def generate_visualization(
         width=800,
         height=600,
         showlegend=True,
-        hovermode='closest'
+        hovermode='closest',
     )
 
     generate_html_visualization(fig, file_name=file_path)

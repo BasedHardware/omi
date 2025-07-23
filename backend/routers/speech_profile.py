@@ -10,10 +10,19 @@ from database.users import get_person
 from models.conversation import Conversation
 from models.other import UploadProfile
 from utils.other import endpoints as auth
-from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists, get_conversation_recording_if_exists, \
-    upload_additional_profile_audio, delete_additional_profile_audio, get_additional_profile_recordings, \
-    upload_user_person_speech_sample, delete_user_person_speech_sample, get_user_person_speech_samples, \
-    delete_speech_sample_for_people, get_user_has_speech_profile
+from utils.other.storage import (
+    upload_profile_audio,
+    get_profile_audio_if_exists,
+    get_conversation_recording_if_exists,
+    upload_additional_profile_audio,
+    delete_additional_profile_audio,
+    get_additional_profile_recordings,
+    upload_user_person_speech_sample,
+    delete_user_person_speech_sample,
+    get_user_person_speech_samples,
+    delete_speech_sample_for_people,
+    get_user_has_speech_profile,
+)
 from utils.stt.vad import apply_vad_for_speech_profile
 
 router = APIRouter()
@@ -61,9 +70,10 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 # ********** SPEECH SAMPLES FROM CONVERSATION **********
 # ******************************************************
 
+
 @router.delete('/v3/speech-profile/expand', tags=['v3'])
 def delete_extra_speech_profile_sample(
-        memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('delete_extra_speech_profile_sample', memory_id, segment_idx, person_id, uid)
     file_name = f'{memory_id}_segment_{segment_idx}.wav'

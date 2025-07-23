@@ -22,8 +22,7 @@ class MemoryReviewSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS;
+    final isMobile = defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
     if (isMobile) {
       return mobile.MobileMemoryReviewSheet(
         memories: memories,

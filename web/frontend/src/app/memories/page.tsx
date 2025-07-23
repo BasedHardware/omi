@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     'Relive the moments that matter, discover new stories, and connect with others through our shared community memories.',
 };
 
-export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
+export default function MemoriesPage() {
   redirect('/dreamforce');
   // const previewId = searchParams.previewId;
   // return (

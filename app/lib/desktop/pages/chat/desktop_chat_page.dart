@@ -20,6 +20,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -185,9 +186,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   child: Column(
                     children: [
                       _buildModernHeader(appProvider),
-
                       if (provider.isLoadingMessages) _buildLoadingBar(),
-
                       Expanded(
                         child: _animationsInitialized
                             ? FadeTransition(
@@ -199,7 +198,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               )
                             : _buildChatContent(provider, connectivityProvider),
                       ),
-
                       _buildFloatingInputArea(provider, connectivityProvider),
                     ],
                   ),
@@ -248,7 +246,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildModernHeader(AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected' ? null : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
+        ? null
+        : appProvider.getSelectedApp();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -767,7 +767,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildCustomNormalMessageWidget(ServerMessage message, MessageProvider provider, int chatIndex) {
-    var previousThinkingText = message.thinkings.length > 1 ? message.thinkings.sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0).first.decodeString : null;
+    var previousThinkingText = message.thinkings.length > 1
+        ? message.thinkings
+            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
+            .first
+            .decodeString
+        : null;
     var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
     bool showTypingIndicator = provider.showTypingIndicator && chatIndex == 0;
 
@@ -1087,7 +1092,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDisabled ? ResponsiveHelper.textQuaternary.withOpacity(0.1) : ResponsiveHelper.purplePrimary.withOpacity(0.15),
+              color: isDisabled
+                  ? ResponsiveHelper.textQuaternary.withOpacity(0.1)
+                  : ResponsiveHelper.purplePrimary.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -1176,7 +1183,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     MessageProvider provider,
     ConnectivityProvider connectivityProvider,
   ) {
-    bool canSend = textController.text.trim().isNotEmpty && !provider.isUploadingFiles && connectivityProvider.isConnected;
+    bool canSend =
+        textController.text.trim().isNotEmpty && !provider.isUploadingFiles && connectivityProvider.isConnected;
 
     return Container(
       margin: const EdgeInsets.only(left: 8),
@@ -1212,15 +1220,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     if (buttonBox == null) return;
 
     final Offset buttonPosition = buttonBox.localToGlobal(Offset.zero);
-    final Size buttonSize = buttonBox.size;
 
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
-        buttonPosition.dx, // Left edge aligned with button
-        buttonPosition.dy - 220, // Position above the button (220px up to account for menu height)
-        buttonPosition.dx + 200, // Right edge (200px wide menu)
-        buttonPosition.dy, // Bottom edge at button top
+        buttonPosition.dx,
+        buttonPosition.dy - (PlatformService.isDesktop ? 160 : 220),
+        buttonPosition.dx + 200,
+        buttonPosition.dy,
       ),
       color: ResponsiveHelper.backgroundSecondary.withOpacity(0.95),
       elevation: 8,
@@ -1228,21 +1235,22 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         borderRadius: BorderRadius.circular(16),
       ),
       items: [
-        PopupMenuItem<String>(
-          value: 'camera',
-          padding: EdgeInsets.zero,
-          child: _buildPopupFileOption(
-            icon: Icons.camera_alt_rounded,
-            title: "Take a Photo",
-            subtitle: "Capture with camera",
+        if (PlatformService.isMobile)
+          PopupMenuItem<String>(
+            value: 'camera',
+            padding: EdgeInsets.zero,
+            child: _buildPopupFileOption(
+              icon: Icons.camera_alt_rounded,
+              title: "Take a Photo",
+              subtitle: "Capture with camera",
+            ),
           ),
-        ),
         PopupMenuItem<String>(
           value: 'gallery',
           padding: EdgeInsets.zero,
           child: _buildPopupFileOption(
             icon: Icons.photo_library_rounded,
-            title: "Select a Photo",
+            title: "Select Images",
             subtitle: "Choose from gallery",
           ),
         ),
@@ -1429,7 +1437,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   void _showAppSelectionSheet(BuildContext context, AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected' ? null : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
+        ? null
+        : appProvider.getSelectedApp();
     final availableApps = appProvider.apps.where((app) => app.worksWithChat() && app.enabled).toList();
 
     showModalBottomSheet(
@@ -1513,7 +1523,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         onTap: () {
                           Navigator.pop(context);
                           final homeProvider = context.read<HomeProvider>();
-                          homeProvider.setIndex(4); // Navigate to apps page
+                          homeProvider.setIndex(4);
+                          homeProvider.onSelectedIndexChanged?.call(4);
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
@@ -1580,10 +1591,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              color: isSelected
+                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
+                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.3) : ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                color: isSelected
+                    ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
+                    : ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
                 width: 1,
               ),
             ),

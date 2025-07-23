@@ -12,6 +12,7 @@ from database import redis_db
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
+import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
@@ -20,18 +21,33 @@ from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
 from models.conversation import *
-from models.conversation import ExternalIntegrationCreateConversation, Conversation, CreateConversation, ConversationSource
+from models.conversation import (
+    ExternalIntegrationCreateConversation,
+    Conversation,
+    CreateConversation,
+    ConversationSource,
+)
+from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
-from utils.llm.conversation_processing import get_transcript_structure, \
-    get_app_result, should_discard_conversation, select_best_app_for_conversation, \
-    get_reprocess_transcript_structure
+from utils.llm.conversation_processing import (
+    get_transcript_structure,
+    get_app_result,
+    should_discard_conversation,
+    select_best_app_for_conversation,
+    get_reprocess_transcript_structure,
+)
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
-from utils.llm.chat import retrieve_metadata_from_text, retrieve_metadata_from_message, retrieve_metadata_fields_from_transcript, obtain_emotional_message
+from utils.llm.chat import (
+    retrieve_metadata_from_text,
+    retrieve_metadata_from_message,
+    retrieve_metadata_fields_from_transcript,
+    obtain_emotional_message,
+)
 from utils.llm.external_integrations import get_message_structure
 from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
@@ -41,19 +57,26 @@ from utils.webhooks import conversation_created_webhook
 
 
 def _get_structured(
-        uid: str, language_code: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-        force_process: bool = False
+    uid: str,
+    language_code: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    force_process: bool = False,
+    people: List[Person] = None,
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
-        if conversation.source == ConversationSource.workflow or conversation.source == ConversationSource.external_integration:
+        if (
+            conversation.source == ConversationSource.workflow
+            or conversation.source == ConversationSource.external_integration
+        ):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
                 structured = get_transcript_structure(conversation.text, conversation.started_at, language_code, tz)
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.message:
-                structured = get_message_structure(conversation.text, conversation.started_at, language_code, tz,
-                                                   conversation.text_source_spec)
+                structured = get_message_structure(
+                    conversation.text, conversation.started_at, language_code, tz, conversation.text_source_spec
+                )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.other:
@@ -63,15 +86,22 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        transcript_text = conversation.get_transcript(False)
+        transcript_text = conversation.get_transcript(False, people=people)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
             # reprocess endpoint
-            return get_reprocess_transcript_structure(
-                transcript_text, conversation.started_at, language_code, tz, conversation.structured.title,
-                photos=conversation.photos
-            ), False
+            return (
+                get_reprocess_transcript_structure(
+                    transcript_text,
+                    conversation.started_at,
+                    language_code,
+                    tz,
+                    conversation.structured.title,
+                    photos=conversation.photos,
+                ),
+                False,
+            )
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discarded = should_discard_conversation(transcript_text, conversation.photos)
@@ -79,16 +109,22 @@ def _get_structured(
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
-        return get_transcript_structure(
-            transcript_text, conversation.started_at, language_code, tz, photos=conversation.photos
-        ), False
+        return (
+            get_transcript_structure(
+                transcript_text, conversation.started_at, language_code, tz, photos=conversation.photos
+            ),
+            False,
+        )
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
 
 
-def _get_conversation_obj(uid: str, structured: Structured,
-                          conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]):
+def _get_conversation_obj(
+    uid: str,
+    structured: Structured,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+):
     discarded = structured.title == ''
     if isinstance(conversation, CreateConversation):
         conversation = Conversation(
@@ -120,7 +156,10 @@ def _get_conversation_obj(uid: str, structured: Structured,
 
 
 # Get default conversation summary app IDs from environment variable
-CONVERSATION_SUMMARIZED_APP_IDS = os.getenv('CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer').split(',')
+CONVERSATION_SUMMARIZED_APP_IDS = os.getenv(
+    'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
+).split(',')
+
 
 # Function to get default memory apps
 def get_default_conversation_summarized_apps():
@@ -132,7 +171,15 @@ def get_default_conversation_summarized_apps():
 
     return default_apps
 
-def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False, app_id: Optional[str] = None, language_code: str = 'en'):
+
+def _trigger_apps(
+    uid: str,
+    conversation: Conversation,
+    is_reprocess: bool = False,
+    app_id: Optional[str] = None,
+    language_code: str = 'en',
+    people: List[Person] = None,
+):
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
     filtered_apps = []
@@ -175,7 +222,9 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        result = get_app_result(conversation.get_transcript(False), conversation.photos, app, language_code=language_code).strip()
+        result = get_app_result(
+            conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code
+        ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -206,7 +255,7 @@ def _extract_memories(uid: str, conversation: Conversation):
     parsed_memories = []
     for memory in new_memories:
         parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
-        #print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
+        # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
         print(f"No memories extracted for conversation {conversation.id}")
@@ -230,8 +279,8 @@ def send_new_memories_notification(token: str, memories: [MemoryDB]):
     send_notification(token, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _extract_trends(conversation: Conversation):
-    extracted_items = trends_extractor(conversation)
+def _extract_trends(uid: str, conversation: Conversation):
+    extracted_items = trends_extractor(uid, conversation)
     parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
     trends_db.save_trends(conversation, parsed)
 
@@ -249,7 +298,9 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
         if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
             text_source_spec = conversation.external_data.get('text_source_spec')
             if text_source == ExternalIntegrationConversationSource.message.value:
-                metadata = retrieve_metadata_from_message(uid, conversation.created_at, text_content, tz, text_source_spec)
+                metadata = retrieve_metadata_from_message(
+                    uid, conversation.created_at, text_content, tz, text_source_spec
+                )
             elif text_source == ExternalIntegrationConversationSource.other.value:
                 metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
     else:
@@ -283,22 +334,51 @@ def _update_personas_async(uid: str):
 
 
 def process_conversation(
-        uid: str, language_code: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-        force_process: bool = False, is_reprocess: bool = False, app_id: Optional[str] = None
+    uid: str,
+    language_code: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    force_process: bool = False,
+    is_reprocess: bool = False,
+    app_id: Optional[str] = None,
 ) -> Conversation:
-    structured, discarded = _get_structured(uid, language_code, conversation, force_process)
+    person_ids = [segment.person_id for segment in conversation.transcript_segments if segment.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     if not discarded:
-        _trigger_apps(uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code)
-        threading.Thread(target=save_structured_vector, args=(uid, conversation,)).start() if not is_reprocess else None
+        _trigger_apps(
+            uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
+        )
+        (
+            threading.Thread(
+                target=save_structured_vector,
+                args=(
+                    uid,
+                    conversation,
+                ),
+            ).start()
+            if not is_reprocess
+            else None
+        )
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
+        threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
 
     if not is_reprocess:
-        threading.Thread(target=conversation_created_webhook, args=(uid, conversation,)).start()
+        threading.Thread(
+            target=conversation_created_webhook,
+            args=(
+                uid,
+                conversation,
+            ),
+        ).start()
         # Update persona prompts with new conversation
         threading.Thread(target=update_personas_async, args=(uid,)).start()
 
@@ -392,8 +472,9 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Save predictions
     if len(callback.predictions) > 0:
-        conversations_db.store_model_emotion_predictions_result(task.user_uid, task.memory_id, provider,
-                                                                callback.predictions)
+        conversations_db.store_model_emotion_predictions_result(
+            task.user_uid, task.memory_id, provider, callback.predictions
+        )
 
     # Conversation
     conversation_data = conversations_db.get_conversation(uid, task.memory_id)

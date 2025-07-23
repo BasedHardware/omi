@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DesktopCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -110,9 +111,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 32),
-
                       const Text(
                         'You\'re all set!',
                         style: TextStyle(
@@ -123,9 +122,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                         ),
                         textAlign: TextAlign.center,
                       ),
-
                       const SizedBox(height: 8),
-
                       Container(
                         constraints: const BoxConstraints(maxWidth: 480),
                         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -140,28 +137,26 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                           textAlign: TextAlign.center,
                         ),
                       ),
-
                       const SizedBox(height: 48),
-
                       Container(
                         constraints: const BoxConstraints(maxWidth: 400),
                         margin: const EdgeInsets.symmetric(horizontal: 40),
                         child: OmiButton(
                           label: 'Start Using Omi',
                           icon: Icons.arrow_forward_rounded,
-                          onPressed: widget.onComplete,
+                          onPressed: () {
+                            MixpanelManager().onboardingCompleted();
+                            widget.onComplete();
+                          },
                         ),
                       ),
-
                       const SizedBox(height: 16),
-
                       if (widget.onBack != null)
                         OmiButton(
                           label: 'Back',
                           type: OmiButtonType.text,
                           onPressed: widget.onBack,
                         ),
-
                       const SizedBox(height: 16),
                     ],
                   ),

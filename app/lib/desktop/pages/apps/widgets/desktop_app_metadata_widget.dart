@@ -63,15 +63,15 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                           width: 2,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -87,7 +87,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                                       fit: BoxFit.cover,
                                       placeholder: (context, url) => Container(
                                         decoration: BoxDecoration(
-                                          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                                          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
                                           borderRadius: BorderRadius.circular(22),
                                         ),
                                         child: const Center(
@@ -124,7 +124,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 4),
                               ),
@@ -213,10 +213,10 @@ class DesktopAppMetadataWidget extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -247,10 +247,10 @@ class DesktopAppMetadataWidget extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -287,7 +287,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -311,10 +311,10 @@ class DesktopAppMetadataWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -345,10 +345,10 @@ class DesktopAppMetadataWidget extends StatelessWidget {
   Widget _buildDescriptionField(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -428,10 +428,10 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                        color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                         width: 1,
                       ),
                     ),
@@ -458,10 +458,10 @@ class DesktopAppMetadataWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -472,7 +472,8 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                 child: Text(
                   appPricing?.isNotEmpty == true ? appPricing! : 'None Selected',
                   style: TextStyle(
-                    color: appPricing?.isNotEmpty == true ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
+                    color:
+                        appPricing?.isNotEmpty == true ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
                     fontSize: 14,
                   ),
                 ),
@@ -548,7 +549,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 separatorBuilder: (context, index) => Container(
                   height: 1,
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                 ),
                 itemCount: categories.length,
                 itemBuilder: (context, index) {
@@ -656,7 +657,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 separatorBuilder: (context, index) => Container(
                   height: 1,
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                 ),
                 itemCount: options.length,
                 itemBuilder: (context, index) {

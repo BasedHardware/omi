@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_dialog.dart';
+import 'widgets/desktop_memory_management_dialog.dart';
 import 'package:omi/ui/organisms/memory_review_sheet.dart';
 import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
@@ -25,7 +26,8 @@ class DesktopMemoriesPage extends StatefulWidget {
   State<DesktopMemoriesPage> createState() => DesktopMemoriesPageState();
 }
 
-class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -299,24 +301,28 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
             child: OmiSearchInput(
               controller: _searchController,
               hint: 'Search memories...',
-              onChanged: (value) => provider.setSearchQuery(value),
+              onChanged: (value) {
+                provider.setSearchQuery(value);
+                if (value.isNotEmpty) {
+                  MixpanelManager().memorySearched(value, provider.filteredMemories.length);
+                }
+              },
+              onClear: () {
+                _searchController.clear();
+                provider.setSearchQuery('');
+                MixpanelManager().memorySearchCleared(provider.memories.length);
+              },
             ),
           ),
-
           const SizedBox(width: 12),
-
           _buildFilterDropdown(provider),
-
           const SizedBox(width: 12),
-
           OmiIconButton(
             icon: Icons.add,
             onPressed: () => _showMemoryDialog(context, provider),
             style: OmiIconButtonStyle.filled,
           ),
-
           const SizedBox(width: 8),
-
           OmiIconButton(
             icon: Icons.more_vert,
             onPressed: () => _showManagementSheet(context, provider),
@@ -517,11 +523,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
       children: [
         OmiEmptyState(
           icon: FontAwesomeIcons.brain,
-          title: provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
-          message: provider.searchQuery.isEmpty && _selectedCategory == null ? 'Create your first memory to get started' : 'Try adjusting your search or filter',
+          title:
+              provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
+          message: provider.searchQuery.isEmpty && _selectedCategory == null
+              ? 'Create your first memory to get started'
+              : 'Try adjusting your search or filter',
           color: ResponsiveHelper.purplePrimary,
         ),
-
         if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
           const SizedBox(height: 24),
           Material(
@@ -784,14 +792,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
   }
 
   void _showManagementSheet(BuildContext context, MemoriesProvider provider) {
-    // TODO: Implement desktop memory management sheet
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Management options coming soon'),
-        backgroundColor: ResponsiveHelper.purplePrimary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(milliseconds: 2000),
+    showDialog(
+      context: context,
+      builder: (context) => DesktopMemoryManagementDialog(
+        provider: provider,
       ),
     );
   }

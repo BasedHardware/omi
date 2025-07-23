@@ -104,7 +104,7 @@ function SetupProvisioningProfile {
 
 
 function SetupAppEnv {
-    $API_BASE_URL = "https://backend-dt5lrfkkoa-uc.a.run.app/"
+    $API_BASE_URL = "https://api.omiapi.com/"
     # Using Set-Content with UTF8 encoding
     $content = "API_BASE_URL=$API_BASE_URL"
     [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)

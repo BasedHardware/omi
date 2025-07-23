@@ -37,10 +37,13 @@ class OmiSelectableTile extends AdaptiveWidget {
               ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
               : const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: BoxDecoration(
-            color: selected ? ResponsiveHelper.backgroundSecondary : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+            color:
+                selected ? ResponsiveHelper.backgroundSecondary : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? ResponsiveHelper.purplePrimary.withOpacity(0.5) : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              color: selected
+                  ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
+                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
               width: 1,
             ),
           ),
@@ -104,4 +107,4 @@ class OmiSelectableTile extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

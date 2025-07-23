@@ -1,4 +1,3 @@
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -192,10 +191,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
         border: Border(
           bottom: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -217,7 +216,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -264,7 +263,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   'Build and submit your custom Omi app',
                   style: TextStyle(
                     fontSize: 12,
-                    color: ResponsiveHelper.textSecondary.withOpacity(0.5),
+                    color: ResponsiveHelper.textSecondary.withValues(alpha: 0.5),
                   ),
                 ),
               ],
@@ -284,15 +283,15 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
       padding: const EdgeInsets.all(20),
       child: Container(
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -369,7 +368,8 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                         ),
 
                         // Prompts section (if applicable) - using desktop widgets
-                        if (provider.isCapabilitySelectedById('chat') || provider.isCapabilitySelectedById('memories')) ...[
+                        if (provider.isCapabilitySelectedById('chat') ||
+                            provider.isCapabilitySelectedById('memories')) ...[
                           const SizedBox(height: 24),
                           _buildDesktopPromptsSection(provider),
                         ],
@@ -414,15 +414,15 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
       child: Container(
         padding: const EdgeInsets.all(40),
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -487,10 +487,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -500,14 +500,14 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
               ),
               border: Border(
                 bottom: BorderSide(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -552,10 +552,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+            color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -623,10 +623,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   height: height,
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -674,7 +674,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                           width: 1,
                         ),
                         image: DecorationImage(
@@ -716,7 +716,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withValues(alpha: 0.6),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close, size: 16, color: Colors.white),
@@ -748,7 +748,8 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                 label: 'Chat Prompt',
                 hint: 'You are an awesome app, your job is to respond to the user queries and make them feel good...',
               ),
-            if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat')) const SizedBox(height: 20),
+            if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat'))
+              const SizedBox(height: 20),
             if (provider.isCapabilitySelectedById('memories'))
               DesktopPromptTextField(
                 controller: provider.conversationPromptController,
@@ -826,14 +827,14 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(16),
           bottomRight: Radius.circular(16),
         ),
         border: Border(
           top: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -849,12 +850,14 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                   decoration: BoxDecoration(
-                    color: provider.isValid ? ResponsiveHelper.purplePrimary : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    color: provider.isValid
+                        ? ResponsiveHelper.purplePrimary
+                        : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: provider.isValid
                         ? [
                             BoxShadow(
-                              color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -897,7 +900,9 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
         builder: (ctx) {
           return ConfirmationDialog(
             title: 'Submit App?',
-            description: provider.makeAppPublic ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!' : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
+            description: provider.makeAppPublic
+                ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
+                : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
             checkboxText: "Don't show it again",
             checkboxValue: !showSubmitAppConfirmation,
             onCheckboxChanged: (value) {

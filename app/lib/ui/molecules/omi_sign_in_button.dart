@@ -38,9 +38,7 @@ class OmiSignInButton extends AdaptiveWidget {
             : Colors.transparent;
 
         final bgColor = outline
-            ? (isHovered && enabled
-                ? ResponsiveHelper.backgroundTertiary
-                : ResponsiveHelper.backgroundSecondary)
+            ? (isHovered && enabled ? ResponsiveHelper.backgroundTertiary : ResponsiveHelper.backgroundSecondary)
             : ResponsiveHelper.purplePrimary;
 
         final fgColor = outline ? ResponsiveHelper.textPrimary : Colors.white;
@@ -95,4 +93,4 @@ class OmiSignInButton extends AdaptiveWidget {
       },
     );
   }
-} 
+}

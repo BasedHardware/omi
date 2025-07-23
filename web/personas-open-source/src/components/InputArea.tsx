@@ -17,84 +17,108 @@ interface InputAreaProps {
   isIntegrating?: boolean;
 }
 
-export const InputArea: React.FC<InputAreaProps> = ({ handle, handleInputChange, handleCreatePersona, isCreating, handleIntegrationClick, isIntegrating }) => (
+export const InputArea: React.FC<InputAreaProps> = ({
+  handle,
+  handleInputChange,
+  handleCreatePersona,
+  isCreating,
+  handleIntegrationClick,
+  isIntegrating,
+}) => (
   <>
     {/* Create Section - Heading Only */}
-    <div className="text-center mx-auto">
-      <h1 className="text-4xl md:text-5xl font-serif font-bold mb-6 md:mb-8">Make Your ChatGPT 5x more personal</h1>
+    <div className="mx-auto text-center">
+      <h1 className="mb-6 font-serif text-4xl font-bold md:mb-8 md:text-5xl">
+        Make Your ChatGPT 5x more personal
+      </h1>
     </div>
 
     {/* Step 1 Instruction */}
-    <p className="text-gray-400 text-sm md:text-base text-center mb-4 font-semibold">
+    <p className="mb-4 text-center text-sm font-semibold text-gray-400 md:text-base">
       Step 1: Pick an app to connect
     </p>
-    
-    <div className="w-full max-w-sm space-y-4 mb-6 md:mb-8">
+
+    <div className="mb-6 w-full max-w-sm space-y-4 md:mb-8">
       {/* Integration Logos/Buttons */}
-      <div className="flex justify-center items-center space-x-6 pb-4">
+      <div className="flex items-center justify-center space-x-6 pb-4">
         {/* Notion */}
         <div className="flex flex-col items-center">
           <button
             onClick={() => handleIntegrationClick?.('notion')}
-            className="bg-zinc-900 border border-zinc-700 shadow-md p-3 rounded-lg transition hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Connect Notion"
             disabled={isIntegrating}
           >
-            <Image src="/logos/notion-logo.png" alt="Notion Logo" width={56} height={56} />
+            <Image
+              src="/logos/notion-logo.png"
+              alt="Notion Logo"
+              width={56}
+              height={56}
+            />
           </button>
-          <span className="text-xs mt-2">Notion</span>
+          <span className="mt-2 text-xs">Notion</span>
         </div>
 
         {/* Gmail */}
         <div className="flex flex-col items-center">
           <button
             onClick={() => handleIntegrationClick?.('mail')}
-            className="bg-zinc-900 border border-zinc-700 shadow-md p-3 rounded-lg transition hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Connect Gmail"
             disabled={isIntegrating}
           >
             <Image src="/logos/gmail-logo.png" alt="Gmail Logo" width={56} height={56} />
           </button>
-          <span className="text-xs mt-2">Gmail</span>
+          <span className="mt-2 text-xs">Gmail</span>
         </div>
 
         {/* Calendar */}
         <div className="flex flex-col items-center">
           <button
             onClick={() => handleIntegrationClick?.('google-calendar')}
-            className="bg-zinc-900 border border-zinc-700 shadow-md p-3 rounded-lg transition hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Connect Google Calendar"
             disabled={isIntegrating}
           >
-            <Image src="/logos/calendar-logo.png" alt="Google Calendar Logo" width={56} height={56} />
+            <Image
+              src="/logos/calendar-logo.png"
+              alt="Google Calendar Logo"
+              width={56}
+              height={56}
+            />
           </button>
-          <span className="text-xs mt-2">Calendar</span>
+          <span className="mt-2 text-xs">Calendar</span>
         </div>
 
         {/* LinkedIn */}
         <div className="flex flex-col items-center">
           <button
             onClick={() => handleIntegrationClick?.('linkedin')}
-            className="bg-zinc-900 border border-zinc-700 shadow-md p-3 rounded-lg transition hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Connect LinkedIn"
             disabled={isIntegrating}
           >
-            <Image src="/logos/linkedin-logo.svg" alt="LinkedIn Logo" width={56} height={56} />
+            <Image
+              src="/logos/linkedin-logo.svg"
+              alt="LinkedIn Logo"
+              width={56}
+              height={56}
+            />
           </button>
-          <span className="text-xs mt-2">LinkedIn</span>
+          <span className="mt-2 text-xs">LinkedIn</span>
         </div>
 
         {/* X */}
         <div className="flex flex-col items-center">
           <button
             onClick={() => handleIntegrationClick?.('x')}
-            className="bg-zinc-900 border border-zinc-700 shadow-md p-3 rounded-lg transition hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Connect X (Twitter)"
             disabled={isIntegrating}
           >
             <Image src="/logos/x-logo.svg" alt="X Logo" width={50} height={50} />
           </button>
-          <span className="text-xs mt-2">X</span>
+          <span className="mt-2 text-xs">X</span>
         </div>
       </div>
     </div>

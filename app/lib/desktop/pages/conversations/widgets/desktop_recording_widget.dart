@@ -231,8 +231,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         ),
         boxShadow: [
           BoxShadow(
-            color:
-                isRecordingOrPaused ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.03),
+            color: isRecordingOrPaused
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -245,14 +246,16 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
             _controlButton(
               icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
               color: isPaused ? ResponsiveHelper.purplePrimary : Colors.orange,
-              onPressed: isInitializing ? null : () => _toggleRecording(context, captureProvider),
+              onPressed: isInitializing || captureProvider.isAutoReconnecting
+                  ? null
+                  : () => _toggleRecording(context, captureProvider),
             ),
             if (hasTranscripts) ...[
               const SizedBox(width: 12),
               _controlButton(
                 icon: Icons.stop_rounded,
                 color: Colors.red,
-                onPressed: () => _stopRecording(context, captureProvider),
+                onPressed: captureProvider.isAutoReconnecting ? null : () => _stopRecording(context, captureProvider),
               ),
             ],
           ] else ...[
@@ -260,7 +263,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               icon: Icons.mic_rounded,
               color: ResponsiveHelper.purplePrimary,
               size: 48,
-              onPressed: isInitializing ? null : () => _toggleRecording(context, captureProvider),
+              onPressed: isInitializing || captureProvider.isAutoReconnecting
+                  ? null
+                  : () => _toggleRecording(context, captureProvider),
             ),
           ],
 
@@ -272,9 +277,11 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isRecordingOrPaused
-                      ? (isPaused ? 'Recording Paused' : 'Recording Active')
-                      : (isInitializing ? 'Setting up...' : 'Start Recording'),
+                  captureProvider.isAutoReconnecting
+                      ? 'Reconnecting...'
+                      : isRecordingOrPaused
+                          ? (isPaused ? 'Recording Paused' : 'Recording Active')
+                          : (isInitializing ? 'Setting up...' : 'Start Recording'),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -286,13 +293,15 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isRecordingOrPaused
-                          ? (latestTranscript.isNotEmpty
-                              ? (latestTranscript.length > 60
-                                  ? '${latestTranscript.substring(0, 60)}...'
-                                  : latestTranscript)
-                              : (isPaused ? 'Tap play to resume' : 'Listening for audio...'))
-                          : (isInitializing ? 'Preparing audio capture' : 'Click to begin recording'),
+                      captureProvider.isAutoReconnecting
+                          ? 'Resuming in ${captureProvider.reconnectCountdown}s...'
+                          : isRecordingOrPaused
+                              ? (latestTranscript.isNotEmpty
+                                  ? (latestTranscript.length > 60
+                                      ? '${latestTranscript.substring(0, 60)}...'
+                                      : latestTranscript)
+                                  : (isPaused ? 'Tap play to resume' : 'Listening for audio...'))
+                              : (isInitializing ? 'Preparing audio capture' : 'Click to begin recording'),
                       style: TextStyle(
                         fontSize: 14,
                         color: isRecordingOrPaused ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
@@ -397,7 +406,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
 
   @override
   Widget build(BuildContext context) {
-
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
       builder: (context, captureProvider, deviceProvider, connectivityProvider, child) {
         final recordingState = captureProvider.recordingState;
@@ -540,7 +548,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     );
   }
 
-  String _getStatusText(RecordingState state, bool isPaused) {
+  String _getStatusText(RecordingState state, bool isPaused, CaptureProvider captureProvider) {
+    if (captureProvider.isAutoReconnecting) return 'Reconnecting...';
     if (isPaused) return 'Paused';
     switch (state) {
       case RecordingState.initialising:
@@ -552,7 +561,10 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     }
   }
 
-  String _getSubtitleText(RecordingState state, bool isPaused) {
+  String _getSubtitleText(RecordingState state, bool isPaused, CaptureProvider captureProvider) {
+    if (captureProvider.isAutoReconnecting) {
+      return 'Microphone changed. Resuming in ${captureProvider.reconnectCountdown}s';
+    }
     if (isPaused) return 'Click play to resume or stop to finish';
     switch (state) {
       case RecordingState.initialising:
@@ -663,7 +675,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     }
   }
 
-
   Widget _buildTranslationNotice() {
     return const Opacity(
       opacity: 0.5,
@@ -689,8 +700,29 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     );
   }
 
-  Widget _buildFullRecordingView(bool isRecording, bool isInitializing, bool isPaused, bool hasTranscripts,
-      RecordingState recordingState, CaptureProvider captureProvider) {
+  Widget _buildAudioLevelBar(double level, Color color) {
+    final double normalizedLevel = (level / 0.05).clamp(0.0, 1.0);
+    const double maxHeight = 16.0;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 100),
+      curve: Curves.easeOut,
+      height: (maxHeight * normalizedLevel).clamp(2.0, maxHeight),
+      width: 4,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
+  Widget _buildFullRecordingView(
+    bool isRecording,
+    bool isInitializing,
+    bool isPaused,
+    bool hasTranscripts,
+    RecordingState recordingState,
+    CaptureProvider captureProvider,
+  ) {
     return Column(
       children: [
         // Recording header
@@ -756,7 +788,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                       icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
                       color: isPaused ? ResponsiveHelper.purplePrimary : Colors.orange,
                       size: 48,
-                      onPressed: isInitializing ? null : () => _toggleRecording(context, captureProvider),
+                      onPressed: isInitializing || captureProvider.isAutoReconnecting
+                          ? null
+                          : () => _toggleRecording(context, captureProvider),
                     ),
 
                   if ((isRecording || isPaused) && hasTranscripts) ...[
@@ -765,7 +799,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                       icon: Icons.stop_rounded,
                       color: Colors.red,
                       size: 48,
-                      onPressed: () => _stopRecording(context, captureProvider),
+                      onPressed:
+                          captureProvider.isAutoReconnecting ? null : () => _stopRecording(context, captureProvider),
                     ),
                   ],
 
@@ -775,7 +810,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                       icon: Icons.mic_rounded,
                       color: ResponsiveHelper.purplePrimary,
                       size: 48,
-                      onPressed: isInitializing ? null : () => _toggleRecording(context, captureProvider),
+                      onPressed: isInitializing || captureProvider.isAutoReconnecting
+                          ? null
+                          : () => _toggleRecording(context, captureProvider),
                     ),
                 ],
               ),
@@ -784,7 +821,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
 
               // Status text
               Text(
-                _getStatusText(recordingState, isPaused),
+                _getStatusText(recordingState, isPaused, captureProvider),
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
@@ -796,13 +833,16 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               const SizedBox(height: 8),
 
               Text(
-                _getSubtitleText(recordingState, isPaused),
+                _getSubtitleText(recordingState, isPaused, captureProvider),
                 style: const TextStyle(
                   fontSize: 16,
                   color: ResponsiveHelper.textTertiary,
                 ),
                 textAlign: TextAlign.center,
               ),
+
+              const SizedBox(height: 24),
+              if (isRecording || isPaused) _buildAudioSourceStatus(captureProvider),
             ],
           ),
         ),
@@ -813,6 +853,53 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
             margin: const EdgeInsets.fromLTRB(32, 0, 32, 32),
             child: _buildAnimatedTranscript(captureProvider.segments, isRecording, true),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAudioSourceStatus(CaptureProvider captureProvider) {
+    final micName = captureProvider.microphoneName;
+    final micLevel = captureProvider.microphoneLevel;
+    final systemLevel = captureProvider.systemAudioLevel;
+
+    if (micName == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Microphone
+        Tooltip(
+          message: micName ?? 'Default Microphone',
+          child: Row(
+            children: [
+              const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+              const SizedBox(width: 8),
+              const Text(
+                'Mic',
+                style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+              ),
+              const SizedBox(width: 8),
+              _buildAudioLevelBar(micLevel, ResponsiveHelper.purplePrimary),
+            ],
+          ),
+        ),
+        const SizedBox(width: 24),
+        // System Audio
+        Row(
+          children: [
+            const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+            const SizedBox(width: 8),
+            const Text(
+              'System',
+              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+            ),
+            const SizedBox(width: 8),
+            _buildAudioLevelBar(systemLevel, Colors.orange.shade600),
+          ],
         ),
       ],
     );

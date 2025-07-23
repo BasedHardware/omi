@@ -72,6 +72,11 @@ dist/
 **/macos/.generated/
 **/macos/Runner.xcworkspace
 **/macos/**/GeneratedPluginRegistrant.*
+**/macos/GoogleService-Info.plist
+**/macos/Runner/GoogleService-Info.plist
+**/macos/GoogleService-Info.plist
+**/macos/Config/*
+**/macos/Config/**/*
 
 # Linux specific
 **/linux/.dart_tool/
@@ -90,6 +95,7 @@ dist/
 # Miscellaneous
 !app/pubspec.lock
 !app/ios/Podfile.lock
+!mcp/uv.lock
 *.lock
 *.log
 *.swo

@@ -45,8 +45,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
+	<key>LSBackgroundOnly</key>
+	<false/>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>LSUIElement</key>
+	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth permission is required to connect with your Omi.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
@@ -71,21 +75,21 @@
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Omi records your microphone audio as part of conversation recording feature and transcribes in real-time</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Omi records screen and system audio as part of conversation recording feature and transcribes in real-time.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>PermissionGroupNotification</key>
-	<string>You need to enable notifications to receive your pro-active feedback.</string>
-	<key>LSUIElement</key>
-	<false/>
-	<key>LSBackgroundOnly</key>
-	<false/>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>PermissionGroupNotification</key>
+	<string>You need to enable notifications to receive your pro-active feedback.</string>
 	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>

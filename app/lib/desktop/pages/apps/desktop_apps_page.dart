@@ -8,6 +8,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 import 'widgets/desktop_app_grid.dart';
 import 'widgets/desktop_filter_chips.dart';
@@ -50,6 +51,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().addListener(_handleAppProviderChange);
+      MixpanelManager().pageOpened('Apps');
     });
   }
 
@@ -59,8 +61,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       // Small delay to ensure all state updates are complete
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
-          setState(() {
-          });
+          setState(() {});
         }
       });
     }
@@ -270,7 +271,6 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           );
                         }
 
-
                         return Text(
                           'Browse, install, and create apps',
                           style: responsive.bodyMedium.copyWith(
@@ -289,10 +289,16 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                 child: OmiSearchInput(
                   controller: _searchController,
                   focusNode: _searchFocusNode,
-                  onChanged: (query) => _debouncer.run(() => appProvider.searchApps(query)),
+                  onChanged: (query) => _debouncer.run(() {
+                    appProvider.searchApps(query);
+                    if (query.isNotEmpty) {
+                      MixpanelManager().memorySearched(query, appProvider.filteredApps.length);
+                    }
+                  }),
                   onClear: () {
                     _searchController.clear();
                     appProvider.searchApps('');
+                    MixpanelManager().memorySearchCleared(appProvider.apps.length);
                     _searchFocusNode.unfocus();
                   },
                   hint: 'Search apps...',
@@ -305,7 +311,10 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
               OmiButton(
                 label: 'Create App',
                 icon: Icons.add_rounded,
-                onPressed: () => _navigateToCreateApp(context),
+                onPressed: () {
+                  MixpanelManager().pageOpened('Submit App');
+                  _navigateToCreateApp(context);
+                },
                 type: OmiButtonType.primary,
               ),
             ],
@@ -355,6 +364,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
           // Clear all button
           TextButton.icon(
             onPressed: () {
+              MixpanelManager().appsClearFilters();
               appProvider.clearFilters();
             },
             icon: const Icon(Icons.clear_all, size: 16),
@@ -417,6 +427,23 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
           SizedBox(width: responsive.spacing(baseSpacing: 6)),
           GestureDetector(
             onTap: () {
+              // Track filter removal based on filter type
+              if (value is Category) {
+                MixpanelManager().appsCategoryFilter(value.title, false);
+              } else if (value is AppCapability) {
+                MixpanelManager().appsCapabilityFilter(value.title, false);
+              } else if (value is String) {
+                if (value == 'Installed Apps' || value == 'My Apps') {
+                  MixpanelManager().appsTypeFilter(value, false);
+                } else if (value.startsWith('1+') ||
+                    value.startsWith('2+') ||
+                    value.startsWith('3+') ||
+                    value.startsWith('4+')) {
+                  MixpanelManager().appsRatingFilter(value, false);
+                } else if (value == 'A-Z' || value == 'Z-A' || value == 'Highest Rating' || value == 'Lowest Rating') {
+                  MixpanelManager().appsSortFilter(value, false);
+                }
+              }
               appProvider.removeFilter(key);
             },
             child: const Icon(
@@ -725,7 +752,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     return slivers;
   }
 
-  Widget _buildCategorySection(ResponsiveHelper responsive, AppProvider appProvider, dynamic category, List<App> categoryApps) {
+  Widget _buildCategorySection(
+      ResponsiveHelper responsive, AppProvider appProvider, dynamic category, List<App> categoryApps) {
     // Show up to 8 apps from this category
     final displayApps = categoryApps.take(8).toList();
 
@@ -774,6 +802,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                   TextButton.icon(
                     onPressed: () {
                       // Apply category filter
+                      MixpanelManager().appsCategoryFilter(category.title, true);
                       appProvider.addOrRemoveCategoryFilter(category);
                     },
                     icon: const Icon(Icons.arrow_forward, size: 16),
@@ -881,7 +910,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   Widget _buildCategoryAppCard(ResponsiveHelper responsive, App app) {
     return SizedBox(
-      width: 320, 
+      width: 320,
       height: 120,
       child: Material(
         color: Colors.transparent,
@@ -1041,7 +1070,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   }
 
   Widget _buildAppsGrid(ResponsiveHelper responsive, AppProvider appProvider) {
-    final apps = appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps : appProvider.apps;
+    final apps =
+        appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps : appProvider.apps;
 
     if (apps.isEmpty) {
       return SliverFillRemaining(
@@ -1087,6 +1117,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   }
 
   void _handleAppTap(App app) {
+    MixpanelManager().pageOpened('App Detail');
     _selectedAppNotifier.value = app;
   }
 

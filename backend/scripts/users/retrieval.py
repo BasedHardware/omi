@@ -18,10 +18,10 @@ from utils.conversations.process_conversation import save_structured_vector
 from database.redis_db import has_migrated_retrieval_conversation_id, save_migrated_retrieval_conversation_id
 
 if __name__ == '__main__':
+
     def single(uid, memory, update):
         save_structured_vector(uid, memory, update)
         save_migrated_retrieval_conversation_id(memory.id)
-
 
     uids = get_users_uid()
     for uid in uids:

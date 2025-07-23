@@ -63,14 +63,17 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     return True, remaining, reset_time, 0
 
 
-@router.post('/v2/integrations/{app_id}/user/conversations', response_model=integration_models.EmptyResponse,
-             tags=['integration', 'conversations'])
+@router.post(
+    '/v2/integrations/{app_id}/user/conversations',
+    response_model=integration_models.EmptyResponse,
+    tags=['integration', 'conversations'],
+)
 async def create_conversation_via_integration(
     request: Request,
     app_id: str,
     create_conversation: conversation_models.ExternalIntegrationCreateConversation,
     uid: str,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
 ):
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
@@ -95,9 +98,14 @@ async def create_conversation_via_integration(
         raise HTTPException(status_code=403, detail="App does not have the capability to create conversations")
 
     # Time
-    started_at = create_conversation.started_at if create_conversation.started_at is not None else datetime.now(timezone.utc)
-    finished_at = create_conversation.finished_at if create_conversation.finished_at is not None else started_at + \
-        timedelta(seconds=300)  # 5 minutes
+    started_at = (
+        create_conversation.started_at if create_conversation.started_at is not None else datetime.now(timezone.utc)
+    )
+    finished_at = (
+        create_conversation.finished_at
+        if create_conversation.finished_at is not None
+        else started_at + timedelta(seconds=300)
+    )  # 5 minutes
     create_conversation.started_at = started_at
     create_conversation.finished_at = finished_at
 
@@ -130,14 +138,17 @@ async def create_conversation_via_integration(
     return {}
 
 
-@router.post('/v2/integrations/{app_id}/user/memories', response_model=integration_models.EmptyResponse,
-             tags=['integration', 'facts'])
+@router.post(
+    '/v2/integrations/{app_id}/user/memories',
+    response_model=integration_models.EmptyResponse,
+    tags=['integration', 'facts'],
+)
 async def create_memories_via_integration(
     request: Request,
     app_id: str,
     fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
 ):
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
@@ -162,9 +173,12 @@ async def create_memories_via_integration(
         raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
 
     # Validate that text is provided or explicit facts are provided
-    if (not fact_data.text or len(fact_data.text.strip()) == 0) and \
-            (not fact_data.memories or len(fact_data.memories) == 0):
-        raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
+    if (not fact_data.text or len(fact_data.text.strip()) == 0) and (
+        not fact_data.memories or len(fact_data.memories) == 0
+    ):
+        raise HTTPException(
+            status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty"
+        )
 
     # Process and save the memory using the utility function
     process_external_integration_memory(uid, fact_data, app_id)
@@ -173,14 +187,17 @@ async def create_memories_via_integration(
     return {}
 
 
-@router.post('/v2/integrations/{app_id}/user/facts', response_model=integration_models.EmptyResponse,
-             tags=['integration', 'facts'])
+@router.post(
+    '/v2/integrations/{app_id}/user/facts',
+    response_model=integration_models.EmptyResponse,
+    tags=['integration', 'facts'],
+)
 async def create_facts_via_integration(
     request: Request,
     app_id: str,
     fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
 ):
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
@@ -205,9 +222,12 @@ async def create_facts_via_integration(
         raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
 
     # Validate that text is provided or explicit facts are provided
-    if (not fact_data.text or len(fact_data.text.strip()) == 0) and \
-            (not fact_data.memories or len(fact_data.memories) == 0):
-        raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
+    if (not fact_data.text or len(fact_data.text.strip()) == 0) and (
+        not fact_data.memories or len(fact_data.memories) == 0
+    ):
+        raise HTTPException(
+            status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty"
+        )
 
     # Process and save the memory using the utility function
     process_external_integration_memory(uid, fact_data, app_id)
@@ -216,14 +236,19 @@ async def create_facts_via_integration(
     return {}
 
 
-@router.get('/v2/integrations/{app_id}/memories', response_model=integration_models.MemoriesResponse, response_model_exclude_none=True, tags=['integration', 'facts'])
+@router.get(
+    '/v2/integrations/{app_id}/memories',
+    response_model=integration_models.MemoriesResponse,
+    response_model_exclude_none=True,
+    tags=['integration', 'facts'],
+)
 async def get_memories_via_integration(
     request: Request,
     app_id: str,
     uid: str,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
 ):
     """
     Get all memories (facts) for a user via integration API.
@@ -257,8 +282,12 @@ async def get_memories_via_integration(
     return {"memories": memory_items}
 
 
-@router.get('/v2/integrations/{app_id}/conversations', response_model=integration_models.ConversationsResponse, response_model_exclude_none=True,
-            tags=['integration', 'conversations'])
+@router.get(
+    '/v2/integrations/{app_id}/conversations',
+    response_model=integration_models.ConversationsResponse,
+    response_model_exclude_none=True,
+    tags=['integration', 'conversations'],
+)
 async def get_conversations_via_integration(
     request: Request,
     app_id: str,
@@ -267,10 +296,19 @@ async def get_conversations_via_integration(
     offset: int = Query(0, ge=0),
     include_discarded: bool = Query(False),
     statuses: List[str] = Query([]),
-    start_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations after this date (ISO format)"),
-    end_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations before this date (ISO format)"),
-    max_transcript_segments: int = Query(100, ge=-1, le=1000, description="Maximum number of transcript segments to include per conversation. Use -1 for no limit."),
-    authorization: Optional[str] = Header(None)
+    start_date: Optional[Union[datetime, str]] = Query(
+        None, description="Filter conversations after this date (ISO format)"
+    ),
+    end_date: Optional[Union[datetime, str]] = Query(
+        None, description="Filter conversations before this date (ISO format)"
+    ),
+    max_transcript_segments: int = Query(
+        100,
+        ge=-1,
+        le=1000,
+        description="Maximum number of transcript segments to include per conversation. Use -1 for no limit.",
+    ),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Get all conversations for a user via integration API.
@@ -307,13 +345,17 @@ async def get_conversations_via_integration(
         try:
             start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)")
+            raise HTTPException(
+                status_code=400, detail="Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)"
+            )
 
     if isinstance(end_date, str) and end_date:
         try:
             end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)")
+            raise HTTPException(
+                status_code=400, detail="Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)"
+            )
 
     conversations_data = conversations_db.get_conversations(
         uid,
@@ -322,7 +364,7 @@ async def get_conversations_via_integration(
         include_discarded=include_discarded,
         statuses=statuses,
         start_date=start_date,
-        end_date=end_date
+        end_date=end_date,
     )
 
     # Convert database conversations
@@ -332,8 +374,11 @@ async def get_conversations_via_integration(
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments
-            if max_transcript_segments != -1 and item.transcript_segments and \
-                    len(item.transcript_segments) > max_transcript_segments:
+            if (
+                max_transcript_segments != -1
+                and item.transcript_segments
+                and len(item.transcript_segments) > max_transcript_segments
+            ):
                 item.transcript_segments = item.transcript_segments[:max_transcript_segments]
 
             # Convert to dict with exclude_none=True to remove null values
@@ -347,15 +392,24 @@ async def get_conversations_via_integration(
     return response.dict(exclude_none=True)
 
 
-@router.post('/v2/integrations/{app_id}/search/conversations', response_model=integration_models.SearchConversationsResponse,
-             response_model_exclude_none=True, tags=['integration', 'conversations'])
+@router.post(
+    '/v2/integrations/{app_id}/search/conversations',
+    response_model=integration_models.SearchConversationsResponse,
+    response_model_exclude_none=True,
+    tags=['integration', 'conversations'],
+)
 async def search_conversations_via_integration(
     request: Request,
     app_id: str,
     uid: str,
     search_request: SearchRequest,
-    max_transcript_segments: int = Query(100, ge=-1, le=1000, description="Maximum number of transcript segments to include per conversation. Use -1 for no limit."),
-    authorization: Optional[str] = Header(None)
+    max_transcript_segments: int = Query(
+        100,
+        ge=-1,
+        le=1000,
+        description="Maximum number of transcript segments to include per conversation. Use -1 for no limit.",
+    ),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Search conversations for a user via integration API.
@@ -401,7 +455,7 @@ async def search_conversations_via_integration(
         uid=uid,
         include_discarded=search_request.include_discarded,
         start_date=start_timestamp,
-        end_date=end_timestamp
+        end_date=end_timestamp,
     )
 
     # Extract conversation IDs from search results
@@ -419,8 +473,11 @@ async def search_conversations_via_integration(
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments
-            if max_transcript_segments != -1 and item.transcript_segments and \
-                    len(item.transcript_segments) > max_transcript_segments:
+            if (
+                max_transcript_segments != -1
+                and item.transcript_segments
+                and len(item.transcript_segments) > max_transcript_segments
+            ):
                 item.transcript_segments = item.transcript_segments[:max_transcript_segments]
 
             conversation_items.append(item)
@@ -433,20 +490,19 @@ async def search_conversations_via_integration(
         conversations=conversation_items,
         total_pages=search_results['total_pages'],
         current_page=search_results['current_page'],
-        per_page=search_results['per_page']
+        per_page=search_results['per_page'],
     )
 
     return response.dict(exclude_none=True)
 
 
-@router.post('/v2/integrations/{app_id}/notification', response_model=integration_models.EmptyResponse,
-             tags=['integration', 'notifications'])
+@router.post(
+    '/v2/integrations/{app_id}/notification',
+    response_model=integration_models.EmptyResponse,
+    tags=['integration', 'notifications'],
+)
 async def send_notification_via_integration(
-    request: Request,
-    app_id: str,
-    message: str,
-    uid: str,
-    authorization: Optional[str] = Header(None)
+    request: Request, app_id: str, message: str, uid: str, authorization: Optional[str] = Header(None)
 ):
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
@@ -483,15 +539,9 @@ async def send_notification_via_integration(
         return JSONResponse(
             status_code=429,
             headers=headers,
-            content={
-                'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'
-            }
+            content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
     token = notification_db.get_token_only(uid)
     send_app_notification(token, app.name, app.id, message)
-    return JSONResponse(
-        status_code=200,
-        headers=headers,
-        content={'status': 'Ok'}
-    )
+    return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})

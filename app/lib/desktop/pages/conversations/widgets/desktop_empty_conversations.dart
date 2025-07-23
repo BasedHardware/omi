@@ -21,9 +21,7 @@ class DesktopEmptyConversations extends StatelessWidget {
             iconPadding: 24,
             color: ResponsiveHelper.purplePrimary,
           ),
-
           const SizedBox(height: 16),
-
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(

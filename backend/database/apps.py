@@ -43,8 +43,7 @@ def get_app_by_id_db(app_id: str):
 def get_audio_apps_count(app_ids: List[str]):
     if not app_ids or len(app_ids) == 0:
         return 0
-    filters = [FieldFilter('id', 'in', app_ids),
-               FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
+    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
     apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).count().get()
     return apps_ref[0][0].value
 
@@ -84,8 +83,7 @@ def get_public_approved_apps_db() -> List:
 
 
 def get_popular_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', True),
-               FieldFilter('is_popular', '==', True)]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('is_popular', '==', True)]
     popular_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in popular_apps]
 
@@ -97,8 +95,7 @@ def set_app_popular_db(app_id: str, popular: bool):
 
 # This returns public unapproved apps for a user
 def get_public_unapproved_apps_db(uid: str) -> List:
-    filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid),
-               FieldFilter('private', '==', False)]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('private', '==', False)]
     public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
@@ -161,20 +158,38 @@ def get_app_usage_history_db(app_id: str):
 
 
 def get_app_memory_created_integration_usage_count_db(app_id: str):
-    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').where(
-        filter=FieldFilter('type', '==', UsageHistoryType.memory_created_external_integration)).count().get()
+    usage = (
+        db.collection(app_analytics_collection)
+        .document(app_id)
+        .collection('usage_history')
+        .where(filter=FieldFilter('type', '==', UsageHistoryType.memory_created_external_integration))
+        .count()
+        .get()
+    )
     return usage[0][0].value
 
 
 def get_app_memory_prompt_usage_count_db(app_id: str):
-    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').where(
-        filter=FieldFilter('type', '==', UsageHistoryType.memory_created_prompt)).count().get()
+    usage = (
+        db.collection(app_analytics_collection)
+        .document(app_id)
+        .collection('usage_history')
+        .where(filter=FieldFilter('type', '==', UsageHistoryType.memory_created_prompt))
+        .count()
+        .get()
+    )
     return usage[0][0].value
 
 
 def get_app_chat_message_sent_usage_count_db(app_id: str):
-    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').where(
-        filter=FieldFilter('type', '==', UsageHistoryType.chat_message_sent)).count().get()
+    usage = (
+        db.collection(app_analytics_collection)
+        .document(app_id)
+        .collection('usage_history')
+        .where(filter=FieldFilter('type', '==', UsageHistoryType.chat_message_sent))
+        .count()
+        .get()
+    )
     return usage[0][0].value
 
 
@@ -187,6 +202,7 @@ def get_app_usage_count_db(app_id: str):
 # *********** REVIEWS ************
 # ********************************
 
+
 def set_app_review_in_db(app_id: str, uid: str, review: dict):
     app_ref = db.collection(apps_collection).document(app_id).collection('reviews').document(uid)
     app_ref.set(review)
@@ -195,6 +211,7 @@ def set_app_review_in_db(app_id: str, uid: str, review: dict):
 # ********************************
 # ************ TESTER ************
 # ********************************
+
 
 def add_tester_db(data: dict):
     app_ref = db.collection(testers_collection).document(data['uid'])
@@ -233,9 +250,14 @@ def is_tester_db(uid: str) -> bool:
 # *********** APPS USAGE *********
 # ********************************
 
+
 def record_app_usage(
-        uid: str, app_id: str, usage_type: UsageHistoryType, conversation_id: str = None, message_id: str = None,
-        timestamp: datetime = None
+    uid: str,
+    app_id: str,
+    usage_type: UsageHistoryType,
+    conversation_id: str = None,
+    message_id: str = None,
+    timestamp: datetime = None,
 ):
     if not conversation_id and not message_id:
         raise ValueError('memory_id or message_id must be provided')
@@ -248,14 +270,16 @@ def record_app_usage(
         'type': usage_type,
     }
 
-    db.collection(app_analytics_collection).document(app_id).collection('usage_history').document(conversation_id or message_id).set(
-        data)
+    db.collection(app_analytics_collection).document(app_id).collection('usage_history').document(
+        conversation_id or message_id
+    ).set(data)
     return data
 
 
 # ********************************
 # *********** PERSONAS ***********
 # ********************************
+
 
 def delete_persona_db(persona_id: str):
     persona_ref = db.collection(apps_collection).document(persona_id)
@@ -326,10 +350,7 @@ def create_user_persona_db(persona_data: dict):
 
 
 def get_persona_by_twitter_handle_db(handle: str):
-    filters = [
-        FieldFilter('category', '==', 'personality-emulation'),
-        FieldFilter('twitter.username', '==', handle)
-    ]
+    filters = [FieldFilter('category', '==', 'personality-emulation'), FieldFilter('twitter.username', '==', handle)]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
@@ -344,7 +365,7 @@ def get_persona_by_username_twitter_handle_db(username: str, handle: str):
     filters = [
         FieldFilter('username', '==', username),
         FieldFilter('category', '==', 'personality-emulation'),
-        FieldFilter('twitter.username', '==', handle)
+        FieldFilter('twitter.username', '==', handle),
     ]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
@@ -367,8 +388,7 @@ def get_omi_personas_by_uid_db(uid: str):
 
 
 def get_omi_persona_apps_by_uid_db(uid: str):
-    filters = [FieldFilter('uid', '==', uid),
-               FieldFilter('category', '==', 'personality-emulation')]
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('category', '==', 'personality-emulation')]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters))
     docs = persona_ref.get()
     if not docs:
@@ -414,8 +434,13 @@ def get_api_key_by_id_db(app_id: str, key_id: str):
 def get_api_key_by_hash_db(app_id: str, hashed_key: str):
     """Get an API key by its hash value"""
     filters = [FieldFilter('hashed', '==', hashed_key)]
-    api_keys_ref = db.collection(apps_collection).document(app_id).collection('api_keys').where(
-        filter=BaseCompositeFilter('AND', filters)).limit(1)
+    api_keys_ref = (
+        db.collection(apps_collection)
+        .document(app_id)
+        .collection('api_keys')
+        .where(filter=BaseCompositeFilter('AND', filters))
+        .limit(1)
+    )
     docs = api_keys_ref.get()
     if not docs:
         return None
@@ -427,8 +452,13 @@ def get_api_key_by_hash_db(app_id: str, hashed_key: str):
 
 def list_api_keys_db(app_id: str):
     """List all API keys for an app (excluding the hashed values)"""
-    api_keys_ref = db.collection(apps_collection).document(app_id).collection('api_keys').order_by('created_at',
-                                                                                                   direction='DESCENDING').stream()
+    api_keys_ref = (
+        db.collection(apps_collection)
+        .document(app_id)
+        .collection('api_keys')
+        .order_by('created_at', direction='DESCENDING')
+        .stream()
+    )
     return [{k: v for k, v in doc.to_dict().items() if k != 'hashed'} for doc in api_keys_ref]
 
 

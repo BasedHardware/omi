@@ -31,10 +31,8 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
 
         def send_batch(batch_users):
             messages = [
-                messaging.Message(
-                    notification=messaging.Notification(title=title, body=body),
-                    token=token
-                ) for token in batch_users
+                messaging.Message(notification=messaging.Notification(title=title, body=body), token=token)
+                for token in batch_users
             ]
             return messaging.send_each(messages)
 

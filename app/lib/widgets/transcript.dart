@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -17,7 +18,10 @@ class TranscriptWidget extends StatefulWidget {
   final bool canDisplaySeconds;
   final bool isConversationDetail;
   final double bottomMargin;
-  final Function(int, int)? editSegment;
+  final Function(String, int)? editSegment;
+  final Map<String, SpeakerLabelSuggestionEvent> suggestions;
+  final List<String> taggingSegmentIds;
+  final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
 
   const TranscriptWidget({
     super.key,
@@ -29,6 +33,9 @@ class TranscriptWidget extends StatefulWidget {
     this.isConversationDetail = false,
     this.bottomMargin = 200,
     this.editSegment,
+    this.suggestions = const {},
+    this.taggingSegmentIds = const [],
+    this.onAcceptSuggestion,
   });
 
   @override
@@ -193,165 +200,178 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
+    final suggestion = widget.suggestions[data.id];
+    final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
-
-    final speakerName = isUser
-        ? (SharedPreferencesUtil().givenName.isNotEmpty ? SharedPreferencesUtil().givenName : 'You')
-        : data.personId != null
-            ? person?.name ?? 'Deleted Person'
-            : 'Speaker ${data.speakerId}';
 
     return Padding(
       padding: EdgeInsetsDirectional.fromSTEB(widget.horizontalMargin ? 16 : 0, 2.0, widget.horizontalMargin ? 16 : 0, 2.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row with bubble and avatars (for proper alignment)
-          Row(
-            mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Speaker avatar (only for others, on the left)
-              if (!isUser) ...[
-                GestureDetector(
-                  onTap: () {
-                    widget.editSegment?.call(segmentIdx, data.speakerId);
-                    MixpanelManager().assignSheetOpened();
-                  },
-                  child: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                    child: Image.asset(
-                      person != null ? speakerImagePath[person.colorIdx!] : Assets.images.speaker1Icon.path,
-                      width: 20,
-                      height: 20,
+          // Functional tagging row at top
+          GestureDetector(
+            onTap: () {
+              widget.editSegment?.call(data.id, data.speakerId);
+              MixpanelManager().tagSheetOpened();
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 13,
+                  backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                  child: Image.asset(
+                    data.isUser
+                        ? Assets.images.speaker0Icon.path
+                        : person != null
+                            ? speakerImagePath[person.colorIdx!]
+                            : speakerImagePath[data.speakerId % speakerImagePath.length],
+                    width: 20,
+                    height: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    data.isUser
+                        ? SharedPreferencesUtil().givenName.isNotEmpty
+                            ? SharedPreferencesUtil().givenName
+                            : 'You'
+                        : suggestion != null && person == null && !data.isUser
+                            ? '${suggestion.personName}?'
+                            : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
+                    style: TextStyle(
+                      color: person == null && !data.isUser && !isTagging ? Colors.grey.shade400 : Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                if (!data.speechProfileProcessed && !data.isUser && (data.personId ?? "").isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Tooltip(
+                      message: 'Low confidence speaker identification',
+                      triggerMode: TooltipTriggerMode.tap,
+                      child: const Icon(
+                        Icons.help_outline,
+                        color: Colors.orange,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                if (isTagging) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                ] else if (suggestion != null && person == null && !data.isUser) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => widget.onAcceptSuggestion?.call(suggestion),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      alignment: Alignment.centerLeft,
+                    ),
+                    child: const Text(
+                      'Tag',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white,
+                      ),
+                    ),
+                  )
+                ],
+                if (widget.canDisplaySeconds) ...[
+                  const SizedBox(width: 12),
+                  Text(
+                    data.getTimestampString(),
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
               ],
-
-              // Chat bubble only (no label here for alignment)
+            ),
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // Chat bubble with content
+          Row(
+            mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
               Flexible(
-                child: Align(
-                  alignment: isUser ? Alignment.bottomRight : Alignment.bottomLeft,
-                  child: GestureDetector(
-                    onTap: () {
-                      widget.editSegment?.call(segmentIdx, data.speakerId);
-                      MixpanelManager().assignSheetOpened();
-                    },
-                    child: Container(
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.7,
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.75,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _getSpeakerBubbleColor(isUser, data.speakerId),
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isUser ? 16 : 4),
+                      bottomRight: Radius.circular(isUser ? 4 : 16),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _getSpeakerBubbleColor(isUser, data.speakerId),
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(16),
-                          topRight: const Radius.circular(16),
-                          bottomLeft: Radius.circular(isUser ? 16 : 4),
-                          bottomRight: Radius.circular(isUser ? 4 : 16),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 3,
-                            offset: const Offset(0, 1),
+                    ],
+                  ),
+                  child: SelectionArea(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _getDecodedText(data.text),
+                          style: TextStyle(
+                            letterSpacing: 0.0,
+                            color: isUser ? Colors.white : Colors.grey.shade200,
+                            fontSize: 15,
+                            height: 1.3,
                           ),
-                        ],
-                      ),
-                      child: SelectionArea(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _getDecodedText(data.text),
-                              style: TextStyle(
-                                letterSpacing: 0.0,
-                                color: isUser ? Colors.white : Colors.grey.shade200,
-                                fontSize: 15,
-                                height: 1.3,
-                              ),
-                              textAlign: TextAlign.left,
-                            ),
-                            if (data.translations.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              ...data.translations.map((translation) => Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(
-                                      _getDecodedText(translation.text),
-                                      style: TextStyle(
-                                        letterSpacing: 0.0,
-                                        color: isUser ? Colors.white.withOpacity(0.8) : Colors.grey.shade300.withOpacity(0.8),
-                                        fontSize: 14,
-                                        fontStyle: FontStyle.italic,
-                                        height: 1.3,
-                                      ),
-                                      textAlign: TextAlign.left,
-                                    ),
-                                  )),
-                              const SizedBox(height: 4),
-                              _buildTranslationNotice(),
-                            ],
-                          ],
+                          textAlign: TextAlign.left,
                         ),
-                      ),
+                        if (data.translations.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          ...data.translations.map((translation) => Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  _getDecodedText(translation.text),
+                                  style: TextStyle(
+                                    letterSpacing: 0.0,
+                                    color: isUser ? Colors.white.withOpacity(0.8) : Colors.grey.shade300.withOpacity(0.8),
+                                    fontSize: 14,
+                                    fontStyle: FontStyle.italic,
+                                    height: 1.3,
+                                  ),
+                                  textAlign: TextAlign.left,
+                                ),
+                              )),
+                          const SizedBox(height: 4),
+                          _buildTranslationNotice(),
+                        ],
+                      ],
                     ),
                   ),
                 ),
               ),
-
-              // User avatar (only for user, on the right)
-              if (isUser) ...[
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () {
-                    widget.editSegment?.call(segmentIdx, data.speakerId);
-                    MixpanelManager().assignSheetOpened();
-                  },
-                  child: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                    child: Image.asset(
-                      Assets.images.speaker0Icon.path,
-                      width: 20,
-                      height: 20,
-                    ),
-                  ),
-                ),
-              ],
             ],
-          ),
-
-          // Speaker name below the entire row (for all speakers)
-          Padding(
-            padding: EdgeInsets.only(
-              top: 4,
-              left: isUser ? 0 : 40, // 32 (avatar + gap) + 8 (extra padding) for non-users
-              right: isUser ? 40 : 0, // 32 (avatar + gap) + 8 (extra padding) for users
-            ),
-            child: Row(
-              mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-              children: [
-                Text(
-                  speakerName,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-                // Commented out timestamp - can be restored later if needed
-                // if (widget.canDisplaySeconds) ...[
-                //   const SizedBox(width: 8),
-                //   Text(
-                //     data.getTimestampString(),
-                //     style: const TextStyle(color: Colors.grey, fontSize: 9),
-                //   ),
-                // ],
-              ],
-            ),
           ),
         ],
       ),

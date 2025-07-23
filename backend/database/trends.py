@@ -16,8 +16,13 @@ def get_trends_data() -> List[Dict]:
     for category in trends_docs:
         try:
             category_data = category.to_dict()
-            if category_data['category'] not in ['ceo', 'company', 'software_product', 'hardware_product',
-                                                 'ai_product']:
+            if category_data['category'] not in [
+                'ceo',
+                'company',
+                'software_product',
+                'hardware_product',
+                'ai_product',
+            ]:
                 continue
 
             category_topics_ref = trends_ref.document(category_data['id']).collection('topics')
@@ -51,8 +56,7 @@ def save_trends(memory: Conversation, trends: List[Trend]):
         category_doc_ref = trends_coll_ref.document(category_id)
 
         category_doc_ref.set(
-            {"id": category_id, "category": category, "type": trend_type, "created_at": datetime.utcnow()},
-            merge=True
+            {"id": category_id, "category": category, "type": trend_type, "created_at": datetime.utcnow()}, merge=True
         )
 
         topics_coll_ref = category_doc_ref.collection('topics')

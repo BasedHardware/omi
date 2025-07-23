@@ -9,8 +9,16 @@ from pydantic import BaseModel
 
 from database import conversations as conversations_db, memories as memories_db, chat as chat_db
 from database.conversations import get_in_progress_conversation, get_conversation
-from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
-    enable_user_webhook_db, user_webhook_status_db, set_user_preferred_app, set_user_data_protection_level
+from database.redis_db import (
+    cache_user_geolocation,
+    set_user_webhook_db,
+    get_user_webhook_db,
+    disable_user_webhook_db,
+    enable_user_webhook_db,
+    user_webhook_status_db,
+    set_user_preferred_app,
+    set_user_data_protection_level,
+)
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
@@ -18,8 +26,11 @@ from models.users import WebhookType
 from utils.apps import get_available_app_by_id
 from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
-from utils.other.storage import delete_all_conversation_recordings, get_user_person_speech_samples, \
-    delete_user_person_speech_samples
+from utils.other.storage import (
+    delete_all_conversation_recordings,
+    get_user_person_speech_samples,
+    delete_user_person_speech_samples,
+)
 from utils.webhooks import webhook_first_time_setup
 
 router = APIRouter()
@@ -116,13 +127,14 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
         'audio_bytes': audio_bytes,
         'memory_created': memory_created,
         'realtime_transcript': realtime_transcript,
-        'day_summary': day_summary
+        'day_summary': day_summary,
     }
 
 
 # *************************************************
 # ************* RECORDING PERMISSION **************
 # *************************************************
+
 
 @router.post('/v1/users/store-recording-permission', tags=['v1'])
 def store_recording_permission(value: bool, uid: str = Depends(auth.get_current_user_uid)):
@@ -146,6 +158,7 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 # ************* PEOPLE CRUD **************
 # ****************************************
 
+
 # TODO: consider adding person photo.
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
 def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
@@ -161,7 +174,7 @@ def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_us
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
 def get_single_person(
-        person_id: str, include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)
+    person_id: str, include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)
 ):
     person = get_person(uid, person_id)
     if not person:
@@ -176,6 +189,7 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
+
         def single(person):
             person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
 
@@ -187,9 +201,9 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
 
 @router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
 def update_person_name(
-        person_id: str,
-        value: str,  # = Field(min_length=2, max_length=40),
-        uid: str = Depends(auth.get_current_user_uid),
+    person_id: str,
+    value: str,  # = Field(min_length=2, max_length=40),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     update_person(uid, person_id, value)
     return {'status': 'ok'}
@@ -223,11 +237,12 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
 # ************* Analytics **************
 # **************************************
 
+
 @router.post('/v1/users/analytics/memory_summary', tags=['v1'])
 def set_memory_summary_rating(
-        memory_id: str,
-        value: int,  # 0, 1, -1 (shown)
-        uid: str = Depends(auth.get_current_user_uid),
+    memory_id: str,
+    value: int,  # 0, 1, -1 (shown)
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     set_conversation_summary_rating_score(uid, memory_id, value)
     return {'status': 'ok'}
@@ -235,8 +250,8 @@ def set_memory_summary_rating(
 
 @router.get('/v1/users/analytics/memory_summary', tags=['v1'])
 def get_memory_summary_rating(
-        memory_id: str,
-        _: str = Depends(auth.get_current_user_uid),
+    memory_id: str,
+    _: str = Depends(auth.get_current_user_uid),
 ):
     rating = get_conversation_summary_rating_score(memory_id)
     # TODO: later ask reason, a set of options, if user says good, whats the best, if bad, whats the worst
@@ -247,9 +262,9 @@ def get_memory_summary_rating(
 
 @router.post('/v1/users/analytics/chat_message', tags=['v1'])
 def set_chat_message_analytics(
-        message_id: str,
-        value: int,
-        uid: str = Depends(auth.get_current_user_uid),
+    message_id: str,
+    value: int,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     set_chat_message_rating_score(uid, message_id, value)
     return {'status': 'ok'}
@@ -258,6 +273,7 @@ def set_chat_message_analytics(
 # ***************************************
 # ************* Language ****************
 # ***************************************
+
 
 @router.get('/v1/users/language', tags=['v1'])
 def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
@@ -282,10 +298,10 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
 # ********* Data Protection ************
 # **************************************
 
+
 @router.post('/v1/users/migration/requests', tags=['v1'])
 def handle_migration_requests(
-    request: Union[MigrationRequest, MigrationTargetRequest],
-    uid: str = Depends(auth.get_current_user_uid)
+    request: Union[MigrationRequest, MigrationTargetRequest], uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     Handles data migration requests.
@@ -317,7 +333,9 @@ def handle_migration_requests(
     elif isinstance(request, MigrationTargetRequest):
         # This is for starting the migration process
         if request.target_level != 'enhanced':
-            raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
+            raise HTTPException(
+                status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported."
+            )
 
         set_migration_status(uid, request.target_level)
         return {'status': 'ok', 'message': 'Migration status set.'}
@@ -338,8 +356,7 @@ def get_migration_requests(target_level: str, uid: str = Depends(auth.get_curren
 
 @router.post('/v1/users/migration/batch-requests', tags=['v1'])
 def handle_batch_migration_requests(
-    batch_request: BatchMigrationRequest,
-    uid: str = Depends(auth.get_current_user_uid)
+    batch_request: BatchMigrationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Migrates a batch of data objects to the target protection level."""
     errors = []
@@ -386,8 +403,8 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
 
 @router.put('/v1/users/preferences/app', tags=['v1'])
 def set_preferred_app_for_user(
-        app_id: str = Query(..., description="The ID of the app to set as preferred"),
-        uid: str = Depends(auth.get_current_user_uid)
+    app_id: str = Query(..., description="The ID of the app to set as preferred"),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Sets the user's preferred app for future processing."""
 
