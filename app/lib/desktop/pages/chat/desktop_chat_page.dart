@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -17,6 +18,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -34,6 +36,8 @@ import 'package:omi/ui/atoms/omi_message_input.dart';
 import 'package:omi/ui/atoms/omi_send_button.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_section_header.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/ui/molecules/omi_session_tile.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -130,8 +134,16 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
+      var sessionProvider = context.read<ChatSessionProvider>();
+      
+      // Load sessions from cache first for instant UI
+      sessionProvider.setSessionsFromCache();
+      
+      // Then load sessions from server
+      await sessionProvider.loadSessions();
+      
       if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+        provider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
       }
 
       _fadeController.forward();
@@ -156,8 +168,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
-      builder: (context, provider, connectivityProvider, appProvider, child) {
+    return Consumer4<MessageProvider, ConnectivityProvider, AppProvider, ChatSessionProvider>(
+      builder: (context, provider, connectivityProvider, appProvider, sessionProvider, child) {
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -172,6 +184,25 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
+            child: Row(
+              children: [
+                // Sessions sidebar
+                Container(
+                  width: 300,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
+                    border: Border(
+                      right: BorderSide(
+                        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: _buildSessionsSidebar(sessionProvider, appProvider),
+                ),
+                
+                // Main chat area
+                Expanded(
             child: Stack(
               children: [
                 // Animated background pattern
@@ -181,7 +212,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(20),
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(20),
+                            bottomRight: Radius.circular(20),
+                          ),
                   ),
                   child: Column(
                     children: [
@@ -199,6 +233,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                             : _buildChatContent(provider, connectivityProvider),
                       ),
                       _buildFloatingInputArea(provider, connectivityProvider),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1415,11 +1452,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   void _sendMessageUtil(String text) {
     var provider = context.read<MessageProvider>();
+    var sessionProvider = context.read<ChatSessionProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     scrollToBottom();
     textController.clear();
-    provider.sendMessageStreamToServer(text);
+    provider.sendMessageStreamToServer(text, chatSessionId: sessionProvider.currentSessionId, context: context);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }
@@ -1671,7 +1709,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       appProvider.setSelectedChatAppId(app?.id);
 
       final messageProvider = context.read<MessageProvider>();
-      await messageProvider.refreshMessages(dropdownSelected: true);
+      final sessionProvider = context.read<ChatSessionProvider>();
+      
+      // Refresh sessions for the new app
+      await sessionProvider.refreshOnAppChange();
+      
+      await messageProvider.refreshMessages(dropdownSelected: true, chatSessionId: sessionProvider.currentSessionId);
 
       if (messageProvider.messages.isEmpty) {
         messageProvider.sendInitialAppMessage(app);
@@ -1699,7 +1742,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         context,
         () => Navigator.of(context).pop(),
         () {
-          context.read<MessageProvider>().clearChat();
+          final sessionProvider = context.read<ChatSessionProvider>();
+          context.read<MessageProvider>().clearChat(chatSessionId: sessionProvider.currentSessionId);
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1715,5 +1759,127 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         'Are you sure you want to clear the chat? This action cannot be undone.',
       ),
     );
+  }
+
+  void _showDeleteSessionDialog(BuildContext context, ChatSessionProvider sessionProvider, ChatSession session) async {
+    final confirmed = await OmiConfirmDialog.show(
+      context,
+      title: 'Delete Session?',
+      message: 'Are you sure you want to delete the chat session "${session.displayTitle}"? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      confirmColor: ResponsiveHelper.errorColor,
+    );
+
+    if (confirmed == true) {
+      await sessionProvider.deleteSession(session);
+      
+      // Refresh messages for the new current session
+      final messageProvider = context.read<MessageProvider>();
+      await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+      scrollToBottom();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Chat session "${session.displayTitle}" deleted'),
+          backgroundColor: ResponsiveHelper.backgroundTertiary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Widget _buildSessionsSidebar(ChatSessionProvider sessionProvider, AppProvider appProvider) {
+    return Column(
+      children: [
+        // Header with new session button
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Text(
+                'Chat Sessions',
+                style: TextStyle(
+                  color: ResponsiveHelper.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              OmiIconButton(
+                icon: Icons.add,
+                onPressed: () async {
+                  await sessionProvider.createNewSession();
+                  // Refresh messages for the new session
+                  final messageProvider = context.read<MessageProvider>();
+                  await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+                  scrollToBottom();
+                },
+                style: OmiIconButtonStyle.filled,
+                size: 32,
+                iconSize: 16,
+              ),
+            ],
+          ),
+        ),
+
+        // Sessions list
+        Expanded(
+          child: sessionProvider.isLoadingSessions
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: sessionProvider.sessions.length,
+                  itemBuilder: (context, index) {
+                    final session = sessionProvider.sessions[index];
+                    final isActive = session.id == sessionProvider.currentSessionId;
+                    
+                    return OmiSessionTile(
+                      title: session.displayTitle,
+                      subtitle: _formatSessionTime(session.createdAt),
+                      isActive: isActive,
+                      onTap: () => _handleSessionSwitch(sessionProvider, session),
+                      onDelete: sessionProvider.sessions.length > 1
+                          ? () => _showDeleteSessionDialog(context, sessionProvider, session)
+                          : null,
+                      showDeleteButton: sessionProvider.sessions.length > 1,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  String _formatSessionTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  void _handleSessionSwitch(ChatSessionProvider sessionProvider, ChatSession session) async {
+    if (sessionProvider.currentSessionId == session.id) return;
+    
+    await sessionProvider.switchToSession(session);
+    
+    // Refresh messages for the new session
+    final messageProvider = context.read<MessageProvider>();
+    await messageProvider.refreshMessages(chatSessionId: session.id);
+    
+    scrollToBottom();
   }
 }
