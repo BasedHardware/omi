@@ -155,7 +155,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
                     : null,
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.white,
-                  backgroundColor: isConfirmed ? Colors.deepPurple : Colors.grey.shade800,
+                  backgroundColor: isConfirmed ? Colors.deepPurple : Color(0xFF35343B),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),

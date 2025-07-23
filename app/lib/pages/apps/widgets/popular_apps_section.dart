@@ -101,7 +101,7 @@ class PopularAppsSection extends StatelessWidget {
                         width: 60,
                         height: 60,
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade800,
+                          color: Color(0xFF35343B),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: CachedNetworkImage(

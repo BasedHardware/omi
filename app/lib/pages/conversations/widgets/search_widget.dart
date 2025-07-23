@@ -52,7 +52,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                     color: const Color(0xFF1F1F25),
                     border: Border(
                       bottom: BorderSide(
-                        color: Colors.grey.shade800,
+                        color: Color(0xFF35343B),
                         width: 0.5,
                       ),
                     ),

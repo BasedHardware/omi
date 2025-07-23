@@ -82,7 +82,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
               const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade800,
+                  color: Color(0xFF35343B),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -143,7 +143,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                         ),
                         selected: isSelected,
                         showCheckmark: false,
-                        backgroundColor: Colors.grey.shade800,
+                        backgroundColor: Color(0xFF35343B),
                         selectedColor: Colors.white,
                         onSelected: (bool selected) {
                           if (selected) {

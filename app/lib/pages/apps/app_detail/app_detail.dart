@@ -454,7 +454,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           text: '',
                           width: MediaQuery.of(context).size.width * 0.9,
                           onPressed: () async {},
-                          color: Colors.grey.shade800,
+                          color: Color(0xFF35343B),
                         ),
                       ),
                     )

@@ -97,7 +97,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             bottom: isLast
                 ? BorderSide.none
                 : BorderSide(
-                    color: Colors.grey.shade800,
+                    color: Color(0xFF35343B),
                     width: 0.5,
                   ),
           ),

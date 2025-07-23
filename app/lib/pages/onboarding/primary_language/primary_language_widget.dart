@@ -137,11 +137,11 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
               fillColor: const Color(0xFF2A2A2A),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade800),
+                borderSide: BorderSide(color: Color(0xFF35343B)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade800),
+                borderSide: BorderSide(color: Color(0xFF35343B)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),

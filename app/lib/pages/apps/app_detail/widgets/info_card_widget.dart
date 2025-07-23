@@ -56,7 +56,7 @@ class InfoCardWidget extends StatelessWidget {
                           backgroundColor: Colors.transparent,
                           shape: StadiumBorder(
                             side: BorderSide(
-                              color: Colors.grey.shade800,
+                              color: Color(0xFF35343B),
                             ),
                           ),
                         ))
@@ -77,7 +77,7 @@ class InfoCardWidget extends StatelessWidget {
                           backgroundColor: Colors.transparent,
                           shape: StadiumBorder(
                             side: BorderSide(
-                              color: Colors.grey.shade800,
+                              color: Color(0xFF35343B),
                             ),
                           ),
                         ))
