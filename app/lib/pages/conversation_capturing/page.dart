@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
@@ -7,9 +8,13 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/people_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
+import 'package:omi/widgets/photos_grid.dart';
+import 'package:omi/providers/people_provider.dart';
+
+
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -76,6 +81,57 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     });
   }
 
+  Future<void> _stopConversation(CaptureProvider provider) async {
+    if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
+      // Helper function to stop recording and process conversation
+      Future<void> stopRecordingAndProcess() async {
+        // Stop any active recording (phone mic or system audio)
+        if (provider.recordingState == RecordingState.record) {
+          await provider.stopStreamRecording();
+        } else if (provider.recordingState == RecordingState.systemAudioRecord) {
+          await provider.stopSystemAudioRecording();
+        }
+        // Then process the conversation
+        provider.forceProcessingCurrentConversation();
+      }
+
+      if (!showSummarizeConfirmation) {
+        await stopRecordingAndProcess();
+        Navigator.of(context).pop();
+        return;
+      }
+      showDialog(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return ConfirmationDialog(
+                title: "Finished Conversation?",
+                description: "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: Conversation is summarized after 2 minutes of no speech.",
+                checkboxValue: !showSummarizeConfirmation,
+                checkboxText: "Don't ask me again",
+                onCheckboxChanged: (value) {
+                  setState(() {
+                    showSummarizeConfirmation = !value;
+                  });
+                },
+                onCancel: () {
+                  Navigator.of(context).pop();
+                },
+                onConfirm: () async {
+                  SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
+                  await stopRecordingAndProcess();
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
+              );
+            },
+          );
+        },
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
@@ -111,7 +167,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               children: [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 0),
                     child: TabBarView(
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
@@ -170,12 +226,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         // Summary Tab
                         Center(
                           child: Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
+                            padding: const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
                             child: Text(
-                              provider.segments.isEmpty && provider.photos.isEmpty
-                                  ? "No summary yet"
-                                  : "Conversation is summarized after 2 minutes of no speech 🤫",
+                              provider.segments.isEmpty && provider.photos.isEmpty ? "No summary yet" : "Conversation is summarized after 2 minutes of no speech 🤫",
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
                             ),
@@ -188,61 +241,33 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               ],
             ),
             floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-            floatingActionButton: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                (provider.segments.isEmpty && provider.photos.isEmpty)
-                    ? const SizedBox()
-                    : ConversationBottomBar(
-                        mode: ConversationBottomBarMode.recording,
-                        selectedTab: _controller!.index == 0 ? ConversationTab.transcript : ConversationTab.summary,
-                        hasSegments: provider.segments.isNotEmpty || provider.photos.isNotEmpty,
-                        onTabSelected: (tab) {
-                          _controller!.animateTo(tab == ConversationTab.transcript ? 0 : 1);
-                          setState(() {});
-                        },
-                        onStopPressed: () {
-                          if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
-                            if (!showSummarizeConfirmation) {
-                              context.read<CaptureProvider>().forceProcessingCurrentConversation();
-                              Navigator.of(context).pop();
-                              return;
-                            }
-                            showDialog(
-                              context: context,
-                              builder: (context) {
-                                return StatefulBuilder(
-                                  builder: (context, setState) {
-                                    return ConfirmationDialog(
-                                      title: "Finished Conversation?",
-                                      description:
-                                          "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: Conversation is summarized after 2 minutes of no speech.",
-                                      checkboxValue: !showSummarizeConfirmation,
-                                      checkboxText: "Don't ask me again",
-                                      onCheckboxChanged: (value) {
-                                        setState(() {
-                                          showSummarizeConfirmation = !value;
-                                        });
-                                      },
-                                      onCancel: () {
-                                        Navigator.of(context).pop();
-                                      },
-                                      onConfirm: () {
-                                        SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
-                                        context.read<CaptureProvider>().forceProcessingCurrentConversation();
-                                        Navigator.of(context).pop();
-                                        Navigator.of(context).pop();
-                                      },
-                                    );
-                                  },
-                                );
-                              },
-                            );
-                          }
-                        },
+            floatingActionButton: (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+                ? Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          spreadRadius: 2,
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      onPressed: () => _stopConversation(provider),
+                      icon: const FaIcon(
+                        FontAwesomeIcons.stop,
+                        color: Colors.white,
+                        size: 20.0,
                       ),
-              ],
-            ),
+                      padding: EdgeInsets.zero,
+                    ),
+                  )
+                : null,
           ),
         );
       },

@@ -19,7 +19,7 @@ class PaymentDetailsWidget extends StatelessWidget {
         padding: const EdgeInsets.only(top: 12.0),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.grey.shade900,
+            color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(12.0),
           ),
           padding: const EdgeInsets.all(14.0),
@@ -37,7 +37,7 @@ class PaymentDetailsWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
                 margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade800,
+                  color: Color(0xFF35343B),
                   borderRadius: BorderRadius.circular(10.0),
                 ),
                 width: double.infinity,
@@ -170,7 +170,7 @@ class PaymentDetailsWidget extends StatelessWidget {
                   margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                   padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade800,
+                    color: Color(0xFF35343B),
                     borderRadius: BorderRadius.circular(10.0),
                   ),
                   width: double.infinity,
@@ -181,8 +181,7 @@ class PaymentDetailsWidget extends StatelessWidget {
                       ),
                       Text(
                         (paymentPlan?.isNotEmpty == true ? paymentPlan : 'None Selected') ?? 'None Selected',
-                        style: TextStyle(
-                            color: paymentPlan != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                        style: TextStyle(color: paymentPlan != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                       ),
                       const Spacer(),
                       Icon(

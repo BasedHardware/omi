@@ -16,7 +16,7 @@ class AppAnalyticsWidget extends StatelessWidget {
       padding: const EdgeInsets.all(16.0),
       margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(

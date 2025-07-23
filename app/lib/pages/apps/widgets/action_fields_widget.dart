@@ -37,7 +37,7 @@ class ActionFieldsWidget extends StatelessWidget {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8.0),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade800,
+                          color: Color(0xFF35343B),
                           borderRadius: BorderRadius.circular(8.0),
                         ),
                         child: Column(

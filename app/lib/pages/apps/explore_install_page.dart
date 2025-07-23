@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/app_section_card.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/list_item.dart';
+import 'package:omi/pages/apps/widgets/category_apps_page.dart';
+import 'package:omi/pages/apps/widgets/category_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'widgets/create_options_sheet.dart';
 
@@ -33,6 +38,10 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
   late TextEditingController searchController;
   Debouncer debouncer = Debouncer(delay: const Duration(milliseconds: 500));
 
+  // Cache grouped apps to avoid recomputing on every rebuild
+  Map<String, List<App>>? _cachedGroupedApps;
+  List<App>? _cachedAllApps;
+
   @override
   void initState() {
     searchController = TextEditingController();
@@ -48,256 +57,631 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    return Consumer<AppProvider>(builder: (context, provider, child) {
-      return CustomScrollView(
-        slivers: [
-          const SliverToBoxAdapter(child: SizedBox(height: 18)),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 50,
-              child: Row(
+  Map<String, List<App>> _groupAppsByCategory(List<App> apps) {
+    // Use cached result if apps haven't changed
+    if (_cachedAllApps != null && _cachedGroupedApps != null && apps.length == _cachedAllApps!.length) {
+      return _cachedGroupedApps!;
+    }
+
+    Map<String, List<App>> groupedApps = {};
+    for (var app in apps) {
+      String categoryName = app.getCategoryName();
+      if (!groupedApps.containsKey(categoryName)) {
+        groupedApps[categoryName] = [];
+      }
+      groupedApps[categoryName]!.add(app);
+    }
+
+    // Cache the result
+    _cachedAllApps = List.from(apps);
+    _cachedGroupedApps = groupedApps;
+
+    return groupedApps;
+  }
+
+  Widget _buildAppsView() {
+    return Selector<AppProvider, ({bool isFilterActive, bool isSearchActive})>(
+      selector: (context, provider) => (
+        isFilterActive: provider.isFilterActive(),
+        isSearchActive: provider.isSearchActive(),
+      ),
+      builder: (context, state, child) {
+        if (state.isFilterActive || state.isSearchActive) {
+          return _buildFilteredAppsView();
+        }
+        return _buildCategorizedAppsView();
+      },
+    );
+  }
+
+  Widget _buildShimmerCreateButton() {
+    return Shimmer.fromColors(
+      baseColor: AppStyles.backgroundSecondary,
+      highlightColor: AppStyles.backgroundTertiary,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        decoration: BoxDecoration(
+          color: AppStyles.backgroundSecondary,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundTertiary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: ChoiceChip(
-                      label: Row(
-                        children: [
-                          const Icon(
-                            Icons.filter_list_alt,
-                            size: 15,
-                          ),
-                          const SizedBox(width: 4),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 6.5),
-                            child: Text(
-                              'Filter ',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                          ),
-                          provider.isFilterActive() ? Text("(${provider.filters.length})") : const SizedBox.shrink(),
-                        ],
-                      ),
-                      selected: false,
-                      showCheckmark: true,
-                      backgroundColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      onSelected: (bool selected) {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                          ),
-                          builder: (context) => const FilterBottomSheet(),
-                        ).whenComplete(() {
-                          context.read<AppProvider>().filterApps();
-                        });
-                      },
+                  Container(
+                    width: 180,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundTertiary,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(
-                    width: 12,
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 120,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundTertiary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
-                  provider.isFilterActive()
-                      ? Expanded(
-                          child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemBuilder: (ctx, idx) {
-                            return ChoiceChip(
-                              labelPadding: const EdgeInsets.only(left: 8, right: 4),
-                              label: Row(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 6.5),
-                                    child: Text(
-                                      filterValueToString(provider.filters.values.elementAt(idx)),
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  const Icon(
-                                    Icons.close,
-                                    size: 15,
-                                  ),
-                                ],
-                              ),
-                              selected: false,
-                              showCheckmark: true,
-                              backgroundColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              onSelected: (bool selected) {
-                                provider.removeFilter(provider.filters.keys.elementAt(idx));
-                              },
-                            );
-                          },
-                          separatorBuilder: (ctx, idx) {
-                            return const SizedBox(
-                              width: 10,
-                            );
-                          },
-                          itemCount: provider.filters.length,
-                        ))
-                      : SizedBox(
-                          width: MediaQuery.sizeOf(context).width * 0.71,
-                          height: 40,
-                          child: TextFormField(
-                            controller: searchController,
-                            focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
-                            onChanged: (value) {
-                              debouncer.run(() {
-                                provider.searchApps(value);
-                              });
-                            },
-                            decoration: InputDecoration(
-                              hintText: 'Search Apps',
-                              hintStyle: const TextStyle(color: Colors.white),
-                              filled: true,
-                              fillColor: Colors.grey[800],
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide.none,
-                              ),
-                              suffixIcon: provider.isSearchActive()
-                                  ? GestureDetector(
-                                      onTap: () {
-                                        context.read<HomeProvider>().appsSearchFieldFocusNode.unfocus();
-                                        provider.searchApps('');
-                                        searchController.clear();
-                                      },
-                                      child: const Icon(
-                                        Icons.close,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : null,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                            ),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        )
                 ],
               ),
             ),
-          ),
-          const SliverToBoxAdapter(
-              child: SizedBox(
-            height: 20,
-          )),
-          SliverToBoxAdapter(
-            child: GestureDetector(
-              onTap: () async {
-                // routeToPage(context, SocialHandleScreen());
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => const CreateOptionsSheet(),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                );
-              },
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundTertiary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerSearchBar() {
+    return Shimmer.fromColors(
+      baseColor: AppStyles.backgroundSecondary,
+      highlightColor: AppStyles.backgroundTertiary,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Row(
+          children: [
+            Expanded(
               child: Container(
-                padding: const EdgeInsets.all(12.0),
-                margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 12),
+                height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
-                  borderRadius: BorderRadius.circular(16.0),
+                  color: AppStyles.backgroundSecondary,
+                  borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                 ),
-                child: const ListTile(
-                  title: Row(
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundSecondary,
+                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerCategorySection() {
+    return Shimmer.fromColors(
+      baseColor: AppStyles.backgroundSecondary,
+      highlightColor: AppStyles.backgroundTertiary,
+      child: Container(
+        margin: const EdgeInsets.only(top: 12, bottom: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Category title shimmer
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 140,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundSecondary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    width: 60,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundSecondary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Apps grid shimmer
+            Container(
+              height: 270, // Approximate height for 3 rows
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: GridView.builder(
+                scrollDirection: Axis.horizontal,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 0.28,
+                  crossAxisSpacing: 0.0,
+                  mainAxisSpacing: 14.0,
+                ),
+                itemCount: 9, // Show 9 shimmer items
+                itemBuilder: (context, index) => Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.add, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text(
-                        'Create your own',
-                        textAlign: TextAlign.center,
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: AppStyles.backgroundSecondary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: double.infinity,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: AppStyles.backgroundSecondary,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              width: 80,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: AppStyles.backgroundSecondary,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 60,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppStyles.backgroundSecondary,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
             ),
-          ),
-          !provider.isFilterActive() && !provider.isSearchActive()
-              ? const SliverToBoxAdapter(child: SizedBox.shrink())
-              : Consumer<AppProvider>(
-                  builder: (context, provider, child) {
-                    if (provider.filteredApps.isEmpty) {
-                      return SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.28),
-                          child: const Text(
-                            'No apps found',
-                            style: TextStyle(fontSize: 18),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      );
-                    }
-                    return SliverPadding(
-                      padding: const EdgeInsets.only(bottom: 64),
-                      sliver: SliverList.separated(
-                        itemCount: provider.filteredApps.length,
-                        itemBuilder: (context, index) {
-                          final originalIndex =
-                              provider.apps.indexWhere((app) => app.id == provider.filteredApps[index].id);
-                          return AppListItem(
-                            app: provider.filteredApps[index],
-                            index: originalIndex,
-                          );
-                        },
-                        separatorBuilder: (context, index) {
-                          return const SizedBox(height: 8);
-                        },
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerAppsView() {
+    return CustomScrollView(
+      slivers: [
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        // Shimmer for Popular Apps
+        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
+        // Shimmer for other categories (show 3-4 category sections)
+        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
+        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
+        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
+        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+      ],
+    );
+  }
+
+  Widget _buildFilteredAppsView() {
+    return Selector<AppProvider, List<App>>(
+      selector: (context, provider) => provider.filteredApps,
+      builder: (context, filteredApps, child) {
+        return CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            if (filteredApps.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.3),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.search_off,
+                        size: 64,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No apps found',
+                        style: TextStyle(fontSize: 18, color: Colors.white70),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Try adjusting your search or filters',
+                        style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20),
+                sliver: SliverList.separated(
+                  itemCount: filteredApps.length,
+                  itemBuilder: (context, index) {
+                    return Selector<AppProvider, List<App>>(
+                      selector: (context, provider) => provider.apps,
+                      builder: (context, allApps, child) {
+                        final originalIndex = allApps.indexWhere(
+                          (app) => app.id == filteredApps[index].id,
+                        );
+                        return AppListItem(
+                          app: filteredApps[index],
+                          index: originalIndex,
+                        );
+                      },
+                    );
+                  },
+                  separatorBuilder: (context, index) => const SizedBox(height: 8),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCategorizedAppsView() {
+    return Selector<AppProvider, List<App>>(
+      selector: (context, provider) => provider.apps,
+      builder: (context, apps, child) {
+        final groupedApps = _groupAppsByCategory(apps);
+
+        // Get most downloaded apps overall (sorted by installs)
+        final allApps = List<App>.from(apps);
+        allApps.sort((a, b) => (b.installs ?? 0).compareTo(a.installs ?? 0));
+        final mostDownloadedApps = allApps.take(20).toList(); // Get top 20 most downloaded
+
+        return CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
+            // Popular Apps Section - First category, no view all
+            if (mostDownloadedApps.isNotEmpty)
+              SliverToBoxAdapter(
+                child: CategorySection(
+                  categoryName: 'Popular Apps',
+                  apps: mostDownloadedApps,
+                  showViewAll: false,
+                  onViewAll: () {}, // Not used since showViewAll is false
+                ),
+              ),
+
+            // Other categories sections - sorted alphabetically
+            ...(() {
+              final sortedEntries = groupedApps.entries.where((entry) => entry.key != 'Popular').toList();
+
+              // Custom sorting: alphabetical but with blank/empty and "Other" at the end
+              sortedEntries.sort((a, b) {
+                final aKey = a.key.trim();
+                final bKey = b.key.trim();
+
+                // Handle blank/empty categories
+                if (aKey.isEmpty && bKey.isEmpty) return 0;
+                if (aKey.isEmpty) return 1; // a goes to end
+                if (bKey.isEmpty) return -1; // b goes to end
+
+                // Handle "Other" category
+                if (aKey.toLowerCase() == 'other' && bKey.toLowerCase() == 'other') return 0;
+                if (aKey.toLowerCase() == 'other') return 1; // a goes to end
+                if (bKey.toLowerCase() == 'other') return -1; // b goes to end
+
+                // Normal alphabetical sorting
+                return aKey.compareTo(bKey);
+              });
+
+              return sortedEntries;
+            })()
+                .map((entry) {
+              final categoryName = entry.key;
+              final categoryApps = entry.value;
+
+              return SliverToBoxAdapter(
+                child: CategorySection(
+                  categoryName: categoryName,
+                  apps: categoryApps,
+                  onViewAll: () {
+                    final category = context.read<AddAppProvider>().categories.firstWhere(
+                          (cat) => cat.title == categoryName,
+                          orElse: () => Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
+                        );
+                    routeToPage(
+                      context,
+                      CategoryAppsPage(
+                        category: category,
+                        apps: categoryApps,
                       ),
                     );
                   },
                 ),
-          !provider.isFilterActive() && !provider.isSearchActive()
-              ? SliverToBoxAdapter(
-                  child: AppSectionCard(
-                    title: 'Popular Apps',
-                    apps: context.read<AppProvider>().popularApps,
-                  ),
-                )
-              : const SliverToBoxAdapter(child: SizedBox.shrink()),
-          !provider.isFilterActive() && !provider.isSearchActive()
-              ? const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 12.0, top: 18, bottom: 0),
-                    child: Text('All Apps', style: TextStyle(fontSize: 18)),
-                  ),
-                )
-              : const SliverToBoxAdapter(child: SizedBox.shrink()),
-          !provider.isFilterActive() && !provider.isSearchActive()
-              ? Selector<AppProvider, List<App>>(
-                  selector: (context, provider) => provider.apps,
-                  builder: (context, apps, child) {
-                    return SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          return AppListItem(
-                            app: apps[index],
-                            index: index,
-                          );
-                        },
-                        childCount: apps.length,
+              );
+            }),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Selector<AppProvider, ({bool isLoading, Map<String, dynamic> filters, bool isSearchActive})>(
+      selector: (context, provider) => (
+        isLoading: provider.isLoading,
+        filters: provider.filters,
+        isSearchActive: provider.isSearchActive(),
+      ),
+      builder: (context, state, child) {
+        return CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+            // Create your own app section - show shimmer when loading
+            SliverToBoxAdapter(
+              child: state.isLoading
+                  ? _buildShimmerCreateButton()
+                  : GestureDetector(
+                      onTap: () async {
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (context) => const CreateOptionsSheet(),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Color(0xFF1F1F25),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.add,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Create Your Own App',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Build and share your custom app',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right,
+                              color: Colors.black,
+                              size: 24,
+                            ),
+                          ],
+                        ),
                       ),
-                    );
-                  },
-                )
-              : const SliverToBoxAdapter(child: SizedBox.shrink()),
-        ],
-      );
-    });
+                    ),
+            ),
+
+            // Top bar with search and filters - show shimmer when loading
+            SliverToBoxAdapter(
+              child: state.isLoading
+                  ? _buildShimmerSearchBar()
+                  : Container(
+                      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Row(
+                        children: [
+                          // Search bar
+                          Expanded(
+                            child: state.filters.isNotEmpty
+                                ? ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemBuilder: (ctx, idx) {
+                                      return Container(
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: AppStyles.backgroundSecondary,
+                                          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                        ),
+                                        child: TextButton.icon(
+                                          onPressed: () {
+                                            context.read<AppProvider>().removeFilter(state.filters.keys.elementAt(idx));
+                                          },
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 14,
+                                            color: Colors.white70,
+                                          ),
+                                          label: Text(
+                                            filterValueToString(state.filters.values.elementAt(idx)),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    separatorBuilder: (ctx, idx) => const SizedBox(width: 8),
+                                    itemCount: state.filters.length,
+                                  )
+                                : SizedBox(
+                                    height: 44,
+                                    child: SearchBar(
+                                      hintText: 'Search Apps',
+                                      leading: const Padding(
+                                        padding: EdgeInsets.only(left: 6.0),
+                                        child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
+                                      ),
+                                      backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
+                                      elevation: WidgetStateProperty.all(0),
+                                      padding: WidgetStateProperty.all(
+                                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      ),
+                                      focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
+                                      controller: searchController,
+                                      trailing: state.isSearchActive
+                                          ? [
+                                              IconButton(
+                                                icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(
+                                                  minHeight: 36,
+                                                  minWidth: 36,
+                                                ),
+                                                onPressed: () {
+                                                  searchController.clear();
+                                                  context.read<AppProvider>().searchApps('');
+                                                },
+                                              )
+                                            ]
+                                          : null,
+                                      hintStyle: WidgetStateProperty.all(
+                                        TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                                      ),
+                                      textStyle: WidgetStateProperty.all(
+                                        TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                      ),
+                                      shape: WidgetStateProperty.all(
+                                        RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                        ),
+                                      ),
+                                      onChanged: (value) {
+                                        debouncer.run(() {
+                                          context.read<AppProvider>().searchApps(value);
+                                        });
+                                      },
+                                    ),
+                                  ),
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          // Filter button
+                          SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: AppStyles.backgroundSecondary,
+                                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                              ),
+                              child: IconButton(
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                    ),
+                                    builder: (context) => const FilterBottomSheet(),
+                                  ).whenComplete(() {
+                                    context.read<AppProvider>().filterApps();
+                                  });
+                                },
+                                icon: const Icon(
+                                  FontAwesomeIcons.filter,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 0)),
+
+            // Main content - show shimmer when loading
+            SliverFillRemaining(
+              child: state.isLoading ? _buildShimmerAppsView() : _buildAppsView(),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
