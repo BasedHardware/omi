@@ -51,6 +51,29 @@ def get_people(uid: str):
     return [person.to_dict() for person in people]
 
 
+def get_person_by_name(uid: str, name: str):
+    people_ref = db.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
+    docs = list(query.stream())
+    if docs:
+        return docs[0].to_dict()
+    return None
+
+
+def get_people_by_ids(uid: str, person_ids: list[str]):
+    if not person_ids:
+        return []
+    people_ref = db.collection('users').document(uid).collection('people')
+    # Firestore 'in' query supports up to 30 items.
+    all_people = []
+    for i in range(0, len(person_ids), 30):
+        chunk_ids = person_ids[i : i + 30]
+        people_query = people_ref.where("id", 'in', chunk_ids)
+        people = people_query.stream()
+        all_people.extend([person.to_dict() for person in people])
+    return all_people
+
+
 def update_person(uid: str, person_id: str, name: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.update({'name': name})

@@ -1,11 +1,11 @@
 'use client';
 
-import { NavArrowLeft, Xmark, ArrowRight, Clock } from 'iconoir-react';
+import { NavArrowLeft, Xmark } from 'iconoir-react';
 import Link from 'next/link';
 
 export default function Error() {
   console.log('Memory not found');
-  
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] p-4 pt-32">
       <div className="mx-auto max-w-lg text-center">
@@ -13,7 +13,7 @@ export default function Error() {
         <div className="relative mb-8 inline-flex h-24 w-24 items-center justify-center">
           <div className="absolute inset-0 rounded-full bg-gradient-to-r from-red-500/20 to-orange-500/20 blur-xl" />
           <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
-            <Xmark className="h-10 w-10 text-red-400 animate-pulse" />
+            <Xmark className="h-10 w-10 animate-pulse text-red-400" />
           </div>
         </div>
 
@@ -21,11 +21,12 @@ export default function Error() {
         <h1 className="mb-4 bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-3xl font-bold text-transparent">
           Memory Not Found
         </h1>
-        
+
         {/* Description */}
         <p className="mb-8 text-lg leading-relaxed text-zinc-400">
-          Oops! The memory you're looking for seems to have vanished into the digital ether. 
-          It might have been deleted, moved, or perhaps it never existed in the first place.
+          Oops! The memory you&apos;re looking for seems to have vanished into the digital
+          ether. It might have been deleted, moved, or perhaps it never existed in the
+          first place.
         </p>
 
         {/* Action button */}
@@ -42,7 +43,7 @@ export default function Error() {
 
       {/* Subtle decorative elements */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-gradient-to-r from-purple-500/5 to-blue-500/5 blur-3xl" />
+        <div className="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-gradient-to-r from-purple-500/5 to-blue-500/5 blur-3xl" />
         <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-gradient-to-r from-blue-500/5 to-purple-500/5 blur-3xl" />
       </div>
     </div>

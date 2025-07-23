@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import List
 from langchain_core.prompts import ChatPromptTemplate
+import database.users as users_db
 from models.conversation import Structured, Conversation
+from models.other import Person
 from utils.llm.clients import parser, llm_mini
 from utils.llms.memory import get_prompt_memories
 
@@ -66,7 +68,16 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
 
-    conversation_history = Conversation.conversations_to_string(memories)
+    all_person_ids = []
+    for m in memories:
+        all_person_ids.extend([s.person_id for s in m.transcript_segments if s.person_id])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    conversation_history = Conversation.conversations_to_string(memories, people=people)
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.

@@ -14,12 +14,14 @@ from typing_extensions import TypedDict, Literal
 # import os
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 import database.conversations as conversations_db
+import database.users as users_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
 from models.conversation import Conversation
+from models.other import Person
 from utils.llm.chat import (
     answer_omi_question,
     answer_omi_question_stream,
@@ -315,16 +317,27 @@ def query_vectors(state: GraphState):
 
 def qa_handler(state: GraphState):
     uid = state.get("uid")
+    memories = state.get("memories_found", [])
+
+    all_person_ids = []
+    for m in memories:
+        # m is a dict
+        segments = m.get('transcript_segments', [])
+        all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
 
     # streaming
     streaming = state.get("streaming")
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
-        memories = state.get("memories_found", [])
         response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
-            Conversation.conversations_to_string(memories, False),
+            Conversation.conversations_to_string(memories, False, people=people),
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
@@ -334,11 +347,10 @@ def qa_handler(state: GraphState):
         return {"answer": response, "ask_for_nps": True}
 
     # no streaming
-    memories = state.get("memories_found", [])
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Conversation.conversations_to_string(memories, False),
+        Conversation.conversations_to_string(memories, False, people=people),
         state.get("plugin_selected"),
         cited=state.get("cited"),
         messages=state.get("messages"),

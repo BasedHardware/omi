@@ -7,10 +7,12 @@ from typing import List, Optional, Tuple
 
 from pydantic import BaseModel, Field, ValidationError
 
+import database.users as users_db
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
+from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 
@@ -239,8 +241,8 @@ class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
 
 
-def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
-    content = TranscriptSegment.segments_as_string(segments)
+def chunk_extraction(segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None) -> str:
+    content = TranscriptSegment.segments_as_string(segments, people=people)
     prompt = f'''
     You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
     You will be given a conversation transcript of a low quality recording, and a list of topics.
@@ -456,8 +458,14 @@ def qa_rag_stream(
 # **************************************************
 
 
-def retrieve_memory_context_params(memory: Conversation) -> List[str]:
-    transcript = memory.get_transcript(False)
+def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
+    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = memory.get_transcript(False, people=people)
     if len(transcript) == 0:
         return []
 
@@ -484,7 +492,14 @@ def retrieve_memory_context_params(memory: Conversation) -> List[str]:
 
 def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    transcript = memory.get_transcript(False)
+
+    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = memory.get_transcript(False, people=people)
     prompt = f"""
     You are a thoughtful and encouraging Friend.
     Your best friend is {user_name}, {memories_str}
@@ -883,6 +898,13 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
 
 def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
+
+    person_ids = [s.person_id for s in segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
     prompt = f'''
     {user_name} is having a conversation.
 
@@ -901,7 +923,7 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
 
     Conversation:
     ```
-    {TranscriptSegment.segments_as_string(segments)}
+    {TranscriptSegment.segments_as_string(segments, people=people)}
     ```
     '''.replace(
         '    ', ''
@@ -915,7 +937,14 @@ class OutputMessage(BaseModel):
 
 def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    transcript = TranscriptSegment.segments_as_string(segments)
+
+    person_ids = [s.person_id for s in segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = TranscriptSegment.segments_as_string(segments, people=people)
     # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
     prompt = f"""

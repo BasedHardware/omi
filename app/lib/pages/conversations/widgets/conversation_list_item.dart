@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -84,12 +85,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
           }
         },
         child: Padding(
-          padding:
-              EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
+          padding: EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
           child: Container(
             width: double.maxFinite,
             decoration: BoxDecoration(
-              color: Colors.grey.shade900,
+              color: const Color(0xFF1F1F25),
               borderRadius: BorderRadius.circular(16.0),
             ),
             child: ClipRRect(
@@ -103,41 +103,26 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   color: Colors.red,
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
-                confirmDismiss: (direction) {
+                confirmDismiss: (direction) async {
+                  HapticFeedback.mediumImpact();
                   bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
                   if (!showDeleteConfirmation) return Future.value(true);
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (connectivityProvider.isConnected) {
-                    return showDialog(
-                        context: context,
-                        builder: (context) {
-                          return StatefulBuilder(
-                            builder: (context, setState) {
-                              return ConfirmationDialog(
-                                title: "Delete Conversation?",
-                                description:
-                                    "Are you sure you want to delete this conversation? This action cannot be undone.",
-                                checkboxValue: !showDeleteConfirmation,
-                                checkboxText: "Don't ask me again",
-                                onCheckboxChanged: (value) {
-                                  setState(() {
-                                    showDeleteConfirmation = !value;
-                                  });
-                                },
-                                onCancel: () => Navigator.of(context).pop(),
-                                onConfirm: () {
-                                  SharedPreferencesUtil().showConversationDeleteConfirmation = showDeleteConfirmation;
-                                  return Navigator.pop(context, true);
-                                },
-                              );
-                            },
-                          );
-                        });
+                    return await showDialog(
+                      context: context,
+                      builder: (ctx) => getDialog(
+                        context,
+                        () => Navigator.of(context).pop(false),
+                        () => Navigator.of(context).pop(true),
+                        'Delete Conversation?',
+                        'Are you sure you want to delete this conversation? This action cannot be undone.',
+                        okButtonText: 'Confirm',
+                      ),
+                    );
                   } else {
                     return showDialog(
-                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
-                          singleButton: true, okButtonText: 'OK'),
+                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
                       context: context,
                     );
                   }
@@ -167,10 +152,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           ? const SizedBox.shrink()
                           : Text(
                               structured.overview.decodeString,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium!
-                                  .copyWith(color: Colors.grey.shade300, height: 1.3),
+                              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                               maxLines: 2,
                             ),
                       widget.conversation.discarded
@@ -188,18 +170,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                     ),
                                     Text(
                                       "${widget.conversation.photos.length} photos",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium!
-                                          .copyWith(color: Colors.grey.shade300, height: 1.3),
+                                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                                     )
                                   ]),
                                 Text(
                                   widget.conversation.getTranscript(maxCount: 100),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium!
-                                      .copyWith(color: Colors.grey.shade300, height: 1.3),
+                                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                                 ),
                               ],
                             )
@@ -232,8 +208,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     widget.conversation.structured.getEmoji(),
                     style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
                   ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
+                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded) const SizedBox(width: 8),
                 if (widget.conversation.structured.category.isNotEmpty)
                   Flexible(
                     child: Container(
@@ -244,10 +219,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
                         widget.conversation.getTag(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium!
-                            .copyWith(color: widget.conversation.getTagTextColor()),
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -272,7 +244,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           'MMM d, h:mm a',
                           widget.conversation.startedAt ?? widget.conversation.createdAt,
                         ),
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                         maxLines: 1,
                       ),
                       if (widget.conversation.transcriptSegments.isNotEmpty && _getConversationDuration().isNotEmpty)
@@ -281,12 +253,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade800,
+                              color: const Color(0xFF35343B),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               _getConversationDuration(),
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 11),
+                              style: const TextStyle(color: Colors.white, fontSize: 11),
                               maxLines: 1,
                             ),
                           ),
@@ -319,8 +291,7 @@ class ConversationNewStatusIndicator extends StatefulWidget {
   State<ConversationNewStatusIndicator> createState() => _ConversationNewStatusIndicatorState();
 }
 
-class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator>
-    with SingleTickerProviderStateMixin {
+class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacityAnim;
 

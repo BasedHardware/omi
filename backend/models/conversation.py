@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, field_validator
 
 from models.chat import Message
+from models.other import Person
 from models.transcript_segment import TranscriptSegment
 
 
@@ -253,9 +254,13 @@ class Conversation(BaseModel):
 
     @staticmethod
     def conversations_to_string(
-        conversations: List['Conversation'], use_transcript: bool = False, include_timestamps: bool = False
+        conversations: List['Conversation'],
+        use_transcript: bool = False,
+        include_timestamps: bool = False,
+        people: List[Person] = None,
     ) -> str:
         result = []
+        people_map = {p.id: p for p in people} if people else {}
         for i, conversation in enumerate(conversations):
             if isinstance(conversation, dict):
                 conversation = Conversation(**conversation)
@@ -266,6 +271,15 @@ class Conversation(BaseModel):
                 f"{str(conversation.structured.title).capitalize()}\n"
                 f"{str(conversation.structured.overview).capitalize()}\n"
             )
+
+            # attendees
+            if people_map:
+                conv_person_ids = set(conversation.get_person_ids())
+                if conv_person_ids:
+                    attendees_names = [people_map[pid].name for pid in conv_person_ids if pid in people_map]
+                    if attendees_names:
+                        attendees = ", ".join(attendees_names)
+                        conversation_str += f"Attendees: {attendees}\n"
 
             if conversation.structured.action_items:
                 conversation_str += "Action Items:\n"
@@ -282,9 +296,7 @@ class Conversation(BaseModel):
                 conversation_str += f"{conversation.apps_results[0].content}"
 
             if use_transcript:
-                conversation_str += (
-                    f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps)}\n"
-                )
+                conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people)}\n"
                 # photos
                 photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
                 if photo_descriptions != 'None':
@@ -294,12 +306,19 @@ class Conversation(BaseModel):
 
         return "\n\n---------------------\n\n".join(result).strip()
 
-    def get_transcript(self, include_timestamps: bool) -> str:
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None) -> str:
         # Warn: missing transcript for workflow source, external integration source
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+        return TranscriptSegment.segments_as_string(
+            self.transcript_segments, include_timestamps=include_timestamps, people=people
+        )
 
     def get_photos_descriptions(self, include_timestamps: bool = False) -> str:
         return ConversationPhoto.photos_as_string(self.photos, include_timestamps=include_timestamps)
+
+    def get_person_ids(self) -> List[str]:
+        if not self.transcript_segments:
+            return []
+        return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
 
     def as_dict_cleaned_dates(self):
         conversation_dict = self.dict()
@@ -335,8 +354,15 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
 
-    def get_transcript(self, include_timestamps: bool) -> str:
-        return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None) -> str:
+        return TranscriptSegment.segments_as_string(
+            self.transcript_segments, include_timestamps=include_timestamps, people=people
+        )
+
+    def get_person_ids(self) -> List[str]:
+        if not self.transcript_segments:
+            return []
+        return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
 
 
 class ExternalIntegrationConversationSource(str, Enum):
@@ -381,6 +407,12 @@ class SetConversationEventsStateRequest(BaseModel):
 class SetConversationActionItemsStateRequest(BaseModel):
     items_idx: List[int]
     values: List[bool]
+
+
+class BulkAssignSegmentsRequest(BaseModel):
+    segment_ids: List[str]
+    assign_type: str
+    value: Optional[str] = None
 
 
 class DeleteActionItemRequest(BaseModel):

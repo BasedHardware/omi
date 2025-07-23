@@ -586,7 +586,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: const Color(0xFF1F1F25),
         title: const Text(
           'Clear Omi\'s Memory',
           style: TextStyle(color: Colors.white),

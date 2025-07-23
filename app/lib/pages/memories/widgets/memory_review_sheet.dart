@@ -18,7 +18,7 @@ class MemoriesReviewSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: const Color(0xFF1F1F25),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(

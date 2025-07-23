@@ -29,11 +29,11 @@ class ConversationActionItemsGroupWidget extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -55,9 +55,7 @@ class ConversationActionItemsGroupWidget extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          conversation.structured.title.isNotEmpty
-                              ? conversation.structured.title
-                              : 'Untitled Conversation',
+                          conversation.structured.title.isNotEmpty ? conversation.structured.title : 'Untitled Conversation',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,

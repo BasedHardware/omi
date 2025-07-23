@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
@@ -30,59 +31,75 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: Color(0xFFE0E0E0),
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.2,
-          ),
-        ),
+  Widget _buildSectionContainer({required List<Widget> children}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: children,
       ),
     );
   }
 
-  Widget _buildProfileTile({
+  Widget _buildProfileItem({
     required String title,
-    required String subtitle,
-    required Widget iconWidget,
+    String? subtitle,
+    required Widget icon,
     required VoidCallback onTap,
-    Color iconColor = Colors.white,
+    bool showSubtitle = true,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1D1D1D),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
         ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(
-            color: Color(0xFFAAAAAA),
-            fontSize: 13,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: icon,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    if (showSubtitle && subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: Color(0xFF8E8E93),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                color: Color(0xFF3C3C43),
+                size: 20,
+              ),
+            ],
           ),
-        ),
-        trailing: iconWidget,
-        onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
         ),
       ),
     );
@@ -95,52 +112,58 @@ class _ProfilePageState extends State<ProfilePage> {
     required VoidCallback onInfoTap,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1D1D1D),
-        borderRadius: BorderRadius.circular(10),
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: onInfoTap,
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Color(0xFFAAAAAA),
-                  fontSize: 14,
-                  decoration: TextDecoration.underline,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: GestureDetector(
+                onTap: onInfoTap,
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-          GestureDetector(
-            onTap: () => onChanged(!value),
-            child: Container(
-              decoration: BoxDecoration(
-                color: value ? const Color(0xFF4A90E2) : Colors.transparent,
-                border: Border.all(
-                  color: value ? const Color(0xFF4A90E2) : const Color(0xFFAAAAAA),
-                  width: 2,
+            const SizedBox(width: 16),
+            GestureDetector(
+              onTap: () => onChanged(!value),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: value ? const Color(0xFF007AFF) : Colors.transparent,
+                  border: Border.all(
+                    color: value ? const Color(0xFF007AFF) : const Color(0xFF8E8E93),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                borderRadius: BorderRadius.circular(12),
+                width: 24,
+                height: 24,
+                child: value
+                    ? const Icon(
+                        Icons.check,
+                        color: Colors.white,
+                        size: 16,
+                      )
+                    : null,
               ),
-              width: 20,
-              height: 20,
-              child: value
-                  ? const Icon(
-                      Icons.check,
-                      color: Colors.white,
-                      size: 16,
-                    )
-                  : null,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -148,117 +171,130 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
         title: const Text(
           'Profile',
           style: TextStyle(
+            color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
         centerTitle: true,
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: const Color(0xFF000000),
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: ListView(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
           children: <Widget>[
-            // YOUR INFORMATION SECTION
-            _buildSectionHeader('YOUR INFORMATION'),
-            _buildProfileTile(
-              title: SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
-              subtitle: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
-              iconWidget: const Icon(Icons.person, size: 20, color: Colors.white),
-              onTap: () async {
-                MixpanelManager().pageOpened('Profile Change Name');
-                await showDialog(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return const ChangeNameWidget();
-                  },
-                ).whenComplete(() => setState(() {}));
-              },
-            ),
-            Consumer<HomeProvider>(
-              builder: (context, homeProvider, _) {
-                final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
-                    ? homeProvider.availableLanguages.entries
-                        .firstWhere(
-                          (element) => element.value == homeProvider.userPrimaryLanguage,
-                        )
-                        .key
-                    : 'Not set';
+            const SizedBox(height: 20),
 
-                return _buildProfileTile(
-                  title: 'Primary Language',
-                  subtitle: languageName,
-                  iconWidget: const Icon(Icons.language, size: 20, color: Colors.white),
+            // YOUR INFORMATION SECTION
+            _buildSectionContainer(
+              children: [
+                _buildProfileItem(
+                  title: SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
+                  subtitle: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
+                  icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    MixpanelManager().pageOpened('Profile Change Language');
-                    await LanguageSelectionDialog.show(context, isRequired: false, forceShow: true);
-                    await homeProvider.setupUserPrimaryLanguage();
-                    setState(() {});
+                    MixpanelManager().pageOpened('Profile Change Name');
+                    await showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return const ChangeNameWidget();
+                      },
+                    ).whenComplete(() => setState(() {}));
                   },
-                );
-              },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                Consumer<HomeProvider>(
+                  builder: (context, homeProvider, _) {
+                    final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
+                        ? homeProvider.availableLanguages.entries
+                            .firstWhere(
+                              (element) => element.value == homeProvider.userPrimaryLanguage,
+                            )
+                            .key
+                        : 'Not set';
+
+                    return _buildProfileItem(
+                      title: 'Primary Language',
+                      subtitle: languageName,
+                      icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
+                      onTap: () async {
+                        MixpanelManager().pageOpened('Profile Change Language');
+                        await LanguageSelectionDialog.show(context, isRequired: false, forceShow: true);
+                        await homeProvider.setupUserPrimaryLanguage();
+                        setState(() {});
+                      },
+                    );
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Persona',
+                  subtitle: 'Manage your Omi persona',
+                  icon: const FaIcon(FontAwesomeIcons.solidCircleUser, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const PersonaProfilePage(),
+                        settings: const RouteSettings(
+                          arguments: 'from_settings',
+                        ),
+                      ),
+                    );
+                    MixpanelManager().pageOpened('Profile Persona Settings');
+                  },
+                ),
+              ],
             ),
-            _buildProfileTile(
-              title: 'Persona',
-              subtitle: 'Manage your Omi persona',
-              iconWidget: SvgPicture.asset(
-                Assets.images.icPersonaProfile,
-                width: 20,
-                height: 20,
-                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-              ),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const PersonaProfilePage(),
-                    settings: const RouteSettings(
-                      arguments: 'from_settings',
-                    ),
-                  ),
-                );
-                MixpanelManager().pageOpened('Profile Persona Settings');
-              },
-            ),
+            const SizedBox(height: 32),
 
             // VOICE & PEOPLE SECTION
-            _buildSectionHeader('VOICE & PEOPLE'),
-            _buildProfileTile(
-              title: 'Speech Profile',
-              subtitle: 'Teach Omi your voice',
-              iconWidget: const Icon(Icons.multitrack_audio, size: 20, color: Colors.white),
-              onTap: () {
-                routeToPage(context, const SpeechProfilePage());
-                MixpanelManager().pageOpened('Profile Speech Profile');
-              },
+            _buildSectionContainer(
+              children: [
+                _buildProfileItem(
+                  title: 'Speech Profile',
+                  subtitle: 'Teach Omi your voice',
+                  icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const SpeechProfilePage());
+                    MixpanelManager().pageOpened('Profile Speech Profile');
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Identifying Others',
+                  subtitle: 'Tell Omi who said it 🗣️',
+                  icon: const FaIcon(FontAwesomeIcons.users, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const UserPeoplePage());
+                  },
+                ),
+              ],
             ),
-            _buildProfileTile(
-              title: 'Identifying Others',
-              subtitle: 'Tell Omi who said it 🗣️',
-              iconWidget: const Icon(Icons.people, size: 20, color: Colors.white),
-              onTap: () {
-                routeToPage(context, const UserPeoplePage());
-              },
-            ),
+            const SizedBox(height: 32),
 
             // PAYMENT SECTION
-            _buildSectionHeader('PAYMENT'),
-            _buildProfileTile(
-              title: 'Payment Methods',
-              subtitle: 'Add or change your payment method',
-              iconWidget: const Icon(Icons.attach_money_outlined, size: 20, color: Colors.white),
-              onTap: () {
-                routeToPage(context, const PaymentsPage());
-              },
+            _buildSectionContainer(
+              children: [
+                _buildProfileItem(
+                  title: 'Payment Methods',
+                  subtitle: 'Add or change your payment method',
+                  icon: const FaIcon(FontAwesomeIcons.solidCreditCard, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const PaymentsPage());
+                  },
+                ),
+              ],
             ),
+            const SizedBox(height: 32),
 
             // PREFERENCES SECTION
-            _buildSectionHeader('PREFERENCES'),
             _buildPreferenceToggle(
               title: 'Help improve Omi by sharing anonymized analytics data',
               value: SharedPreferencesUtil().optInAnalytics,
@@ -273,28 +309,33 @@ class _ProfilePageState extends State<ProfilePage> {
                 MixpanelManager().pageOpened('Share Analytics Data Details');
               },
             ),
+            const SizedBox(height: 32),
 
             // ACCOUNT SECTION
-            _buildSectionHeader('ACCOUNT'),
-            _buildProfileTile(
-              title: 'User ID',
-              subtitle: SharedPreferencesUtil().uid,
-              iconWidget: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
-              },
+            _buildSectionContainer(
+              children: [
+                _buildProfileItem(
+                  title: 'User ID',
+                  subtitle: SharedPreferencesUtil().uid,
+                  icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Delete Account',
+                  subtitle: 'Delete your account and all data',
+                  icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
+                  onTap: () {
+                    MixpanelManager().pageOpened('Profile Delete Account Dialog');
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
+                  },
+                ),
+              ],
             ),
-            _buildProfileTile(
-              title: 'Delete Account',
-              subtitle: 'Delete your account and all data',
-              iconWidget: Icon(Icons.warning, size: 20, color: Colors.red.shade300),
-              onTap: () {
-                MixpanelManager().pageOpened('Profile Delete Account Dialog');
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
-              },
-            ),
+            const SizedBox(height: 32),
           ],
         ),
       ),

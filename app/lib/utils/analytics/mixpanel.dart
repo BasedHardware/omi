@@ -462,11 +462,11 @@ class MixpanelManager {
 
   void removedPerson() => track('Removed Person');
 
-  void assignSheetOpened() => track('Assign Sheet Opened');
+  void tagSheetOpened() => track('Tag Sheet Opened');
 
-  void assignedSegment(String assignType) => track('Assigned Segment $assignType');
+  void taggedSegment(String assignType) => track('Tagged Segment $assignType');
 
-  void unassignedSegment() => track('Unassigned Segment');
+  void untaggedSegment() => track('Untagged Segment');
 
   void deleteAccountClicked() => track('Delete Account Clicked');
 

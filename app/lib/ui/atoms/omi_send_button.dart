@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/ui/adaptive_widget.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -23,7 +24,12 @@ class OmiSendButton extends AdaptiveWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: enabled ? onPressed : null,
+        onTap: enabled
+            ? () {
+                HapticFeedback.mediumImpact();
+                onPressed?.call();
+              }
+            : null,
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),

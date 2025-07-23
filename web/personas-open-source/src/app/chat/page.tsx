@@ -1,17 +1,25 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, Settings, Share, ArrowLeft, BadgeCheck, X } from 'lucide-react';
 import { FaLinkedin } from 'react-icons/fa';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { auth, db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, orderBy, deleteDoc } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  deleteDoc,
+} from 'firebase/firestore';
 import { signInWithPopup } from 'firebase/auth';
 import { googleProvider } from '@/lib/firebase';
 import { getDoc, doc, setDoc } from 'firebase/firestore';
@@ -21,13 +29,12 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
 import { Message } from '@/types/chat';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { Mixpanel } from '@/lib/mixpanel';
 
 function ChatContent() {
-
   useEffect(() => {
     // Identify the user first
     Mixpanel.identify();
@@ -36,7 +43,7 @@ function ChatContent() {
     Mixpanel.track('Page View', {
       page: 'Chat',
       url: window.location.pathname,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }, []);
 
@@ -75,30 +82,32 @@ function ChatContent() {
         if (botDoc.exists()) {
           const data = botDoc.data();
           let category = data.category;
-          
+
           // If connected_accounts exists, determine category from it
-          if (category !== 'linkedin' && category !== 'twitter' && data.connected_accounts) {
+          if (
+            category !== 'linkedin' &&
+            category !== 'twitter' &&
+            data.connected_accounts
+          ) {
             if (data.connected_accounts.includes('omi')) {
               category = 'omi';
-            } 
-            else if (category !== 'twitter' && category !== 'linkedin') {
+            } else if (category !== 'twitter' && category !== 'linkedin') {
               if (data.connected_accounts.includes('twitter')) {
                 category = 'twitter';
               } else if (data.connected_accounts.includes('linkedin')) {
                 category = 'linkedin';
-              } 
-              else {
+              } else {
                 category = data.connected_accounts[0];
               }
             }
           }
-          
+
           setBotData({
             name: data.name,
             avatar: data.avatar,
             username: data.username,
             category: category,
-            image: data.image
+            image: data.image,
           });
         }
       } catch (error) {
@@ -126,7 +135,7 @@ function ChatContent() {
         timestamp: new Date(),
         botName,
         botImage,
-        pluginId: botId
+        pluginId: botId,
       });
     } catch (error) {
       console.error('Error saving messages:', error);
@@ -148,12 +157,12 @@ function ChatContent() {
         const q = query(
           userMessagesRef,
           where('pluginId', '==', botId),
-          orderBy('timestamp', 'asc')
+          orderBy('timestamp', 'asc'),
         );
         const querySnapshot = await getDocs(q);
 
         const fetchedMessages: Message[] = [];
-        querySnapshot.forEach(doc => {
+        querySnapshot.forEach((doc) => {
           const data = doc.data();
           fetchedMessages.push(...data.messages);
         });
@@ -170,7 +179,9 @@ function ChatContent() {
   // Define scrollToBottom first, before any useEffects that use it
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
-      const scrollArea = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      const scrollArea = scrollRef.current.querySelector(
+        '[data-radix-scroll-area-viewport]',
+      );
       if (scrollArea) {
         scrollArea.scrollTop = scrollArea.scrollHeight;
       }
@@ -191,10 +202,11 @@ function ChatContent() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            message: "lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.",
+            message:
+              'lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.',
             botId: botId,
-            conversationHistory: messages
-          })
+            conversationHistory: messages,
+          }),
         });
 
         if (!response.ok) {
@@ -222,12 +234,12 @@ function ChatContent() {
                 const parsed = JSON.parse(data);
                 if (parsed.text) {
                   accumulatedText += parsed.text;
-                  setTypingMessage(prev => ({
+                  setTypingMessage((prev) => ({
                     id: prev?.id || Date.now(),
                     text: accumulatedText,
                     sender: 'omi',
                     type: 'text',
-                    status: 'sending'
+                    status: 'sending',
                   }));
                 }
               } catch (e) {
@@ -244,9 +256,9 @@ function ChatContent() {
             text: accumulatedText,
             sender: 'omi',
             type: 'text',
-            status: 'received'
+            status: 'received',
           };
-          setMessages(prev => [...prev, newMessage]);
+          setMessages((prev) => [...prev, newMessage]);
 
           // Track initial message
           Mixpanel.track('Initial Message Received', {
@@ -254,10 +266,9 @@ function ChatContent() {
             bot_id: botId,
             message_length: accumulatedText.length,
             is_authenticated: !!auth.currentUser,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           });
         }
-
       } catch (error) {
         console.error('Error getting initial message:', error);
       } finally {
@@ -280,7 +291,7 @@ function ChatContent() {
       bot_id: botId,
       message_count: newUserMessageCount,
       is_authenticated: !!auth.currentUser,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     /***
@@ -301,10 +312,10 @@ function ChatContent() {
       text: inputText,
       sender: 'user',
       type: 'text',
-      status: 'sent'
+      status: 'sent',
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setUserMessageCount(newUserMessageCount);
     setInputText('');
     setIsLoading(true);
@@ -316,8 +327,8 @@ function ChatContent() {
         body: JSON.stringify({
           message: inputText,
           botId: botId,
-          conversationHistory: messages
-        })
+          conversationHistory: messages,
+        }),
       });
 
       const reader = response.body?.getReader();
@@ -329,7 +340,7 @@ function ChatContent() {
         text: '',
         sender: 'omi',
         type: 'text',
-        status: 'sending'
+        status: 'sending',
       });
 
       while (true) {
@@ -348,12 +359,12 @@ function ChatContent() {
               const parsed = JSON.parse(data);
               if (parsed.text) {
                 accumulatedText += parsed.text;
-                setTypingMessage(prev => ({
+                setTypingMessage((prev) => ({
                   id: prev?.id || Date.now(),
                   text: accumulatedText,
                   sender: 'omi',
                   type: 'text',
-                  status: 'sending'
+                  status: 'sending',
                 }));
               }
             } catch (e) {
@@ -365,13 +376,16 @@ function ChatContent() {
 
       if (accumulatedText) {
         setTypingMessage(null);
-        setMessages(prev => [...prev, {
-          id: Date.now(),
-          text: accumulatedText,
-          sender: 'omi',
-          type: 'text',
-          status: 'received'
-        }]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            text: accumulatedText,
+            sender: 'omi',
+            type: 'text',
+            status: 'received',
+          },
+        ]);
 
         // Track message received
         Mixpanel.track('Message Received', {
@@ -379,10 +393,9 @@ function ChatContent() {
           bot_id: botId,
           message_length: accumulatedText.length,
           is_authenticated: !!auth.currentUser,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
       }
-
     } catch (error: any) {
       console.error('Error:', error);
 
@@ -392,7 +405,7 @@ function ChatContent() {
         bot_id: botId,
         error: error.toString(),
         is_authenticated: !!auth.currentUser,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     } finally {
       setIsLoading(false);
@@ -446,12 +459,14 @@ function ChatContent() {
         }
 
         // Update ownership of any personas created by this user
-        const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
+        const createdPersonas = JSON.parse(
+          localStorage.getItem('createdPersonas') || '[]',
+        );
         for (const personaId of createdPersonas) {
           try {
             const personaRef = doc(db, 'plugins_data', personaId);
             const personaSnap = await getDoc(personaRef);
-            
+
             if (personaSnap.exists() && !personaSnap.data().uid) {
               // Only update the uid field
               await setDoc(personaRef, { uid: user.uid }, { merge: true });
@@ -460,7 +475,7 @@ function ChatContent() {
             console.error(`Error updating persona ${personaId}:`, error);
           }
         }
-        
+
         // Clear the created personas list after updating ownership
         localStorage.removeItem('createdPersonas');
 
@@ -474,7 +489,7 @@ function ChatContent() {
             botImage,
             lastMessage: messages[messages.length - 1]?.text || '',
             messageCount: messages.length,
-            pluginId: botId
+            pluginId: botId,
           });
         }
 
@@ -485,17 +500,19 @@ function ChatContent() {
     };
 
     return (
-      <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
         <div className="w-full max-w-lg">
-          <div className="flex flex-col items-center justify-center min-h-[400px] px-4">
-            <div className="text-center mb-12">
-              <h1 className="text-6xl font-serif mb-8 text-white">omi</h1>
-              <p className="text-gray-400 mb-4">Sign in to continue chatting</p>
-              <p className="text-sm text-gray-500">Create a free account to unlock unlimited conversations</p>
+          <div className="flex min-h-[400px] flex-col items-center justify-center px-4">
+            <div className="mb-12 text-center">
+              <h1 className="mb-8 font-serif text-6xl text-white">omi</h1>
+              <p className="mb-4 text-gray-400">Sign in to continue chatting</p>
+              <p className="text-sm text-gray-500">
+                Create a free account to unlock unlimited conversations
+              </p>
             </div>
 
             <Button
-              className="w-full max-w-sm flex items-center justify-center gap-2 rounded-full bg-white text-black hover:bg-gray-200"
+              className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-white text-black hover:bg-gray-200"
               onClick={handleGoogleSignIn}
             >
               Continue with Google
@@ -508,24 +525,24 @@ function ChatContent() {
 
   const SettingsDialog = () => (
     <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
-      <DialogContent className="bg-black border-0 p-0 h-screen sm:h-auto sm:max-w-lg">
+      <DialogContent className="h-screen border-0 bg-black p-0 sm:h-auto sm:max-w-lg">
         {/* Back Button - Moved down to be fully visible on iOS */}
-        <div className="fixed sm:absolute top-12 left-4 z-50">
+        <div className="fixed left-4 top-12 z-50 sm:absolute">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setShowSettingsDialog(false)}
-            className="text-white hover:text-gray-300 rounded-full h-12 w-12 flex items-center justify-center"
+            className="flex h-12 w-12 items-center justify-center rounded-full text-white hover:text-gray-300"
           >
             <ArrowLeft className="h-6 w-6" />
           </Button>
         </div>
 
         {/* Main Content - Adjusted padding to accommodate the new button position */}
-        <div className="flex flex-col items-center justify-center min-h-[400px] px-4 pt-28 sm:pt-4">
+        <div className="flex min-h-[400px] flex-col items-center justify-center px-4 pt-28 sm:pt-4">
           {/* Logo/Text */}
-          <div className="text-center mb-12">
-            <h1 className="text-6xl font-serif mb-8 text-white">Settings</h1>
+          <div className="mb-12 text-center">
+            <h1 className="mb-8 font-serif text-6xl text-white">Settings</h1>
             <p className="text-gray-400">Manage your chat settings here</p>
           </div>
 
@@ -550,12 +567,14 @@ function ChatContent() {
   );
 
   const inputRef = useRef<HTMLInputElement>(null);
-  
+
   const getStoreUrl = useMemo(() => {
     // Get the current URL parameters but always add ref=personas
     const currentUrl = typeof window !== 'undefined' ? window.location.search : '';
     // Return the product page URL with ?ref=personas
-    return `https://www.omi.me/pages/product?ref=personas${currentUrl ? `&${currentUrl.substring(1)}` : ''}`;
+    return `https://www.omi.me/pages/product?ref=personas${
+      currentUrl ? `&${currentUrl.substring(1)}` : ''
+    }`;
   }, []);
 
   useEffect(() => {
@@ -574,7 +593,7 @@ function ChatContent() {
   }, []);
 
   useEffect(() => {
-    if ((messages.length === 2) || (messages.length > 5 && messages.length % 5 === 0)) {
+    if (messages.length === 2 || (messages.length > 5 && messages.length % 5 === 0)) {
       setShowDevicePopup(true);
       const timer = setTimeout(() => setShowDevicePopup(false), 5000);
       return () => clearTimeout(timer);
@@ -582,23 +601,28 @@ function ChatContent() {
   }, [messages.length]);
 
   const DevicePopup = () => (
-    <div className={`fixed bottom-48 right-4 z-50 transition-all duration-500 ${showDevicePopup ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'
-      }`}>
+    <div
+      className={`fixed bottom-48 right-4 z-50 transition-all duration-500 ${
+        showDevicePopup
+          ? 'translate-x-0 opacity-100'
+          : 'pointer-events-none translate-x-full opacity-0'
+      }`}
+    >
       <Link
         href="https://www.omi.me/products/omi-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
         target="_blank"
         rel="noopener noreferrer"
-        className="relative block w-[220px] h-[200px] rounded-2xl overflow-hidden shadow-2xl bg-black"
+        className="relative block h-[200px] w-[220px] overflow-hidden rounded-2xl bg-black shadow-2xl"
       >
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/80">
           <img
             src="/omidevice.webp"
             alt="Omi Device"
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
           />
         </div>
         <div className="absolute bottom-2 left-0 right-0 text-center">
-          <p className="text-white text-[14px] font-bold tracking-wide">
+          <p className="text-[14px] font-bold tracking-wide text-white">
             Take your ai clone with you.
           </p>
         </div>
@@ -607,7 +631,7 @@ function ChatContent() {
             e.preventDefault();
             setShowDevicePopup(false);
           }}
-          className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors"
+          className="absolute right-4 top-4 text-white/80 transition-colors hover:text-white"
         >
           <X className="h-6 w-6" />
         </button>
@@ -616,72 +640,101 @@ function ChatContent() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-900 text-white">
+    <div className="flex h-screen flex-col bg-zinc-900 text-white">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/')} className="text-white hover:text-gray-300">
+      <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 p-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => router.push('/')}
+          className="text-white hover:text-gray-300"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-2">
           {botCategory === 'linkedin' ? (
-            <Link href={`https://www.linkedin.com/in/${username}`} target="_blank" rel="noopener noreferrer">
-              <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
+            <Link
+              href={`https://www.linkedin.com/in/${username}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <h2 className="flex items-center truncate text-lg font-semibold text-white hover:underline">
                 {botName}
-                <FaLinkedin className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#0077b5' }} />
+                <FaLinkedin
+                  className="ml-1 h-5 w-5 stroke-zinc-900"
+                  style={{ fill: '#0077b5' }}
+                />
               </h2>
             </Link>
           ) : botCategory === 'twitter' ? (
-            <Link href={`https://x.com/${username}`} target="_blank" rel="noopener noreferrer">
-              <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
+            <Link
+              href={`https://x.com/${username}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <h2 className="flex items-center truncate text-lg font-semibold text-white hover:underline">
                 {botName}
-                <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
+                <BadgeCheck
+                  className="ml-1 h-5 w-5 stroke-zinc-900"
+                  style={{ fill: '#00acee' }}
+                />
               </h2>
             </Link>
           ) : botCategory === 'omi' ? (
             <Link href={getStoreUrl} target="_blank" rel="noopener noreferrer">
-              <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
+              <h2 className="flex items-center truncate text-lg font-semibold text-white hover:underline">
                 {botName}
-                <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
+                <BadgeCheck
+                  className="ml-1 h-5 w-5 stroke-zinc-900"
+                  style={{ fill: '#00acee' }}
+                />
               </h2>
             </Link>
-          ) : null
-          }
+          ) : null}
           <Avatar className="h-8 w-8">
             <AvatarImage src={botImage} alt={botName} />
             <AvatarFallback>{botName[0]}</AvatarFallback>
           </Avatar>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="icon" className="text-white hover:text-gray-300" onClick={() => setShowSettingsDialog(true)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:text-gray-300"
+            onClick={() => setShowSettingsDialog(true)}
+          >
             <Settings className="h-5 w-5" />
           </Button>
         </div>
       </div>
 
       {/* Timestamp */}
-      <div className="text-center py-2 text-xs text-gray-500">
+      <div className="py-2 text-center text-xs text-gray-500">
         Today {new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
       </div>
 
       {/* Chat Area */}
       <ScrollArea className="flex-grow p-4" ref={scrollRef}>
-        <div className="space-y-4 max-w-4xl mx-auto">
+        <div className="mx-auto max-w-4xl space-y-4">
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${
+                message.sender === 'user' ? 'justify-end' : 'justify-start'
+              }`}
             >
               {message.sender === 'omi' && (
-                <Avatar className="h-8 w-8 mr-2">
+                <Avatar className="mr-2 h-8 w-8">
                   <AvatarImage src={botImage} alt={botName} />
                   <AvatarFallback>{botName[0]}</AvatarFallback>
                 </Avatar>
               )}
               <div
-                className={`max-w-[80%] rounded-3xl p-4 ${message.sender === 'user'
-                  ? 'bg-white text-zinc-800'
-                  : 'bg-zinc-800 text-white'
-                  }`}
+                className={`max-w-[80%] rounded-3xl p-4 ${
+                  message.sender === 'user'
+                    ? 'bg-white text-zinc-800'
+                    : 'bg-zinc-800 text-white'
+                }`}
               >
                 <p className="text-sm">{message.text}</p>
               </div>
@@ -689,11 +742,11 @@ function ChatContent() {
           ))}
           {typingMessage && (
             <div className="flex justify-start">
-              <Avatar className="h-8 w-8 mr-2">
+              <Avatar className="mr-2 h-8 w-8">
                 <AvatarImage src={botImage} alt={botName} />
                 <AvatarFallback>{botName[0]}</AvatarFallback>
               </Avatar>
-              <div className="max-w-[80%] rounded-3xl p-4 bg-zinc-800 text-white">
+              <div className="max-w-[80%] rounded-3xl bg-zinc-800 p-4 text-white">
                 <p className="text-sm">{typingMessage.text}</p>
               </div>
             </div>
@@ -702,8 +755,8 @@ function ChatContent() {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-4 pb-16 sm:pb-4 border-t border-zinc-800">
-        <div className="max-w-4xl mx-auto flex gap-2">
+      <div className="border-t border-zinc-800 p-4 pb-16 sm:pb-4">
+        <div className="mx-auto flex max-w-4xl gap-2">
           <Input
             ref={inputRef}
             type="text"
@@ -711,7 +764,7 @@ function ChatContent() {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="flex-grow rounded-full bg-zinc-800 border-0 text-white placeholder-gray-400"
+            className="flex-grow rounded-full border-0 bg-zinc-800 text-white placeholder-gray-400"
             disabled={isLoading}
           />
           <Button
@@ -724,25 +777,39 @@ function ChatContent() {
             <Send className="h-5 w-5" />
           </Button>
         </div>
-        
-        <div className="flex justify-center mt-5 mb-6 sm:mb-2">
+
+        <div className="mb-6 mt-5 flex justify-center sm:mb-2">
           <Button
             onClick={() => window.open(getStoreUrl, '_blank')}
-            className="w-full max-w-[250px] py-5 text-base font-bold text-[16px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90 shadow-lg"
+            className="w-full max-w-[250px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 py-5 text-[16px] text-base font-bold text-white shadow-lg hover:opacity-90"
           >
-          Train AI on Your Real Life!
+            Train AI on Your Real Life!
           </Button>
         </div>
-        
-        <div className="max-w-4xl mx-auto mt-4">
-          <div className="flex flex-col sm:flex-row justify-between text-xs text-gray-500">
-            <div className="flex gap-2 mb-2 sm:mb-0">
+
+        <div className="mx-auto mt-4 max-w-4xl">
+          <div className="flex flex-col justify-between text-xs text-gray-500 sm:flex-row">
+            <div className="mb-2 flex gap-2 sm:mb-0">
               <span>Omi by Based Hardware © 2025</span>
             </div>
             <div className="flex gap-2">
-              <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Terms & Conditions</Button>
-              <Link href="https://www.omi.me/pages/privacy" target="_blank" rel="noopener noreferrer">
-                <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Privacy Policy</Button>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-xs text-gray-500 hover:text-white"
+              >
+                Terms & Conditions
+              </Button>
+              <Link
+                href="https://www.omi.me/pages/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button
+                  variant="link"
+                  className="h-auto p-0 text-xs text-gray-500 hover:text-white"
+                >
+                  Privacy Policy
+                </Button>
               </Link>
             </div>
           </div>
@@ -757,11 +824,13 @@ function ChatContent() {
 
 export default function ChatInterface() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-screen bg-black text-white">
-        <div>Loading...</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-black text-white">
+          <div>Loading...</div>
+        </div>
+      }
+    >
       <ChatContent />
     </Suspense>
   );
