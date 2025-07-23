@@ -46,6 +46,68 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
     return llm_mini.invoke(prompt).content
 
 
+def generate_session_title(message_text: str) -> str:
+    """
+    Generate a concise, meaningful title for a chat session based on the first user message.
+    The title should be 3-4 words maximum and capture the main topic or intent.
+    """
+    
+    if not message_text or not message_text.strip():
+        return "New Chat"
+    
+    clean_text = message_text.strip()[:500]
+    
+    prompt = f"""
+    You are an expert at creating concise, meaningful titles for conversations.
+    
+    Your task is to generate a short title (3-4 words maximum) that captures the main topic or intent of this message.
+    The title should be:
+    - Very concise (3-4 words max)
+    - Clear and descriptive
+    - Focus on the main topic, not implementation details
+    - Use Title Case (capitalize first letter of each word)
+    - Avoid generic words like "Help", "Question", "Issue" unless very specific
+    - Avoid quotes or special characters
+    
+    Examples of good titles:
+    - "Python Data Analysis" (for questions about analyzing data with Python)
+    - "Travel Planning Europe" (for questions about planning European travel)
+    - "Career Change Advice" (for questions about switching careers)
+    - "Recipe Recommendations" (for asking about food recipes)
+    - "Investment Strategy" (for financial planning questions)
+    - "Machine Learning Setup" (for ML environment questions)
+    - "React Component Design" (for React development questions)
+    
+    Message: ```{clean_text}```
+    
+    Output only the title, nothing else.
+    """.replace('    ', '').strip()
+    
+    try:
+        response = llm_mini.invoke(prompt)
+        title = response.content.strip()
+        
+        title = title.replace('"', '').replace("'", "").strip()
+        
+        words = title.split()
+        if len(words) > 4:
+            title = ' '.join(words[:4])
+        elif len(words) == 0:
+            title = "New Chat"
+            
+        title = ' '.join(word.capitalize() for word in title.split())
+        
+        return title
+        
+    except Exception as e:
+        print(f"Error generating session title: {e}")
+        words = clean_text.split()[:3]
+        fallback_title = ' '.join(words).title() if words else "New Chat"
+        
+        fallback_title = fallback_title.replace('?', '').replace('!', '').strip()
+        return fallback_title[:50]
+
+
 # *********************************************
 # ************* RETRIEVAL + CHAT **************
 # *********************************************

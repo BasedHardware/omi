@@ -12,18 +12,18 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
-import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -96,8 +96,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
+      var sessionProvider = context.read<ChatSessionProvider>();
+      
+      // Initialize sessions
+      await sessionProvider.loadSessions();
+      
+      // Refresh messages for the current session
       if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+        provider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
       }
       scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
@@ -120,17 +126,19 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
-  @override
+
+
+    @override
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer2<MessageProvider, ConnectivityProvider>(
-      builder: (context, provider, connectivityProvider, child) {
+    return Consumer3<MessageProvider, ConnectivityProvider, ChatSessionProvider>(
+      builder: (context, provider, connectivityProvider, sessionProvider, child) {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          endDrawer: _buildHistoryDrawer(context),
+          endDrawer: _buildSessionsDrawer(context),
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -308,7 +316,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 // Send message area - fixed at bottom
                 Container(
                   margin: const EdgeInsets.only(top: 10),
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: Color(0xFF1f1f25),
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(22),
@@ -510,7 +518,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             height: 44,
                                             width: 32,
                                             alignment: Alignment.center,
-                                            child: FaIcon(
+                                            child: const FaIcon(
                                               FontAwesomeIcons.microphone,
                                               color: Colors.white,
                                               size: 20,
@@ -563,7 +571,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             ),
                                           ],
                                         ),
-                                        child: Icon(
+                                        child: const Icon(
                                           FontAwesomeIcons.arrowUp,
                                           color: Color(0xFF35343B),
                                           size: 18,
@@ -590,6 +598,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textFieldFocusNode.unfocus();
 
     var provider = context.read<MessageProvider>();
+    var sessionProvider = context.read<ChatSessionProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
 
@@ -597,7 +606,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     _scrollToAlignUserMessageToTop();
 
     textController.clear();
-    provider.sendMessageStreamToServer(text);
+    provider.sendMessageStreamToServer(text, chatSessionId: sessionProvider.currentSessionId, context: context);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }
@@ -768,6 +777,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           icon: const Icon(Icons.history, color: Colors.white),
           onPressed: () {
             HapticFeedback.mediumImpact();
+            // Dismiss keyboard before opening drawer
+            FocusScope.of(context).unfocus();
             scaffoldKey.currentState?.openEndDrawer();
           },
         ),
@@ -1127,248 +1138,351 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       height: 0.5,
       color: Colors.grey.shade700,
       margin: const EdgeInsets.symmetric(horizontal: 20),
+        );
+  }
+
+  Widget _buildSessionsDrawer(BuildContext context) {
+    return Consumer<ChatSessionProvider>(
+      builder: (context, sessionProvider, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            canvasColor: Colors.white.withOpacity(0.1),
+          ),
+          child: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.85,
+            child: Drawer(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              child: Column(
+                children: [
+                  // Search bar and header
+                  Container(
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top + 16,
+                      left: 12,
+                      right: 12,
+                      bottom: 6,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              enabled: false,
+                              readOnly: true,
+                              focusNode: FocusNode()..canRequestFocus = false,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: 'Search chats...',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: 16,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.search,
+                                  color: Colors.white.withOpacity(0.6),
+                                  size: 20,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () => _handleCreateNewSession(),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF151415),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.plus,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Content
+                  Expanded(
+                    child: sessionProvider.isLoadingSessions
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : sessionProvider.sessions.isEmpty
+                            ? _buildDrawerEmptyState()
+                            : _buildDrawerSessionsList(sessionProvider),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildHistoryDrawer(BuildContext context) {
-    // Dummy chat history data
-    final List<Map<String, dynamic>> chatHistory = [
-      {
-        'title': 'Travel Planning Discussion',
-        'subtitle': 'Help me plan a trip to Japan...',
-        'timestamp': 'Today 2:30 PM',
-        'appName': 'Travel Assistant',
-        'appColor': Colors.blue,
-        'isSelected': true,
-      },
-      {
-        'title': 'Code Review Session',
-        'subtitle': 'Can you review my Flutter code?',
-        'timestamp': 'Today 10:45 AM',
-        'appName': 'Code Helper',
-        'appColor': Colors.green,
-        'isSelected': false,
-      },
-      {
-        'title': 'Recipe Suggestions',
-        'subtitle': 'What can I cook with chicken?',
-        'timestamp': 'Yesterday 6:20 PM',
-        'appName': 'Chef Bot',
-        'appColor': Colors.orange,
-        'isSelected': false,
-      },
-      {
-        'title': 'Learning Discussion',
-        'subtitle': 'Explain machine learning basics',
-        'timestamp': 'Yesterday 2:15 PM',
-        'appName': 'Omi',
-        'appColor': Colors.purple,
-        'isSelected': false,
-      },
-      {
-        'title': 'Book Recommendations',
-        'subtitle': 'Suggest some sci-fi novels',
-        'timestamp': '2 days ago',
-        'appName': 'Book Guru',
-        'appColor': Colors.red,
-        'isSelected': false,
-      },
-      {
-        'title': 'Workout Planning',
-        'subtitle': 'Create a weekly exercise routine',
-        'timestamp': '3 days ago',
-        'appName': 'Fitness Pro',
-        'appColor': Colors.teal,
-        'isSelected': false,
-      },
-      {
-        'title': 'Career Advice Chat',
-        'subtitle': 'Should I switch to tech?',
-        'timestamp': '1 week ago',
-        'appName': 'Career Coach',
-        'appColor': Colors.indigo,
-        'isSelected': false,
-      },
-      {
-        'title': 'Creative Writing Help',
-        'subtitle': 'Help with story plot ideas',
-        'timestamp': '1 week ago',
-        'appName': 'Story Helper',
-        'appColor': Colors.pink,
-        'isSelected': false,
-      },
-    ];
-
-    return Theme(
-      data: Theme.of(context).copyWith(
-        canvasColor: Colors.white.withOpacity(0.1),
-      ),
-      child: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.85,
-        child: Drawer(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          child: Column(
-            children: [
-              // Search bar
-              Container(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top + 16,
-                  left: 12,
-                  right: 12,
-                  bottom: 6,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: TextField(
-                          enabled: false,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: 'Search chats...',
-                            hintStyle: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 16,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search,
-                              color: Colors.white.withOpacity(0.6),
-                              size: 20,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ),
+  Widget _buildDrawerEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            FontAwesomeIcons.comments,
+            size: 64,
+            color: Colors.grey.shade600,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No chat sessions yet',
+            style: TextStyle(
+              color: Colors.grey.shade300,
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start a new conversation to create your first session',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: () => _handleCreateNewSession(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FaIcon(FontAwesomeIcons.plus, size: 16, color: Colors.black),
+                  SizedBox(width: 8),
+                  Text(
+                    'Start New Chat',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('New chat functionality coming soon!'),
-                            duration: Duration(seconds: 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawerSessionsList(ChatSessionProvider sessionProvider) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      itemCount: sessionProvider.sessions.length,
+      itemBuilder: (context, index) {
+        final session = sessionProvider.sessions[index];
+        final isSelected = session.id == sessionProvider.currentSessionId;
+        final sessionColor = _getSessionColor(index);
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _handleSessionTap(session),
+              onLongPress: sessionProvider.sessions.length > 1 
+                  ? () => _handleDeleteSession(session)
+                  : null,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF2A282A) : const Color(0xFF151415),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: sessionColor,
+                            shape: BoxShape.circle,
                           ),
-                        );
-                      },
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Color(0xFF151415),
-                          borderRadius: BorderRadius.circular(12),
+                          child: Center(
+                            child: Text(
+                              session.displayTitle.isNotEmpty 
+                                  ? session.displayTitle[0].toUpperCase()
+                                  : 'C',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                         ),
-                        child: const Center(
-                          child: FaIcon(
-                            FontAwesomeIcons.plus,
-                            color: Colors.white,
-                            size: 18,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            session.displayTitle.isNotEmpty 
+                                ? session.displayTitle 
+                                : 'Chat Session',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        ),
+                        if (isSelected)
+                          const SizedBox(
+                            width: 24,
+                            child: Icon(Icons.check, color: Colors.white60, size: 16),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 32),
+                      child: Text(
+                        _formatSessionTime(session.createdAt),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 12,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              // Content
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  itemCount: chatHistory.length,
-                  itemBuilder: (context, index) {
-                    final chat = chatHistory[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            // TODO: Navigate to specific chat
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Opening: ${chat['title']}'),
-                                duration: const Duration(seconds: 1),
-                              ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: chat['isSelected'] ? Color(0xFF2A282A) : Color(0xFF151415),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 20,
-                                      height: 20,
-                                      decoration: BoxDecoration(
-                                        color: chat['appColor'],
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          chat['appName'][0].toUpperCase(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        chat['title'],
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 32),
-                                  child: Text(
-                                    chat['timestamp'],
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.5),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
+
+  void _handleSessionTap(ChatSession session) async {
+    final sessionProvider = context.read<ChatSessionProvider>();
+    final messageProvider = context.read<MessageProvider>();
+    
+    // Switch to the selected session
+    sessionProvider.switchToSession(session);
+    
+    // Refresh messages for the selected session
+    messageProvider.refreshMessages(chatSessionId: session.id);
+    
+    // Close the drawer
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _handleDeleteSession(ChatSession session) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return getDialog(
+          context,
+          () => Navigator.of(context).pop(false),
+          () => Navigator.of(context).pop(true),
+          'Delete Session?',
+          'Are you sure you want to delete the chat session "${session.displayTitle}"? This action cannot be undone.',
+        );
+      },
+    );
+
+    if (result == true && mounted) {
+      final sessionProvider = context.read<ChatSessionProvider>();
+      await sessionProvider.deleteSession(session);
+      
+      // Refresh messages for the new current session
+      final messageProvider = context.read<MessageProvider>();
+      await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Chat session "${session.displayTitle}" deleted'),
+            backgroundColor: Theme.of(context).colorScheme.secondary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleCreateNewSession() async {
+    final sessionProvider = context.read<ChatSessionProvider>();
+    final messageProvider = context.read<MessageProvider>();
+
+    // Close the drawer first
+    Navigator.of(context).pop();
+    
+    await sessionProvider.createNewSession();
+    
+    // Refresh messages for the new session
+    await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+  }
+
+  String _formatSessionTime(DateTime createdAt) {
+    final now = DateTime.now();
+    final difference = now.difference(createdAt);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${createdAt.day}/${createdAt.month}/${createdAt.year}';
+    }
+  }
+
+  Color _getSessionColor(int index) {
+    final colors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.red,
+      Colors.teal,
+      Colors.indigo,
+      Colors.pink,
+    ];
+    return colors[index % colors.length];
+  }
+
 }
