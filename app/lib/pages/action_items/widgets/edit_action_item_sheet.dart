@@ -112,7 +112,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
 
                           convoProvider.updateGlobalActionItemState(
                             conversation,
-                            widget.itemIndex,
+                            widget.actionItem.description,
                             value,
                           );
 

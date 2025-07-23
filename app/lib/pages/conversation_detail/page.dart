@@ -844,13 +844,11 @@ class EditSegmentWidget extends StatelessWidget {
 class ActionItemDetailWidget extends StatefulWidget {
   final ActionItem actionItem;
   final String conversationId;
-  final int itemIndexInConversation;
 
   const ActionItemDetailWidget({
     super.key,
     required this.actionItem,
     required this.conversationId,
-    required this.itemIndexInConversation,
   });
 
   @override
@@ -858,20 +856,27 @@ class ActionItemDetailWidget extends StatefulWidget {
 }
 
 class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
-  bool _isAnimating = false;
-  bool? _localCompletionState; // Local state for immediate visual feedback
+  static final Map<String, bool> _pendingStates = {}; // Track pending states by description
+
+  @override
+  void dispose() {
+    // Clean up any pending state for this item when widget is disposed
+    _pendingStates.remove(widget.actionItem.description);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
-        final actionItem = provider.conversation.structured.actionItems[widget.itemIndexInConversation];
+        // Find the current action item by description to get the latest state
+        final actionItem = provider.conversation.structured.actionItems.firstWhere((item) => item.description == widget.actionItem.description, orElse: () => widget.actionItem);
 
-        // Use local state if available, otherwise use the provider state
-        final isCompleted = _localCompletionState ?? actionItem.completed;
+        // Check if this specific item has a pending state change
+        final isCompleted = _pendingStates.containsKey(widget.actionItem.description) ? _pendingStates[widget.actionItem.description]! : actionItem.completed;
 
         return AnimatedOpacity(
-          opacity: _isAnimating ? 0.7 : 1.0,
+          opacity: 1.0,
           duration: const Duration(milliseconds: 300),
           child: Container(
             decoration: BoxDecoration(
@@ -957,43 +962,43 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
     HapticFeedback.lightImpact();
 
     final newValue = !actionItem.completed;
+    final itemDescription = widget.actionItem.description;
 
-    // Update local state immediately for instant visual feedback
+    // Update pending state immediately for instant visual feedback
     setState(() {
-      _localCompletionState = newValue;
-      _isAnimating = true;
+      _pendingStates[itemDescription] = newValue;
     });
 
     // Get ConversationProvider for global state management
     final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
 
     try {
-      // Update global state immediately (this handles server + provider state)
-      await conversationProvider.updateGlobalActionItemState(provider.conversation, widget.itemIndexInConversation, newValue);
+      // Update global state immediately
+      await conversationProvider.updateGlobalActionItemState(provider.conversation, itemDescription, newValue);
 
-      // Wait for 1 second before clearing local state (which will show the item in correct section)
-      Future.delayed(const Duration(milliseconds: 500), () {
+      // Wait for 200ms before clearing pending state (allows user to see the change before item moves)
+      Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted) {
-          // Clear local state so item shows in correct section
           setState(() {
-            _localCompletionState = null;
-            _isAnimating = false;
+            _pendingStates.remove(itemDescription); // Clear pending state so item moves to correct section
           });
         }
       });
 
-      // Track analytics
-      if (newValue) {
-        MixpanelManager().checkedActionItem(provider.conversation, widget.itemIndexInConversation);
-      } else {
-        MixpanelManager().uncheckedActionItem(provider.conversation, widget.itemIndexInConversation);
+      // Track analytics - find the current index for analytics
+      final currentIndex = provider.conversation.structured.actionItems.indexWhere((item) => item.description == itemDescription);
+      if (currentIndex != -1) {
+        if (newValue) {
+          MixpanelManager().checkedActionItem(provider.conversation, currentIndex);
+        } else {
+          MixpanelManager().uncheckedActionItem(provider.conversation, currentIndex);
+        }
       }
     } catch (e) {
-      // If there's an error, revert local state
+      // If there's an error, revert pending state
       if (mounted) {
         setState(() {
-          _localCompletionState = null;
-          _isAnimating = false;
+          _pendingStates.remove(itemDescription);
         });
       }
       debugPrint('Error updating action item state: $e');
@@ -1068,13 +1073,11 @@ class ActionItemsTab extends StatelessWidget {
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final item = incompleteItems[index];
-                      final itemIndex = provider.conversation.structured.actionItems.indexOf(item);
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                         child: ActionItemDetailWidget(
                           actionItem: item,
                           conversationId: provider.conversation.id,
-                          itemIndexInConversation: itemIndex,
                         ),
                       );
                     },
@@ -1155,13 +1158,11 @@ class ActionItemsTab extends StatelessWidget {
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final item = completedItems[index];
-                      final itemIndex = provider.conversation.structured.actionItems.indexOf(item);
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                         child: ActionItemDetailWidget(
                           actionItem: item,
                           conversationId: provider.conversation.id,
-                          itemIndexInConversation: itemIndex,
                         ),
                       );
                     },
