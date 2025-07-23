@@ -473,9 +473,9 @@ struct VoiceAssistantPopup: View {
                     .foregroundColor(.white.opacity(0.7))
                     .monospacedDigit()
                 
-                Text("Release to stop")
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.5))
+                //Text("Release to stop")
+                    //.font(.caption2)
+                    //.foregroundColor(.white.opacity(0.5))
             }
         }
     }
