@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: prod-omi-grafana-alb-cert
+  namespace: prod-omi-monitoring
+spec:
+  domains:
+    - monitor.omi.me

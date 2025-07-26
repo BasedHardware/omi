@@ -168,7 +168,7 @@ gpu-operator:
 
 kube-prometheus-stack:
   grafana:
-    enabled: true
+    enabled: false
     ingress:
       enabled: true
       annotations:
@@ -189,6 +189,7 @@ kube-prometheus-stack:
       finalizers:
         - kubernetes.io/pvc-protection
   prometheus:
+    enabled: false
     prometheusSpec:
       additionalScrapeConfigs:
         - job_name: "dg_engine_metrics"
@@ -224,6 +225,12 @@ kube-prometheus-stack:
           - source_labels: [__meta_kubernetes_pod_node_name]
             action: replace
             target_label: kubernetes_node
+
+  prometheusOperator:
+    enabled: false
+
+  kubeStateMetrics:
+    enabled: false
 
 prometheus-adapter:
   # -- Normally, this chart will be installed if `scaling.auto.enabled` is true. However, if you wish
