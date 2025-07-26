@@ -147,4 +147,4 @@ function cleanupSubscriptionsForDevice(deviceId) {
     }
 }
 export { OmiModule };
-export * from './omi';
+export * from './OmiConnection';
