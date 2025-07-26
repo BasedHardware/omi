@@ -1,10 +1,10 @@
 cluster:
-  name: dev-omi-gke
+  name: prod-omi-gke
 
 destinations:
   - name: loki
     type: loki
-    url: http://dev-omi-loki-gateway/loki/api/v1/push
+    url: http://prod-omi-loki-gateway/loki/api/v1/push
     auth:
       type: basic
       usernameKey: username
@@ -17,7 +17,7 @@ clusterEvents:
   enabled: true
   collector: alloy-logs
   namespaces:
-    - dev-omi-backend
+    - prod-omi-backend
 
 nodeLogs:
   enabled: false
@@ -30,7 +30,7 @@ podLogs:
   structuredMetadata:
     pod: pod  # Set structured metadata "pod" from label "pod"
   namespaces:
-    - dev-omi-backend
+    - prod-omi-backend
 
 # Collectors
 alloy-singleton:

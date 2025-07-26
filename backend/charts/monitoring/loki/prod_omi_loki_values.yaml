@@ -1,9 +1,9 @@
 loki_anchors:
-  chunkBucketName: &chunkBucketName dev-omi-loki-chunks
-  rulerBucketName: &rulerBucketName dev-omi-loki-ruler
+  chunkBucketName: &chunkBucketName prod-omi-loki-chunks
+  rulerBucketName: &rulerBucketName prod-omi-loki-ruler
   nodeSelector: &nodeSelector
     service: monitoring
-    env: dev
+    env: prod
 
 loki:
   schemaConfig:
@@ -36,7 +36,7 @@ loki:
       gcs_storage_config:
         region: us-central1 # The GCS region, for example europe-west4
         bucketnames: *rulerBucketName # Your actual gcs bucket name, for example, loki-gcp-ruler
-      alertmanager_url: http://dev-kube-prometheus-stack-alertmanager:9093 # The URL of the Alertmanager to send alerts (Prometheus, Mimir, etc.)
+      alertmanager_url: http://prod-kube-prometheus-stack-alertmanager:9093 # The URL of the Alertmanager to send alerts (Prometheus, Mimir, etc.)
   querier:
     max_concurrent: 4
   storage:
@@ -47,7 +47,7 @@ loki:
 
 serviceAccount:
   create: false
-  name: dev-omi-loki-ksa
+  name: prod-omi-loki-ksa
 
 deploymentMode: Distributed
 
