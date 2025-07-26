@@ -21,6 +21,7 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		016F7F5D2E24A7780048FA48 /* CustomChatOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 016F7F5C2E24A7780048FA48 /* CustomChatOverlay.swift */; };
 		332689E32D863DBF00CB35A1 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 332689E22D863DBF00CB35A1 /* GoogleService-Info.plist */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
@@ -58,6 +59,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		016F7F5C2E24A7780048FA48 /* CustomChatOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomChatOverlay.swift; sourceTree = "<group>"; };
 		1C2D026EB5A0346DDF59E311 /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		332689E22D863DBF00CB35A1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		332689E42D870FC600CB35A1 /* RunnerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerRelease.entitlements; sourceTree = "<group>"; };
@@ -166,6 +168,7 @@
 		33FAB671232836740065AC1E /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				016F7F5C2E24A7780048FA48 /* CustomChatOverlay.swift */,
 				33AE6C012D885D8700901B39 /* RunnerProfile-prod.entitlements */,
 				33AE6C002D885D7E00901B39 /* RunnerRelease-prod.entitlements */,
 				33AE6BFF2D885D7700901B39 /* RunnerDebug-dev.entitlements */,
@@ -422,6 +425,7 @@
 				33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
+				016F7F5D2E24A7780048FA48 /* CustomChatOverlay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -509,12 +513,10 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Mac Developer";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 9536L8KLMP;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -527,7 +529,6 @@
 				MARKETING_VERSION = 1.0.64;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "match Development com.friend-app-with-wearable.ios12.development macos";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
@@ -685,12 +686,10 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/DebugProfile.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Mac Developer";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 9536L8KLMP;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -703,7 +702,6 @@
 				MARKETING_VERSION = 1.0.64;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "match Development com.friend-app-with-wearable.ios12.development macos";
 				SWIFT_VERSION = 5.0;
 			};
 			name = "Profile-dev";
@@ -1151,12 +1149,10 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/RunnerDebug.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Mac Developer";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 9536L8KLMP;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -1169,7 +1165,6 @@
 				MARKETING_VERSION = 1.0.64;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "match Development com.friend-app-with-wearable.ios12.development macos";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
