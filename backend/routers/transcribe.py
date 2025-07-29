@@ -1029,3 +1029,10 @@ async def listen_handler(
         None,
         including_combined_segments=True,
     )
+@router.api_route("/v4/listen", methods=["GET", "POST", "PUT", "OPTIONS"])
+async def reject_non_websocket_requests(request: Request):
+    print(f"[REJECT] Non-WebSocket request to /v4/listen from {request.client.host} via {request.method}")
+    return JSONResponse(
+        status_code=400,
+        content={"error": "WebSocket connection required at /v4/listen"},
+    )
