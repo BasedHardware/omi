@@ -75,7 +75,7 @@ scaling:
 api:
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-api
-    tag: release-250710
+    tag: release-250626
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -108,7 +108,7 @@ api:
 engine:
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-engine
-    tag: release-250710
+    tag: release-250626
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -144,7 +144,7 @@ licenseProxy:
   enabled: true
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-license-proxy
-    tag: release-250710
+    tag: release-250626
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -238,7 +238,7 @@ prometheus-adapter:
   # you can force it to not be installed by setting this to `false`.
   includeDependency:
   prometheus:
-    url: http://dg-prometheus-stack-prometheus.{{ .Release.Namespace }}.svc
+    url: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc
   rules:
     default: false
     external:
