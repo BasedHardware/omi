@@ -106,5 +106,10 @@ prometheus:
                   values:
                     - prod
 
+kube-state-metrics:
+  enabled: true
+  metricLabelsAllowlist:
+    - namespaces=[{{ .Release.Namespace }}],deployments=[app]
+
 nodeExporter:
   enabled: true
