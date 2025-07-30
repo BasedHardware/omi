@@ -55,7 +55,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
         padding: const EdgeInsets.all(16.0),
         margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 6),
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16.0),
         ),
         child: Column(
@@ -175,8 +175,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                         onPressed: () {
                                           updateShowReplyField(false);
                                         },
-                                        child:
-                                            const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
+                                        child: const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
                                       ),
                                     ),
                                     const SizedBox(
@@ -198,8 +197,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                               isLoading = true;
                                             });
                                             await replyToAppReview(widget.appId, replyController.text);
-                                            context.read<AppProvider>().updateLocalAppReviewResponse(
-                                                widget.appId, replyController.text, widget.review.uid);
+                                            context.read<AppProvider>().updateLocalAppReviewResponse(widget.appId, replyController.text, widget.review.uid);
                                             setState(() {
                                               widget.review.response = replyController.text;
                                               isLoading = false;
@@ -207,8 +205,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                             });
                                           }
                                         },
-                                        child: const Text('Submit Reply',
-                                            style: TextStyle(color: Colors.black, fontSize: 16)),
+                                        child: const Text('Submit Reply', style: TextStyle(color: Colors.black, fontSize: 16)),
                                       ),
                                     ),
                                   ],
@@ -234,10 +231,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                           const SizedBox(
                             width: 8,
                           ),
-                          widget.review.respondedAt != null
-                              ? Text(timeago.format(widget.review.respondedAt!),
-                                  style: const TextStyle(color: Colors.grey, fontSize: 12))
-                              : const SizedBox(),
+                          widget.review.respondedAt != null ? Text(timeago.format(widget.review.respondedAt!), style: const TextStyle(color: Colors.grey, fontSize: 12)) : const SizedBox(),
                         ],
                       ),
                       const SizedBox(

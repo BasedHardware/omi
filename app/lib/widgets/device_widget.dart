@@ -4,11 +4,15 @@ import 'package:omi/gen/assets.gen.dart';
 class DeviceAnimationWidget extends StatefulWidget {
   final bool animatedBackground;
   final double sizeMultiplier;
+  final bool isConnected;
+  final String? deviceName;
 
   const DeviceAnimationWidget({
     super.key,
     this.sizeMultiplier = 1.0,
     this.animatedBackground = true,
+    this.isConnected = false,
+    this.deviceName,
   });
 
   @override
@@ -52,25 +56,72 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                     builder: (context, child) {
                       return Image.asset(
                         Assets.images.blob.path,
-                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
-                            widget.sizeMultiplier *
-                            _animation.value,
-                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
-                            widget.sizeMultiplier *
-                            _animation.value,
+                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier * _animation.value,
+                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier * _animation.value,
                       );
                     },
                   )
                 : Container(),
             // Image.asset("assets/images/blob.png"),
-            Image.asset(
-              Assets.images.herologo.path,
-              height: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
-              width: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
-            )
+            _buildDeviceImage()
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildDeviceImage() {
+    final double imageHeight = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
+    final double imageWidth = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
+
+    // Special stacked approach for "Omi" device
+    if (widget.deviceName != null && widget.deviceName == 'Omi') {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          // Bottom layer: turned-off image (always visible)
+          Image.asset(
+            'assets/images/omi-without-rope-turned-off.png',
+            height: imageHeight,
+            width: imageWidth,
+          ),
+          // Top layer: turned-on image (visible only when connected)
+          AnimatedOpacity(
+            opacity: widget.isConnected ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Image.asset(
+              'assets/images/omi-without-rope.png',
+              height: imageHeight,
+              width: imageWidth,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // For all other devices, use the regular single image approach
+    return Image.asset(
+      _getImagePath(),
+      height: imageHeight,
+      width: imageWidth,
+    );
+  }
+
+  String _getImagePath() {
+    // Show device image for both connected and paired devices
+    if (widget.deviceName != null && widget.deviceName!.contains('Glass')) {
+      return 'assets/images/omi-glass.png';
+    }
+
+    if (widget.deviceName != null && widget.deviceName!.contains('Omi DevKit')) {
+      return 'assets/images/omi-devkit-without-rope.png';
+    }
+
+    // Default to omi device image, fallback to hero logo only if no device name
+    if (widget.deviceName != null && widget.deviceName!.isNotEmpty) {
+      return 'assets/images/omi-without-rope.png';
+    }
+
+    return Assets.images.herologo.path;
   }
 }

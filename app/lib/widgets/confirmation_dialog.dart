@@ -55,7 +55,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
   Widget build(BuildContext context) {
     if (Platform.isAndroid) {
       return AlertDialog(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: const Color(0xFF1F1F25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         contentPadding: const EdgeInsets.only(top: 20, left: 24, right: 24, bottom: 10),
         title: Text(

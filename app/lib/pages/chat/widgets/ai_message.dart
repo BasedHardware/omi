@@ -4,6 +4,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -21,6 +22,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'markdown_message_widget.dart';
 
@@ -59,54 +61,121 @@ class _AIMessageState extends State<AIMessage> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.max,
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        widget.appSender != null
-            ? CachedNetworkImage(
-                imageUrl: widget.appSender!.getImageUrl(),
-                imageBuilder: (context, imageProvider) => CircleAvatar(
-                  backgroundColor: Colors.white,
-                  radius: 16,
-                  backgroundImage: imageProvider,
-                ),
-                placeholder: (context, url) => const CircularProgressIndicator(),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
-              )
-            : Container(
-                decoration: BoxDecoration(
-                  image: DecorationImage(
-                    image: AssetImage(Assets.images.background.path),
-                    fit: BoxFit.cover,
-                  ),
-                  borderRadius: const BorderRadius.all(Radius.circular(16.0)),
-                ),
-                height: 32,
-                width: 32,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Image.asset(
-                      Assets.images.herologo.path,
-                      height: 24,
-                      width: 24,
-                    ),
-                  ],
-                ),
-              ),
-        const SizedBox(width: 16.0),
-        Expanded(
-          child: buildMessageWidget(
-            widget.message,
-            widget.sendMessage,
-            widget.showTypingIndicator,
-            widget.displayOptions,
-            widget.appSender,
-            widget.updateConversation,
-            widget.setMessageNps,
-          ),
+        buildMessageWidget(
+          widget.message,
+          widget.sendMessage,
+          widget.showTypingIndicator,
+          widget.displayOptions,
+          widget.appSender,
+          widget.updateConversation,
+          widget.setMessageNps,
         ),
+        // Add copy, share, and NPS buttons below message
+        if (!widget.showTypingIndicator && widget.message.text.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, left: 0),
+            child: Row(
+              children: [
+                // Copy button
+                GestureDetector(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: widget.message.text.decodeString));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Message copied to clipboard',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const FaIcon(
+                      FontAwesomeIcons.clone,
+                      size: 16,
+                      color: Colors.white60,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Share button
+                GestureDetector(
+                  onTap: () {
+                    Share.share(
+                      '${widget.message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
+                      subject: 'Chat with Omi',
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const FaIcon(
+                      FontAwesomeIcons.arrowUpFromBracket,
+                      size: 16,
+                      color: Colors.white60,
+                    ),
+                  ),
+                ),
+                // Add NPS buttons if message asks for NPS
+                if (widget.message.askForNps) ...[
+                  const SizedBox(width: 8),
+                  // Thumbs down button
+                  GestureDetector(
+                    onTap: () {
+                      widget.setMessageNps(0);
+                      AppSnackbar.showSnackbar('Thank you for your feedback!');
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const FaIcon(
+                        FontAwesomeIcons.thumbsDown,
+                        size: 16,
+                        color: Colors.white60,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Thumbs up button
+                  GestureDetector(
+                    onTap: () {
+                      widget.setMessageNps(1);
+                      AppSnackbar.showSnackbar('Thank you for your feedback!');
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const FaIcon(
+                        FontAwesomeIcons.thumbsUp,
+                        size: 16,
+                        color: Colors.white60,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -131,8 +200,7 @@ Widget buildMessageWidget(
         setMessageNps: sendMessageNps,
         date: message.createdAt);
   } else if (message.type == MessageType.daySummary) {
-    return DaySummaryWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
+    return DaySummaryWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
       showTypingIndicator: showTypingIndicator,
@@ -185,8 +253,7 @@ class InitialMessageWidget extends StatelessWidget {
   final String messageText;
   final Function(String) sendMessage;
 
-  const InitialMessageWidget(
-      {super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
+  const InitialMessageWidget({super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -266,10 +333,7 @@ class DaySummaryWidget extends StatelessWidget {
     } else {
       // Split by period followed by space
       List<String> listOfMessages = message.split('. ');
-      return listOfMessages
-          .map((msg) => msg.endsWith('.') ? msg.substring(0, msg.length - 1) : msg)
-          .where((msg) => msg.trim().isNotEmpty)
-          .toList();
+      return listOfMessages.map((msg) => msg.endsWith('.') ? msg.substring(0, msg.length - 1) : msg).where((msg) => msg.trim().isNotEmpty).toList();
     }
   }
 
@@ -289,7 +353,7 @@ class DaySummaryWidget extends StatelessWidget {
           leading: Text(
             '${index + 1}.',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: FontWeight.bold,
               color: Colors.grey.shade500,
             ),
@@ -297,7 +361,7 @@ class DaySummaryWidget extends StatelessWidget {
           title: AutoSizeText(
             sentences[index],
             style: const TextStyle(
-              fontSize: 15.0,
+              fontSize: 16.0,
               fontWeight: FontWeight.w500,
               height: 1.35,
               color: Colors.white,
@@ -332,12 +396,7 @@ class NormalMessageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var previousThinkingText = message.thinkings.length > 1
-        ? message.thinkings
-            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
-            .first
-            .decodeString
-        : null;
+    var previousThinkingText = message.thinkings.length > 1 ? message.thinkings.sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0).first.decodeString : null;
     var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +420,7 @@ class NormalMessageWidget extends StatelessWidget {
                                         maxLines: 1,
                                         softWrap: false,
                                         previousThinkingText,
-                                        style: const TextStyle(color: Colors.white60, fontSize: 14),
+                                        style: const TextStyle(color: Colors.white60, fontSize: 15),
                                       )
                                     : const SizedBox.shrink(),
                                 Shimmer.fromColors(
@@ -372,7 +431,7 @@ class NormalMessageWidget extends StatelessWidget {
                                     maxLines: 1,
                                     softWrap: false,
                                     thinkingText,
-                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                    style: const TextStyle(color: Colors.white, fontSize: 15),
                                   ),
                                 )
                               ],
@@ -385,20 +444,19 @@ class NormalMessageWidget extends StatelessWidget {
                   ],
                 ))
             : const SizedBox.shrink(),
-        !(showTypingIndicator && messageText.isEmpty)
-            ? Container(
-                margin: const EdgeInsets.only(bottom: 4.0),
-                child: Text(
-                  formatChatTimestamp(createdAt),
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                  ),
-                ),
-              )
-            : const SizedBox.shrink(),
+        // !(showTypingIndicator && messageText.isEmpty)
+        //     ? Container(
+        //         margin: const EdgeInsets.only(bottom: 4.0),
+        //         child: Text(
+        //           formatChatTimestamp(createdAt),
+        //           style: TextStyle(
+        //             color: Colors.grey.shade500,
+        //             fontSize: 12,
+        //           ),
+        //         ),
+        //       )
+        //     : const SizedBox.shrink(),
         messageText.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, messageText),
-        _getNpsWidget(context, message, setMessageNps),
       ],
     );
   }
@@ -442,16 +500,16 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4.0),
-          child: Text(
-            formatChatTimestamp(widget.date),
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-            ),
-          ),
-        ),
+        // Padding(
+        //   padding: const EdgeInsets.only(bottom: 4.0),
+        //   child: Text(
+        //     formatChatTimestamp(widget.date),
+        //     style: TextStyle(
+        //       color: Colors.grey.shade500,
+        //       fontSize: 12,
+        //     ),
+        //   ),
+        // ),
         widget.showTypingIndicator
             ? const Row(
                 mainAxisSize: MainAxisSize.min,
@@ -534,7 +592,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
                 width: double.maxFinite,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
+                  color: const Color(0xFF1F1F25),
                   borderRadius: BorderRadius.circular(12.0),
                 ),
                 child: Row(
@@ -562,7 +620,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             ),
           ),
         ],
-        _getNpsWidget(context, widget.message, widget.setMessageNps),
       ],
     );
   }
@@ -649,7 +706,7 @@ class InitialOptionWidget extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
         width: double.maxFinite,
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(12.0),
         ),
         child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),

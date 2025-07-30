@@ -7,10 +7,12 @@ from typing import List, Optional, Tuple
 
 from pydantic import BaseModel, Field, ValidationError
 
+import database.users as users_db
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
+from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 
@@ -42,6 +44,68 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 """
     prompt = prompt.strip()
     return llm_mini.invoke(prompt).content
+
+
+def generate_session_title(message_text: str) -> str:
+    """
+    Generate a concise, meaningful title for a chat session based on the first user message.
+    The title should be 3-4 words maximum and capture the main topic or intent.
+    """
+    
+    if not message_text or not message_text.strip():
+        return "New Chat"
+    
+    clean_text = message_text.strip()[:500]
+    
+    prompt = f"""
+    You are an expert at creating concise, meaningful titles for conversations.
+    
+    Your task is to generate a short title (3-4 words maximum) that captures the main topic or intent of this message.
+    The title should be:
+    - Very concise (3-4 words max)
+    - Clear and descriptive
+    - Focus on the main topic, not implementation details
+    - Use Title Case (capitalize first letter of each word)
+    - Avoid generic words like "Help", "Question", "Issue" unless very specific
+    - Avoid quotes or special characters
+    
+    Examples of good titles:
+    - "Python Data Analysis" (for questions about analyzing data with Python)
+    - "Travel Planning Europe" (for questions about planning European travel)
+    - "Career Change Advice" (for questions about switching careers)
+    - "Recipe Recommendations" (for asking about food recipes)
+    - "Investment Strategy" (for financial planning questions)
+    - "Machine Learning Setup" (for ML environment questions)
+    - "React Component Design" (for React development questions)
+    
+    Message: ```{clean_text}```
+    
+    Output only the title, nothing else.
+    """.replace('    ', '').strip()
+    
+    try:
+        response = llm_mini.invoke(prompt)
+        title = response.content.strip()
+        
+        title = title.replace('"', '').replace("'", "").strip()
+        
+        words = title.split()
+        if len(words) > 4:
+            title = ' '.join(words[:4])
+        elif len(words) == 0:
+            title = "New Chat"
+            
+        title = ' '.join(word.capitalize() for word in title.split())
+        
+        return title
+        
+    except Exception as e:
+        print(f"Error generating session title: {e}")
+        words = clean_text.split()[:3]
+        fallback_title = ' '.join(words).title() if words else "New Chat"
+        
+        fallback_title = fallback_title.replace('?', '').replace('!', '').strip()
+        return fallback_title[:50]
 
 
 # *********************************************
@@ -177,8 +241,8 @@ class SummaryOutput(BaseModel):
     summary: str = Field(description="The extracted content, maximum 500 words.")
 
 
-def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> str:
-    content = TranscriptSegment.segments_as_string(segments)
+def chunk_extraction(segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None) -> str:
+    content = TranscriptSegment.segments_as_string(segments, people=people)
     prompt = f'''
     You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
     You will be given a conversation transcript of a low quality recording, and a list of topics.
@@ -394,8 +458,14 @@ def qa_rag_stream(
 # **************************************************
 
 
-def retrieve_memory_context_params(memory: Conversation) -> List[str]:
-    transcript = memory.get_transcript(False)
+def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
+    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = memory.get_transcript(False, people=people)
     if len(transcript) == 0:
         return []
 
@@ -422,7 +492,14 @@ def retrieve_memory_context_params(memory: Conversation) -> List[str]:
 
 def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    transcript = memory.get_transcript(False)
+
+    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = memory.get_transcript(False, people=people)
     prompt = f"""
     You are a thoughtful and encouraging Friend.
     Your best friend is {user_name}, {memories_str}
@@ -821,6 +898,13 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
 
 def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
+
+    person_ids = [s.person_id for s in segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
     prompt = f'''
     {user_name} is having a conversation.
 
@@ -839,7 +923,7 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
 
     Conversation:
     ```
-    {TranscriptSegment.segments_as_string(segments)}
+    {TranscriptSegment.segments_as_string(segments, people=people)}
     ```
     '''.replace(
         '    ', ''
@@ -853,7 +937,14 @@ class OutputMessage(BaseModel):
 
 def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    transcript = TranscriptSegment.segments_as_string(segments)
+
+    person_ids = [s.person_id for s in segments if s.person_id]
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    transcript = TranscriptSegment.segments_as_string(segments, people=people)
     # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
     prompt = f"""

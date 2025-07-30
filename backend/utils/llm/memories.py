@@ -3,7 +3,9 @@ from typing import List, Optional, Tuple
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
+from database import users as users_db
 from models.memories import Memory, MemoryCategory
+from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
@@ -47,7 +49,9 @@ def new_memories_extractor(
     if user_name is None or memories_str is None:
         user_name, memories_str = get_prompt_memories(uid)
 
-    content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
+    person_ids = list(set([s.person_id for s in segments if s.person_id]))
+    people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
@@ -127,7 +131,9 @@ def new_learnings_extractor(
     if user_name is None or learnings_str is None:
         user_name, memories_str = get_prompt_memories(uid)
 
-    content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
+    person_ids = list(set([s.person_id for s in segments if s.person_id]))
+    people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
     if not content or len(content) < 100:
         return []
 

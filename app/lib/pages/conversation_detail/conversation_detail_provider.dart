@@ -38,10 +38,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null ||
-        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
-        conversationProvider!.groupedConversations[selectedDate] == null ||
-        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
+    if (conversationProvider == null || !conversationProvider!.groupedConversations.containsKey(selectedDate) || conversationProvider!.groupedConversations[selectedDate] == null || conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
       // Return cached conversation if available, otherwise create an empty one
       if (_cachedConversation == null) {
         throw StateError("No conversation available");
@@ -63,9 +60,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool hasAudioRecording = false;
 
-  bool displayDevToolsInSheet = false;
-  bool displayShareOptionsInSheet = false;
-
   bool editSegmentLoading = false;
 
   bool showUnassignedFloatingButton = true;
@@ -82,16 +76,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   void toggleIsTranscriptExpanded() {
     isTranscriptExpanded = !isTranscriptExpanded;
-    notifyListeners();
-  }
-
-  void toggleDevToolsInSheet(bool value) {
-    displayDevToolsInSheet = value;
-    notifyListeners();
-  }
-
-  void toggleShareOptionsInSheet(bool value) {
-    displayShareOptionsInSheet = value;
     notifyListeners();
   }
 
@@ -246,6 +230,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       conversationProvider!.updateConversation(updatedConversation);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
+      // Update the cached conversation to ensure we have the latest data
+      _cachedConversation = updatedConversation;
+
       // Check if the summarized app is in the apps list
       AppResponse? summaryApp = getSummarizedApp();
       if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
@@ -273,10 +260,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
-  void unassignConversationTranscriptSegment(String conversationId, int segmentIdx) {
+  void unassignConversationTranscriptSegment(String conversationId, String segmentId) {
+    final segmentIdx = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+    if (segmentIdx == -1) return;
     conversation.transcriptSegments[segmentIdx].isUser = false;
     conversation.transcriptSegments[segmentIdx].personId = null;
-    assignConversationTranscriptSegment(conversationId, segmentIdx);
+    assignBulkConversationTranscriptSegments(conversationId, [segmentId]);
     notifyListeners();
   }
 
@@ -286,11 +275,23 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (conversation.appResults.isNotEmpty) {
       return conversation.appResults[0];
     }
+    // If no appResults but we have structured overview, create a fake AppResponse
+    if (conversation.structured.overview.isNotEmpty) {
+      return AppResponse(
+        conversation.structured.overview,
+        appId: null,
+      );
+    }
     return null;
   }
 
   void setPreferredSummarizationApp(String appId) {
     setPreferredSummarizationAppServer(appId);
+    notifyListeners();
+  }
+
+  void setCachedConversation(ServerConversation conversation) {
+    _cachedConversation = conversation;
     notifyListeners();
   }
 }

@@ -55,7 +55,7 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                 color: Colors.black,
               ),
               blockquoteDecoration: BoxDecoration(
-                color: Colors.grey.shade800,
+                color: Color(0xFF35343B),
                 borderRadius: BorderRadius.circular(4),
               ),
               code: widget.style.copyWith(

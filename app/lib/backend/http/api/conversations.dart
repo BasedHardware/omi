@@ -178,44 +178,34 @@ Future<bool> hasConversationRecording(String conversationId) async {
   return false;
 }
 
-Future<bool> assignConversationTranscriptSegment(
+Future<bool> assignBulkConversationTranscriptSegments(
   String conversationId,
-  int segmentIdx, {
+  List<String> segmentIds, {
   bool? isUser,
   String? personId,
-  bool useForSpeechTraining = true,
 }) async {
-  String assignType = isUser != null ? 'is_user' : 'person_id';
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/$segmentIdx/assign?value=${isUser ?? personId}'
-        '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
-    headers: {},
-    method: 'PATCH',
-    body: '',
-  );
-  if (response == null) return false;
-  debugPrint('assignConversationTranscriptSegment: ${response.body}');
-  return response.statusCode == 200;
-}
+  String assignType;
+  String? value;
+  if (isUser == true) {
+    assignType = 'is_user';
+    value = 'true';
+  } else {
+    assignType = 'person_id';
+    value = personId; // can be null for un-assign
+  }
 
-Future<bool> assignConversationSpeaker(
-  String conversationId,
-  int speakerId,
-  bool isUser, {
-  String? personId,
-  bool useForSpeechTraining = true,
-}) async {
-  String assignType = isUser ? 'is_user' : 'person_id';
   var response = await makeApiCall(
-    url:
-        '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?value=${isUser ? 'true' : personId}'
-        '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk',
     headers: {},
     method: 'PATCH',
-    body: '',
+    body: jsonEncode({
+      'segment_ids': segmentIds,
+      'assign_type': assignType,
+      'value': value,
+    }),
   );
   if (response == null) return false;
-  debugPrint('assignConversationSpeaker: ${response.body}');
+  debugPrint('assignBulkConversationTranscriptSegments: ${response.body}');
   return response.statusCode == 200;
 }
 

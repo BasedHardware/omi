@@ -125,7 +125,7 @@ class SectionAppItemCard extends StatelessWidget {
                   width: 50,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade800,
+                    color: Color(0xFF35343B),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),

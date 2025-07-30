@@ -28,7 +28,9 @@ export function AppStats({ plugin, size = 'md', className = '' }: AppStatsProps)
   };
 
   return (
-    <div className={`flex items-center ${sizeClasses[size].container} text-gray-400 ${className}`}>
+    <div
+      className={`flex items-center ${sizeClasses[size].container} text-gray-400 ${className}`}
+    >
       <div className="flex items-center">
         <Star className={`mr-2 ${sizeClasses[size].icon} text-yellow-400`} />
         <span className={sizeClasses[size].text}>
@@ -44,4 +46,4 @@ export function AppStats({ plugin, size = 'md', className = '' }: AppStatsProps)
       </div>
     </div>
   );
-} 
+}

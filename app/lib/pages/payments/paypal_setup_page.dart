@@ -76,8 +76,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(_isComplete ? 'Update PayPal' : 'Set Up PayPal',
-            style: const TextStyle(color: Colors.white, fontSize: 20)),
+        title: Text(_isComplete ? 'Update PayPal' : 'Set Up PayPal', style: const TextStyle(color: Colors.white, fontSize: 20)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -135,9 +134,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                             ),
                             const SizedBox(height: 24),
                             Text(
-                              _isComplete
-                                  ? 'Update your PayPal account details'
-                                  : 'Connect your PayPal account to start receiving payments for your apps',
+                              _isComplete ? 'Update your PayPal account details' : 'Connect your PayPal account to start receiving payments for your apps',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.grey.shade300,
@@ -151,7 +148,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
+                          color: const Color(0xFF1F1F25),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Column(
@@ -168,7 +165,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
                               margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade800,
+                                color: Color(0xFF35343B),
                                 borderRadius: BorderRadius.circular(10.0),
                               ),
                               width: double.infinity,
@@ -197,7 +194,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
                               margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade800,
+                                color: Color(0xFF35343B),
                                 borderRadius: BorderRadius.circular(10.0),
                               ),
                               width: double.infinity,
@@ -222,10 +219,10 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
+                            color: const Color(0xFF1F1F25),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Colors.grey.shade800,
+                              color: Color(0xFF35343B),
                               width: 1,
                             ),
                           ),

@@ -45,7 +45,7 @@ scaling:
 
     engine:
       # -- Minimum number of Engine replicas.
-      minReplicas: 5
+      minReplicas: 4
       # -- Maximum number of Engine replicas.
       maxReplicas: 20
       metrics:
@@ -168,7 +168,7 @@ gpu-operator:
 
 kube-prometheus-stack:
   grafana:
-    enabled: true
+    enabled: false
     ingress:
       enabled: true
       annotations:
@@ -189,6 +189,7 @@ kube-prometheus-stack:
       finalizers:
         - kubernetes.io/pvc-protection
   prometheus:
+    enabled: false
     prometheusSpec:
       additionalScrapeConfigs:
         - job_name: "dg_engine_metrics"
@@ -225,13 +226,19 @@ kube-prometheus-stack:
             action: replace
             target_label: kubernetes_node
 
+  prometheusOperator:
+    enabled: false
+
+  kubeStateMetrics:
+    enabled: false
+
 prometheus-adapter:
   # -- Normally, this chart will be installed if `scaling.auto.enabled` is true. However, if you wish
   # to manage the Prometheus adapter in your cluster on your own and not as part of the Deepgram Helm chart,
   # you can force it to not be installed by setting this to `false`.
   includeDependency:
   prometheus:
-    url: http://dg-prometheus-stack-prometheus.{{ .Release.Namespace }}.svc
+    url: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc
   rules:
     default: false
     external:

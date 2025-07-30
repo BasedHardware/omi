@@ -5,4 +5,6 @@ module.exports = {
   printWidth: 90,
   tabWidth: 2,
   endOfLine: 'auto',
+  htmlWhitespaceSensitivity: 'css',
+  singleAttributePerLine: false,
 };

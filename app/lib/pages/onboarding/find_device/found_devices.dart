@@ -4,7 +4,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:gradient_borders/gradient_borders.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
@@ -25,6 +25,16 @@ class _FoundDevicesState extends State<FoundDevices> {
   @override
   void initState() {
     super.initState();
+  }
+
+  String _getDeviceImagePath(String deviceName) {
+    if (deviceName.contains('Glass')) {
+      return 'assets/images/omi-glass.png';
+    }
+    if (deviceName.contains('Omi DevKit')) {
+      return 'assets/images/omi-devkit-without-rope.png';
+    }
+    return 'assets/images/omi-without-rope.png';
   }
 
   @override
@@ -59,9 +69,7 @@ class _FoundDevicesState extends State<FoundDevices> {
           children: [
             !provider.isConnected
                 ? Text(
-                    provider.deviceList.isEmpty
-                        ? 'Searching for devices...'
-                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                    provider.deviceList.isEmpty ? 'Searching for devices...' : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
@@ -126,50 +134,55 @@ class _FoundDevicesState extends State<FoundDevices> {
                 }
               : null,
           child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               decoration: BoxDecoration(
-                border: const GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
-                  width: 1,
-                ),
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
               ),
               child: Row(
                 children: [
+                  // Device icon
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Image.asset(
+                      _getDeviceImagePath(device.name),
+                      width: 32,
+                      height: 32,
+                    ),
+                  ),
+                  // Device name and info
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
                       child: Stack(
                         children: [
                           Align(
-                            alignment: Alignment.center,
+                            alignment: Alignment.centerLeft,
                             child: Text(
                               '${device.name} (${device.getShortId()})',
-                              textAlign: TextAlign.center,
+                              textAlign: TextAlign.left,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w500,
                                 fontSize: 18,
-                                color: Color(0xCCFFFFFF),
+                                color: Colors.black,
                               ),
                             ),
                           ),
                           Align(
                             alignment: Alignment.centerRight,
-                            child: isConnecting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                : const SizedBox.shrink(), // Show loading indicator if connecting
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 16.0),
+                              child: isConnecting
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
                           )
                         ],
                       ),
