@@ -1,21 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:provider/provider.dart';
 
 class EditActionItemBottomSheet extends StatefulWidget {
-  final ActionItem actionItem;
-  final String conversationId;
-  final int itemIndex;
+  final ActionItemWithMetadata actionItem;
 
   const EditActionItemBottomSheet({
     super.key,
     required this.actionItem,
-    required this.conversationId,
-    required this.itemIndex,
   });
 
   @override
@@ -25,6 +20,7 @@ class EditActionItemBottomSheet extends StatefulWidget {
 class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
   late TextEditingController _textController;
   late bool _isCompleted;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -44,7 +40,6 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
 
   void _saveActionItem() async {
     if (_textController.text.trim().isEmpty) {
-      // Optionally, show a message that description can't be empty
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Action item description cannot be empty.'),
@@ -54,20 +49,81 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       return;
     }
 
-    String oldDescription = widget.actionItem.description;
-    String newDescription = _textController.text.trim();
-
-    updateActionItemDescription(widget.conversationId, oldDescription, newDescription, widget.itemIndex);
-
-    final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
-    convoProvider.updateActionItemDescriptionInConversation(
-      widget.conversationId,
-      widget.itemIndex, // This should be the index of the item in the conversation's list
-      newDescription,
-    );
-
-    if (mounted) {
+    if (_textController.text.trim() == widget.actionItem.description) {
       Navigator.pop(context);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      String oldDescription = widget.actionItem.description;
+      String newDescription = _textController.text.trim();
+
+      await updateActionItemDescription(
+        widget.actionItem.conversationId, 
+        oldDescription, 
+        newDescription, 
+        widget.actionItem.index
+      );
+
+      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      final updatedItem = widget.actionItem.copyWith(description: newDescription);
+      await provider.updateActionItemState(updatedItem, updatedItem.completed);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action item updated'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update action item: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _deleteActionItem() async {
+    Navigator.pop(context);
+
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final success = await provider.deleteActionItem(widget.actionItem);
+    
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action item deleted'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete action item'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -76,9 +132,9 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1F1F25),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         child: Column(
@@ -100,25 +156,17 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(5),
                         ),
-                        onChanged: (bool? value) {
-                          HapticFeedback.lightImpact();
+                        onChanged: _isLoading ? null : (bool? value) async {
                           if (value == null) return;
-
-                          final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
-                          ServerConversation? conversation = convoProvider.conversations.firstWhere(
-                            (c) => c.id == widget.conversationId,
-                            orElse: () => throw Exception('Conversation not found for ID: ${widget.conversationId}'),
-                          );
-
-                          convoProvider.updateGlobalActionItemState(
-                            conversation,
-                            widget.actionItem.description,
-                            value,
-                          );
-
+                          
+                          HapticFeedback.lightImpact();
+                          
                           setState(() {
                             _isCompleted = value;
                           });
+
+                          final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+                          await provider.updateActionItemState(widget.actionItem, value);
                         },
                       ),
                     ),
@@ -135,7 +183,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                 // Delete button
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () {
+                  onPressed: _isLoading ? null : () {
                     // Show delete confirmation dialog
                     showDialog(
                       context: context,
@@ -160,15 +208,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                           TextButton(
                             onPressed: () {
                               Navigator.pop(context, true); // Close dialog
-                              Navigator.pop(context); // Close bottom sheet
-
-                              // Show confirmation
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Action item deleted'),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
+                              _deleteActionItem();
                             },
                             child: const Text(
                               'Delete',
@@ -188,6 +228,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
               controller: _textController,
               autofocus: true,
               maxLines: null,
+              enabled: !_isLoading,
               textInputAction: TextInputAction.done,
               style: const TextStyle(
                 color: Colors.white,
@@ -200,7 +241,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                 isDense: true,
               ),
               onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
+                if (value.trim().isNotEmpty && !_isLoading) {
                   _saveActionItem();
                 }
               },
@@ -226,7 +267,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Press done to save',
+                        _isLoading ? 'Saving...' : 'Press done to save',
                         style: TextStyle(
                           color: Colors.grey.shade400,
                           fontSize: 11,

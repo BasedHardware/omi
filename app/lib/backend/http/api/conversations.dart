@@ -4,9 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
@@ -252,6 +250,7 @@ Future<bool> setConversationActionItemState(
   print(jsonEncode({
     'items_idx': actionItemsIdx,
     'values': values,
+    'conversation_id': conversationId,
   }));
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
@@ -397,4 +396,50 @@ Future<String> testConversationPrompt(String prompt, String conversationId) asyn
   } else {
     return '';
   }
+}
+
+// *********************************
+// ******** ACTION ITEMS ***********
+// *********************************
+
+Future<ActionItemsResponse> getActionItems({
+  int limit = 50,
+  int offset = 0,
+  bool includeCompleted = true,
+  DateTime? startDate,
+  DateTime? endDate,
+}) async {
+  String url = '${Env.apiBaseUrl}v1/action-items?limit=$limit&offset=$offset&include_completed=$includeCompleted';
+  
+  if (startDate != null) {
+    url += '&start_date=${startDate.toIso8601String()}';
+  }
+  if (endDate != null) {
+    url += '&end_date=${endDate.toIso8601String()}';
+  }
+  
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  
+  if (response == null) return ActionItemsResponse(actionItems: [], totalCount: 0, hasMore: false);
+  
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return ActionItemsResponse.fromJson(jsonDecode(body));
+  } else {
+    debugPrint('getActionItems error ${response.statusCode}');
+    return ActionItemsResponse(actionItems: [], totalCount: 0, hasMore: false);
+  }
+}
+
+Future<bool> updateActionItemStateByMetadata(
+  String conversationId,
+  int itemIndex,
+  bool newState,
+) async {
+  return await setConversationActionItemState(conversationId, [itemIndex], [newState]);
 }
