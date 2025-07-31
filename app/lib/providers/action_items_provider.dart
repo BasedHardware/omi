@@ -139,6 +139,13 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
+    final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
+    if (itemInList != null) {
+      notifyListeners();
+    }
+  }
+
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
     try {
       final success = await api.deleteConversationActionItem(
@@ -169,6 +176,16 @@ class ActionItemsProvider extends ChangeNotifier {
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
     if (mainIndex != -1) {
       _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState);
+      return _actionItems[mainIndex];
+    }
+
+    return null;
+  }
+
+  ActionItemWithMetadata? _findAndUpdateItemDescription(String itemId, String newDescription) {
+    final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
+    if (mainIndex != -1) {
+      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(description: newDescription);
       return _actionItems[mainIndex];
     }
 
