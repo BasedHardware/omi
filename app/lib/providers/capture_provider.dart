@@ -201,7 +201,10 @@ class CaptureProvider extends ChangeNotifier
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
   // having a connected device or using the phone's mic for recording
-  bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record || recordingState == RecordingState.systemAudioRecord;
+  bool get recordingDeviceServiceReady =>
+      _recordingDevice != null ||
+      recordingState == RecordingState.record ||
+      recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
 
@@ -268,7 +271,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Connect to the transcript socket
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
 
     _socket = await ServiceManager.instance()
         .socket
@@ -367,7 +371,10 @@ class CaptureProvider extends ChangeNotifier
 
       // Support: opus codec, 1m from the first device connects
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
-      var checkWalSupported = codec.isOpusSupported() && (deviceFirstConnectedAt != null && deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) && SharedPreferencesUtil().localSyncEnabled;
+      var checkWalSupported = codec.isOpusSupported() &&
+          (deviceFirstConnectedAt != null &&
+              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
+          SharedPreferencesUtil().localSyncEnabled;
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
@@ -480,7 +487,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
@@ -962,7 +970,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
-      ServerConversation(id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
+      ServerConversation(
+          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
     processInProgressConversation().then((result) {
       if (result == null || result.conversation == null) {
@@ -984,7 +993,8 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {
-    bool conversationExists = conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
+    bool conversationExists =
+        conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
     if (conversationExists) {
       return;
     }
