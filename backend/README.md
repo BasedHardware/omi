@@ -112,4 +112,4 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 - [Full Backend Setup Documentation](https://docs.omi.me/developer/backend/Backend_Setup)
 - [Omi Documentation](https://docs.omi.me/)
-- [Community Support](https://discord.gg/omi)
+- [Community Support](http://discord.omi.me)
