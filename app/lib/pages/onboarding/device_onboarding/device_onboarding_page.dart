@@ -34,7 +34,7 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
   final List<Map<String, String>> _slideContent = [
     {
       'title': 'Charging Your Omi',
-      'subtitle': 'Place your Omi on the charging dock. A yellow light indicates that it\'s charging.',
+      'subtitle': 'Place your Omi on the charging dock. An orange light indicates that it\'s charging.',
       'buttonText': 'Got it'
     },
     {
