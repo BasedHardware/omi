@@ -313,7 +313,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   // Just in case the BLE connection gets lost
-  // Just in case the BLE connection gets lost
+  
   void _watchVoiceCommands(String deviceId, DateTime session) {
     Timer.periodic(const Duration(seconds: 3), (t) async {
       debugPrint("voice command watch");
