@@ -608,67 +608,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       },
                                     ),
                                   ),
-                                // Floating Chat Button - Only show on home page (index 0)
-                                if (home.selectedIndex == 0)
-                                  Positioned(
-                                    right: 20,
-                                    bottom: 110, // Position above the bottom navbar
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.mediumImpact();
-                                        // Navigate to chat page
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const ChatPage(isPivotBottom: false),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        height: 56,
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black,
-                                          borderRadius: BorderRadius.circular(28),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.3),
-                                              spreadRadius: 1,
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Container(
-                                              width: 32,
-                                              height: 32,
-                                              decoration: const BoxDecoration(
-                                                color: Colors.white,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                FontAwesomeIcons.solidCommentDots,
-                                                color: Colors.black,
-                                                size: 16,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            const Text(
-                                              'Chat',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                // Remove the floating chat button - moving it to app bar
                               ],
                             );
                           }
@@ -800,6 +740,76 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
+              ),
+              // Chat Button - Only show on home page (index 0)
+              Consumer<HomeProvider>(
+                builder: (context, provider, child) {
+                  if (provider.selectedIndex == 0) {
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        // Navigate to chat page
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChatPage(isPivotBottom: false),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        height: 36,
+                        margin: const EdgeInsets.only(left: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                              Colors.purpleAccent.withValues(alpha: 0.2),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                              Colors.purpleAccent.withValues(alpha: 0.2),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.all(0.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(17.5),
+                            border: Border.all(
+                              color: Colors.pink.withValues(alpha: 0.3),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                FontAwesomeIcons.solidComment,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'Ask',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  } else {
+                    return const SizedBox.shrink();
+                  }
+                },
               ),
             ],
           ),
