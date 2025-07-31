@@ -916,7 +916,7 @@ class CaptureProvider extends ChangeNotifier
     if (event is ConversationEvent) {
       event.memory.isNew = true;
       conversationProvider!.removeProcessingConversation(event.memory.id);
-      _processConversationCreated(event.memory, event.messages as List<ServerMessage>);
+      _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       return;
     }
 
