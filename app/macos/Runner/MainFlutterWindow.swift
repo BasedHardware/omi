@@ -18,6 +18,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
     // Floating overlay window
     private var floatingOverlay: FloatingRecordingOverlay?
+    
+    // Custom chat overlay window
+    private var customChatOverlay: CustomChatOverlay?
 
     // Menu bar manager
     private var menuBarManager: MenuBarManager?
@@ -126,6 +129,46 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     return
                 }
                 self.moveOverlay(x: x, y: y)
+                result(nil)
+                
+            case "showChatOverlay":
+                self.showChatOverlay()
+                result(nil)
+                
+            case "hideChatOverlay":
+                self.hideChatOverlay()
+                result(nil)
+                
+            case "updateChatOverlayState":
+                guard let args = call.arguments as? [String: Any],
+                      let state = args["state"] as? String else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing state parameter", details: nil))
+                    return
+                }
+                self.updateChatOverlayState(state: state)
+                result(nil)
+                
+            case "setChatOverlayTranscript":
+                guard let args = call.arguments as? [String: Any],
+                      let transcript = args["transcript"] as? String else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing transcript parameter", details: nil))
+                    return
+                }
+                self.setChatOverlayTranscript(transcript: transcript)
+                result(nil)
+                
+            case "updateChatWaveform":
+                guard let args = call.arguments as? [String: Any],
+                      let levels = args["levels"] as? [Double] else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing levels parameter", details: nil))
+                    return
+                }
+                self.updateChatWaveform(levels: levels)
+                result(nil)
+                
+            case "setChatOverlayChannel":
+                // This method is called from Dart to set up the channel connection
+                print("🔧 setChatOverlayChannel called - channel is now connected")
                 result(nil)
                 
             default:
@@ -342,6 +385,19 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         }
     }
 
+    // MARK: - Chat Overlay Service Setup
+    
+    private func setupChatOverlayService() {
+        // Pass the overlay channel to ChatOverlayService using method channel
+        overlayChannel.invokeMethod("setChatOverlayChannel", arguments: nil) { result in
+            if let error = result as? FlutterError {
+                print("❌ Failed to setup ChatOverlayService channel: \(error.message ?? "unknown")")
+            } else {
+                print("✅ ChatOverlayService channel setup completed")
+            }
+        }
+    }
+    
     // MARK: - Menu Bar Setup
     
     private func setupMenuBar() {
@@ -688,10 +744,155 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         audioManager.setFlutterEngineActive(false)
     }
 
+    // MARK: - Custom Chat Overlay Methods
+    
+    private func showChatOverlay() {
+        DispatchQueue.main.async {
+            print("DEBUG: showChatOverlay called")
+            
+            if self.customChatOverlay != nil {
+                print("DEBUG: Chat overlay already exists, updating instead of creating new one")
+                self.customChatOverlay?.makeKeyAndOrderFront(nil)
+                return
+            }
+            
+            print("DEBUG: Creating new custom chat overlay window")
+            
+            // Create the custom chat overlay
+            self.customChatOverlay = CustomChatOverlay(
+                contentRect: NSRect(x: 0, y: 0, width: 350, height: 60),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            
+            // Configure overlay window properties
+            self.customChatOverlay?.isReleasedWhenClosed = false
+            self.customChatOverlay?.hidesOnDeactivate = false
+            
+            print("DEBUG: Custom chat overlay window created successfully")
+            
+            // Setup callbacks
+            print("🔧 Setting up overlay callbacks...")
+            self.customChatOverlay?.onClose = { [weak self] in
+                print("DEBUG: Chat overlay close callback triggered")
+                self?.hideChatOverlay()
+            }
+            
+            self.customChatOverlay?.onCheck = { [weak self] in
+                print("🔵 onCheck callback triggered")
+                
+                // Directly hide overlay and stop recording
+                print("🔵 Hiding overlay and stopping recording...")
+                self?.hideChatOverlay()
+                
+                // Then try to call method channel for processing
+                guard let overlayChannel = self?.overlayChannel else { 
+                    print("❌ overlayChannel is nil!")
+                    return 
+                }
+                print("🔵 Calling method channel: onChatCheck")
+                overlayChannel.invokeMethod("onChatCheck", arguments: nil) { result in
+                    if let error = result as? FlutterError {
+                        print("❌ Method channel error: \(error.message ?? "unknown")")
+                    } else {
+                        print("✅ Method channel call succeeded")
+                    }
+                }
+            }
+            print("🔧 onCheck callback assigned")
+            
+            self.customChatOverlay?.onSend = { [weak self] transcript in
+                guard let overlayChannel = self?.overlayChannel else { return }
+                print("DEBUG: Chat overlay send callback triggered with transcript: \(transcript)")
+                overlayChannel.invokeMethod("onChatSend", arguments: ["transcript": transcript])
+            }
+            
+            self.customChatOverlay?.onRetry = { [weak self] in
+                guard let overlayChannel = self?.overlayChannel else { return }
+                print("DEBUG: Chat overlay retry callback triggered")
+                overlayChannel.invokeMethod("onChatRetry", arguments: nil)
+            }
+            
+            self.customChatOverlay?.makeKeyAndOrderFront(nil)
+            
+            print("DEBUG: Custom chat overlay shown successfully")
+        }
+    }
+    
+    private func hideChatOverlay() {
+        DispatchQueue.main.async {
+            guard let overlay = self.customChatOverlay else {
+                print("DEBUG: No custom chat overlay to hide")
+                return
+            }
+            
+            print("DEBUG: Hiding custom chat overlay...")
+            
+            // Clear the reference first to prevent recursive calls
+            self.customChatOverlay = nil
+            
+            // Safely close the overlay
+            do {
+                overlay.orderOut(nil)
+                overlay.close()
+                print("DEBUG: Custom chat overlay hidden successfully")
+            } catch {
+                print("DEBUG: Error closing custom chat overlay: \(error)")
+            }
+            
+            // Notify Flutter that overlay was hidden
+            if let overlayChannel = self.overlayChannel {
+                overlayChannel.invokeMethod("onChatOverlayHidden", arguments: nil)
+            }
+        }
+    }
+    
+    private func updateChatOverlayState(state: String) {
+        DispatchQueue.main.async {
+            guard let overlay = self.customChatOverlay else {
+                print("DEBUG: No custom chat overlay to update state")
+                return
+            }
+            
+            print("DEBUG: Updating chat overlay state to: \(state)")
+            
+            switch state {
+            case "recording":
+                overlay.setState(.recording)
+            case "transcribing":
+                overlay.setState(.transcribing)
+            case "transcribeSuccess":
+                overlay.setState(.transcribeSuccess)
+            case "transcribeFailed":
+                overlay.setState(.transcribeFailed)
+            default:
+                print("DEBUG: Unknown chat overlay state: \(state)")
+            }
+        }
+    }
+    
+    private func setChatOverlayTranscript(transcript: String) {
+        DispatchQueue.main.async {
+            self.customChatOverlay?.setTranscript(transcript)
+            print("DEBUG: Set chat overlay transcript: \(transcript)")
+        }
+    }
+    
+    private func updateChatWaveform(levels: [Double]) {
+        DispatchQueue.main.async {
+            self.customChatOverlay?.updateWaveform(levels: levels)
+        }
+    }
+
     deinit {
         // Clean up observers
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         DistributedNotificationCenter.default().removeObserver(self)
+        
+        // Clean up custom chat overlay
+        hideChatOverlay()
+        
         print("DEBUG: 🧹 Screen sleep/wake observers removed")
     }
 }
