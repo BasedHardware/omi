@@ -313,6 +313,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   // Just incase the ble connection get loss
+  // Just incase the ble connection get loss
   void _watchVoiceCommands(String deviceId, DateTime session) {
     Timer.periodic(const Duration(seconds: 3), (t) async {
       debugPrint("voice command watch");
@@ -802,7 +803,7 @@ class CaptureProvider extends ChangeNotifier
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     ServiceManager.instance().systemAudio.stop();
-    _isPaused = false; // Clear paused state when stopping
+    _isPaused = false;
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
     await _cleanupCurrentState();
   }
@@ -821,8 +822,8 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    _isPaused = false; // Clear paused state
-    await streamSystemAudioRecording(); // Re-trigger the recording flow
+    _isPaused = false; // Clear paused state when stopping
+    await streamSystemAudioRecording();
   }
 
   @override

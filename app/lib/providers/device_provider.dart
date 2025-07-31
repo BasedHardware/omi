@@ -117,6 +117,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return connection?.device;
   }
 
+  DateTime _lastBatteryUpdate = DateTime.now();
+
   initiateBleBatteryListener() async {
     if (connectedDevice == null) {
       return;
@@ -125,6 +127,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
+        final now = DateTime.now();
+        if (now.difference(_lastBatteryUpdate).inSeconds < 30) {
+          return;
+        }
+        _lastBatteryUpdate = now;
+        
         batteryLevel = value;
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
@@ -133,7 +141,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             body: "Your device is running low on battery. Time for a recharge! 🔋",
           );
         } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = true;
+          _hasLowBatteryAlerted = false;
         }
         notifyListeners();
       },
