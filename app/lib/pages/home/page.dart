@@ -210,7 +210,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Navigate
@@ -407,11 +408,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       ),
                       Consumer2<HomeProvider, DeviceProvider>(
                         builder: (context, home, deviceProvider, child) {
-                          if (home.isChatFieldFocused || home.isConvoSearchFieldFocused || home.isAppsSearchFieldFocused || home.isMemoriesSearchFieldFocused) {
+                          if (home.isChatFieldFocused ||
+                              home.isConvoSearchFieldFocused ||
+                              home.isAppsSearchFieldFocused ||
+                              home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
                             // Check if OMI device is connected
-                            bool isOmiDeviceConnected = deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+                            bool isOmiDeviceConnected =
+                                deviceProvider.isConnected && deviceProvider.connectedDevice != null;
 
                             return Stack(
                               children: [
@@ -438,7 +443,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(0);
-                                              _controller?.animateToPage(0, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(0,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -469,7 +475,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(1);
-                                              _controller?.animateToPage(1, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(1,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -502,7 +509,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(2);
-                                              _controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(2,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -533,7 +541,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(3);
-                                              _controller?.animateToPage(3, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(3,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -565,7 +574,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     child: Consumer<CaptureProvider>(
                                       builder: (context, captureProvider, child) {
                                         bool isRecording = captureProvider.recordingState == RecordingState.record;
-                                        bool isInitializing = captureProvider.recordingState == RecordingState.initialising;
+                                        bool isInitializing =
+                                            captureProvider.recordingState == RecordingState.initialising;
                                         return GestureDetector(
                                           onTap: () async {
                                             HapticFeedback.heavyImpact();
@@ -693,7 +703,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Navigate to conversation capturing page
       if (context.mounted) {
-        var topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty ? captureProvider.conversationProvider!.conversations.first.id : null;
+        var topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
+            ? captureProvider.conversationProvider!.conversations.first.id
+            : null;
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -779,7 +791,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                     String transcriptModel = SharedPreferencesUtil().transcriptionModel;
                     SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage || hasSpeech != SharedPreferencesUtil().hasSpeakerProfile || transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
                       if (context.mounted) {
                         context.read<CaptureProvider>().onRecordProfileSettingChanged();
                       }
