@@ -18,6 +18,7 @@ import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -87,7 +88,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       //   context.read<OnboardingProvider>().updatePermissions();
       // }
 
-      if (isSignedIn()) {
+      if (AuthService.instance.isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
