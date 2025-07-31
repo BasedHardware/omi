@@ -16,6 +16,7 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
+import 'package:omi/pages/onboarding/device_onboarding/device_onboarding_wrapper.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/services.dart';
@@ -255,7 +256,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       FindDevicesPage(
         isFromOnboarding: true,
         onSkip: () {
-          // Skipping device finding means skipping speech profile too
+          // Skipping device finding means skipping speech profile and device onboarding too
+          SharedPreferencesUtil().onboardingCompleted = true;
           routeToPage(context, const HomePageWrapper(), replace: true);
         },
         goNext: () async {
@@ -263,25 +265,26 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           MixpanelManager().onboardingStepCompleted('Find Devices');
 
           if (hasSpeechProfile) {
-            routeToPage(context, const HomePageWrapper(), replace: true);
+            // Skip speech profile, go directly to device onboarding
+            routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
           } else {
             var codec = await _getAudioCodec(provider.deviceId);
             if (codec.isOpusSupported() && !PlatformService.isDesktop) {
               _goNext(); // Go to Speech Profile page
             } else {
-              // Device selected, but not Opus, skip speech profile
-              routeToPage(context, const HomePageWrapper(), replace: true);
+              // Device selected, but not Opus, skip speech profile and go to device onboarding
+              routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
             }
           }
         },
       ),
       SpeechProfileWidget(
         goNext: () {
-          routeToPage(context, const HomePageWrapper(), replace: true);
+          routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
           MixpanelManager().onboardingStepCompleted('Speech Profile');
         },
         onSkip: () {
-          routeToPage(context, const HomePageWrapper(), replace: true);
+          routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
           MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
         },
       ),
@@ -303,8 +306,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         image: DecorationImage(
                           image: ResizeImage(
                             AssetImage(_currentBackgroundImage),
-                            width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
-                            height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                            width:
+                                (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                            height:
+                                (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
                           ),
                           fit: BoxFit.cover,
                         ),
@@ -315,7 +320,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   pages[kAuthPage],
                 ],
               )
-            : _controller!.index == kNamePage || _controller!.index == kPrimaryLanguagePage || _controller!.index == kPermissionsPage || _controller!.index == kUserReviewPage || _controller!.index == kWelcomePage
+            : _controller!.index == kNamePage ||
+                    _controller!.index == kPrimaryLanguagePage ||
+                    _controller!.index == kPermissionsPage ||
+                    _controller!.index == kUserReviewPage ||
+                    _controller!.index == kWelcomePage
                 ? Stack(
                     children: [
                       // Animated background image for name, language, permissions, and user review pages (not welcome page)
@@ -328,8 +337,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               image: DecorationImage(
                                 image: ResizeImage(
                                   AssetImage(_currentBackgroundImage),
-                                  width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
-                                  height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                                  width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
+                                      .round(),
+                                  height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
+                                      .round(),
                                 ),
                                 fit: BoxFit.cover,
                               ),
@@ -352,7 +363,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 width: pageIndex == _controller!.index ? 12.0 : 8.0,
                                 height: pageIndex == _controller!.index ? 12.0 : 8.0,
                                 decoration: BoxDecoration(
-                                  color: pageIndex <= _controller!.index ? Theme.of(context).colorScheme.secondary : Colors.grey.shade400,
+                                  color: pageIndex <= _controller!.index
+                                      ? Theme.of(context).colorScheme.secondary
+                                      : Colors.grey.shade400,
                                   shape: BoxShape.circle,
                                 ),
                               );
@@ -418,9 +431,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                       ),
                                     ),
                               SizedBox(
-                                height: (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
-                                    ? max(MediaQuery.of(context).size.height - 500 - 10, maxHeightWithTextScale(context, _controller!.index))
-                                    : max(MediaQuery.of(context).size.height - 500 - 30, maxHeightWithTextScale(context, _controller!.index)),
+                                height:
+                                    (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
+                                        ? max(MediaQuery.of(context).size.height - 500 - 10,
+                                            maxHeightWithTextScale(context, _controller!.index))
+                                        : max(MediaQuery.of(context).size.height - 500 - 30,
+                                            maxHeightWithTextScale(context, _controller!.index)),
                                 child: Padding(
                                   padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                                   child: TabBarView(
@@ -472,7 +488,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                     width: pageIndex == _controller!.index ? 12.0 : 8.0,
                                     height: pageIndex == _controller!.index ? 12.0 : 8.0,
                                     decoration: BoxDecoration(
-                                      color: pageIndex <= _controller!.index ? Theme.of(context).colorScheme.secondary : Colors.grey.shade400,
+                                      color: pageIndex <= _controller!.index
+                                          ? Theme.of(context).colorScheme.secondary
+                                          : Colors.grey.shade400,
                                       shape: BoxShape.circle,
                                     ),
                                   );
