@@ -158,9 +158,17 @@ class CaptureProvider extends ChangeNotifier
   // Audio level tracking for waveform visualization
   final List<double> _audioLevels = List.generate(8, (_) => 0.15);
   List<double> get audioLevels => List.from(_audioLevels);
+  DateTime _lastVisualizationUpdate = DateTime.now();
 
   void _processAudioBytesForVisualization(List<int> bytes) {
     if (bytes.isEmpty) return;
+
+    // Throttle visualization updates to reduce battery drain
+    final now = DateTime.now();
+    if (now.difference(_lastVisualizationUpdate).inMilliseconds < 100) {
+      return;
+    }
+    _lastVisualizationUpdate = now;
 
     double rms = 0;
 
@@ -829,7 +837,7 @@ class CaptureProvider extends ChangeNotifier
 
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 45), (t) async {
       debugPrint("[Provider] keep alive...");
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
