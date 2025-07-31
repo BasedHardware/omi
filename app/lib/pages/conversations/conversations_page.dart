@@ -156,7 +156,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         onVisibilityChanged: (visibilityInfo) {
                           var provider = Provider.of<ConversationProvider>(context, listen: false);
                           if (provider.previousQuery.isNotEmpty) {
-                            if (visibilityInfo.visibleFraction > 0 && !provider.isLoadingConversations && (provider.totalSearchPages > provider.currentSearchPage)) {
+                            if (visibilityInfo.visibleFraction > 0 &&
+                                !provider.isLoadingConversations &&
+                                (provider.totalSearchPages > provider.currentSearchPage)) {
                               provider.searchMoreConversations();
                             }
                           } else {
