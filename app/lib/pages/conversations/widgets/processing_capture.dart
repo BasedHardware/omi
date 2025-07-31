@@ -104,7 +104,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           width: double.maxFinite,
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 18, 10, 16),
