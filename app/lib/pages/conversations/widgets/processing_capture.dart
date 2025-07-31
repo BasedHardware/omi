@@ -492,12 +492,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           //     ),
           //   ),
           // ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           // Show transcript below waveform during recording
           if (provider.segments.isNotEmpty) ...[
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: _AutoScrollingText(
                 text: provider.segments.map((segment) => segment.text).join(' '),
               ),
