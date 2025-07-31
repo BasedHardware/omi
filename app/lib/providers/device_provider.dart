@@ -140,7 +140,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             title: "Low Battery Alert",
             body: "Your device is running low on battery. Time for a recharge! 🔋",
           );
-        } else if (batteryLevel > 20) {
+        } else if (batteryLevel > 20 && _hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = false;
         }
         notifyListeners();
