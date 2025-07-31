@@ -329,7 +329,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
         const SizedBox(height: 4), // Space above content
         // Top row with listening tag (left) and transcript preview (right)
         Padding(
-          padding: const EdgeInsets.only(left: 6, right: 6),
+          padding: const EdgeInsets.only(left: 8, right: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -360,17 +360,26 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
                   ],
                 ),
               ),
-              // Right: Transcript preview (if available)
-              if (provider.segments.isNotEmpty) ...[
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.only(left: 12),
-                    child: _AutoScrollingText(
-                      text: provider.segments.map((segment) => segment.text).join(' '),
-                    ),
-                  ),
+              // Right: Transcript preview or placeholder text
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.only(left: 12),
+                  child: provider.segments.isNotEmpty
+                      ? _AutoScrollingText(
+                          text: provider.segments.map((segment) => segment.text).join(' '),
+                        )
+                      : const Text(
+                          'Start speaking...',
+                          style: TextStyle(
+                            color: Color(0xFF6A6B71),
+                            fontSize: 16,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                 ),
-              ],
+              ),
             ],
           ),
         ),
