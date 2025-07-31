@@ -127,7 +127,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
           TextField(
             onChanged: filterLanguages,
             style: const TextStyle(color: Colors.white),
-            autofocus: true,
+            autofocus: false,
             onSubmitted: (_) {}, // Prevent form submission on Enter
             decoration: InputDecoration(
               hintText: 'Search language by name or code',
@@ -215,7 +215,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           // Find the language name for the saved language code
           final homeProvider = Provider.of<HomeProvider>(context, listen: false);
           try {
-            selectedLanguageName = homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
+            selectedLanguageName =
+                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;
