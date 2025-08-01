@@ -39,6 +39,7 @@ from utils.llm.conversation_processing import (
     select_best_app_for_conversation,
     get_reprocess_transcript_structure,
 )
+from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
@@ -264,6 +265,9 @@ def _extract_memories(uid: str, conversation: Conversation):
     print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
+    if len(parsed_memories) > 0:
+        record_usage(uid, memories_created=len(parsed_memories))
+
 
 def send_new_memories_notification(token: str, memories: [MemoryDB]):
     memories_str = ", ".join([memory.content for memory in memories])
@@ -351,6 +355,20 @@ def process_conversation(
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     if not discarded:
+        # Analytics tracking
+        words_summarized = 0
+        if conversation.structured:
+            words_summarized += len(conversation.structured.title.split())
+            words_summarized += len(conversation.structured.overview.split())
+            for item in conversation.structured.action_items:
+                words_summarized += len(item.description.split())
+            for event in conversation.structured.events:
+                words_summarized += len(event.title.split())
+                words_summarized += len(event.description.split())
+
+        if words_summarized > 0:
+            record_usage(uid, words_summarized=words_summarized)
+
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
         )
