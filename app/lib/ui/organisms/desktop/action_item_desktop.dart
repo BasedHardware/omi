@@ -187,20 +187,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _isEditing
-                      ? KeyboardListener(
-                          focusNode: FocusNode(),
-                          onKeyEvent: (KeyEvent event) {
-                            if (event is KeyDownEvent) {
-                              if (event.logicalKey == LogicalKeyboardKey.enter) {
-                                if (!HardwareKeyboard.instance.isShiftPressed) {
-                                  // Enter without Shift: save changes
-                                  _saveChanges();
-                                }
-                                // Enter with Shift: allow new line (default behavior)
-                              }
-                            }
-                          },
-                          child: TextField(
+                      ? TextField(
                             controller: _textController,
                             focusNode: _focusNode,
                             style: const TextStyle(
@@ -211,9 +198,10 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                             decoration: const InputDecoration(
                                 border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
                             maxLines: null,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _saveChanges(),
                             onChanged: (_) => setState(() {}),
-                          ),
-                        )
+                          )
                       : GestureDetector(
                           onTap: _startEditing,
                           child: AnimatedDefaultTextStyle(

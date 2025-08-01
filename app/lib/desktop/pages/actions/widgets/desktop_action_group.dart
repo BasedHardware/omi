@@ -307,20 +307,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
           // Content
           Expanded(
             child: isEditing
-                ? KeyboardListener(
-                    focusNode: FocusNode(),
-                    onKeyEvent: (KeyEvent event) {
-                      if (event is KeyDownEvent) {
-                        if (event.logicalKey == LogicalKeyboardKey.enter) {
-                          if (!HardwareKeyboard.instance.isShiftPressed) {
-                            // Enter without Shift: save changes
-                            _saveChanges(item.id);
-                          }
-                          // Enter with Shift: allow new line (default behavior)
-                        }
-                      }
-                    },
-                    child: TextField(
+                ? TextField(
                       controller: _textControllers[item.id],
                       focusNode: _focusNodes[item.id],
                       style: const TextStyle(
@@ -328,9 +315,10 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
                       decoration: const InputDecoration(
                           border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
                       maxLines: null,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _saveChanges(item.id),
                       onChanged: (_) => setState(() {}),
-                    ),
-                  )
+                    )
                 : GestureDetector(
                     onTap: () => _startEditing(item.id),
                     child: Text(
@@ -358,18 +346,20 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
               onPressed: (_textControllers[item.id]?.text.trim() != item.description)
                   ? () => _saveChanges(item.id)
                   : () => _cancelEditing(item.id),
-              style: OmiIconButtonStyle.outline,
+              style: OmiIconButtonStyle.neutral,
               color: (_textControllers[item.id]?.text.trim() != item.description)
                   ? Colors.green.shade600
                   : ResponsiveHelper.textSecondary,
               size: 24,
+              iconSize: 14,
             )
           else
             OmiIconButton(
               icon: FontAwesomeIcons.pen,
               onPressed: () => _startEditing(item.id),
-              style: OmiIconButtonStyle.outline,
-              size: 24,
+              style: OmiIconButtonStyle.neutral,
+              size: 18,
+              iconSize: 14,
               color: ResponsiveHelper.textSecondary,
             ),
         ],

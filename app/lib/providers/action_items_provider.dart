@@ -10,7 +10,6 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isFetching = false;
   bool _hasMore = false;
-  int _totalCount = 0;
   
   bool _includeCompleted = true;
   
@@ -27,7 +26,6 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
-  int get totalCount => _totalCount;
   bool get includeCompleted => _includeCompleted;
   DateTime? get selectedStartDate => _selectedStartDate;
   DateTime? get selectedEndDate => _selectedEndDate;
@@ -73,9 +71,8 @@ class ActionItemsProvider extends ChangeNotifier {
         endDate: _selectedEndDate,
       );
 
-      _actionItems = response.actionItems;
-      _hasMore = response.hasMore;
-      _totalCount = response.totalCount;
+          _actionItems = response.actionItems;
+    _hasMore = response.hasMore;
     } catch (e) {
       debugPrint('Error fetching action items: $e');
     } finally {
@@ -159,7 +156,6 @@ class ActionItemsProvider extends ChangeNotifier {
 
       if (success) {
         _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
-        _totalCount = _totalCount > 0 ? _totalCount - 1 : 0;
         notifyListeners();
         return true;
       } else {

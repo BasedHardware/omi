@@ -425,14 +425,14 @@ Future<ActionItemsResponse> getActionItems({
     body: '',
   );
   
-  if (response == null) return ActionItemsResponse(actionItems: [], totalCount: 0, hasMore: false);
+  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
   
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemsResponse.fromJson(jsonDecode(body));
   } else {
     debugPrint('getActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], totalCount: 0, hasMore: false);
+    return ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
 

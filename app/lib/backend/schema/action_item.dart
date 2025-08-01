@@ -70,12 +70,10 @@ class ActionItemWithMetadata {
 
 class ActionItemsResponse {
   final List<ActionItemWithMetadata> actionItems;
-  final int totalCount;
   final bool hasMore;
 
   ActionItemsResponse({
     required this.actionItems,
-    required this.totalCount,
     required this.hasMore,
   });
 
@@ -84,7 +82,6 @@ class ActionItemsResponse {
       actionItems: (json['action_items'] as List<dynamic>)
           .map((item) => ActionItemWithMetadata.fromJson(item))
           .toList(),
-      totalCount: json['total_count'],
       hasMore: json['has_more'],
     );
   }

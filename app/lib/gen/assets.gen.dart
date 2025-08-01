@@ -67,6 +67,21 @@ class $AssetsFontsGen {
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
+  /// File path: assets/images/1.mov
+  String get a1 => 'assets/images/1.mov';
+
+  /// File path: assets/images/2.mov
+  String get a2 => 'assets/images/2.mov';
+
+  /// File path: assets/images/3.mov
+  String get a3 => 'assets/images/3.mov';
+
+  /// File path: assets/images/4.mov
+  String get a4 => 'assets/images/4.mov';
+
+  /// File path: assets/images/5.mov
+  String get a5 => 'assets/images/5.mov';
+
   /// File path: assets/images/Logo Text White.png
   AssetGenImage get logoTextWhite =>
       const AssetGenImage('assets/images/Logo Text White.png');
@@ -340,6 +355,11 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
         logoTextWhite,
         aiMagic,
         appLauncherIcon,
