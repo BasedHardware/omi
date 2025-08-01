@@ -10,6 +10,7 @@ from models.conversation import SearchRequest, ActionItemsResponse, ActionItemWi
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
+from utils.conversations.action_items import get_action_items_with_caching, clear_action_items_cache, should_clear_cache_for_conversation
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -36,6 +37,11 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
     messages = trigger_external_integrations(uid, conversation)
+    
+    # Clear action items cache if the processed conversation has action items
+    if should_clear_cache_for_conversation(conversation.dict()):
+        clear_action_items_cache(uid)
+    
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
@@ -60,7 +66,13 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
-    return process_conversation(uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id)
+    processed_conversation = process_conversation(uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id)
+    
+    # Clear action items cache if the reprocessed conversation has action items
+    if should_clear_cache_for_conversation(processed_conversation.dict()):
+        clear_action_items_cache(uid)
+    
+    return processed_conversation
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
@@ -120,6 +132,8 @@ def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_curren
     print('delete_conversation', conversation_id, uid)
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(conversation_id)
+    # Clear action items cache when conversation is deleted
+    clear_action_items_cache(uid)
     return {"status": "Ok"}
 
 
@@ -160,6 +174,7 @@ def set_action_item_status(
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.dict() for action_item in action_items]
     )
+    clear_action_items_cache(uid)
     return {"status": "Ok"}
 
 
@@ -186,6 +201,7 @@ def update_action_item_description(
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.dict() for action_item in action_items]
     )
+    clear_action_items_cache(uid)
     return {"status": "Ok"}
 
 
@@ -198,6 +214,7 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.dict() for action_item in updated_action_items]
     )
+    clear_action_items_cache(uid)
     return {"status": "Ok"}
 
 
@@ -507,7 +524,7 @@ def get_action_items(
     end_date: Optional[datetime] = Query(None, description="Filter action items from conversations before this date"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    action_items_data = conversations_db.get_action_items(
+    action_items_data = get_action_items_with_caching(
         uid=uid,
         limit=limit + 1,
         offset=offset,
@@ -522,17 +539,7 @@ def get_action_items(
     
     action_items = [ActionItemWithMetadata(**item) for item in action_items_data]
     
-    total_action_items_data = conversations_db.get_action_items(
-        uid=uid,
-        limit=2000,
-        offset=0,
-        include_completed=include_completed,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    
     return ActionItemsResponse(
         action_items=action_items,
-        total_count=len(total_action_items_data),
         has_more=has_more,
     )

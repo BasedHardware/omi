@@ -113,7 +113,6 @@ class ActionItemWithMetadata(BaseModel):
 
 class ActionItemsResponse(BaseModel):
     action_items: List[ActionItemWithMetadata] = Field(description="List of action items")
-    total_count: int = Field(description="Total number of action items available")
     has_more: bool = Field(description="Whether there are more action items available")
 
 
