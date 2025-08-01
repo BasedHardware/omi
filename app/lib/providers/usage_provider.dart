@@ -3,8 +3,29 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/user_usage.dart';
 
 class UsageProvider with ChangeNotifier {
-  UserUsageResponse? _usageResponse;
-  UserUsageResponse? get usageResponse => _usageResponse;
+  UsageStats? _todayUsage;
+  UsageStats? get todayUsage => _todayUsage;
+
+  UsageStats? _monthlyUsage;
+  UsageStats? get monthlyUsage => _monthlyUsage;
+
+  UsageStats? _yearlyUsage;
+  UsageStats? get yearlyUsage => _yearlyUsage;
+
+  UsageStats? _allTimeUsage;
+  UsageStats? get allTimeUsage => _allTimeUsage;
+
+  List<UsageHistoryPoint>? _todayHistory;
+  List<UsageHistoryPoint>? get todayHistory => _todayHistory;
+
+  List<UsageHistoryPoint>? _monthlyHistory;
+  List<UsageHistoryPoint>? get monthlyHistory => _monthlyHistory;
+
+  List<UsageHistoryPoint>? _yearlyHistory;
+  List<UsageHistoryPoint>? get yearlyHistory => _yearlyHistory;
+
+  List<UsageHistoryPoint>? _allTimeHistory;
+  List<UsageHistoryPoint>? get allTimeHistory => _allTimeHistory;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -22,16 +43,23 @@ class UsageProvider with ChangeNotifier {
     try {
       final response = await getUserUsage(period: period);
       if (response != null) {
-        if (_usageResponse == null) {
-          _usageResponse = response;
-        } else {
-          _usageResponse = UserUsageResponse(
-            today: response.today ?? _usageResponse!.today,
-            monthly: response.monthly ?? _usageResponse!.monthly,
-            yearly: response.yearly ?? _usageResponse!.yearly,
-            allTime: response.allTime ?? _usageResponse!.allTime,
-            history: response.history ?? _usageResponse!.history,
-          );
+        switch (period) {
+          case 'today':
+            _todayUsage = response.today;
+            _todayHistory = response.history;
+            break;
+          case 'monthly':
+            _monthlyUsage = response.monthly;
+            _monthlyHistory = response.history;
+            break;
+          case 'yearly':
+            _yearlyUsage = response.yearly;
+            _yearlyHistory = response.history;
+            break;
+          case 'all_time':
+            _allTimeUsage = response.allTime;
+            _allTimeHistory = response.history;
+            break;
         }
       } else {
         _error = 'Failed to load usage data. Please try again later.';

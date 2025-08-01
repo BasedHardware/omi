@@ -38,20 +38,19 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     String period = _getPeriodForIndex(_tabController.index);
 
     final provider = context.read<UsageProvider>();
-    final response = provider.usageResponse;
     bool shouldFetch = false;
     switch (period) {
       case 'today':
-        if (response?.today == null) shouldFetch = true;
+        if (provider.todayUsage == null) shouldFetch = true;
         break;
       case 'monthly':
-        if (response?.monthly == null) shouldFetch = true;
+        if (provider.monthlyUsage == null) shouldFetch = true;
         break;
       case 'yearly':
-        if (response?.yearly == null) shouldFetch = true;
+        if (provider.yearlyUsage == null) shouldFetch = true;
         break;
       case 'all_time':
-        if (response?.allTime == null) shouldFetch = true;
+        if (provider.allTimeUsage == null) shouldFetch = true;
         break;
     }
 
@@ -107,11 +106,16 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          if (provider.isLoading) {
+          final hasAnyData = provider.todayUsage != null ||
+              provider.monthlyUsage != null ||
+              provider.yearlyUsage != null ||
+              provider.allTimeUsage != null;
+
+          if (provider.isLoading && !hasAnyData) {
             return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
           }
 
-          if (provider.error != null) {
+          if (provider.error != null && !hasAnyData) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -124,17 +128,17 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             );
           }
 
-          if (provider.usageResponse == null) {
+          if (!provider.isLoading && !hasAnyData && provider.error == null) {
             return _buildEmptyState();
           }
 
           return TabBarView(
             controller: _tabController,
             children: [
-              _buildUsageListView(provider.usageResponse!.today, provider.usageResponse!.history, 'today'),
-              _buildUsageListView(provider.usageResponse!.monthly, provider.usageResponse!.history, 'monthly'),
-              _buildUsageListView(provider.usageResponse!.yearly, provider.usageResponse!.history, 'yearly'),
-              _buildUsageListView(provider.usageResponse!.allTime, provider.usageResponse!.history, 'all_time'),
+              _buildUsageListView(provider.todayUsage, provider.todayHistory, 'today'),
+              _buildUsageListView(provider.monthlyUsage, provider.monthlyHistory, 'monthly'),
+              _buildUsageListView(provider.yearlyUsage, provider.yearlyHistory, 'yearly'),
+              _buildUsageListView(provider.allTimeUsage, provider.allTimeHistory, 'all_time'),
             ],
           );
         },
@@ -316,7 +320,13 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
 
                       switch (period) {
                         case 'today':
-                          if (index % 4 == 0) {
+                          int interval = 1;
+                          if (history.length > 12) {
+                            interval = 4;
+                          } else if (history.length > 6) {
+                            interval = 2;
+                          }
+                          if (index % interval == 0) {
                             text = DateFormat.Hm().format(dateTime);
                           } else {
                             return const SizedBox();
