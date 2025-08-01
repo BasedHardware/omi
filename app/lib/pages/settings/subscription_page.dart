@@ -16,7 +16,18 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Upgrade Subscription'),
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FaIcon(
+              FontAwesomeIcons.crown,
+              color: Color(0xFFFFD700),
+              size: 20,
+            ),
+            SizedBox(width: 8),
+            Text('Upgrade Subscription'),
+          ],
+        ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
       ),
@@ -25,38 +36,34 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header section
-            const Center(
+            // Benefits Section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  FaIcon(
-                    FontAwesomeIcons.crown,
-                    color: Color(0xFFFFD700),
-                    size: 48,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Unlock Unlimited Access',
+                  const Text(
+                    'What you get:',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Get unlimited access to all Omi features',
-                    style: TextStyle(
-                      color: Color(0xFF8E8E93),
-                      fontSize: 16,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                  const SizedBox(height: 16),
+                  _buildFeatureItem('Unlimited conversation minutes'),
+                  _buildFeatureItem('Unlimited AI insights'),
+                  _buildFeatureItem('Priority customer support'),
+                  _buildFeatureItem('Early access to new features'),
                 ],
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 32),
 
             // Yearly Plan Card (Recommended)
             _buildPlanCard(
@@ -114,7 +121,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isRecommended ? const Color(0xFF007AFF) : const Color(0xFF3C3C43),
+            color: isRecommended ? Colors.white : const Color(0xFF3C3C43),
             width: isRecommended ? 2 : 1,
           ),
         ),
@@ -137,13 +144,13 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF007AFF),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text(
                       'RECOMMENDED',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.black,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -215,13 +222,6 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             ],
             const SizedBox(height: 24),
 
-            // Features list
-            _buildFeatureItem('Unlimited conversation minutes'),
-            _buildFeatureItem('Unlimited AI insights'),
-            _buildFeatureItem('Priority customer support'),
-            _buildFeatureItem('Early access to new features'),
-            const SizedBox(height: 20),
-
             // Subscribe button
             SizedBox(
               width: double.infinity,
@@ -229,8 +229,8 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               child: ElevatedButton(
                 onPressed: onTap,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isRecommended ? const Color(0xFF007AFF) : const Color(0xFF3C3C43),
-                  foregroundColor: Colors.white,
+                  backgroundColor: isRecommended ? Colors.white : const Color(0xFF3C3C43),
+                  foregroundColor: isRecommended ? Colors.black : Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
