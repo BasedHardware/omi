@@ -39,27 +39,26 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             // Benefits Section
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
+                color: const Color(0xFF1F1F25),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'What you get:',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  // const Text(
+                  //   'What you get:',
+                  //   style: TextStyle(
+                  //     color: Colors.white,
+                  //     fontSize: 20,
+                  //     fontWeight: FontWeight.w600,
+                  //   ),
+                  // ),
                   const SizedBox(height: 16),
-                  _buildFeatureItem('Unlimited conversation minutes'),
-                  _buildFeatureItem('Unlimited AI insights'),
-                  _buildFeatureItem('Priority customer support'),
-                  _buildFeatureItem('Early access to new features'),
+                  _buildFeatureItem('Unlimited conversations'),
+                  _buildFeatureItem('Ask Omi anything about your life'),
+                  _buildFeatureItem('Unlock Omi\'s infinite memory'),
                 ],
               ),
             ),
@@ -71,8 +70,8 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               price: '\$199',
               period: '/year',
               isRecommended: true,
-              badge: 'SAVE 17%',
-              originalPrice: '\$228/year',
+              badge: 'SAVE 20%',
+              originalPrice: '\$240/year',
               onTap: () => _handleSubscribe(isYearly: true),
             ),
             const SizedBox(height: 16),
@@ -85,7 +84,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               isRecommended: false,
               onTap: () => _handleSubscribe(isYearly: false),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
 
             // Terms and conditions
             const Text(
@@ -93,7 +92,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               'Subscription will auto-renew unless cancelled.',
               style: TextStyle(
                 color: Color(0xFF8E8E93),
-                fontSize: 13,
+                fontSize: 12,
               ),
               textAlign: TextAlign.center,
             ),
@@ -118,7 +117,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         width: double.infinity,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
+          color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isRecommended ? Colors.white : const Color(0xFF3C3C43),
@@ -144,14 +143,14 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text(
-                      'RECOMMENDED',
+                      'POPULAR',
                       style: TextStyle(
                         color: Colors.black,
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -237,7 +236,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                         originalPrice!.substring(1), // Remove $ from originalPrice
                         style: const TextStyle(
                           color: Color(0xFF8E8E93),
-                          fontSize: 14,
+                          fontSize: 16,
                           fontWeight: FontWeight.w500,
                           decoration: TextDecoration.lineThrough,
                         ),
