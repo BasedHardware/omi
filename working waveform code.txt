@@ -1,0 +1,289 @@
+#AudioWaveformMonitor.swift
+import AVFoundation
+import Accelerate
+import Foundation
+
+class AudioWaveformMonitor: ObservableObject {
+    @Published var magnitudes: [Float] = []
+    @Published var volumeHistory: [Float] = Array(repeating: 0.0, count: 20)
+    @Published var hasPermission = false
+    @Published var isRunning = false
+    @Published var errorMessage: String?
+
+    private let engine = AVAudioEngine()
+    private var fftSetup: vDSP_DFT_Setup?
+    private var previousMagnitudes: [Float] = []
+
+    private var isTestMode = false
+    private var testTimer: Timer?
+
+    struct Constants {
+        static let sampleAmount = 60
+        static let bufferSize = 1024
+        static let sampleRate: Double = 44100
+    }
+
+    init() {
+        checkPermission()
+        magnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+        previousMagnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+    }
+
+    func checkPermission() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            hasPermission = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                DispatchQueue.main.async {
+                    self?.hasPermission = granted
+                }
+            }
+        case .denied, .restricted:
+            hasPermission = false
+            errorMessage = "Microphone access denied. Please enable it in System Preferences."
+        @unknown default:
+            hasPermission = false
+            errorMessage = "Unknown microphone permission status."
+        }
+    }
+
+    func start() {
+        guard !isRunning else { return }
+        guard hasPermission else {
+            errorMessage = "Cannot start audio monitoring without microphone permission."
+            return
+        }
+
+        if isTestMode {
+            testTimer?.invalidate()
+            testTimer = nil
+            isTestMode = false
+        }
+
+        do {
+            let inputNode = engine.inputNode
+            let format = inputNode.inputFormat(forBus: 0)
+
+            guard format.sampleRate > 0 else {
+                throw NSError(domain: "AudioError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid audio format"])
+            }
+
+            fftSetup = vDSP_DFT_zop_CreateSetup(nil, UInt(Constants.bufferSize), .FORWARD)
+
+            inputNode.removeTap(onBus: 0)
+
+            inputNode.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Constants.bufferSize), format: format) { [weak self] buffer, _ in
+                guard let self = self else { return }
+                self.processAudioBuffer(buffer)
+            }
+
+            engine.prepare()
+            try engine.start()
+            isRunning = true
+            errorMessage = nil
+            print("✅ Engine started")
+
+        } catch {
+            errorMessage = "Failed to start audio engine: \(error.localizedDescription)"
+            print("❌ Audio engine error: \(error)")
+        }
+    }
+
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        let frameLength = Int(buffer.frameLength)
+        guard frameLength > 0 else { return }
+
+        let channelDataArray = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+
+        // Volume (RMS)
+        let rms = sqrt(channelDataArray.reduce(0) { $0 + $1 * $1 } / Float(frameLength))
+        DispatchQueue.main.async {
+            self.volumeHistory.append(rms)
+            if self.volumeHistory.count > 20 {
+                self.volumeHistory.removeFirst()
+            }
+        }
+
+        // Skip FFT if no signal
+        guard rms > 0.001 else { return }
+
+        let newMagnitudes = performFFT(samples: channelDataArray)
+        DispatchQueue.main.async {
+            self.magnitudes = self.smoothMagnitudes(newMagnitudes)
+        }
+    }
+
+    private func performFFT(samples: [Float]) -> [Float] {
+        guard let fftSetup = fftSetup else { return [] }
+
+        let bufferSize = Constants.bufferSize
+        let sampleAmount = Constants.sampleAmount
+
+        var paddedSamples = samples
+        if paddedSamples.count < bufferSize {
+            paddedSamples += [Float](repeating: 0, count: bufferSize - paddedSamples.count)
+        } else if paddedSamples.count > bufferSize {
+            paddedSamples = Array(paddedSamples.prefix(bufferSize))
+        }
+
+        for i in 0..<paddedSamples.count {
+            let window = 0.5 * (1.0 - cos(2.0 * .pi * Float(i) / Float(paddedSamples.count - 1)))
+            paddedSamples[i] *= Float(window)
+        }
+
+        var realIn = paddedSamples
+        var imagIn = [Float](repeating: 0, count: bufferSize)
+        var realOut = [Float](repeating: 0, count: bufferSize)
+        var imagOut = [Float](repeating: 0, count: bufferSize)
+
+        vDSP_DFT_Execute(fftSetup, &realIn, &imagIn, &realOut, &imagOut)
+
+        var magnitudes = [Float](repeating: 0, count: sampleAmount)
+        let binSize = bufferSize / (2 * sampleAmount)
+
+        for i in 0..<sampleAmount {
+            var sum: Float = 0
+            let start = i * binSize
+            let end = min(start + binSize, bufferSize / 2)
+            for j in start..<end {
+                sum += sqrt(realOut[j] * realOut[j] + imagOut[j] * imagOut[j])
+            }
+            if binSize > 0 {
+                magnitudes[i] = sum / Float(binSize)
+            }
+        }
+
+        // Log scale and normalize
+        for i in 0..<magnitudes.count {
+            magnitudes[i] = log10(magnitudes[i] + 1) * 40
+            magnitudes[i] = max(0, min(150, magnitudes[i]))
+        }
+
+        return magnitudes
+    }
+
+    private func smoothMagnitudes(_ newMagnitudes: [Float]) -> [Float] {
+        let factor: Float = 0.3
+        var smoothed = [Float](repeating: 0, count: Constants.sampleAmount)
+
+        for i in 0..<min(newMagnitudes.count, Constants.sampleAmount) {
+            let prev = i < previousMagnitudes.count ? previousMagnitudes[i] : 0
+            smoothed[i] = prev * (1 - factor) + newMagnitudes[i] * factor
+        }
+
+        previousMagnitudes = smoothed
+        return smoothed
+    }
+
+    func stop() {
+        guard isRunning else { return }
+
+        if isTestMode {
+            testTimer?.invalidate()
+            testTimer = nil
+            isTestMode = false
+        } else {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+
+        isRunning = false
+        fftSetup.map { vDSP_DFT_DestroySetup($0) }
+        fftSetup = nil
+
+        magnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+        previousMagnitudes = magnitudes
+    }
+
+    func startTestMode() {
+        guard !isRunning else { return }
+
+        if engine.isRunning {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+
+        isTestMode = true
+        isRunning = true
+
+        testTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let newMagnitudes = (0..<Constants.sampleAmount).map { i in
+                let base = sin(Date().timeIntervalSince1970 * 2 + Double(i) * 0.5) * 40 + 60
+                let jitter = Float.random(in: -20...20)
+                return max(0, Float(base) + jitter)
+            }
+            DispatchQueue.main.async {
+                self.magnitudes = self.smoothMagnitudes(newMagnitudes)
+            }
+        }
+        print("🧪 Test mode started")
+    }
+}
+
+#FFTVisualizerView.swift
+import SwiftUI
+
+struct FFTVisualizerView: View {
+    @ObservedObject var audioMonitor: AudioWaveformMonitor
+    
+    private let barWidth: CGFloat = 3
+    private let barSpacing: CGFloat = 1
+    private let maxHeight: CGFloat = 180 // Increased from 100 to 180
+    private let minHeight: CGFloat = 2
+    
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: barSpacing) {
+                ForEach(audioMonitor.magnitudes.indices, id: \.self) { index in
+                    let magnitude = audioMonitor.magnitudes[index]
+                    let normalizedHeight = max(minHeight, CGFloat(magnitude) * maxHeight / 150.0) // Updated to match new max range
+                    
+                    RoundedRectangle(cornerRadius: barWidth / 2)
+                        .fill(colorForFrequency(index: index, totalBars: audioMonitor.magnitudes.count))
+                        .frame(width: barWidth, height: normalizedHeight)
+                        .animation(.easeOut(duration: 0.05), value: magnitude)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .bottom)
+        }
+        .frame(height: maxHeight + 20)
+        .padding(.horizontal)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.05))
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+    
+    private func colorForFrequency(index: Int, totalBars: Int) -> Color {
+        let ratio = Double(index) / Double(totalBars)
+        let magnitude = Double(audioMonitor.magnitudes[index])
+        let intensity = min(1.0, magnitude / 75.0) // Adjusted for new scale (150/2 = 75)
+        
+        if ratio < 0.33 {
+            // Low frequencies - Red to Orange
+            return Color(red: 1.0, green: ratio * 3 * 0.5 * intensity, blue: 0.0, opacity: 0.7 + intensity * 0.3)
+        } else if ratio < 0.66 {
+            // Mid frequencies - Orange to Yellow
+            let adjustedRatio = (ratio - 0.33) / 0.33
+            return Color(red: 1.0, green: (0.5 + adjustedRatio * 0.5) * intensity, blue: 0.0, opacity: 0.7 + intensity * 0.3)
+        } else {
+            // High frequencies - Yellow to Green
+            let adjustedRatio = (ratio - 0.66) / 0.34
+            return Color(red: (1.0 - adjustedRatio * 0.5) * intensity, green: 1.0 * intensity, blue: adjustedRatio * 0.5 * intensity, opacity: 0.7 + intensity * 0.3)
+        }
+    }
+}
+
+struct FFTVisualizerView_Previews: PreviewProvider {
+    static var previews: some View {
+        FFTVisualizerView(audioMonitor: AudioWaveformMonitor())
+            .padding()
+    }
+}
+
+
+

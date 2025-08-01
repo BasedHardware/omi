@@ -17,6 +17,7 @@ enum VoicePopupState: Equatable {
     case idle
     case recording
     case transcribing
+    case transcribed(String)
     case chatMode  // New state for chat interface
     case error(String)
 }
@@ -516,7 +517,9 @@ struct ChatMessageView: View {
 struct VoiceAssistantPopup: View {
     @StateObject private var voiceRecorder = SimpleVoiceRecorder()
     @StateObject private var waveformMonitor = AudioWaveformMonitor()
-    @State private var popupState: VoicePopupState = .recording
+    @State private var popupState: VoicePopupState = .idle
+    @State private var transcribedText = ""
+    @State private var editableText = ""
     @State private var isLoading = false
     @State private var isViewActive = true
     
@@ -555,6 +558,8 @@ struct VoiceAssistantPopup: View {
                         recordingView
                     case .transcribing:
                         transcribingView
+                    case .transcribed(let text):
+                        transcribedView(text: text)
                     case .chatMode:
                         chatView
                     case .error(let message):
@@ -603,11 +608,15 @@ struct VoiceAssistantPopup: View {
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
         .onAppear {
             isViewActive = true
-            popupState = .recording  // Skip idle entirely for seamless experience
+            popupState = .idle
             initializeAuthentication()
             
-            // Start recording immediately without delay
-            startRecording()
+            // Auto-start recording when popup appears for seamless voice interaction
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                if popupState == .idle {
+                    startRecording()
+                }
+            }
         }
         .onDisappear {
             isViewActive = false
@@ -715,6 +724,56 @@ struct VoiceAssistantPopup: View {
         }
     }
     
+    private func transcribedView(text: String) -> some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Review and edit your message:")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.7))
+                
+                HStack {
+                    TextField("Your message", text: $editableText, axis: .vertical)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black.opacity(0.2))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                        .foregroundColor(.white)
+                        .font(.body)
+                        .lineLimit(3...6)
+                    
+                    Button(action: {
+                        sendToAPIAndEnterChatMode()
+                    }) {
+                        if isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .frame(width: 36, height: 36)
+                    .background(
+                        Circle()
+                            .fill(Color.purple)
+                    )
+                    .disabled(editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                    .opacity(editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1.0)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+    
     // MARK: - New Chat View
     
     private var chatView: some View {
@@ -798,6 +857,29 @@ struct VoiceAssistantPopup: View {
         }
     }
     
+    private func successView(text: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 40)
+                .foregroundColor(.green)
+            
+            Text("Transcription complete!")
+                .font(.headline)
+                .foregroundColor(.white)
+            
+            if !text.isEmpty {
+                Text("\"\(text)\"")
+                    .font(.body)
+                    .foregroundColor(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .padding(.horizontal, 8)
+            }
+        }
+    }
+    
     private func errorView(message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -816,7 +898,7 @@ struct VoiceAssistantPopup: View {
                 .multilineTextAlignment(.center)
                 
             Button("Retry") {
-                startRecording()
+                popupState = .idle
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -837,6 +919,8 @@ struct VoiceAssistantPopup: View {
             return "Listening..."
         case .transcribing:
             return "Processing..."
+        case .transcribed:
+            return "Review & Send"
         case .chatMode:
             return "Chat with Omi"
         case .error:
@@ -1002,8 +1086,9 @@ struct VoiceAssistantPopup: View {
                     if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         popupState = .error("No speech detected. Please try again.")
                     } else {
-                        // Directly send to API and enter chat mode
-                        sendToAPIAndEnterChatMode(with: transcript)
+                        transcribedText = transcript
+                        editableText = transcript
+                        popupState = .transcribed(transcript)
                     }
                 }
                 
@@ -1083,23 +1168,22 @@ struct VoiceAssistantPopup: View {
     }
     
     // Modified to transition to chat mode after first message
-    private func sendToAPIAndEnterChatMode(with text: String) {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            popupState = .error("No speech detected.")
-            return
-        }
+    private func sendToAPIAndEnterChatMode() {
+        guard !editableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
-        popupState = .chatMode  // Move to chat mode early to avoid flicker
         isLoading = true
         
         // Add user message to chat
-        let userMessage = ChatMessage(content: text, isUser: true)
+        let userMessage = ChatMessage(content: editableText, isUser: true)
         messages.append(userMessage)
         messageSyncManager.syncMessageToFlutter(userMessage)
         
+        let messageToSend = editableText
+        editableText = ""
+        
         Task {
             do {
-                let response = try await sendMessageToAPI(text: text)
+                let response = try await sendMessageToAPI(text: messageToSend)
                 
                 await MainActor.run {
                     guard isViewActive else { return }
@@ -1111,8 +1195,9 @@ struct VoiceAssistantPopup: View {
                     messages.append(aiMessage)
                     messageSyncManager.syncMessageToFlutter(aiMessage)
                     
-                    // Ensure we're in chat mode
+                    // Transition to chat mode
                     showWelcomeMessage = false
+                    popupState = .chatMode
                 }
             } catch {
                 await MainActor.run {

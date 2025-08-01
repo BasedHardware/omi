@@ -1,0 +1,31 @@
+#VolumeHistoryView.swift
+import SwiftUI
+
+struct VolumeHistoryView: View {
+    var volumes: [Float]
+    let maxBarHeight: CGFloat = 100
+    let scaleFactor: CGFloat = 300
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(volumes.indices, id: \.self) { index in
+                GeometryReader { geometry in
+                    let scaledHeight = barHeight(for: volumes[index])
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.green)
+                        .frame(width: 6, height: scaledHeight)
+                        .position(x: geometry.size.width / 2,
+                                  y: geometry.size.height / 2)
+                }
+                .frame(width: 6, height: maxBarHeight)
+            }
+        }
+        .frame(height: maxBarHeight)
+        .padding(.horizontal)
+    }
+
+    private func barHeight(for volume: Float) -> CGFloat {
+        let scaled = CGFloat(volume) * scaleFactor
+        return min(maxBarHeight, max(2, scaled))
+    }
+}
