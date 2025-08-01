@@ -2,10 +2,13 @@ import UIKit
 import Flutter
 import UserNotifications
 import app_links
+import AccessorySetupKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
+  private var accessorySetupChannel: FlutterMethodChannel?
+  private var accessorySetupManager: Any? // Using Any to avoid availability issues
 
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -28,6 +31,26 @@ import app_links
     methodChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleMethodCall(call, result: result)
     }
+    
+    // Initialize AccessorySetupKit method channel
+    accessorySetupChannel = FlutterMethodChannel(name: "com.omi.ios/accessorySetup", binaryMessenger: controller!.binaryMessenger)
+    accessorySetupChannel?.setMethodCallHandler { [weak self] (call, result) in
+      if #available(iOS 18.0, *) {
+        self?.handleAccessorySetupCall(call, result: result)
+      } else {
+        result(FlutterError(code: "UNAVAILABLE", message: "AccessorySetupKit requires iOS 18.0 or later", details: nil))
+      }
+    }
+    
+    // Initialize AccessorySetupManager for iOS 18+
+    if #available(iOS 18.0, *) {
+      accessorySetupManager = AccessorySetupManager()
+      if let manager = accessorySetupManager as? AccessorySetupManager {
+        manager.setEventHandler { [weak self] (eventType, eventData) in
+          self?.accessorySetupChannel?.invokeMethod("onAccessoryEvent", arguments: ["eventType": eventType, "data": eventData])
+        }
+      }
+    }
 
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
@@ -44,6 +67,50 @@ import app_links
     switch call.method {
       case "setNotificationOnKillService":
         handleSetNotificationOnKillService(call: call)
+      default:
+        result(FlutterMethodNotImplemented)
+    }
+  }
+  
+  @available(iOS 18.0, *)
+  private func handleAccessorySetupCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let manager = accessorySetupManager as? AccessorySetupManager else {
+      result(FlutterError(code: "UNAVAILABLE", message: "AccessorySetupManager not initialized", details: nil))
+      return
+    }
+    
+    switch call.method {
+      case "showAccessoryPicker":
+        manager.showAccessoryPicker { success, error in
+          if success {
+            result(true)
+          } else {
+            result(FlutterError(code: "PICKER_ERROR", message: error ?? "Unknown error", details: nil))
+          }
+        }
+        
+      case "getConnectedAccessories":
+        let accessories = manager.getConnectedAccessories()
+        result(accessories)
+        
+      case "removeAccessory":
+        guard let args = call.arguments as? [String: Any],
+              let accessoryId = args["accessoryId"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Missing accessoryId", details: nil))
+          return
+        }
+        
+        manager.removeAccessory(withId: accessoryId) { success, error in
+          if success {
+            result(true)
+          } else {
+            result(FlutterError(code: "REMOVE_ERROR", message: error ?? "Unknown error", details: nil))
+          }
+        }
+        
+      case "isAccessorySetupKitAvailable":
+        result(true)
+        
       default:
         result(FlutterMethodNotImplemented)
     }

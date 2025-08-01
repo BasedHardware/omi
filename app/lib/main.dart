@@ -44,6 +44,7 @@ import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/accessory_setup_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/logger.dart';
@@ -76,6 +77,9 @@ Future<bool> _init() async {
   await PlatformManager.initializeServices();
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
+
+  // Initialize AccessorySetupService for iOS 18+ devices
+  AccessorySetupService.instance.initialize();
 
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();

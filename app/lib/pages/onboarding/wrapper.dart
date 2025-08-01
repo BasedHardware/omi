@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
+import 'package:omi/pages/onboarding/find_device/accessory_setup_page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_mobile_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_desktop_widget.dart';
@@ -253,31 +254,57 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           routeToPage(context, const HomePageWrapper(), replace: true);
         },
       ),
-      FindDevicesPage(
-        isFromOnboarding: true,
-        onSkip: () {
-          // Skipping device finding means skipping speech profile and device onboarding too
-          SharedPreferencesUtil().onboardingCompleted = true;
-          routeToPage(context, const HomePageWrapper(), replace: true);
-        },
-        goNext: () async {
-          var provider = context.read<OnboardingProvider>();
-          MixpanelManager().onboardingStepCompleted('Find Devices');
+      PlatformService.isIOS
+          ? AccessorySetupPage(
+              isFromOnboarding: true,
+              onSkip: () {
+                // Skipping device finding means skipping speech profile and device onboarding too
+                SharedPreferencesUtil().onboardingCompleted = true;
+                routeToPage(context, const HomePageWrapper(), replace: true);
+              },
+              goNext: () async {
+                var provider = context.read<OnboardingProvider>();
+                MixpanelManager().onboardingStepCompleted('Find Devices');
 
-          if (hasSpeechProfile) {
-            // Skip speech profile, go directly to device onboarding
-            routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
-          } else {
-            var codec = await _getAudioCodec(provider.deviceId);
-            if (codec.isOpusSupported() && !PlatformService.isDesktop) {
-              _goNext(); // Go to Speech Profile page
-            } else {
-              // Device selected, but not Opus, skip speech profile and go to device onboarding
-              routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
-            }
-          }
-        },
-      ),
+                if (hasSpeechProfile) {
+                  // Skip speech profile, go directly to device onboarding
+                  routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
+                } else {
+                  var codec = await _getAudioCodec(provider.deviceId);
+                  if (codec.isOpusSupported() && !PlatformService.isDesktop) {
+                    _goNext(); // Go to Speech Profile page
+                  } else {
+                    // Device selected, but not Opus, skip speech profile and go to device onboarding
+                    routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
+                  }
+                }
+              },
+            )
+          : FindDevicesPage(
+              isFromOnboarding: true,
+              onSkip: () {
+                // Skipping device finding means skipping speech profile and device onboarding too
+                SharedPreferencesUtil().onboardingCompleted = true;
+                routeToPage(context, const HomePageWrapper(), replace: true);
+              },
+              goNext: () async {
+                var provider = context.read<OnboardingProvider>();
+                MixpanelManager().onboardingStepCompleted('Find Devices');
+
+                if (hasSpeechProfile) {
+                  // Skip speech profile, go directly to device onboarding
+                  routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
+                } else {
+                  var codec = await _getAudioCodec(provider.deviceId);
+                  if (codec.isOpusSupported() && !PlatformService.isDesktop) {
+                    _goNext(); // Go to Speech Profile page
+                  } else {
+                    // Device selected, but not Opus, skip speech profile and go to device onboarding
+                    routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
+                  }
+                }
+              },
+            ),
       SpeechProfileWidget(
         goNext: () {
           routeToPage(context, const DeviceOnboardingWrapper(), replace: true);

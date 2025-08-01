@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
@@ -7,6 +8,7 @@ import 'package:omi/http/api/device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/accessory_setup_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -43,6 +45,82 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
+    _initializeAccessorySetupKitListener();
+  }
+
+  void _initializeAccessorySetupKitListener() {
+    if (Platform.isIOS) {
+      AccessorySetupService.eventStream.listen((event) {
+        if (event.type == AccessoryEventTypes.accessoryAdded) {
+          _handleAccessorySetupKitConnection(event.data);
+        }
+      });
+    }
+  }
+
+  Future<void> _handleAccessorySetupKitConnection(Map<String, dynamic> eventData) async {
+    try {
+      final accessoryId = eventData['accessoryId'] as String?;
+      final displayName = eventData['displayName'] as String?;
+
+      if (accessoryId == null) {
+        Logger.debug('AccessorySetupKit: Missing accessory ID');
+        return;
+      }
+
+      Logger.debug('AccessorySetupKit: Connecting to device with ID $accessoryId');
+
+      // Connect using the existing connection logic first
+      updateConnectingStatus(true);
+      final connection = await ServiceManager.instance().device.ensureConnection(accessoryId, force: true);
+
+      if (connection != null) {
+        // Get the actual device through scanning to get real name and details
+        await ServiceManager.instance().device.discover();
+        final connectedDevice = await _getConnectedDevice();
+
+        if (connectedDevice != null) {
+          // Use the real device name from Bluetooth, not AccessorySetupKit display name
+          Logger.debug('AccessorySetupKit: Found real device name: ${connectedDevice.name}');
+
+          // Update preferences with real device info
+          await SharedPreferencesUtil().btDeviceSet(connectedDevice);
+          SharedPreferencesUtil().deviceName = connectedDevice.name;
+
+          // Get full device info and update state
+          final deviceWithInfo = await connectedDevice.getDeviceInfo(connection);
+          setConnectedDevice(deviceWithInfo);
+          setIsDeviceV2Connected();
+          setIsConnected(true);
+          MixpanelManager().deviceConnected();
+
+          Logger.debug('AccessorySetupKit: Successfully connected to ${connectedDevice.name}');
+        } else {
+          // Fallback: create device with AccessorySetupKit info
+          final fallbackDevice = BtDevice(
+            id: accessoryId,
+            name: displayName ?? 'Omi Device',
+            rssi: 0,
+            type: (displayName?.toLowerCase().contains('glass') ?? false) ? DeviceType.frame : DeviceType.omi,
+            firmwareRevision: '',
+          );
+
+          final deviceWithInfo = await fallbackDevice.getDeviceInfo(connection);
+          setConnectedDevice(deviceWithInfo);
+          setIsDeviceV2Connected();
+          setIsConnected(true);
+          MixpanelManager().deviceConnected();
+
+          Logger.debug('AccessorySetupKit: Using fallback connection');
+        }
+      } else {
+        Logger.debug('AccessorySetupKit: Failed to establish connection');
+        updateConnectingStatus(false);
+      }
+    } catch (e) {
+      Logger.debug('AccessorySetupKit connection error: $e');
+      updateConnectingStatus(false);
+    }
   }
 
   void setProviders(CaptureProvider provider) {

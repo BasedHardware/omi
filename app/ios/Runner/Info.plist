@@ -126,5 +126,25 @@
 		<false/>
 		<key>com.posthog.posthog.AUTO_INIT</key>
     	<false/>
+		<key>NSAccessorySetupKitSupports</key>
+		<array>
+			<string>Bluetooth</string>
+		</array>
+		<key>NSAccessorySetupBluetoothServices</key>
+		<array>
+			<string>19B10000-E8F2-537E-4F6C-D104768A1214</string>
+			<string>7A230001-5475-A6A4-654C-8431F6AD49C4</string>
+		</array>
+		<key>NSAccessorySetupBluetoothNames</key>
+		<array>
+			<string>Omi</string>
+			<string>Omi DevKit</string>
+			<string>Omi DevK</string>
+			<string>DevKit</string>
+			<string>DevK</string>
+			<string>Omi Glass</string>
+			<string>OMI Glass</string>
+			<string>Glass</string>
+		</array>
 	</dict>
 </plist>

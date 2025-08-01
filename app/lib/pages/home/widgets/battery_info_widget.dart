@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -5,12 +6,39 @@ import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/home/device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/services/accessory_setup_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class BatteryInfoWidget extends StatelessWidget {
   const BatteryInfoWidget({super.key});
+
+  Future<void> _handleConnectDevice(BuildContext context) async {
+    if (Platform.isIOS) {
+      // Check if AccessorySetupKit is available (iOS 18+)
+      final isAvailable = await AccessorySetupService.instance.isAccessorySetupKitAvailable();
+
+      if (isAvailable) {
+        // Show AccessorySetupKit picker directly
+        try {
+          await AccessorySetupService.instance.showAccessoryPicker();
+          // Note: DeviceProvider now handles the AccessorySetupKit events automatically
+        } catch (e) {
+          debugPrint('Error showing AccessorySetupKit picker: $e');
+          // Fallback to old connection page
+          if (!context.mounted) return;
+          routeToPage(context, const ConnectDevicePage());
+        }
+      } else {
+        // iOS < 18, use old connection page
+        routeToPage(context, const ConnectDevicePage());
+      }
+    } else {
+      // Android or other platforms, use old connection page
+      routeToPage(context, const ConnectDevicePage());
+    }
+  }
 
   String _getDeviceImagePath(String? deviceName) {
     if (deviceName != null && deviceName.contains('Glass')) {
@@ -132,7 +160,7 @@ class BatteryInfoWidget extends StatelessWidget {
               return GestureDetector(
                 onTap: () async {
                   if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-                    routeToPage(context, const ConnectDevicePage());
+                    await _handleConnectDevice(context);
                     MixpanelManager().connectFriendClicked();
                   } else {
                     await routeToPage(context, const ConnectedDevice());
