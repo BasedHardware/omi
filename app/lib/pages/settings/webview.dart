@@ -34,10 +34,20 @@ class _PageWebViewState extends State<PageWebView> {
           onHttpError: (HttpResponseError error) {},
           onWebResourceError: (WebResourceError error) {},
           onNavigationRequest: (NavigationRequest request) {
-            if (request.url != widget.url) {
-              return NavigationDecision.prevent;
+            // Allow navigation to omi.me domains and common payment/checkout domains
+            final Uri uri = Uri.parse(request.url);
+            final String host = uri.host.toLowerCase();
+
+            // Allow omi.me and its subdomains, plus common checkout/payment domains
+            if (host.contains('omi.me') ||
+                host.contains('shopify') ||
+                host.contains('stripe') ||
+                host.contains('paypal') ||
+                request.url == widget.url) {
+              return NavigationDecision.navigate;
             }
-            return NavigationDecision.navigate;
+
+            return NavigationDecision.prevent;
           },
         ),
       )
