@@ -63,7 +63,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
 
             // Yearly Plan Card (Recommended)
             _buildPlanCard(
