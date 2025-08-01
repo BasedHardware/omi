@@ -162,10 +162,23 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
 
             // Price
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Dollar sign
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '\$',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                // Price number
                 Text(
-                  price,
+                  price.substring(1), // Remove the $ from the price string
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 48,
@@ -174,7 +187,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                 ),
                 const SizedBox(width: 8),
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.only(top: 28),
                   child: Text(
                     period,
                     style: const TextStyle(
@@ -208,14 +221,28 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    originalPrice,
-                    style: const TextStyle(
-                      color: Color(0xFF8E8E93),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      decoration: TextDecoration.lineThrough,
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '\$',
+                        style: const TextStyle(
+                          color: Color(0xFF8E8E93),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                      Text(
+                        originalPrice!.substring(1), // Remove $ from originalPrice
+                        style: const TextStyle(
+                          color: Color(0xFF8E8E93),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
