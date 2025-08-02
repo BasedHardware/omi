@@ -34,6 +34,31 @@ def update_hourly_usage(uid: str, date: datetime, updates: dict):
     hourly_usage_ref.set(update_doc, merge=True)
 
 
+def batch_update_hourly_usage(uid: str, hourly_updates: dict):
+    """Batch updates or creates usage stats for multiple hours."""
+    batch_size = 400
+    items = list(hourly_updates.items())
+
+    for i in range(0, len(items), batch_size):
+        batch = db.batch()
+        chunk = items[i : i + batch_size]
+        for date, updates in chunk:
+            doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
+            hourly_usage_ref = db.collection('users').document(uid).collection('hourly_usage').document(doc_id)
+
+            update_doc = updates.copy()
+            # Add year, month, day, hour fields for querying
+            update_doc['year'] = date.year
+            update_doc['month'] = date.month
+            update_doc['day'] = date.day
+            update_doc['hour'] = date.hour
+            update_doc['id'] = doc_id
+            update_doc['last_updated'] = datetime.utcnow()
+
+            batch.set(hourly_usage_ref, update_doc, merge=True)
+        batch.commit()
+
+
 def get_today_usage_stats(uid: str, date: datetime) -> dict:
     """Aggregates hourly usage stats for a given day from Firestore."""
     user_ref = db.collection('users').document(uid)
