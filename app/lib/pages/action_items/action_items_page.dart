@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
-import 'widgets/action_item_title_widget.dart';
-import 'widgets/convo_action_items_group_widget.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
+import 'widgets/action_item_tile_widget.dart';
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
 class ActionItemsPage extends StatefulWidget {
@@ -16,6 +14,7 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   bool _showGroupedView = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
@@ -23,57 +22,54 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MixpanelManager().actionItemsPageOpened();
+      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      if (provider.actionItems.isEmpty) {
+        provider.fetchActionItems(showShimmer: true);
+      }
     });
   }
 
-  // Get all action items as a flat list
-  List<ActionItemData> _getFlattenedActionItems(Map<ServerConversation, List<ActionItem>> itemsByConversation) {
-    final result = <ActionItemData>[];
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
-    for (final entry in itemsByConversation.entries) {
-      for (final item in entry.value) {
-        if (item.deleted) continue;
-        result.add(
-          ActionItemData(
-            actionItem: item,
-            conversation: entry.key,
-            itemIndex: entry.key.structured.actionItems.indexOf(item),
-          ),
-        );
+  void _onScroll() {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (!provider.isFetching && provider.hasMore) {
+        provider.loadMoreActionItems();
       }
     }
-
-    // Sort by completion status (incomplete first)
-    result.sort((a, b) {
-      if (a.actionItem.completed == b.actionItem.completed) return 0;
-      return a.actionItem.completed ? 1 : -1;
-    });
-
-    return result;
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<ConversationProvider>(
-      builder: (context, convoProvider, child) {
-        final Map<ServerConversation, List<ActionItem>> itemsByConversation = convoProvider.conversationsWithActiveActionItems;
-
-        // Sort conversations by date (most recent first)
-        final sortedEntries = itemsByConversation.entries.toList()..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
-
-        // Get flattened list for non-grouped view
-        final flattenedItems = _getFlattenedActionItems(itemsByConversation);
+    
+    return Consumer<ActionItemsProvider>(
+      builder: (context, provider, child) {
+        // Get incomplete and complete items
+        final incompleteItems = provider.incompleteItems;
+        final completedItems = provider.completedItems;
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          body: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
+          body: RefreshIndicator(
+            onRefresh: () => provider.forceRefreshActionItems(),
+            color: Colors.deepPurpleAccent,
+            backgroundColor: Colors.white,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
               // Main Content
-              if (convoProvider.isLoadingConversations && sortedEntries.isEmpty)
+              if (provider.isLoading && provider.actionItems.isEmpty)
                 const SliverFillRemaining(
                   child: Center(
                     child: CircularProgressIndicator(
@@ -81,7 +77,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ),
                   ),
                 )
-              else if (sortedEntries.isEmpty)
+              else if (provider.actionItems.isEmpty)
                 SliverFillRemaining(
                   child: Center(
                     child: Padding(
@@ -146,7 +142,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    '${flattenedItems.where((item) => !item.actionItem.completed).length}',
+                                    '${incompleteItems.length}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -154,58 +150,45 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                     ),
                                   ),
                                 ),
+                                
                               ],
                             ),
-                            const Row(
-                              children: [
-                                // Settings button
-                                // TODO: Add settings once we have more stuff for action items
-                                // Container(
-                                //   width: 44,
-                                //   height: 44,
-                                //   margin: const EdgeInsets.only(right: 8),
-                                //   decoration: BoxDecoration(
-                                //     color: Colors.grey.shade700.withOpacity(0.3),
-                                //     borderRadius: BorderRadius.circular(12),
-                                //   ),
-                                //   child: IconButton(
-                                //     icon: const Icon(Icons.tune, size: 20),
-                                //     color: Colors.white,
-                                //     onPressed: () {
-                                //       // Filter settings
-                                //     },
-                                //   ),
-                                // ),
-                                // Group/Ungroup toggle button hidden for now
-                                // Container(
-                                //   width: 44,
-                                //   height: 44,
-                                //   decoration: BoxDecoration(
-                                //     color: _showGroupedView
-                                //         ? Colors.deepPurpleAccent.withOpacity(0.3)
-                                //         : Colors.grey.shade700.withOpacity(0.3),
-                                //     borderRadius: BorderRadius.circular(12),
-                                //     border: _showGroupedView
-                                //         ? Border.all(color: Colors.deepPurpleAccent, width: 1.5)
-                                //         : null,
-                                //   ),
-                                //   child: IconButton(
-                                //     icon: Icon(
-                                //       _showGroupedView ? Icons.view_agenda_outlined : Icons.view_list_outlined,
-                                //       size: 20,
-                                //     ),
-                                //     color: _showGroupedView ? Colors.deepPurpleAccent : Colors.white,
-                                //     onPressed: () {
-                                //       setState(() {
-                                //         _showGroupedView = !_showGroupedView;
-                                //       });
-                                //       MixpanelManager().actionItemsViewToggled(_showGroupedView);
-                                //     },
-                                //   ),
-                                // ),
-                              ],
-                            ),
+                            GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _showGroupedView = !_showGroupedView;
+                                    });
+                                    MixpanelManager().actionItemsViewToggled(_showGroupedView);
+                                  },
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: _showGroupedView 
+                                        ? Colors.deepPurpleAccent.withOpacity(0.2)
+                                        : Colors.grey[800]?.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: _showGroupedView 
+                                        ? Border.all(color: Colors.deepPurpleAccent, width: 1)
+                                        : null,
+                                    ),
+                                    child: Icon(
+                                      _showGroupedView ? Icons.view_agenda : Icons.view_list,
+                                      size: 16,
+                                      color: _showGroupedView ? Colors.deepPurpleAccent : Colors.white70,
+                                    ),
+                                  ),
+                                ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Help text for editing
+                        Text(
+                          'Tap to edit • Checkbox to toggle • Swipe for actions',
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -213,9 +196,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
 
-              if (sortedEntries.isNotEmpty) _showGroupedView ? _buildGroupedView(sortedEntries) : _buildFlatView(flattenedItems),
+              // Incomplete Items
+              if (provider.actionItems.isNotEmpty)
+                _showGroupedView 
+                  ? _buildGroupedIncompleteItems(incompleteItems, provider)
+                  : _buildFlatIncompleteItems(incompleteItems, provider),
 
-              if (sortedEntries.isNotEmpty)
+              // Completed Section Header
+              if (provider.actionItems.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 8.0),
@@ -243,7 +231,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
-                                    '${flattenedItems.where((item) => item.actionItem.completed).length}',
+                                    '${completedItems.length}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -253,14 +241,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 ),
                               ],
                             ),
-                            // Text(
-                            //   'Hide',
-                            //   style: TextStyle(
-                            //     color: Colors.grey.shade400,
-                            //     fontSize: 14,
-                            //     fontWeight: FontWeight.w500,
-                            //   ),
-                            // ),
                           ],
                         ),
                       ],
@@ -268,29 +248,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
 
-              if (sortedEntries.isNotEmpty && flattenedItems.any((item) => item.actionItem.completed))
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final completedItems = flattenedItems.where((item) => item.actionItem.completed).toList();
-                      if (index < completedItems.length) {
-                        final item = completedItems[index];
-                        // Simple container for proper spacing
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          child: ActionItemTileWidget(
-                            actionItem: item.actionItem,
-                            conversationId: item.conversation.id,
-                            itemIndexInConversation: item.itemIndex,
-                          ),
-                        );
-                      }
-                      return null;
-                    },
-                    childCount: flattenedItems.where((item) => item.actionItem.completed).length,
-                  ),
-                )
-              else if (sortedEntries.isNotEmpty)
+              // Completed Items
+              if (provider.actionItems.isNotEmpty && completedItems.isNotEmpty)
+                _showGroupedView 
+                  ? _buildGroupedCompletedItems(completedItems, provider)
+                  : _buildFlatCompletedItems(completedItems, provider)
+              else if (provider.actionItems.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -313,59 +276,507 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
 
+              // Loading indicator for pagination
+              if (provider.isFetching)
+                SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Load More button (fallback for manual loading)
+              if (!provider.isFetching && provider.hasMore && provider.actionItems.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Center(
+                      child: ElevatedButton(
+                        onPressed: () => provider.loadMoreActionItems(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurpleAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Load More'),
+                      ),
+                    ),
+                  ),
+                ),
+
               const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
             ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildGroupedView(List<MapEntry<ServerConversation, List<ActionItem>>> sortedEntries) {
+  Widget _buildFlatIncompleteItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          final entry = sortedEntries[index];
-          return ConversationActionItemsGroupWidget(
-            conversation: entry.key,
-            actionItems: entry.value,
-          );
+          if (index < items.length) {
+            final item = items[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: _buildDismissibleActionItem(
+                item: item,
+                provider: provider,
+              ),
+            );
+          }
+          return null;
         },
-        childCount: sortedEntries.length,
+        childCount: items.length,
       ),
     );
   }
 
-  Widget _buildFlatView(List<ActionItemData> items) {
-    final incompleteItems = items.where((item) => !item.actionItem.completed).toList();
+  Widget _buildGroupedIncompleteItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
+    // Group items by conversation title
+    final Map<String, List<ActionItemWithMetadata>> groupedItems = {};
+    for (final item in items) {
+      groupedItems.putIfAbsent(item.conversationTitle, () => []).add(item);
+    }
 
     return SliverList(
       delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final item = incompleteItems[index];
+        (context, groupIndex) {
+          final conversationTitle = groupedItems.keys.elementAt(groupIndex);
+          final conversationItems = groupedItems[conversationTitle]!;
+
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: ActionItemTileWidget(
-              actionItem: item.actionItem,
-              conversationId: item.conversation.id,
-              itemIndexInConversation: item.itemIndex,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Conversation group header
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800]?.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    conversationTitle,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Action items for this conversation
+                ...conversationItems.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: _buildDismissibleActionItem(
+                    item: item,
+                    provider: provider,
+                  ),
+                )),
+              ],
             ),
           );
         },
-        childCount: incompleteItems.length,
+        childCount: groupedItems.length,
       ),
     );
   }
-}
 
-class ActionItemData {
-  final ActionItem actionItem;
-  final ServerConversation conversation;
-  final int itemIndex;
+  Widget _buildFlatCompletedItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index < items.length) {
+            final item = items[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: _buildDismissibleActionItem(
+                item: item,
+                provider: provider,
+              ),
+            );
+          }
+          return null;
+        },
+        childCount: items.length,
+      ),
+    );
+  }
 
-  ActionItemData({
-    required this.actionItem,
-    required this.conversation,
-    required this.itemIndex,
-  });
+  Widget _buildGroupedCompletedItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
+    // Group items by conversation title
+    final Map<String, List<ActionItemWithMetadata>> groupedItems = {};
+    for (final item in items) {
+      groupedItems.putIfAbsent(item.conversationTitle, () => []).add(item);
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, groupIndex) {
+          final conversationTitle = groupedItems.keys.elementAt(groupIndex);
+          final conversationItems = groupedItems[conversationTitle]!;
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Conversation group header
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800]?.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    conversationTitle,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Action items for this conversation
+                ...conversationItems.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: _buildDismissibleActionItem(
+                    item: item,
+                    provider: provider,
+                  ),
+                )),
+              ],
+            ),
+          );
+        },
+        childCount: groupedItems.length,
+      ),
+    );
+  }
+
+  Widget _buildDismissibleActionItem({
+    required ActionItemWithMetadata item,
+    required ActionItemsProvider provider,
+  }) {
+    return Dismissible(
+      key: Key(item.id),
+      // Swipe right background - Mark as completed
+      background: Container(
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: item.completed ? Colors.orange : Colors.green,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        child:   Icon(
+              item.completed ? Icons.undo : Icons.check,
+              color: Colors.white,
+              size: 24,
+            ),
+      ),
+      // Swipe left background - Delete
+      secondaryBackground: Container(
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const   Icon(
+              Icons.delete,
+              color: Colors.white,
+              size: 24,
+            ),
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          // Swipe right - Toggle completion
+          await provider.updateActionItemState(item, !item.completed);
+          
+          // Show feedback
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  item.completed 
+                    ? 'Action item marked as incomplete' 
+                    : 'Action item completed'
+                ),
+                backgroundColor: item.completed ? Colors.orange : Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+          return false;
+        } else {
+          // Swipe left - Show delete confirmation
+          return await _showDeleteConfirmationDialog(item);
+        }
+      },
+      onDismissed: (direction) async {
+        // Only called for delete action (swipe left)
+        if (direction == DismissDirection.endToStart) {
+          await _deleteActionItem(item, provider);
+        }
+      },
+      child: ActionItemTileWidget(
+        actionItem: item,
+        onToggle: (newState) => provider.updateActionItemState(item, newState),
+      ),
+    );
+  }
+
+  Future<bool?> _showDeleteConfirmationDialog(ActionItemWithMetadata item) async {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 340),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F1F25),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with icon
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Delete Action Item?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Content
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Are you sure you want to delete this action item?',
+                        style: TextStyle(
+                          color: Colors.grey[300],
+                          fontSize: 16,
+                          height: 1.4,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Action item preview
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800]?.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.grey[700]!.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.assignment_outlined,
+                              color: Colors.grey[400],
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                item.description,
+                                style: TextStyle(
+                                  color: Colors.grey[200],
+                                  fontSize: 14,
+                                  height: 1.3,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Warning text with better styling
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.orange.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange[300],
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'This action cannot be undone',
+                              style: TextStyle(
+                                color: Colors.orange[300],
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Colors.grey[300],
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                'Delete',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteActionItem(ActionItemWithMetadata item, ActionItemsProvider provider) async {
+    final success = await provider.deleteActionItem(item);
+    
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Action item "${item.description}" deleted'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Undo',
+              textColor: Colors.white,
+              onPressed: () {
+                // For now, show that undo is not implemented
+                // In the future, you could implement an undo mechanism
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Undo functionality not implemented yet'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete action item'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 }

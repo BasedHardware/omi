@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
@@ -14,15 +13,11 @@ import 'package:omi/ui/molecules/omi_popup_menu.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 
 class DesktopActionItem extends StatefulWidget {
-  final ActionItem actionItem;
-  final ServerConversation conversation;
-  final int itemIndex;
+  final ActionItemWithMetadata actionItem;
 
   const DesktopActionItem({
     super.key,
     required this.actionItem,
-    required this.conversation,
-    required this.itemIndex,
   });
 
   @override
@@ -101,14 +96,26 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       return;
     }
 
-    updateActionItemDescription(widget.conversation.id, originalText, newText, widget.itemIndex)
-        .catchError((e) => debugPrint('$e'));
-
-    final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
-    convoProvider.updateActionItemDescriptionInConversation(widget.conversation.id, widget.itemIndex, newText);
-
-    setState(() => _isEditing = false);
-    _showSavedMessage();
+    try {
+      await updateActionItemDescription(widget.actionItem.conversationId, originalText, newText, widget.actionItem.index);
+      
+      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      await provider.updateActionItemDescription(widget.actionItem, newText);
+      
+      setState(() => _isEditing = false);
+      _showSavedMessage();
+    } catch (e) {
+      debugPrint('Error updating action item description: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to update action item'),
+          backgroundColor: Colors.red.shade400,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _showSavedMessage() {
@@ -180,20 +187,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _isEditing
-                      ? KeyboardListener(
-                          focusNode: FocusNode(),
-                          onKeyEvent: (KeyEvent event) {
-                            if (event is KeyDownEvent) {
-                              if (event.logicalKey == LogicalKeyboardKey.enter) {
-                                if (!HardwareKeyboard.instance.isShiftPressed) {
-                                  // Enter without Shift: save changes
-                                  _saveChanges();
-                                }
-                                // Enter with Shift: allow new line (default behavior)
-                              }
-                            }
-                          },
-                          child: TextField(
+                      ? TextField(
                             controller: _textController,
                             focusNode: _focusNode,
                             style: const TextStyle(
@@ -204,9 +198,10 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                             decoration: const InputDecoration(
                                 border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
                             maxLines: null,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _saveChanges(),
                             onChanged: (_) => setState(() {}),
-                          ),
-                        )
+                          )
                       : GestureDetector(
                           onTap: _startEditing,
                           child: AnimatedDefaultTextStyle(
@@ -232,8 +227,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                     const SizedBox(width: 6),
                     Expanded(
                         child: Text(
-                            widget.conversation.structured.title.isNotEmpty
-                                ? widget.conversation.structured.title
+                            widget.actionItem.conversationTitle.isNotEmpty
+                                ? widget.actionItem.conversationTitle
                                 : 'Untitled Conversation',
                             style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12),
                             maxLines: 1,
@@ -298,11 +293,11 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     HapticFeedback.lightImpact();
     final newValue = !widget.actionItem.completed;
     MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
-      conversationId: widget.conversation.id,
+      conversationId: widget.actionItem.conversationId,
       actionItemDescription: widget.actionItem.description,
       isCompleted: newValue,
     );
-    context.read<ConversationProvider>().updateGlobalActionItemState(widget.conversation, widget.actionItem.description, newValue);
+    context.read<ActionItemsProvider>().updateActionItemState(widget.actionItem, newValue);
   }
 
   void _showDeleteConfirmation(BuildContext context) {
@@ -311,8 +306,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         .then((confirmed) {
       if (confirmed == true) {
         context
-            .read<ConversationProvider>()
-            .deleteActionItemAndUpdateLocally(widget.conversation.id, widget.itemIndex, widget.actionItem);
+            .read<ActionItemsProvider>()
+            .deleteActionItem(widget.actionItem);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Action item deleted'),
