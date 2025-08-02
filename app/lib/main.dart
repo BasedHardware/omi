@@ -41,6 +41,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -246,6 +247,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
           ChangeNotifierProvider(create: (context) => UserProvider()),
+          ChangeNotifierProvider(create: (context) => UsageProvider()),
           ChangeNotifierProvider(create: (context) => ChatSessionProvider()),
         ],
         builder: (context, child) {

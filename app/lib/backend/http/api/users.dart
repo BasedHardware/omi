@@ -6,6 +6,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/models/user_usage.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
@@ -322,4 +323,19 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   if (response == null) return false;
   debugPrint('setPreferredSummarizationAppServer response: ${response.body}');
   return response.statusCode == 200;
+}
+
+Future<UserUsageResponse?> getUserUsage({required String period}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/me/usage?period=$period',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getUserUsage response: ${response.body}');
+  if (response.statusCode == 200) {
+    return UserUsageResponse.fromJson(jsonDecode(response.body));
+  }
+  return null;
 }

@@ -7,6 +7,7 @@ import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/widgets.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -67,6 +68,18 @@ class _SettingsPageState extends State<SettingsPage> {
           'Profile',
           () => routeToPage(context, const ProfilePage()),
           icon: const Icon(Icons.person, color: Colors.white, size: 22),
+        ),
+        const SizedBox(height: 12),
+        getItemAddOn2(
+          'Usage',
+          () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const UsagePage(),
+              ),
+            );
+          },
+          icon: const Icon(Icons.bar_chart_sharp, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 12),
 
