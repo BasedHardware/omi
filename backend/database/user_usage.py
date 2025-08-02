@@ -17,7 +17,7 @@ def update_hourly_usage(uid: str, date: datetime, updates: dict):
     has_increments = False
 
     for key, value in updates.items():
-        if key in ['transcription_seconds', 'words_transcribed', 'words_summarized', 'memories_created'] and value > 0:
+        if key in ['transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created'] and value > 0:
             update_doc[key] = firestore.Increment(value)
             has_increments = True
 
@@ -52,14 +52,14 @@ def _aggregate_stats(query) -> dict:
     stats = {
         'transcription_seconds': 0,
         'words_transcribed': 0,
-        'words_summarized': 0,
+        'insights_gained': 0,
         'memories_created': 0,
     }
     for doc in docs:
         data = doc.to_dict()
         stats['transcription_seconds'] += data.get('transcription_seconds', 0)
         stats['words_transcribed'] += data.get('words_transcribed', 0)
-        stats['words_summarized'] += data.get('words_summarized', 0)
+        stats['insights_gained'] += data.get('insights_gained', 0)
         stats['memories_created'] += data.get('memories_created', 0)
     return stats
 
@@ -108,13 +108,13 @@ def get_hourly_history_for_today(uid: str, date: datetime) -> list[dict]:
             hourly_totals[hour] = {
                 'transcription_seconds': 0,
                 'words_transcribed': 0,
-                'words_summarized': 0,
+                'insights_gained': 0,
                 'memories_created': 0,
             }
 
         hourly_totals[hour]['transcription_seconds'] += data.get('transcription_seconds', 0)
         hourly_totals[hour]['words_transcribed'] += data.get('words_transcribed', 0)
-        hourly_totals[hour]['words_summarized'] += data.get('words_summarized', 0)
+        hourly_totals[hour]['insights_gained'] += data.get('insights_gained', 0)
         hourly_totals[hour]['memories_created'] += data.get('memories_created', 0)
 
     history = [
@@ -141,13 +141,13 @@ def get_daily_history_for_month(uid: str, date: datetime) -> list[dict]:
             daily_totals[day] = {
                 'transcription_seconds': 0,
                 'words_transcribed': 0,
-                'words_summarized': 0,
+                'insights_gained': 0,
                 'memories_created': 0,
             }
 
         daily_totals[day]['transcription_seconds'] += data.get('transcription_seconds', 0)
         daily_totals[day]['words_transcribed'] += data.get('words_transcribed', 0)
-        daily_totals[day]['words_summarized'] += data.get('words_summarized', 0)
+        daily_totals[day]['insights_gained'] += data.get('insights_gained', 0)
         daily_totals[day]['memories_created'] += data.get('memories_created', 0)
 
     history = [{'date': f"{date.year}-{date.month:02d}-{day:02d}", **stats} for day, stats in daily_totals.items()]
@@ -169,13 +169,13 @@ def get_monthly_history_for_year(uid: str, date: datetime) -> list[dict]:
             monthly_totals[month] = {
                 'transcription_seconds': 0,
                 'words_transcribed': 0,
-                'words_summarized': 0,
+                'insights_gained': 0,
                 'memories_created': 0,
             }
 
         monthly_totals[month]['transcription_seconds'] += data.get('transcription_seconds', 0)
         monthly_totals[month]['words_transcribed'] += data.get('words_transcribed', 0)
-        monthly_totals[month]['words_summarized'] += data.get('words_summarized', 0)
+        monthly_totals[month]['insights_gained'] += data.get('insights_gained', 0)
         monthly_totals[month]['memories_created'] += data.get('memories_created', 0)
 
     history = [{'date': f"{date.year}-{month:02d}-01", **stats} for month, stats in monthly_totals.items()]
@@ -196,13 +196,13 @@ def get_yearly_history(uid: str) -> list[dict]:
             yearly_totals[year] = {
                 'transcription_seconds': 0,
                 'words_transcribed': 0,
-                'words_summarized': 0,
+                'insights_gained': 0,
                 'memories_created': 0,
             }
 
         yearly_totals[year]['transcription_seconds'] += data.get('transcription_seconds', 0)
         yearly_totals[year]['words_transcribed'] += data.get('words_transcribed', 0)
-        yearly_totals[year]['words_summarized'] += data.get('words_summarized', 0)
+        yearly_totals[year]['insights_gained'] += data.get('insights_gained', 0)
         yearly_totals[year]['memories_created'] += data.get('memories_created', 0)
 
     history = [{'date': f"{year}-01-01", **stats} for year, stats in yearly_totals.items()]

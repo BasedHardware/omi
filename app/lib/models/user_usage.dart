@@ -6,13 +6,13 @@ part 'user_usage.g.dart';
 class UsageStats {
   final int transcriptionSeconds;
   final int wordsTranscribed;
-  final int wordsSummarized;
+  final int insightsGained;
   final int memoriesCreated;
 
   UsageStats({
     required this.transcriptionSeconds,
     required this.wordsTranscribed,
-    required this.wordsSummarized,
+    required this.insightsGained,
     required this.memoriesCreated,
   });
 
@@ -25,14 +25,14 @@ class UsageHistoryPoint {
   final String date;
   final int transcriptionSeconds;
   final int wordsTranscribed;
-  final int wordsSummarized;
+  final int insightsGained;
   final int memoriesCreated;
 
   UsageHistoryPoint({
     required this.date,
     required this.transcriptionSeconds,
     required this.wordsTranscribed,
-    required this.wordsSummarized,
+    required this.insightsGained,
     required this.memoriesCreated,
   });
 

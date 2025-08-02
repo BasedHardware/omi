@@ -380,7 +380,7 @@ def process_conversation(
                         insights_gained += 1
 
         if insights_gained > 0:
-            record_usage(uid, words_summarized=insights_gained)
+            record_usage(uid, insights_gained=insights_gained)
 
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people

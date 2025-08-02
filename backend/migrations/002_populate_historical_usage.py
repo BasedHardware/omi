@@ -1,8 +1,10 @@
 import argparse
 import copy
+import json
 import os
 import re
 import sys
+import zlib
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timezone
@@ -42,41 +44,36 @@ db = firestore.client()
 
 
 def _decrypt_conversation_data(data: dict, uid: str) -> dict:
-    """Helper to decrypt conversation fields. Assumes encryption utils structure."""
+    """Helper to decrypt conversation fields. Mimics logic from conversations_db."""
     decrypted_data = copy.deepcopy(data)
-    if 'transcript_segments' in decrypted_data:
-        try:
-            # Assuming `decrypt_transcript_segments` exists and works on the list of segments.
-            decrypted_data['transcript_segments'] = encryption.decrypt_transcript_segments(
-                decrypted_data['transcript_segments'], uid
-            )
-        except AttributeError:
-            # Fallback if decrypt_transcript_segments does not exist, try decrypting text field of each segment
-            for segment in decrypted_data.get('transcript_segments', []):
-                if 'text' in segment and segment['text']:
-                    try:
-                        segment['text'] = encryption.decrypt(segment['text'], uid)
-                    except Exception:
-                        pass  # Ignore if a single segment fails
-        except Exception as e:
-            print(f"Warning: Could not decrypt transcript segments for user {uid}. Error: {e}")
 
-    # It's likely structured data and app results are also encrypted if they contain sensitive text.
-    # Without seeing the encryption module, we make a reasonable guess.
-    if 'structured' in decrypted_data and decrypted_data['structured']:
-        for key in ['title', 'overview']:
-            if key in decrypted_data['structured'] and decrypted_data['structured'][key]:
-                try:
-                    decrypted_data['structured'][key] = encryption.decrypt(decrypted_data['structured'][key], uid)
-                except Exception:
-                    pass
-    if 'apps_results' in decrypted_data:
-        for result in decrypted_data['apps_results']:
-            if 'content' in result and result['content']:
-                try:
-                    result['content'] = encryption.decrypt(result['content'], uid)
-                except Exception:
-                    pass
+    if 'transcript_segments' not in decrypted_data:
+        return decrypted_data
+
+    if isinstance(decrypted_data['transcript_segments'], str):
+        try:
+            decrypted_payload = encryption.decrypt(decrypted_data['transcript_segments'], uid)
+            if decrypted_data.get('transcript_segments_compressed'):
+                compressed_bytes = bytes.fromhex(decrypted_payload)
+                decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
+                decrypted_data['transcript_segments'] = json.loads(decompressed_json)
+            # backward compatibility, will be removed soon
+            else:
+                decrypted_data['transcript_segments'] = json.loads(decrypted_payload)
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+            print(e, uid)
+            decrypted_data['transcript_segments'] = []
+    # backward compatibility, will be removed soon
+    elif isinstance(decrypted_data['transcript_segments'], bytes):
+        try:
+            compressed_bytes = decrypted_data['transcript_segments']
+            if decrypted_data.get('transcript_segments_compressed'):
+                decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
+                decrypted_data['transcript_segments'] = json.loads(decompressed_json)
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+            print(e, uid)
+            decrypted_data['transcript_segments'] = []
+
     return decrypted_data
 
 
@@ -88,6 +85,13 @@ def get_all_conversations_for_user(uid: str) -> list[Conversation]:
         data = doc.to_dict()
         if data.get('data_protection_level') == 'enhanced':
             data = _decrypt_conversation_data(data, uid)
+        elif data.get('transcript_segments_compressed') and isinstance(data.get('transcript_segments'), bytes):
+            try:
+                decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
+                data['transcript_segments'] = json.loads(decompressed_json)
+            except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+                print(f"Warning: Could not decompress transcript segments for user {uid}. Error: {e}")
+                data['transcript_segments'] = []
         try:
             conversations.append(Conversation(**data))
         except Exception as e:
@@ -147,7 +151,7 @@ def migrate_user_usage(uid: str):
         delete_hourly_usage_for_user(uid)
 
         hourly_updates = defaultdict(
-            lambda: {'transcription_seconds': 0, 'words_transcribed': 0, 'words_summarized': 0, 'memories_created': 0}
+            lambda: {'transcription_seconds': 0, 'words_transcribed': 0, 'insights_gained': 0, 'memories_created': 0}
         )
 
         # Process Conversations
@@ -181,7 +185,7 @@ def migrate_user_usage(uid: str):
                         sentences = re.split(r'[.!?]+', result.content)
                         insights += sum(1 for s in sentences if len(s.split()) > 5)
 
-                hourly_updates[hour_key]['words_summarized'] += insights
+                hourly_updates[hour_key]['insights_gained'] += insights
 
         # Process Memories
         memories = get_all_memories_for_user(uid)

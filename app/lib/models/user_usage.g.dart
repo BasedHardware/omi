@@ -9,7 +9,7 @@ part of 'user_usage.dart';
 UsageStats _$UsageStatsFromJson(Map<String, dynamic> json) => UsageStats(
       transcriptionSeconds: (json['transcription_seconds'] as num).toInt(),
       wordsTranscribed: (json['words_transcribed'] as num).toInt(),
-      wordsSummarized: (json['words_summarized'] as num).toInt(),
+      insightsGained: (json['insights_gained'] as num).toInt(),
       memoriesCreated: (json['memories_created'] as num).toInt(),
     );
 
@@ -17,7 +17,7 @@ Map<String, dynamic> _$UsageStatsToJson(UsageStats instance) =>
     <String, dynamic>{
       'transcription_seconds': instance.transcriptionSeconds,
       'words_transcribed': instance.wordsTranscribed,
-      'words_summarized': instance.wordsSummarized,
+      'insights_gained': instance.insightsGained,
       'memories_created': instance.memoriesCreated,
     };
 
@@ -26,7 +26,7 @@ UsageHistoryPoint _$UsageHistoryPointFromJson(Map<String, dynamic> json) =>
       date: json['date'] as String,
       transcriptionSeconds: (json['transcription_seconds'] as num).toInt(),
       wordsTranscribed: (json['words_transcribed'] as num).toInt(),
-      wordsSummarized: (json['words_summarized'] as num).toInt(),
+      insightsGained: (json['insights_gained'] as num).toInt(),
       memoriesCreated: (json['memories_created'] as num).toInt(),
     );
 
@@ -35,7 +35,7 @@ Map<String, dynamic> _$UsageHistoryPointToJson(UsageHistoryPoint instance) =>
       'date': instance.date,
       'transcription_seconds': instance.transcriptionSeconds,
       'words_transcribed': instance.wordsTranscribed,
-      'words_summarized': instance.wordsSummarized,
+      'insights_gained': instance.insightsGained,
       'memories_created': instance.memoriesCreated,
     };
 

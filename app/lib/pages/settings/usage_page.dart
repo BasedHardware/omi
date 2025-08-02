@@ -126,8 +126,8 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       if (stats.wordsTranscribed > 0) {
         funStats.add('🧠 Understood ${numberFormatter.format(stats.wordsTranscribed)} words');
       }
-      if (stats.wordsSummarized > 0) {
-        funStats.add('✨ Provided ${numberFormatter.format(stats.wordsSummarized)} insights');
+      if (stats.insightsGained > 0) {
+        funStats.add('✨ Provided ${numberFormatter.format(stats.insightsGained)} insights');
       }
       if (stats.memoriesCreated > 0) {
         funStats.add('📚 Remembered ${numberFormatter.format(stats.memoriesCreated)} memories');
@@ -330,7 +330,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
 
     if (stats.transcriptionSeconds == 0 &&
         stats.wordsTranscribed == 0 &&
-        stats.wordsSummarized == 0 &&
+        stats.insightsGained == 0 &&
         stats.memoriesCreated == 0) {
       return RefreshIndicator(
         onRefresh: onRefresh,
@@ -392,7 +392,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 context,
                 icon: FontAwesomeIcons.wandMagicSparkles,
                 title: 'Providing',
-                value: '${numberFormatter.format(stats.wordsSummarized)} insights',
+                value: '${numberFormatter.format(stats.insightsGained)} insights',
                 subtitle: 'Action items, and notes automatically captured.',
                 color: Colors.orange.shade300,
               ),
@@ -426,7 +426,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       final secondsInMinutes = point.transcriptionSeconds / 60.0;
       if (secondsInMinutes > maxY) maxY = secondsInMinutes;
       if (point.wordsTranscribed > maxY) maxY = point.wordsTranscribed.toDouble();
-      if (point.wordsSummarized > maxY) maxY = point.wordsSummarized.toDouble();
+      if (point.insightsGained > maxY) maxY = point.insightsGained.toDouble();
       if (point.memoriesCreated > maxY) maxY = point.memoriesCreated.toDouble();
     }
     maxY = maxY * 1.2;
@@ -453,7 +453,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                     final metricNames = [
                       'Listening (mins)',
                       'Understanding (words)',
-                      'Insights (words)',
+                      'Insights Gained',
                       'Memories Created'
                     ];
                     return BarTooltipItem(
@@ -537,7 +537,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                             BarChartRodData(
                                 toY: data.wordsTranscribed.toDouble(), color: metricColors[1], width: barWidth),
                             BarChartRodData(
-                                toY: data.wordsSummarized.toDouble(), color: metricColors[2], width: barWidth),
+                                toY: data.insightsGained.toDouble(), color: metricColors[2], width: barWidth),
                             BarChartRodData(
                                 toY: data.memoriesCreated.toDouble(), color: metricColors[3], width: barWidth),
                           ],

@@ -10,7 +10,7 @@ class UsageStats(BaseModel):
 
     transcription_seconds: int = 0
     words_transcribed: int = 0
-    words_summarized: int = 0
+    insights_gained: int = 0
     memories_created: int = 0
 
 
