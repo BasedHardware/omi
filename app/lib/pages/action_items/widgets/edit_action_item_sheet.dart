@@ -20,7 +20,6 @@ class EditActionItemBottomSheet extends StatefulWidget {
 class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
   late TextEditingController _textController;
   late bool _isCompleted;
-  bool _isLoading = false;
 
   @override
   void initState() {
@@ -49,54 +48,45 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       return;
     }
 
-    if (_textController.text.trim() == widget.actionItem.description) {
+    String newDescription = _textController.text.trim();
+    if (newDescription == widget.actionItem.description) {
       Navigator.pop(context);
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    String oldDescription = widget.actionItem.description;
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    
+    await provider.updateActionItemDescription(widget.actionItem, newDescription);
+    
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Action item updated'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
 
     try {
-      String oldDescription = widget.actionItem.description;
-      String newDescription = _textController.text.trim();
-
       await updateActionItemDescription(
         widget.actionItem.conversationId, 
         oldDescription, 
         newDescription, 
         widget.actionItem.index
       );
-
-      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-      final updatedItem = widget.actionItem.copyWith(description: newDescription);
-      await provider.updateActionItemState(updatedItem, updatedItem.completed);
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Action item updated'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
+        await provider.updateActionItemDescription(widget.actionItem, oldDescription);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update action item: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
       }
     }
   }
@@ -156,7 +146,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(5),
                         ),
-                        onChanged: _isLoading ? null : (bool? value) async {
+                        onChanged: (bool? value) async {
                           if (value == null) return;
                           
                           HapticFeedback.lightImpact();
@@ -183,7 +173,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                 // Delete button
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: _isLoading ? null : () {
+                  onPressed: () {
                     // Show delete confirmation dialog
                     showDialog(
                       context: context,
@@ -228,7 +218,6 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
               controller: _textController,
               autofocus: true,
               maxLines: null,
-              enabled: !_isLoading,
               textInputAction: TextInputAction.done,
               style: const TextStyle(
                 color: Colors.white,
@@ -241,13 +230,13 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                 isDense: true,
               ),
               onSubmitted: (value) {
-                if (value.trim().isNotEmpty && !_isLoading) {
+                FocusScope.of(context).unfocus();
+                if (value.trim().isNotEmpty) {
                   _saveActionItem();
                 }
               },
             ),
             const SizedBox(height: 18),
-            // Bottom row with helper text and character count
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -267,7 +256,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _isLoading ? 'Saving...' : 'Press done to save',
+                        'Press done to save',
                         style: TextStyle(
                           color: Colors.grey.shade400,
                           fontSize: 11,
