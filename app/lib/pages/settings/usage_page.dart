@@ -151,8 +151,6 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const FaIcon(FontAwesomeIcons.kiwiBird, color: Colors.grey, size: 60),
-          const SizedBox(height: 20),
           const Text(
             'No Activity Yet',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -193,14 +191,9 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
         }),
       );
     }
-    final numberFormatter = NumberFormat.decimalPattern('en_US');
-    final transcriptionMinutes = (stats.transcriptionSeconds / 60);
-    String transcriptionValue;
-    if (transcriptionMinutes >= 60) {
-      transcriptionValue = '${(transcriptionMinutes / 60).toStringAsFixed(1)} hours';
-    } else {
-      transcriptionValue = '${transcriptionMinutes.round()} minutes';
-    }
+    final numberFormatter = NumberFormat.compact(locale: 'en_US');
+    final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
+    final transcriptionValue = '${numberFormatter.format(transcriptionMinutes)} minutes';
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -214,37 +207,37 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           ],
           _buildUsageCard(
             context,
-            icon: FontAwesomeIcons.earListen,
-            title: 'Listening Time',
+            icon: FontAwesomeIcons.microphone,
+            title: 'Listening',
             value: transcriptionValue,
-            subtitle: 'The total time Omi has been actively listening to your world.',
+            subtitle: 'Total time Omi has actively listened.',
             color: Colors.blue.shade300,
           ),
           const SizedBox(height: 16),
           _buildUsageCard(
             context,
-            icon: FontAwesomeIcons.fileWord,
-            title: 'Words Captured',
-            value: numberFormatter.format(stats.wordsTranscribed),
-            subtitle: 'The number of words Omi has transcribed from your conversations.',
+            icon: FontAwesomeIcons.comments,
+            title: 'Understanding',
+            value: '${numberFormatter.format(stats.wordsTranscribed)} words',
+            subtitle: 'Words understood from your conversations.',
             color: Colors.green.shade300,
           ),
           const SizedBox(height: 16),
           _buildUsageCard(
             context,
-            icon: FontAwesomeIcons.lightbulb,
-            title: 'Insights Gained',
-            value: numberFormatter.format(stats.wordsSummarized),
-            subtitle: 'Words in summaries, action items, and other insights generated for you.',
+            icon: FontAwesomeIcons.wandMagicSparkles,
+            title: 'Providing',
+            value: '${numberFormatter.format(stats.wordsSummarized)} insights',
+            subtitle: 'Action items, and notes automatically captured.',
             color: Colors.orange.shade300,
           ),
           const SizedBox(height: 16),
           _buildUsageCard(
             context,
             icon: FontAwesomeIcons.brain,
-            title: 'Memories Created',
-            value: numberFormatter.format(stats.memoriesCreated),
-            subtitle: 'Important facts, events, and ideas Omi has remembered for you.',
+            title: 'Remembering',
+            value: '${numberFormatter.format(stats.memoriesCreated)} memories',
+            subtitle: 'Facts and details remembered for you.',
             color: Colors.purple.shade300,
           ),
         ],
@@ -290,13 +283,18 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 touchTooltipData: BarTouchTooltipData(
                   getTooltipColor: (_) => Colors.grey.shade800,
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final metricNames = ['Mins Listened', 'Words Captured', 'Insights Gained', 'Memories Created'];
+                    final metricNames = [
+                      'Listening (mins)',
+                      'Understanding (words)',
+                      'Insights (words)',
+                      'Memories Created'
+                    ];
                     return BarTooltipItem(
                       '${metricNames[rodIndex]}\n',
                       TextStyle(color: metricColors[rodIndex], fontWeight: FontWeight.bold),
                       children: [
                         TextSpan(
-                          text: NumberFormat.decimalPattern('en_US').format(rod.toY.round()),
+                          text: NumberFormat.compact(locale: 'en_US').format(rod.toY.round()),
                           style: const TextStyle(color: Colors.white, fontSize: 12),
                         ),
                       ],
@@ -395,10 +393,10 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       runSpacing: 8,
       alignment: WrapAlignment.center,
       children: [
-        _buildLegendItem(Colors.blue.shade300, 'Listening Time'),
-        _buildLegendItem(Colors.green.shade300, 'Words Captured'),
-        _buildLegendItem(Colors.orange.shade300, 'Insights Gained'),
-        _buildLegendItem(Colors.purple.shade300, 'Memories Created'),
+        _buildLegendItem(Colors.blue.shade300, 'Listening (mins)'),
+        _buildLegendItem(Colors.green.shade300, 'Understanding (words)'),
+        _buildLegendItem(Colors.orange.shade300, 'Insights'),
+        _buildLegendItem(Colors.purple.shade300, 'Memories'),
       ],
     );
   }
@@ -446,22 +444,22 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                FaIcon(icon, color: color, size: 22),
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
             Text(
               value,
               style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
             ),
             const SizedBox(height: 12),
+            Row(
+              children: [
+                FaIcon(icon, color: color, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text(
               subtitle,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4),
