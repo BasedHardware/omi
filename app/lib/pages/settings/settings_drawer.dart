@@ -8,6 +8,7 @@ import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -127,6 +128,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               onTap: () {
                 Navigator.pop(context);
                 routeToPage(context, const ProfilePage());
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildSettingsItem(
+              title: 'Usage',
+              icon: const FaIcon(FontAwesomeIcons.chartBar, color: Color(0xFF8E8E93), size: 20),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const UsagePage(),
+                  ),
+                );
               },
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -429,7 +443,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
+              child:
+                  widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
             ),
           ),
         ],
