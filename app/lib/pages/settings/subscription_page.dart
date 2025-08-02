@@ -40,418 +40,497 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [
+            Colors.deepPurple.withOpacity(0.3),
+            Colors.deepPurple.withOpacity(0.15),
+            Colors.black.withOpacity(0.8),
+            Colors.black,
+          ],
+          stops: const [0.0, 0.2, 0.6, 1.0],
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          elevation: 0,
+          leading: Container(
+            margin: const EdgeInsets.all(8),
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F1F25),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Header and title with padding
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    // Header with close button
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.grey,
-                            size: 24,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Main heading
-                    const Text(
-                      'Unlimited Access',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                ),
+              const FaIcon(
+                FontAwesomeIcons.crown,
+                color: Colors.yellow,
+                size: 20,
               ),
-
-              // Voice to Notes Flow Graphic (full width, no padding)
-              SizedBox(
-                height: 120,
-                width: double.infinity,
-                child: Stack(
-                  children: [
-                    // Background flow - split into exact halves
-                    Row(
-                      children: [
-                        // Left half - Endless Scrolling Waveform (Left to Right)
-                        Expanded(
-                          flex: 1,
-                          child: ClipRect(
-                            child: Container(
-                              height: 120,
-                              child: AnimatedBuilder(
-                                animation: _waveController,
-                                builder: (context, child) {
-                                  // Seamless infinite scroll left-to-right
-                                  const double totalWidth = 300.0; // Total width needed for seamless loop
-                                  final scrollOffset = (_waveController.value * totalWidth) % totalWidth;
-                                  return Stack(
-                                    children: [
-                                      // First set of bars
-                                      Positioned(
-                                        left: -totalWidth + scrollOffset,
-                                        top: 0,
-                                        bottom: 0,
-                                        child: Row(
-                                          children: List.generate(60, (index) {
-                                            final heights = [15.0, 25.0, 35.0, 20.0, 40.0, 30.0, 25.0, 35.0];
-                                            final height = heights[index % heights.length];
-
-                                            return Container(
-                                              width: 3,
-                                              height: height,
-                                              margin: const EdgeInsets.symmetric(horizontal: 1),
-                                              decoration: BoxDecoration(
-                                                color: Colors.red.withOpacity(0.7),
-                                                borderRadius: BorderRadius.circular(1),
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ),
-                                      // Second set for seamless loop (starts exactly where first one ends)
-                                      Positioned(
-                                        left: scrollOffset,
-                                        top: 0,
-                                        bottom: 0,
-                                        child: Row(
-                                          children: List.generate(60, (index) {
-                                            final heights = [15.0, 25.0, 35.0, 20.0, 40.0, 30.0, 25.0, 35.0];
-                                            final height = heights[index % heights.length];
-
-                                            return Container(
-                                              width: 3,
-                                              height: height,
-                                              margin: const EdgeInsets.symmetric(horizontal: 1),
-                                              decoration: BoxDecoration(
-                                                color: Colors.red.withOpacity(0.7),
-                                                borderRadius: BorderRadius.circular(1),
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // Right half - Endless Scrolling Notes (Left to Right)
-                        Expanded(
-                          flex: 1,
-                          child: ClipRect(
-                            child: Container(
-                              height: 120,
-                              child: AnimatedBuilder(
-                                animation: _notesController,
-                                builder: (context, child) {
-                                  // Seamless infinite scroll left-to-right
-                                  const double totalWidth = 344.0; // Exact width: 8 notes × (35px + 8px margin) = 344px
-                                  final scrollOffset = (_notesController.value * totalWidth) % totalWidth;
-                                  return Stack(
-                                    children: [
-                                      // First set of notes
-                                      Positioned(
-                                        left: -totalWidth + scrollOffset,
-                                        top: 0,
-                                        bottom: 0,
-                                        child: Row(
-                                          children: List.generate(8, (index) {
-                                            return Container(
-                                              width: 35,
-                                              height: 45,
-                                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white.withOpacity(0.95),
-                                                borderRadius: BorderRadius.circular(6),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black.withOpacity(0.15),
-                                                    blurRadius: 4,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(4),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    // Title bar
-                                                    Container(
-                                                      width: 20,
-                                                      height: 2.5,
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.black,
-                                                        borderRadius: BorderRadius.circular(1),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 3),
-                                                    // Text lines
-                                                    ...List.generate(
-                                                        5,
-                                                        (i) => Container(
-                                                              width: i == 4 ? 18 : 27, // Last line shorter
-                                                              height: 1.5,
-                                                              margin: const EdgeInsets.symmetric(vertical: 1.5),
-                                                              decoration: BoxDecoration(
-                                                                color: Colors.grey[350],
-                                                                borderRadius: BorderRadius.circular(0.5),
-                                                              ),
-                                                            )),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ),
-                                      // Second set for seamless loop (starts exactly where first one ends)
-                                      Positioned(
-                                        left: scrollOffset,
-                                        top: 0,
-                                        bottom: 0,
-                                        child: Row(
-                                          children: List.generate(8, (index) {
-                                            return Container(
-                                              width: 35,
-                                              height: 45,
-                                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white.withOpacity(0.95),
-                                                borderRadius: BorderRadius.circular(6),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black.withOpacity(0.15),
-                                                    blurRadius: 4,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(4),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    // Title bar
-                                                    Container(
-                                                      width: 20,
-                                                      height: 2.5,
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.black,
-                                                        borderRadius: BorderRadius.circular(1),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 3),
-                                                    // Text lines
-                                                    ...List.generate(
-                                                        5,
-                                                        (i) => Container(
-                                                              width: i == 4 ? 18 : 27, // Last line shorter
-                                                              height: 1.5,
-                                                              margin: const EdgeInsets.symmetric(vertical: 1.5),
-                                                              decoration: BoxDecoration(
-                                                                color: Colors.grey[350],
-                                                                borderRadius: BorderRadius.circular(0.5),
-                                                              ),
-                                                            )),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Omi Device - perfectly centered
-                    Positioned(
-                      left: (MediaQuery.of(context).size.width - 100) / 2,
-                      top: (120 - 100) / 2, // Center vertically in the 120px container
-                      child: Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.blue.withOpacity(0.4),
-                              blurRadius: 20,
-                              spreadRadius: 3,
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/images/omi-without-rope.png',
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Rest of content with padding
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 32),
-
-                    // Features list
-                    Column(
-                      children: [
-                        _buildFeatureItem(
-                          icon: Icons.all_inclusive,
-                          text: 'Unlimited conversations',
-                        ),
-                        const SizedBox(height: 16),
-                        _buildFeatureItem(
-                          icon: Icons.quiz,
-                          text: 'Ask Omi anything about your life',
-                        ),
-                        const SizedBox(height: 16),
-                        _buildFeatureItem(
-                          icon: Icons.translate,
-                          text: 'Unlock Omi\'s infinite memory',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Yearly plan
-                    _buildPlanOption(
-                      isSelected: selectedPlan == 'yearly',
-                      badge: 'SAVE 20%',
-                      isPopular: true,
-                      title: 'Yearly Plan',
-                      subtitle: '12 month / \$199',
-                      monthlyPrice: '\$16.58/mo',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        setState(() => selectedPlan = 'yearly');
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Monthly plan
-                    _buildPlanOption(
-                      isSelected: selectedPlan == 'monthly',
-                      title: 'Monthly Plan',
-                      subtitle: null, // Remove subtitle
-                      monthlyPrice: '\$19/mo',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        setState(() => selectedPlan = 'monthly');
-                      },
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Continue button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          _handleSubscribe();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Continue',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward, size: 20),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Footer links
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildFooterLink('Privacy'),
-                        const SizedBox(width: 24),
-                        _buildFooterLink('Terms'),
-                        const SizedBox(width: 24),
-                        _buildFooterLink('Restore'),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+              const SizedBox(width: 8),
+              const Text(
+                'Unlimited Access',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
+          ),
+          actions: [
+            Container(
+              margin: const EdgeInsets.all(8),
+              child: GestureDetector(
+                onTap: () {
+                  // Do nothing for now
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1F25),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 3,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Container(
+                        width: 3,
+                        height: 3,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Container(
+                        width: 3,
+                        height: 3,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                const SizedBox(height: 48),
+
+                // Voice to Notes Flow Graphic (full width, no padding)
+                SizedBox(
+                  height: 150,
+                  width: double.infinity,
+                  child: Stack(
+                    children: [
+                      // Background flow - split into exact halves
+                      Row(
+                        children: [
+                          // Left half - Endless Scrolling Waveform (Left to Right)
+                          Expanded(
+                            flex: 1,
+                            child: ClipRect(
+                              child: Container(
+                                height: 120,
+                                child: AnimatedBuilder(
+                                  animation: _waveController,
+                                  builder: (context, child) {
+                                    // Seamless infinite scroll left-to-right
+                                    const double totalWidth =
+                                        420.0; // Total width needed for seamless loop (60 bars × 7px each)
+                                    final scrollOffset = (_waveController.value * totalWidth) % totalWidth;
+                                    return Stack(
+                                      children: [
+                                        // First set of bars
+                                        Positioned(
+                                          left: -totalWidth + scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(60, (index) {
+                                              final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
+                                              final height = heights[index % heights.length];
+
+                                              return Container(
+                                                width: 4,
+                                                height: height,
+                                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withOpacity(0.7),
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              );
+                                            }),
+                                          ),
+                                        ),
+                                        // Second set for seamless loop (starts exactly where first one ends)
+                                        Positioned(
+                                          left: scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(60, (index) {
+                                              final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
+                                              final height = heights[index % heights.length];
+
+                                              return Container(
+                                                width: 4,
+                                                height: height,
+                                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withOpacity(0.7),
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              );
+                                            }),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Right half - Endless Scrolling Notes (Left to Right)
+                          Expanded(
+                            flex: 1,
+                            child: ClipRect(
+                              child: Container(
+                                height: 120,
+                                child: AnimatedBuilder(
+                                  animation: _notesController,
+                                  builder: (context, child) {
+                                    // Seamless infinite scroll left-to-right
+                                    const double totalWidth =
+                                        440.0; // Exact width: 8 notes × (45px + 10px margin) = 440px
+                                    final scrollOffset = (_notesController.value * totalWidth) % totalWidth;
+                                    return Stack(
+                                      children: [
+                                        // First set of notes
+                                        Positioned(
+                                          left: -totalWidth + scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(8, (index) {
+                                              return Container(
+                                                width: 45,
+                                                height: 55,
+                                                margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withOpacity(0.95),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.15),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(6),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      // Title bar
+                                                      Container(
+                                                        width: 26,
+                                                        height: 3,
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black,
+                                                          borderRadius: BorderRadius.circular(1.5),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      // Text lines
+                                                      ...List.generate(
+                                                          5,
+                                                          (i) => Container(
+                                                                width: i == 4 ? 24 : 35, // Last line shorter
+                                                                height: 2,
+                                                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors.grey[350],
+                                                                  borderRadius: BorderRadius.circular(1),
+                                                                ),
+                                                              )),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            }),
+                                          ),
+                                        ),
+                                        // Second set for seamless loop (starts exactly where first one ends)
+                                        Positioned(
+                                          left: scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(8, (index) {
+                                              return Container(
+                                                width: 45,
+                                                height: 55,
+                                                margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withOpacity(0.95),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.15),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(6),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      // Title bar
+                                                      Container(
+                                                        width: 26,
+                                                        height: 3,
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black,
+                                                          borderRadius: BorderRadius.circular(1.5),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      // Text lines
+                                                      ...List.generate(
+                                                          5,
+                                                          (i) => Container(
+                                                                width: i == 4 ? 24 : 35, // Last line shorter
+                                                                height: 2,
+                                                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors.grey[350],
+                                                                  borderRadius: BorderRadius.circular(1),
+                                                                ),
+                                                              )),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            }),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Omi Device - perfectly centered
+                      Positioned(
+                        left: (MediaQuery.of(context).size.width - 120) / 2,
+                        top: 5, // Center vertically in the 150px container
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.withOpacity(0.4),
+                                blurRadius: 20,
+                                spreadRadius: 3,
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/images/omi-without-rope.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Rest of content with padding
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 32),
+
+                      // Features list
+                      Column(
+                        children: [
+                          _buildFeatureItem(
+                            faIcon: FontAwesomeIcons.infinity,
+                            text: 'Unlimited conversations',
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFeatureItem(
+                            faIcon: FontAwesomeIcons.solidComments,
+                            text: 'Ask Omi anything about your life',
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFeatureItem(
+                            faIcon: FontAwesomeIcons.brain,
+                            text: 'Unlock Omi\'s infinite memory',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 48),
+
+                      // Yearly plan
+                      _buildPlanOption(
+                        isSelected: selectedPlan == 'yearly',
+                        saveTag: 'SAVE 20%',
+                        isPopular: true,
+                        title: 'Annual Unlimited',
+                        subtitle: '12 months / \$199',
+                        monthlyPrice: '\$16 /mo',
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          setState(() => selectedPlan = 'yearly');
+                        },
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Monthly plan
+                      _buildPlanOption(
+                        isSelected: selectedPlan == 'monthly',
+                        title: 'Monthly Unlimited',
+                        subtitle: null, // Remove subtitle
+                        monthlyPrice: '\$19 /mo',
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          setState(() => selectedPlan = 'monthly');
+                        },
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Continue button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            _handleSubscribe();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Continue',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(Icons.arrow_forward, size: 20),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Footer links
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildFooterLink('Privacy'),
+                          const SizedBox(width: 24),
+                          _buildFooterLink('Terms'),
+                          const SizedBox(width: 24),
+                          _buildFooterLink('Restore'),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildFeatureItem({required IconData icon, required String text}) {
+  Widget _buildFeatureItem({required IconData faIcon, required String text}) {
     return Row(
       children: [
         Container(
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white,
+              width: 1,
+            ),
           ),
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: 18,
+          child: Center(
+            child: FaIcon(
+              faIcon,
+              color: Colors.white,
+              size: 16,
+            ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: Text(
             text,
@@ -472,16 +551,16 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
     required String? subtitle,
     required String monthlyPrice,
     required VoidCallback onTap,
-    String? badge,
+    String? saveTag,
     bool isPopular = false,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25), // Use conversation list background
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected ? Colors.white : Colors.transparent,
             width: 2,
@@ -489,47 +568,26 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
         ),
         child: Column(
           children: [
-            // Small badges at the top
-            if (isPopular || badge != null) ...[
+            // Popular badge only at the top
+            if (isPopular) ...[
               Row(
                 children: [
-                  if (isPopular) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'POPULAR',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'POPULAR',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    if (badge != null) const SizedBox(width: 8),
-                  ],
-                  if (badge != null) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        badge,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -560,13 +618,37 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
                     ],
                   ],
                 ),
-                Text(
-                  monthlyPrice,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      monthlyPrice,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (saveTag != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade800,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          saveTag,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
