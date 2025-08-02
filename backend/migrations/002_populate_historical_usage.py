@@ -202,8 +202,8 @@ def migrate_user_usage(uid: str):
             return
 
         print(f"  Storing {len(hourly_updates)} hourly usage records for user {uid}.")
-        for date, updates in hourly_updates.items():
-            user_usage_db.update_hourly_usage(uid, date, updates)
+        user_usage_db.batch_update_hourly_usage(uid, hourly_updates)
+        print(f"  Finished storing hourly usage for user {uid}.")
 
     except Exception as e:
         print(f"ERROR migrating usage for user {uid}: {e}")
