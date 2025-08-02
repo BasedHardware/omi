@@ -1,10 +1,19 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class UsagePage extends StatefulWidget {
   const UsagePage({super.key});
@@ -15,6 +24,146 @@ class UsagePage extends StatefulWidget {
 
 class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
+
+  Future<void> _shareUsage() async {
+    final RenderRepaintBoundary boundary =
+        _screenshotKeys[_tabController.index].currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+
+    // Load logo
+    final ByteData logoData = await rootBundle.load('assets/images/herologo.png');
+    final ui.Codec codec = await ui.instantiateImageCodec(logoData.buffer.asUint8List());
+    final ui.FrameInfo fi = await codec.getNextFrame();
+    final ui.Image logoImage = fi.image;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Draw the original image
+    canvas.drawImage(image, Offset.zero, Paint());
+
+    // Prepare the watermark text
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: 'omi.me',
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.8),
+          fontSize: 14 * 3.0, // Scale font size with pixelRatio
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    );
+    textPainter.layout();
+
+    // Define sizes and padding
+    final double logoHeight = 20 * 3.0; // Scaled logo height
+    final double logoWidth = (logoImage.width / logoImage.height) * logoHeight;
+    final double padding = 4 * 3.0;
+    final double totalWatermarkWidth = logoWidth + padding + textPainter.width;
+    final double totalWatermarkHeight = logoHeight > textPainter.height ? logoHeight : textPainter.height;
+
+    // Position and draw the watermark at the bottom right
+    final double xPos = image.width - totalWatermarkWidth - (16 * 3.0);
+    final double yPos = image.height - totalWatermarkHeight - (16 * 3.0);
+
+    // Draw logo
+    final logoRect = Rect.fromLTWH(xPos, yPos + (totalWatermarkHeight - logoHeight) / 2, logoWidth, logoHeight);
+    canvas.drawImageRect(
+        logoImage, Rect.fromLTWH(0, 0, logoImage.width.toDouble(), logoImage.height.toDouble()), logoRect, Paint());
+
+    // Draw text
+    textPainter.paint(
+        canvas, Offset(xPos + logoWidth + padding, yPos + (totalWatermarkHeight - textPainter.height) / 2));
+
+    // Convert the canvas to a new image and then to bytes
+    final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
+    final ByteData? byteData = await watermarkedImage.toByteData(format: ui.ImageByteFormat.png);
+    final Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+    final tempDir = await getTemporaryDirectory();
+    final file = await File('${tempDir.path}/omi_usage.png').create();
+    await file.writeAsBytes(pngBytes);
+
+    final provider = context.read<UsageProvider>();
+    final period = _getPeriodForIndex(_tabController.index);
+    UsageStats? stats;
+    String periodTitle = 'Today';
+    switch (period) {
+      case 'today':
+        stats = provider.todayUsage;
+        periodTitle = 'Today';
+        break;
+      case 'monthly':
+        stats = provider.monthlyUsage;
+        periodTitle = 'This Month';
+        break;
+      case 'yearly':
+        stats = provider.yearlyUsage;
+        periodTitle = 'This Year';
+        break;
+      case 'all_time':
+        stats = provider.allTimeUsage;
+        periodTitle = 'All Time';
+        break;
+    }
+
+    final userName = SharedPreferencesUtil().fullName;
+    final numberFormatter = NumberFormat.compact(locale: 'en_US');
+
+    String shareText;
+    final baseText =
+        '${userName.isNotEmpty ? '$userName has' : 'I have'} a good omi - omi.me - your always-on assistant.';
+
+    if (stats != null) {
+      final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
+      final List<String> funStats = [];
+
+      if (transcriptionMinutes > 0) {
+        funStats.add('🎧 Listened for ${numberFormatter.format(transcriptionMinutes)} minutes');
+      }
+      if (stats.wordsTranscribed > 0) {
+        funStats.add('🧠 Understood ${numberFormatter.format(stats.wordsTranscribed)} words');
+      }
+      if (stats.wordsSummarized > 0) {
+        funStats.add('✨ Provided ${numberFormatter.format(stats.wordsSummarized)} insights');
+      }
+      if (stats.memoriesCreated > 0) {
+        funStats.add('📚 Remembered ${numberFormatter.format(stats.memoriesCreated)} memories');
+      }
+
+      if (funStats.isNotEmpty) {
+        String periodText;
+        switch (periodTitle) {
+          case 'Today':
+            periodText = 'Today, my Omi has:';
+            break;
+          case 'This Month':
+            periodText = 'This month, my Omi has:';
+            break;
+          case 'This Year':
+            periodText = 'This year, my Omi has:';
+            break;
+          case 'All Time':
+            periodText = 'So far, my Omi has:';
+            break;
+          default:
+            periodText = 'My Omi has:';
+        }
+        shareText = '$baseText\n\n$periodText\n${funStats.join('\n')}';
+      } else {
+        shareText = baseText;
+      }
+    } else {
+      shareText = baseText;
+    }
+
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      text: shareText,
+    );
+  }
 
   String _getPeriodForIndex(int index) {
     switch (index) {
@@ -89,6 +238,12 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare),
+            onPressed: _shareUsage,
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.deepPurple,
@@ -135,10 +290,10 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           return TabBarView(
             controller: _tabController,
             children: [
-              _buildUsageListView(provider.todayUsage, provider.todayHistory, 'today'),
-              _buildUsageListView(provider.monthlyUsage, provider.monthlyHistory, 'monthly'),
-              _buildUsageListView(provider.yearlyUsage, provider.yearlyHistory, 'yearly'),
-              _buildUsageListView(provider.allTimeUsage, provider.allTimeHistory, 'all_time'),
+              _buildUsageListView(provider.todayUsage, provider.todayHistory, 'today', _screenshotKeys[0]),
+              _buildUsageListView(provider.monthlyUsage, provider.monthlyHistory, 'monthly', _screenshotKeys[1]),
+              _buildUsageListView(provider.yearlyUsage, provider.yearlyHistory, 'yearly', _screenshotKeys[2]),
+              _buildUsageListView(provider.allTimeUsage, provider.allTimeHistory, 'all_time', _screenshotKeys[3]),
             ],
           );
         },
@@ -166,7 +321,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildUsageListView(UsageStats? stats, List<UsageHistoryPoint>? history, String period) {
+  Widget _buildUsageListView(UsageStats? stats, List<UsageHistoryPoint>? history, String period, GlobalKey key) {
     final onRefresh = () => context.read<UsageProvider>().fetchUsageStats(period: period);
 
     if (stats == null) {
@@ -180,15 +335,21 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       return RefreshIndicator(
         onRefresh: onRefresh,
         color: Colors.deepPurple,
-        child: LayoutBuilder(builder: (context, constraints) {
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: SizedBox(
-              height: constraints.maxHeight,
-              child: _buildEmptyState(),
-            ),
-          );
-        }),
+        child: RepaintBoundary(
+          key: key,
+          child: Container(
+            color: Colors.black,
+            child: LayoutBuilder(builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: constraints.maxHeight,
+                  child: _buildEmptyState(),
+                ),
+              );
+            }),
+          ),
+        ),
       );
     }
     final numberFormatter = NumberFormat.compact(locale: 'en_US');
@@ -198,49 +359,55 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     return RefreshIndicator(
       onRefresh: onRefresh,
       color: Colors.deepPurple,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-        children: [
-          if (history != null && history.isNotEmpty) ...[
-            _buildChart(history, period),
-            const SizedBox(height: 24),
-          ],
-          _buildUsageCard(
-            context,
-            icon: FontAwesomeIcons.microphone,
-            title: 'Listening',
-            value: transcriptionValue,
-            subtitle: 'Total time Omi has actively listened.',
-            color: Colors.blue.shade300,
+      child: RepaintBoundary(
+        key: key,
+        child: Container(
+          color: Colors.black,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+            children: [
+              if (history != null && history.isNotEmpty) ...[
+                _buildChart(history, period),
+                const SizedBox(height: 24),
+              ],
+              _buildUsageCard(
+                context,
+                icon: FontAwesomeIcons.microphone,
+                title: 'Listening',
+                value: transcriptionValue,
+                subtitle: 'Total time Omi has actively listened.',
+                color: Colors.blue.shade300,
+              ),
+              const SizedBox(height: 16),
+              _buildUsageCard(
+                context,
+                icon: FontAwesomeIcons.comments,
+                title: 'Understanding',
+                value: '${numberFormatter.format(stats.wordsTranscribed)} words',
+                subtitle: 'Words understood from your conversations.',
+                color: Colors.green.shade300,
+              ),
+              const SizedBox(height: 16),
+              _buildUsageCard(
+                context,
+                icon: FontAwesomeIcons.wandMagicSparkles,
+                title: 'Providing',
+                value: '${numberFormatter.format(stats.wordsSummarized)} insights',
+                subtitle: 'Action items, and notes automatically captured.',
+                color: Colors.orange.shade300,
+              ),
+              const SizedBox(height: 16),
+              _buildUsageCard(
+                context,
+                icon: FontAwesomeIcons.brain,
+                title: 'Remembering',
+                value: '${numberFormatter.format(stats.memoriesCreated)} memories',
+                subtitle: 'Facts and details remembered for you.',
+                color: Colors.purple.shade300,
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildUsageCard(
-            context,
-            icon: FontAwesomeIcons.comments,
-            title: 'Understanding',
-            value: '${numberFormatter.format(stats.wordsTranscribed)} words',
-            subtitle: 'Words understood from your conversations.',
-            color: Colors.green.shade300,
-          ),
-          const SizedBox(height: 16),
-          _buildUsageCard(
-            context,
-            icon: FontAwesomeIcons.wandMagicSparkles,
-            title: 'Providing',
-            value: '${numberFormatter.format(stats.wordsSummarized)} insights',
-            subtitle: 'Action items, and notes automatically captured.',
-            color: Colors.orange.shade300,
-          ),
-          const SizedBox(height: 16),
-          _buildUsageCard(
-            context,
-            icon: FontAwesomeIcons.brain,
-            title: 'Remembering',
-            value: '${numberFormatter.format(stats.memoriesCreated)} memories',
-            subtitle: 'Facts and details remembered for you.',
-            color: Colors.purple.shade300,
-          ),
-        ],
+        ),
       ),
     );
   }
