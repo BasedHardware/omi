@@ -1,6 +1,7 @@
 import os
 import datetime
 import random
+import re
 import threading
 import uuid
 from datetime import timezone
@@ -356,18 +357,30 @@ def process_conversation(
 
     if not discarded:
         # Analytics tracking
-        words_summarized = 0
+        insights_gained = 0
         if conversation.structured:
-            words_summarized += len(conversation.structured.title.split())
-            words_summarized += len(conversation.structured.overview.split())
-            for item in conversation.structured.action_items:
-                words_summarized += len(item.description.split())
-            for event in conversation.structured.events:
-                words_summarized += len(event.title.split())
-                words_summarized += len(event.description.split())
+            # Count sentences with more than 5 words from title and overview
+            for text in [conversation.structured.title, conversation.structured.overview]:
+                if text:
+                    sentences = re.split(r'[.!?]+', text)
+                    for sentence in sentences:
+                        if len(sentence.split()) > 5:
+                            insights_gained += 1
 
-        if words_summarized > 0:
-            record_usage(uid, words_summarized=words_summarized)
+            # Count number of action items and events
+            insights_gained += len(conversation.structured.action_items)
+            insights_gained += len(conversation.structured.events)
+
+        # Count sentences with more than 5 words from app results
+        for app_result in conversation.apps_results:
+            if app_result.content:
+                sentences = re.split(r'[.!?]+', app_result.content)
+                for sentence in sentences:
+                    if len(sentence.split()) > 5:
+                        insights_gained += 1
+
+        if insights_gained > 0:
+            record_usage(uid, words_summarized=insights_gained)
 
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
