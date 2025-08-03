@@ -434,6 +434,11 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
                             faIcon: FontAwesomeIcons.brain,
                             text: 'Unlock Omi\'s infinite memory',
                           ),
+                          // const SizedBox(height: 16),
+                          // _buildFeatureItem(
+                          //   faIcon: FontAwesomeIcons.clock,
+                          //   text: 'Save 6+ hours per week on average',
+                          // ),
                         ],
                       ),
                       const SizedBox(height: 48),
