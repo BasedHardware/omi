@@ -164,10 +164,16 @@ def migrate_user_usage(uid: str):
 
                 hour_key = conv.created_at.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
+                duration = 0
                 if conv.transcript_segments:
-                    duration = sum((s.end - s.start) for s in conv.transcript_segments if s.end and s.start)
-                    hourly_updates[hour_key]['transcription_seconds'] += int(duration)
+                    duration = max(conv.transcript_segments[-1].end - conv.transcript_segments[0].start, 0)
 
+                if duration <= 0 and conv.started_at and conv.finished_at:
+                    duration = (conv.finished_at - conv.started_at).total_seconds()
+
+                hourly_updates[hour_key]['transcription_seconds'] += int(max(duration, 0))
+
+                if conv.transcript_segments:
                     words = sum(len(s.text.split()) for s in conv.transcript_segments if s.text)
                     hourly_updates[hour_key]['words_transcribed'] += words
 
