@@ -23,12 +23,12 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
   void initState() {
     super.initState();
     _waveController = AnimationController(
-      duration: const Duration(milliseconds: 6000), // Half speed: 2000ms → 4000ms
+      duration: const Duration(milliseconds: 18000),
       vsync: this,
     )..repeat();
 
     _notesController = AnimationController(
-      duration: const Duration(milliseconds: 18000), // Half speed: 3000ms → 6000ms
+      duration: const Duration(milliseconds: 36000),
       vsync: this,
     )..repeat();
 
@@ -166,7 +166,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
           child: SingleChildScrollView(
             child: Column(
               children: [
-                const SizedBox(height: 48),
+                const SizedBox(height: 36),
 
                 // Voice to Notes Flow Graphic (full width, no padding)
                 SizedBox(
@@ -199,7 +199,32 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
                                           bottom: 0,
                                           child: Row(
                                             children: List.generate(60, (index) {
-                                              final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
+                                              final heights = [
+                                                20.0,
+                                                32.0,
+                                                45.0,
+                                                26.0,
+                                                52.0,
+                                                39.0,
+                                                32.0,
+                                                45.0,
+                                                28.0,
+                                                36.0,
+                                                41.0,
+                                                24.0,
+                                                48.0,
+                                                37.0,
+                                                30.0,
+                                                43.0,
+                                                22.0,
+                                                34.0,
+                                                47.0,
+                                                29.0,
+                                                50.0,
+                                                38.0,
+                                                33.0,
+                                                44.0
+                                              ];
                                               final height = heights[index % heights.length];
 
                                               return Container(
@@ -415,7 +440,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> with TickerProvider
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
                       // Features list
                       Column(
