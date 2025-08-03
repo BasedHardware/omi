@@ -25,6 +25,7 @@ class UsagePage extends StatefulWidget {
 class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
+  List<bool> _isMetricVisible = [true, true, true, true];
 
   Future<void> _shareUsage() async {
     final RenderRepaintBoundary boundary =
@@ -109,12 +110,12 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
         break;
     }
 
-    final userName = SharedPreferencesUtil().fullName;
-    final numberFormatter = NumberFormat.compact(locale: 'en_US');
+    final userName = SharedPreferencesUtil().givenName;
+    final numberFormatter = NumberFormat.decimalPattern('en_US');
 
     String shareText;
     final baseText =
-        '${userName.isNotEmpty ? '$userName has' : 'I have'} a good omi - omi.me - your always-on assistant.';
+        '${userName.isNotEmpty ? '$userName has' : 'I have'} a good omi (omi.me - your always-on assistant)';
 
     if (stats != null) {
       final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
@@ -137,19 +138,19 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
         String periodText;
         switch (periodTitle) {
           case 'Today':
-            periodText = 'Today, my Omi has:';
+            periodText = 'Today, omi has:';
             break;
           case 'This Month':
-            periodText = 'This month, my Omi has:';
+            periodText = 'This month, omi has:';
             break;
           case 'This Year':
-            periodText = 'This year, my Omi has:';
+            periodText = 'This year, omi has:';
             break;
           case 'All Time':
-            periodText = 'So far, my Omi has:';
+            periodText = 'So far, omi has:';
             break;
           default:
-            periodText = 'My Omi has:';
+            periodText = 'Omi has:';
         }
         shareText = '$baseText\n\n$periodText\n${funStats.join('\n')}';
       } else {
@@ -352,7 +353,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
         ),
       );
     }
-    final numberFormatter = NumberFormat.compact(locale: 'en_US');
+    final numberFormatter = NumberFormat.decimalPattern('en_US');
     final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
     final transcriptionValue = '${numberFormatter.format(transcriptionMinutes)} minutes';
 
@@ -413,7 +414,82 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
   }
 
   Widget _buildChart(List<UsageHistoryPoint> history, String period) {
-    const barWidth = 4.0;
+    List<UsageHistoryPoint> processedHistory;
+    final now = DateTime.now();
+
+    switch (period) {
+      case 'today':
+        final hourlyMap = {for (var p in history) DateTime.parse(p.date).toLocal().hour: p};
+        processedHistory = List.generate(24, (hour) {
+          if (hourlyMap.containsKey(hour)) {
+            return hourlyMap[hour]!;
+          }
+          final date = DateTime(now.year, now.month, now.day, hour);
+          return UsageHistoryPoint(
+              date: date.toIso8601String(),
+              transcriptionSeconds: 0,
+              wordsTranscribed: 0,
+              insightsGained: 0,
+              memoriesCreated: 0);
+        });
+        break;
+      case 'monthly':
+        final dailyMap = {for (var p in history) DateTime.parse(p.date).toLocal().day: p};
+        final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+        processedHistory = List.generate(daysInMonth, (i) {
+          final day = i + 1;
+          if (dailyMap.containsKey(day)) {
+            return dailyMap[day]!;
+          }
+          final date = DateTime(now.year, now.month, day);
+          return UsageHistoryPoint(
+              date: date.toIso8601String(),
+              transcriptionSeconds: 0,
+              wordsTranscribed: 0,
+              insightsGained: 0,
+              memoriesCreated: 0);
+        });
+        break;
+      case 'yearly':
+        final monthlyMap = {for (var p in history) DateTime.parse(p.date).toLocal().month: p};
+        processedHistory = List.generate(12, (i) {
+          final month = i + 1;
+          if (monthlyMap.containsKey(month)) {
+            return monthlyMap[month]!;
+          }
+          final date = DateTime(now.year, month, 1);
+          return UsageHistoryPoint(
+              date: date.toIso8601String(),
+              transcriptionSeconds: 0,
+              wordsTranscribed: 0,
+              insightsGained: 0,
+              memoriesCreated: 0);
+        });
+        break;
+      case 'all_time':
+        final yearlyMap = {for (var p in history) DateTime.parse(p.date).toLocal().year: p};
+        var minYear = history.map((p) => DateTime.parse(p.date).toLocal().year).reduce((a, b) => a < b ? a : b);
+        var maxYear = history.map((p) => DateTime.parse(p.date).toLocal().year).reduce((a, b) => a > b ? a : b);
+        minYear--;
+
+        final years = List.generate(maxYear - minYear + 1, (i) => minYear + i);
+        processedHistory = years.map((year) {
+          if (yearlyMap.containsKey(year)) {
+            return yearlyMap[year]!;
+          }
+          final date = DateTime(year, 1, 1);
+          return UsageHistoryPoint(
+              date: date.toIso8601String(),
+              transcriptionSeconds: 0,
+              wordsTranscribed: 0,
+              insightsGained: 0,
+              memoriesCreated: 0);
+        }).toList();
+        break;
+      default:
+        processedHistory = List.from(history);
+    }
+
     final metricColors = [
       Colors.blue.shade300,
       Colors.green.shade300,
@@ -422,15 +498,182 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     ];
 
     double maxY = 0;
-    for (var point in history) {
-      final secondsInMinutes = point.transcriptionSeconds / 60.0;
-      if (secondsInMinutes > maxY) maxY = secondsInMinutes;
-      if (point.wordsTranscribed > maxY) maxY = point.wordsTranscribed.toDouble();
-      if (point.insightsGained > maxY) maxY = point.insightsGained.toDouble();
-      if (point.memoriesCreated > maxY) maxY = point.memoriesCreated.toDouble();
+    for (var point in processedHistory) {
+      if (_isMetricVisible[0]) {
+        final secondsInMinutes = point.transcriptionSeconds / 60.0;
+        if (secondsInMinutes > maxY) maxY = secondsInMinutes;
+      }
+      if (_isMetricVisible[1]) {
+        if (point.wordsTranscribed.toDouble() > maxY) maxY = point.wordsTranscribed.toDouble();
+      }
+      if (_isMetricVisible[2]) {
+        if (point.insightsGained.toDouble() > maxY) maxY = point.insightsGained.toDouble();
+      }
+      if (_isMetricVisible[3]) {
+        if (point.memoriesCreated.toDouble() > maxY) maxY = point.memoriesCreated.toDouble();
+      }
     }
     maxY = maxY * 1.2;
     if (maxY == 0) maxY = 1;
+
+    final List<List<FlSpot>> allSpots = List.generate(4, (_) => []);
+    for (var i = 0; i < processedHistory.length; i++) {
+      final point = processedHistory[i];
+      allSpots[0].add(FlSpot(i.toDouble(), point.transcriptionSeconds / 60.0));
+      allSpots[1].add(FlSpot(i.toDouble(), point.wordsTranscribed.toDouble()));
+      allSpots[2].add(FlSpot(i.toDouble(), point.insightsGained.toDouble()));
+      allSpots[3].add(FlSpot(i.toDouble(), point.memoriesCreated.toDouble()));
+    }
+
+    List<LineChartBarData> lineBarsData = [];
+    for (var i = 0; i < allSpots.length; i++) {
+      if (_isMetricVisible[i]) {
+        lineBarsData.add(LineChartBarData(
+          spots: allSpots[i],
+          isCurved: true,
+          color: metricColors[i],
+          barWidth: 3,
+          isStrokeCapRound: true,
+          dotData: const FlDotData(show: false),
+          belowBarData: BarAreaData(
+            show: true,
+            gradient: LinearGradient(
+              colors: [
+                metricColors[i].withOpacity(0.3),
+                metricColors[i].withOpacity(0.0),
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+        ));
+      }
+    }
+
+    final lineChartData = LineChartData(
+      minX: 0,
+      maxX: (processedHistory.length - 1).toDouble(),
+      minY: 0,
+      maxY: maxY,
+      gridData: const FlGridData(show: false),
+      borderData: FlBorderData(
+        show: true,
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+        ),
+      ),
+      lineTouchData: LineTouchData(
+        handleBuiltInTouches: true,
+        touchTooltipData: LineTouchTooltipData(
+          getTooltipColor: (touchedSpot) => Colors.grey.shade800,
+          getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+            return touchedBarSpots
+                .map((barSpot) {
+                  final flSpot = barSpot;
+                  final metricNames = [
+                    'Listening (mins)',
+                    'Understanding (words)',
+                    'Insights Gained',
+                    'Memories Created'
+                  ];
+                  final originalIndex = metricColors.indexOf(flSpot.bar.color!);
+                  if (originalIndex == -1) return null;
+
+                  return LineTooltipItem(
+                    '${metricNames[originalIndex]}\n',
+                    TextStyle(
+                      color: metricColors[originalIndex],
+                      fontWeight: FontWeight.bold,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: NumberFormat.compact(locale: 'en_US').format(flSpot.y),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  );
+                })
+                .whereType<LineTooltipItem>()
+                .toList();
+          },
+        ),
+      ),
+      titlesData: FlTitlesData(
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 40,
+            interval: maxY > 1 ? (maxY / 4).roundToDouble() : 0.25,
+            getTitlesWidget: (value, meta) {
+              if (value == meta.max) return const SizedBox();
+              return SideTitleWidget(
+                axisSide: meta.axisSide,
+                space: 8,
+                child: Text(
+                  NumberFormat.compact(locale: 'en_US').format(value),
+                  style: const TextStyle(color: Colors.grey, fontSize: 10),
+                ),
+              );
+            },
+          ),
+        ),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            getTitlesWidget: (double value, TitleMeta meta) {
+              final index = value.toInt();
+              if (index >= processedHistory.length) return const SizedBox();
+              final point = processedHistory[index];
+              final dateTime = DateTime.parse(point.date).toLocal();
+              String text;
+
+              switch (period) {
+                case 'today':
+                  int interval = 1;
+                  if (processedHistory.length > 12) {
+                    interval = 4;
+                  } else if (processedHistory.length > 6) {
+                    interval = 2;
+                  }
+                  if (index % interval == 0) {
+                    text = DateFormat.Hm().format(dateTime);
+                  } else {
+                    return const SizedBox();
+                  }
+                  break;
+                case 'monthly':
+                  if (index % 7 == 0) {
+                    text = DateFormat('d').format(dateTime);
+                  } else {
+                    return const SizedBox();
+                  }
+                  break;
+                case 'yearly':
+                  text = DateFormat('MMM').format(dateTime);
+                  break;
+                case 'all_time':
+                  text = DateFormat.y().format(dateTime).substring(2);
+                  break;
+                default:
+                  return const SizedBox();
+              }
+
+              return SideTitleWidget(
+                axisSide: meta.axisSide,
+                child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+              );
+            },
+            reservedSize: 20,
+          ),
+        ),
+      ),
+      lineBarsData: lineBarsData,
+    );
 
     return Column(
       children: [
@@ -442,110 +685,9 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withOpacity(0.1)),
           ),
-          child: BarChart(
-            BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: maxY,
-              barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (_) => Colors.grey.shade800,
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final metricNames = [
-                      'Listening (mins)',
-                      'Understanding (words)',
-                      'Insights Gained',
-                      'Memories Created'
-                    ];
-                    return BarTooltipItem(
-                      '${metricNames[rodIndex]}\n',
-                      TextStyle(color: metricColors[rodIndex], fontWeight: FontWeight.bold),
-                      children: [
-                        TextSpan(
-                          text: NumberFormat.compact(locale: 'en_US').format(rod.toY.round()),
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              titlesData: FlTitlesData(
-                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    getTitlesWidget: (double value, TitleMeta meta) {
-                      final index = value.toInt();
-                      if (index >= history.length) return const SizedBox();
-                      final point = history[index];
-                      final dateTime = DateTime.parse(point.date).toLocal();
-                      String text;
-
-                      switch (period) {
-                        case 'today':
-                          int interval = 1;
-                          if (history.length > 12) {
-                            interval = 4;
-                          } else if (history.length > 6) {
-                            interval = 2;
-                          }
-                          if (index % interval == 0) {
-                            text = DateFormat.Hm().format(dateTime);
-                          } else {
-                            return const SizedBox();
-                          }
-                          break;
-                        case 'monthly':
-                          if (index % 7 == 0) {
-                            text = DateFormat('d').format(dateTime);
-                          } else {
-                            return const SizedBox();
-                          }
-                          break;
-                        case 'yearly':
-                          text = DateFormat('MMM').format(dateTime);
-                          break;
-                        case 'all_time':
-                          text = DateFormat.y().format(dateTime).substring(2);
-                          break;
-                        default:
-                          return const SizedBox();
-                      }
-
-                      return SideTitleWidget(
-                        axisSide: meta.axisSide,
-                        child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                      );
-                    },
-                    reservedSize: 20,
-                  ),
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              gridData: const FlGridData(show: false),
-              barGroups: history
-                  .asMap()
-                  .map((index, data) => MapEntry(
-                        index,
-                        BarChartGroupData(
-                          x: index,
-                          barRods: [
-                            BarChartRodData(
-                                toY: data.transcriptionSeconds / 60.0, color: metricColors[0], width: barWidth),
-                            BarChartRodData(
-                                toY: data.wordsTranscribed.toDouble(), color: metricColors[1], width: barWidth),
-                            BarChartRodData(
-                                toY: data.insightsGained.toDouble(), color: metricColors[2], width: barWidth),
-                            BarChartRodData(
-                                toY: data.memoriesCreated.toDouble(), color: metricColors[3], width: barWidth),
-                          ],
-                        ),
-                      ))
-                  .values
-                  .toList(),
-            ),
+          child: LineChart(
+            lineChartData,
+            duration: const Duration(milliseconds: 250),
           ),
         ),
         const SizedBox(height: 16),
@@ -555,27 +697,46 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
   }
 
   Widget _buildLegend() {
+    final legendItems = [
+      {'color': Colors.blue.shade300, 'text': 'Listening (mins)'},
+      {'color': Colors.green.shade300, 'text': 'Understanding (words)'},
+      {'color': Colors.orange.shade300, 'text': 'Insights'},
+      {'color': Colors.purple.shade300, 'text': 'Memories'},
+    ];
+
     return Wrap(
       spacing: 16,
       runSpacing: 8,
       alignment: WrapAlignment.center,
-      children: [
-        _buildLegendItem(Colors.blue.shade300, 'Listening (mins)'),
-        _buildLegendItem(Colors.green.shade300, 'Understanding (words)'),
-        _buildLegendItem(Colors.orange.shade300, 'Insights'),
-        _buildLegendItem(Colors.purple.shade300, 'Memories'),
-      ],
+      children: List.generate(legendItems.length, (index) {
+        return _buildLegendItem(
+          legendItems[index]['color'] as Color,
+          legendItems[index]['text'] as String,
+          _isMetricVisible[index],
+          () {
+            setState(() {
+              _isMetricVisible[index] = !_isMetricVisible[index];
+            });
+          },
+        );
+      }),
     );
   }
 
-  Widget _buildLegendItem(Color color, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(width: 10, height: 10, color: color),
-        const SizedBox(width: 6),
-        Text(text, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
-      ],
+  Widget _buildLegendItem(Color color, String text, bool isVisible, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: isVisible ? 1.0 : 0.5,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 10, height: 10, color: color),
+            const SizedBox(width: 6),
+            Text(text, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+          ],
+        ),
+      ),
     );
   }
 
