@@ -79,6 +79,12 @@ class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
   final int transcriptionSecondsLimit;
+  final int wordsTranscribedUsed;
+  final int wordsTranscribedLimit;
+  final int insightsGainedUsed;
+  final int insightsGainedLimit;
+  final int memoriesCreatedUsed;
+  final int memoriesCreatedLimit;
   @JsonKey(defaultValue: [])
   final List<SubscriptionPlan> availablePlans;
 
@@ -86,6 +92,12 @@ class UserSubscriptionResponse {
     required this.subscription,
     required this.transcriptionSecondsUsed,
     required this.transcriptionSecondsLimit,
+    required this.wordsTranscribedUsed,
+    required this.wordsTranscribedLimit,
+    required this.insightsGainedUsed,
+    required this.insightsGainedLimit,
+    required this.memoriesCreatedUsed,
+    required this.memoriesCreatedLimit,
     this.availablePlans = const [],
   });
 

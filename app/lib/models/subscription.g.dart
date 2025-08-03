@@ -85,6 +85,12 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
           (json['transcription_seconds_used'] as num).toInt(),
       transcriptionSecondsLimit:
           (json['transcription_seconds_limit'] as num).toInt(),
+      wordsTranscribedUsed: (json['words_transcribed_used'] as num).toInt(),
+      wordsTranscribedLimit: (json['words_transcribed_limit'] as num).toInt(),
+      insightsGainedUsed: (json['insights_gained_used'] as num).toInt(),
+      insightsGainedLimit: (json['insights_gained_limit'] as num).toInt(),
+      memoriesCreatedUsed: (json['memories_created_used'] as num).toInt(),
+      memoriesCreatedLimit: (json['memories_created_limit'] as num).toInt(),
       availablePlans: (json['available_plans'] as List<dynamic>?)
               ?.map((e) => SubscriptionPlan.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -97,5 +103,11 @@ Map<String, dynamic> _$UserSubscriptionResponseToJson(
       'subscription': instance.subscription,
       'transcription_seconds_used': instance.transcriptionSecondsUsed,
       'transcription_seconds_limit': instance.transcriptionSecondsLimit,
+      'words_transcribed_used': instance.wordsTranscribedUsed,
+      'words_transcribed_limit': instance.wordsTranscribedLimit,
+      'insights_gained_used': instance.insightsGainedUsed,
+      'insights_gained_limit': instance.insightsGainedLimit,
+      'memories_created_used': instance.memoriesCreatedUsed,
+      'memories_created_limit': instance.memoriesCreatedLimit,
       'available_plans': instance.availablePlans,
     };

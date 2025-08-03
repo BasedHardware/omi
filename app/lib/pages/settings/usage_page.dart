@@ -460,7 +460,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       );
     } else {
       final sub = provider.subscription!;
-      final minutesUsed = (sub.transcriptionSecondsUsed / 60);
+      final minutesUsed = (sub.transcriptionSecondsUsed / 60).round();
       final minutesLimit = (sub.transcriptionSecondsLimit / 60).round();
       final percentage = (sub.transcriptionSecondsLimit > 0)
           ? (sub.transcriptionSecondsUsed / sub.transcriptionSecondsLimit).clamp(0.0, 1.0)
@@ -488,7 +488,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           const SizedBox(height: 4),
           if (minutesLimit > 0)
             Text(
-              '${minutesUsed.toStringAsFixed(1)} of $minutesLimit minutes used',
+              '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit minutes used',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
             ),
         ],
@@ -518,7 +518,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           const SizedBox(height: 12),
           if (minutesLimit > 0)
             Text(
-              'You have used ${minutesUsed.toStringAsFixed(1)} of $minutesLimit minutes of basic transcription this month.',
+              'You have used ${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit minutes of basic transcription this month.',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
             ),
           const SizedBox(height: 12),
@@ -836,6 +836,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 value: '${numberFormatter.format(stats.wordsTranscribed)} words',
                 subtitle: 'Words understood from your conversations.',
                 color: Colors.green.shade300,
+                subscription: provider.subscription,
               ),
               const SizedBox(height: 16),
               _buildUsageCard(
@@ -845,6 +846,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 value: '${numberFormatter.format(stats.insightsGained)} insights',
                 subtitle: 'Action items, and notes automatically captured.',
                 color: Colors.orange.shade300,
+                subscription: provider.subscription,
               ),
               const SizedBox(height: 16),
               _buildUsageCard(
@@ -854,6 +856,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 value: '${numberFormatter.format(stats.memoriesCreated)} memories',
                 subtitle: 'Facts and details remembered for you.',
                 color: Colors.purple.shade300,
+                subscription: provider.subscription,
               ),
             ],
           ),
@@ -1198,6 +1201,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       required String subtitle,
       required Color color,
       UserSubscriptionResponse? subscription}) {
+    final numberFormatter = NumberFormat.decimalPattern('en_US');
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1250,7 +1254,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 subscription.transcriptionSecondsLimit > 0) ...[
               const SizedBox(height: 16),
               Builder(builder: (context) {
-                final minutesUsed = (subscription.transcriptionSecondsUsed / 60);
+                final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                 final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
                 final percentage =
                     (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
@@ -1258,7 +1262,91 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Monthly basic limit: ${minutesUsed.toStringAsFixed(1)} of $minutesLimit minutes used',
+                      '${numberFormatter.format(minutesUsed)} of $minutesLimit min used this month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      backgroundColor: Colors.grey.shade700,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                );
+              })
+            ],
+            if (title == 'Understanding' &&
+                subscription != null &&
+                subscription.subscription.plan == PlanType.basic &&
+                subscription.wordsTranscribedLimit > 0) ...[
+              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final used = subscription.wordsTranscribedUsed;
+                final limit = subscription.wordsTranscribedLimit;
+                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${numberFormatter.format(used)} of ${numberFormatter.format(limit)} words used this month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      backgroundColor: Colors.grey.shade700,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                );
+              })
+            ],
+            if (title == 'Providing' &&
+                subscription != null &&
+                subscription.subscription.plan == PlanType.basic &&
+                subscription.insightsGainedLimit > 0) ...[
+              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final used = subscription.insightsGainedUsed;
+                final limit = subscription.insightsGainedLimit;
+                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${numberFormatter.format(used)} of ${numberFormatter.format(limit)} insights gained this month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      backgroundColor: Colors.grey.shade700,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                );
+              })
+            ],
+            if (title == 'Remembering' &&
+                subscription != null &&
+                subscription.subscription.plan == PlanType.basic &&
+                subscription.memoriesCreatedLimit > 0) ...[
+              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final used = subscription.memoriesCreatedUsed;
+                final limit = subscription.memoriesCreatedLimit;
+                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${numberFormatter.format(used)} of ${numberFormatter.format(limit)} memories created this month',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                     ),
                     const SizedBox(height: 8),

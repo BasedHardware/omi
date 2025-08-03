@@ -33,7 +33,12 @@ from datetime import datetime
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
-from utils.subscription import BASIC_TIER_MONTHLY_SECONDS_LIMIT, BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+from utils.subscription import (
+    BASIC_TIER_MINUTES_LIMIT_PER_MONTH,
+    BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
+    BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
+    BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+)
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
@@ -455,13 +460,30 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     subscription = get_user_subscription(uid)
     usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
     transcription_seconds_used = usage.get('transcription_seconds', 0)
+    words_transcribed_used = usage.get('words_transcribed', 0)
+    insights_gained_used = usage.get('insights_gained', 0)
+    memories_created_used = usage.get('memories_created', 0)
+
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
+    words_transcribed_limit = subscription.limits.words_transcribed or 0
+    insights_gained_limit = subscription.limits.insights_gained or 0
+    memories_created_limit = subscription.limits.memories_created or 0
 
     # Add features to current subscription
     if subscription.plan == PlanType.unlimited:
-        subscription.features = ["Unlimited listening time"]
+        subscription.features = [
+            "Unlimited listening time",
+            "Unlimited words transcribed",
+            "Unlimited insights gained",
+            "Unlimited memories created",
+        ]
     else:  # basic plan
-        subscription.features = [f"{BASIC_TIER_MINUTES_LIMIT_PER_MONTH} minutes of listening per month"]
+        subscription.features = [
+            f"{BASIC_TIER_MINUTES_LIMIT_PER_MONTH} minutes of listening per month",
+            f"{BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH:,} words transcribed per month",
+            f"{BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH:,} insights gained per month",
+            f"{BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH} memories created per month",
+        ]
 
     # Build available plans for upgrading
     available_plans: List[SubscriptionPlan] = []
@@ -502,7 +524,12 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
             SubscriptionPlan(
                 id="unlimited",
                 title="Unlimited",
-                features=["Unlimited listening time"],
+                features=[
+                    "Unlimited listening time",
+                    "Unlimited words transcribed",
+                    "Unlimited insights gained",
+                    "Unlimited memories created",
+                ],
                 prices=unlimited_plan_prices,
             )
         )
@@ -511,5 +538,11 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
         transcription_seconds_limit=transcription_seconds_limit,
+        words_transcribed_used=words_transcribed_used,
+        words_transcribed_limit=words_transcribed_limit,
+        insights_gained_used=insights_gained_used,
+        insights_gained_limit=insights_gained_limit,
+        memories_created_used=memories_created_used,
+        memories_created_limit=memories_created_limit,
         available_plans=available_plans,
     )

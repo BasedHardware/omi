@@ -24,7 +24,9 @@ class SubscriptionStatus(str, Enum):
 
 class PlanLimits(BaseModel):
     transcription_seconds: Optional[int] = None
-    # Add other limits here in the future, e.g., insights_gained: Optional[int] = None
+    words_transcribed: Optional[int] = None
+    insights_gained: Optional[int] = None
+    memories_created: Optional[int] = None
 
 
 class Subscription(BaseModel):
@@ -55,4 +57,10 @@ class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
     transcription_seconds_limit: int
+    words_transcribed_used: int
+    words_transcribed_limit: int
+    insights_gained_used: int
+    insights_gained_limit: int
+    memories_created_used: int
+    memories_created_limit: int
     available_plans: List[SubscriptionPlan] = []

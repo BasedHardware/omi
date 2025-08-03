@@ -4,7 +4,12 @@ from pydantic import BaseModel
 
 from database import users as users_db
 from models.users import Subscription, PlanType, SubscriptionStatus, PlanLimits
-from utils.subscription import BASIC_TIER_MONTHLY_SECONDS_LIMIT
+from utils.subscription import (
+    BASIC_TIER_MONTHLY_SECONDS_LIMIT,
+    BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
+    BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
+    BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+)
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -41,11 +46,18 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
         if stripe_status in ('active', 'trialing'):
             plan = PlanType.unlimited
             status = SubscriptionStatus.active
-            limits = PlanLimits(transcription_seconds=None)
+            limits = PlanLimits(
+                transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
+            )
         else:
             plan = PlanType.basic
             status = SubscriptionStatus.inactive
-            limits = PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT)
+            limits = PlanLimits(
+                transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
+                words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
+                insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
+                memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+            )
 
         new_subscription = Subscription(
             plan=plan,
@@ -160,12 +172,19 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 plan = PlanType.basic
                 status = SubscriptionStatus.inactive
                 cancel_at_period_end = False
-                limits = PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT)
+                limits = PlanLimits(
+                    transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
+                    words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
+                    insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
+                    memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+                )
             else:
                 plan = PlanType.unlimited
                 status = SubscriptionStatus.active
                 cancel_at_period_end = subscription_obj.cancel_at_period_end
-                limits = PlanLimits(transcription_seconds=None)
+                limits = PlanLimits(
+                    transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
+                )
 
             new_subscription = Subscription(
                 plan=plan,

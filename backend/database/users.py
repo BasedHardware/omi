@@ -318,7 +318,12 @@ def set_user_language_preference(uid: str, language: str) -> None:
 
 
 from models.users import PlanLimits, PlanType
-from utils.subscription import BASIC_TIER_MONTHLY_SECONDS_LIMIT
+from utils.subscription import (
+    BASIC_TIER_MONTHLY_SECONDS_LIMIT,
+    BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
+    BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
+    BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+)
 
 
 def get_user_subscription(uid: str) -> Subscription:
@@ -333,9 +338,16 @@ def get_user_subscription(uid: str) -> Subscription:
             if 'limits' not in sub_data:
                 if sub_data.get('plan') == 'free':
                     sub_data['plan'] = PlanType.basic.value
-                    sub_data['limits'] = PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT).dict()
+                    sub_data['limits'] = PlanLimits(
+                        transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
+                        words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
+                        insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
+                        memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+                    ).dict()
                 else:
-                    sub_data['limits'] = PlanLimits(transcription_seconds=None).dict()
+                    sub_data['limits'] = PlanLimits(
+                        transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
+                    ).dict()
                 update_user_subscription(uid, sub_data)
                 return Subscription(**sub_data)
             elif sub_data.get('plan') == 'free':
@@ -345,6 +357,13 @@ def get_user_subscription(uid: str) -> Subscription:
             return Subscription(**sub_data)
 
     # If subscription doesn't exist for the user, create and return a default free plan.
-    default_subscription = Subscription(limits=PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT))
+    default_subscription = Subscription(
+        limits=PlanLimits(
+            transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
+            words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
+            insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
+            memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
+        )
+    )
     user_ref.set({'subscription': default_subscription.dict()}, merge=True)
     return default_subscription
