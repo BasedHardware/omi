@@ -3,7 +3,8 @@ import stripe
 from pydantic import BaseModel
 
 from database import users as users_db
-from models.users import Subscription, PlanType, SubscriptionStatus
+from models.users import Subscription, PlanType, SubscriptionStatus, PlanLimits
+from utils.subscription import FREE_TIER_MONTHLY_SECONDS_LIMIT
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -40,9 +41,11 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
         if stripe_status in ('active', 'trialing'):
             plan = PlanType.unlimited
             status = SubscriptionStatus.active
+            limits = PlanLimits(transcription_seconds=None)
         else:
             plan = PlanType.free
             status = SubscriptionStatus.inactive
+            limits = PlanLimits(transcription_seconds=FREE_TIER_MONTHLY_SECONDS_LIMIT)
 
         new_subscription = Subscription(
             plan=plan,
@@ -50,6 +53,7 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
             current_period_end=stripe_sub.current_period_end,
             stripe_subscription_id=stripe_sub.id,
             cancel_at_period_end=stripe_sub.cancel_at_period_end,
+            limits=limits,
         )
         users_db.update_user_subscription(uid, new_subscription.dict())
         print(f"Subscription for user {uid} updated from session {session.id}.")
@@ -89,10 +93,6 @@ def get_checkout_session_status_endpoint(session_id: str, uid: str = Depends(aut
     if session.client_reference_id != uid:
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    if session.payment_status == 'paid':
-        _update_subscription_from_session(uid, session)
-        return {"status": "paid"}
-
     return {"status": session.status}
 
 
@@ -114,7 +114,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         client_reference_id = session.get('client_reference_id')
 
         # App payments for creators
-        if session['metadata'] and 'app_id' in session['metadata']:
+        if session.get('metadata', {}).get('app_id'):
             print(f"Payment completed for session: {session['id']}")
             app_id = session['metadata']['app_id']
             uid = session['client_reference_id']
@@ -126,6 +126,15 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 subscription_id = session["subscription"]
                 stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
             paid_app(app_id, uid)
+        # Regular user subscription
+        elif client_reference_id:
+            _update_subscription_from_session(client_reference_id, session)
+            subscription_id = session.get('subscription')
+            if subscription_id:
+                try:
+                    stripe.Subscription.modify(subscription_id, metadata={"uid": client_reference_id})
+                except Exception as e:
+                    print(f"Error updating subscription metadata: {e}")
 
     if event['type'] in [
         'customer.subscription.updated',
@@ -133,23 +142,30 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         'customer.subscription.created',
     ]:
         subscription_obj = event['data']['object']
-        customer_id = subscription_obj.get('customer')
-        if not customer_id:
-            return {"status": "success", "message": "No customer ID in subscription event."}
+        uid = subscription_obj.get('metadata', {}).get('uid')
 
-        user = users_db.get_user_by_stripe_customer_id(customer_id)
-        if user and user.get('uid'):
-            uid = user['uid']
+        if not uid:
+            customer_id = subscription_obj.get('customer')
+            if not customer_id:
+                return {"status": "success", "message": "No customer ID or UID in subscription event."}
+
+            user = users_db.get_user_by_stripe_customer_id(customer_id)
+            if user and user.get('uid'):
+                uid = user['uid']
+
+        if uid:
             stripe_status = subscription_obj.status
 
             if event['type'] == 'customer.subscription.deleted' or stripe_status not in ('active', 'trialing'):
                 plan = PlanType.free
                 status = SubscriptionStatus.inactive
                 cancel_at_period_end = False
+                limits = PlanLimits(transcription_seconds=FREE_TIER_MONTHLY_SECONDS_LIMIT)
             else:
                 plan = PlanType.unlimited
                 status = SubscriptionStatus.active
                 cancel_at_period_end = subscription_obj.cancel_at_period_end
+                limits = PlanLimits(transcription_seconds=None)
 
             new_subscription = Subscription(
                 plan=plan,
@@ -157,6 +173,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 current_period_end=subscription_obj.current_period_end,
                 stripe_subscription_id=subscription_obj.id,
                 cancel_at_period_end=cancel_at_period_end,
+                limits=limits,
             )
             users_db.update_user_subscription(uid, new_subscription.dict())
             print(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
@@ -350,17 +367,7 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 
 @router.get("/v1/payments/success", response_class=HTMLResponse)
 async def stripe_success(session_id: str = Query(...)):
-    try:
-        session = stripe.checkout.Session.retrieve(session_id)
-        if (
-            session.client_reference_id
-            and session.get('mode') == 'subscription'
-            and session.get('payment_status') == 'paid'
-        ):
-            _update_subscription_from_session(session.client_reference_id, session)
-    except Exception as e:
-        print(f"Error processing Stripe success redirect: {e}")
-
+    # The subscription is updated via webhook. This page is just for user feedback.
     return HTMLResponse(
         content="""
         <html>

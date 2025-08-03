@@ -22,6 +22,11 @@ class SubscriptionStatus(str, Enum):
     inactive = 'inactive'
 
 
+class PlanLimits(BaseModel):
+    transcription_seconds: Optional[int] = None
+    # Add other limits here in the future, e.g., insights_gained: Optional[int] = None
+
+
 class Subscription(BaseModel):
     plan: PlanType = PlanType.free
     status: SubscriptionStatus = SubscriptionStatus.active
@@ -29,14 +34,21 @@ class Subscription(BaseModel):
     stripe_subscription_id: Optional[str] = None
     features: List[str] = []
     cancel_at_period_end: bool = False
+    limits: PlanLimits = PlanLimits()
 
 
-class SubscriptionPlan(BaseModel):
+class PricingOption(BaseModel):
     id: str  # price_id
     title: str
     description: Optional[str] = None
     price_string: str
+
+
+class SubscriptionPlan(BaseModel):
+    id: str  # e.g., 'unlimited'
+    title: str
     features: List[str] = []
+    prices: List[PricingOption] = []
 
 
 class UserSubscriptionResponse(BaseModel):

@@ -38,14 +38,32 @@ const _$SubscriptionStatusEnumMap = {
   SubscriptionStatus.inactive: 'inactive',
 };
 
-SubscriptionPlan _$SubscriptionPlanFromJson(Map<String, dynamic> json) =>
-    SubscriptionPlan(
+PricingOption _$PricingOptionFromJson(Map<String, dynamic> json) =>
+    PricingOption(
       id: json['id'] as String,
       title: json['title'] as String,
       description: json['description'] as String?,
       priceString: json['price_string'] as String,
+    );
+
+Map<String, dynamic> _$PricingOptionToJson(PricingOption instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'title': instance.title,
+      'description': instance.description,
+      'price_string': instance.priceString,
+    };
+
+SubscriptionPlan _$SubscriptionPlanFromJson(Map<String, dynamic> json) =>
+    SubscriptionPlan(
+      id: json['id'] as String,
+      title: json['title'] as String,
       features: (json['features'] as List<dynamic>?)
               ?.map((e) => e as String)
+              .toList() ??
+          [],
+      prices: (json['prices'] as List<dynamic>?)
+              ?.map((e) => PricingOption.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
     );
@@ -54,9 +72,8 @@ Map<String, dynamic> _$SubscriptionPlanToJson(SubscriptionPlan instance) =>
     <String, dynamic>{
       'id': instance.id,
       'title': instance.title,
-      'description': instance.description,
-      'price_string': instance.priceString,
       'features': instance.features,
+      'prices': instance.prices,
     };
 
 UserSubscriptionResponse _$UserSubscriptionResponseFromJson(

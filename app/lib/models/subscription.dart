@@ -37,20 +37,37 @@ class Subscription {
 }
 
 @JsonSerializable(fieldRename: FieldRename.snake)
-class SubscriptionPlan {
+class PricingOption {
   final String id;
   final String title;
   final String? description;
   final String priceString;
-  @JsonKey(defaultValue: [])
-  final List<String> features;
 
-  SubscriptionPlan({
+  PricingOption({
     required this.id,
     required this.title,
     this.description,
     required this.priceString,
+  });
+
+  factory PricingOption.fromJson(Map<String, dynamic> json) => _$PricingOptionFromJson(json);
+  Map<String, dynamic> toJson() => _$PricingOptionToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class SubscriptionPlan {
+  final String id;
+  final String title;
+  @JsonKey(defaultValue: [])
+  final List<String> features;
+  @JsonKey(defaultValue: [])
+  final List<PricingOption> prices;
+
+  SubscriptionPlan({
+    required this.id,
+    required this.title,
     this.features = const [],
+    this.prices = const [],
   });
 
   factory SubscriptionPlan.fromJson(Map<String, dynamic> json) => _$SubscriptionPlanFromJson(json);
