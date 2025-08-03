@@ -132,7 +132,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildSettingsItem(
-              title: 'Usage',
+              title: 'Subscription & Usage',
               icon: const FaIcon(FontAwesomeIcons.chartBar, color: Color(0xFF8E8E93), size: 20),
               onTap: () {
                 Navigator.pop(context);
@@ -283,17 +283,21 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 await showDialog(
                   context: context,
                   builder: (ctx) {
-                    return getDialog(context, () {
-                      Navigator.of(ctx).pop();
-                    }, () async {
-                      Navigator.of(ctx).pop(); // Close dialog first
-                      await SharedPreferencesUtil().clearUserPreferences();
-                      personaProvider.setRouting(PersonaProfileRouting.no_device);
-                      await signOut();
-                      if (context.mounted) {
-                        routeToPage(context, const DeciderWidget(), replace: true);
-                      }
-                    }, "Sign Out?", "Are you sure you want to sign out?");
+                    return getDialog(
+                      ctx,
+                      () => Navigator.of(ctx).pop(),
+                      () async {
+                        Navigator.of(ctx).pop(); // Close dialog first
+                        await SharedPreferencesUtil().clearUserPreferences();
+                        personaProvider.setRouting(PersonaProfileRouting.no_device);
+                        await signOut();
+                        if (context.mounted) {
+                          routeToPage(context, const DeciderWidget(), replace: true);
+                        }
+                      },
+                      "Sign Out?",
+                      "Are you sure you want to sign out?",
+                    );
                   },
                 );
               },
@@ -350,18 +354,22 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 await showDialog(
                   context: context,
                   builder: (ctx) {
-                    return getDialog(context, () {
-                      Navigator.of(ctx).pop();
-                    }, () async {
-                      Navigator.of(ctx).pop(); // Close dialog first
-                      SharedPreferencesUtil().hasOmiDevice = null;
-                      SharedPreferencesUtil().verifiedPersonaId = null;
-                      personaProvider.setRouting(PersonaProfileRouting.no_device);
-                      await signOut();
-                      if (context.mounted) {
-                        routeToPage(context, const DeciderWidget(), replace: true);
-                      }
-                    }, "Sign Out?", "Are you sure you want to sign out?");
+                    return getDialog(
+                      ctx,
+                      () => Navigator.of(ctx).pop(),
+                      () async {
+                        Navigator.of(ctx).pop(); // Close dialog first
+                        SharedPreferencesUtil().hasOmiDevice = null;
+                        SharedPreferencesUtil().verifiedPersonaId = null;
+                        personaProvider.setRouting(PersonaProfileRouting.no_device);
+                        await signOut();
+                        if (context.mounted) {
+                          routeToPage(context, const DeciderWidget(), replace: true);
+                        }
+                      },
+                      "Sign Out?",
+                      "Are you sure you want to sign out?",
+                    );
                   },
                 );
               },

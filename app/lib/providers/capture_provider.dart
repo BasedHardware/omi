@@ -10,6 +10,8 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/main.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -867,6 +869,52 @@ class CaptureProvider extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('Socket error: $err');
+
+    if (err.toString().contains('4002')) {
+      final context = MyApp.navigatorKey.currentContext;
+      if (context != null) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            return getDialog(
+              ctx,
+              () => Navigator.of(ctx).pop(),
+              () {
+                // onConfirm = Upgrade
+                Navigator.of(ctx).pop(); // Close first dialog
+                showDialog(
+                  context: context,
+                  builder: (ctx2) {
+                    return getDialog(
+                      ctx2,
+                      () => Navigator.of(ctx2).pop(),
+                      () {},
+                      "Coming Soon!",
+                      "Upgrades are coming soon. Stay tuned!",
+                      singleButton: true,
+                      okButtonText: 'Got it',
+                    );
+                  },
+                );
+              },
+              "Usage Limit Reached",
+              "You have used all your free transcription time for this month. Please upgrade to continue.",
+              okButtonText: 'Upgrade',
+              cancelButtonText: 'Dismiss',
+            );
+          },
+        );
+      }
+
+      if (recordingState == RecordingState.record) {
+        stopStreamRecording();
+      } else if (recordingState == RecordingState.systemAudioRecord) {
+        stopSystemAudioRecording();
+      } else if (_recordingDevice != null) {
+        stopStreamDeviceRecording();
+      }
+    }
 
     // Check for display-related errors
     if (err.toString().contains('Failed to find any displays or windows to capture')) {

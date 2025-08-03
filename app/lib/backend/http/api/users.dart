@@ -6,6 +6,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -336,6 +337,21 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   debugPrint('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {
     return UserUsageResponse.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<UserSubscriptionResponse?> getUserSubscription() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/me/subscription',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getUserSubscription response: ${response.body}');
+  if (response.statusCode == 200) {
+    return UserSubscriptionResponse.fromJson(jsonDecode(response.body));
   }
   return null;
 }

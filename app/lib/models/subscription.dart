@@ -1,0 +1,77 @@
+import 'package:json_annotation/json_annotation.dart';
+
+part 'subscription.g.dart';
+
+enum PlanType {
+  free,
+  unlimited,
+}
+
+enum SubscriptionStatus {
+  active,
+  inactive,
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class Subscription {
+  final PlanType plan;
+  final SubscriptionStatus status;
+  final int? currentPeriodEnd;
+  final String? stripeSubscriptionId;
+  @JsonKey(defaultValue: [])
+  final List<String> features;
+  @JsonKey(defaultValue: false)
+  final bool cancelAtPeriodEnd;
+
+  Subscription({
+    required this.plan,
+    required this.status,
+    this.currentPeriodEnd,
+    this.stripeSubscriptionId,
+    this.features = const [],
+    this.cancelAtPeriodEnd = false,
+  });
+
+  factory Subscription.fromJson(Map<String, dynamic> json) => _$SubscriptionFromJson(json);
+  Map<String, dynamic> toJson() => _$SubscriptionToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class SubscriptionPlan {
+  final String id;
+  final String title;
+  final String? description;
+  final String priceString;
+  @JsonKey(defaultValue: [])
+  final List<String> features;
+
+  SubscriptionPlan({
+    required this.id,
+    required this.title,
+    this.description,
+    required this.priceString,
+    this.features = const [],
+  });
+
+  factory SubscriptionPlan.fromJson(Map<String, dynamic> json) => _$SubscriptionPlanFromJson(json);
+  Map<String, dynamic> toJson() => _$SubscriptionPlanToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class UserSubscriptionResponse {
+  final Subscription subscription;
+  final int transcriptionSecondsUsed;
+  final int transcriptionSecondsLimit;
+  @JsonKey(defaultValue: [])
+  final List<SubscriptionPlan> availablePlans;
+
+  UserSubscriptionResponse({
+    required this.subscription,
+    required this.transcriptionSecondsUsed,
+    required this.transcriptionSecondsLimit,
+    this.availablePlans = const [],
+  });
+
+  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) => _$UserSubscriptionResponseFromJson(json);
+  Map<String, dynamic> toJson() => _$UserSubscriptionResponseToJson(this);
+}

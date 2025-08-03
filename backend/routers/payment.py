@@ -1,6 +1,9 @@
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
+from pydantic import BaseModel
 
+from database import users as users_db
+from models.users import Subscription, PlanType, SubscriptionStatus
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -19,6 +22,80 @@ from utils.stripe import create_connect_account, refresh_connect_account_link, i
 router = APIRouter()
 
 
+class CreateCheckoutRequest(BaseModel):
+    price_id: str
+
+
+def _update_subscription_from_session(uid: str, session: stripe.checkout.Session):
+    customer_id = session.get('customer')
+    subscription_id = session.get('subscription')
+
+    if customer_id:
+        users_db.set_stripe_customer_id(uid, customer_id)
+
+    if subscription_id:
+        stripe_sub = stripe.Subscription.retrieve(subscription_id)
+        stripe_status = stripe_sub.status
+
+        if stripe_status in ('active', 'trialing'):
+            plan = PlanType.unlimited
+            status = SubscriptionStatus.active
+        else:
+            plan = PlanType.free
+            status = SubscriptionStatus.inactive
+
+        new_subscription = Subscription(
+            plan=plan,
+            status=status,
+            current_period_end=stripe_sub.current_period_end,
+            stripe_subscription_id=stripe_sub.id,
+            cancel_at_period_end=stripe_sub.cancel_at_period_end,
+        )
+        users_db.update_user_subscription(uid, new_subscription.dict())
+        print(f"Subscription for user {uid} updated from session {session.id}.")
+
+
+@router.post('/v1/payments/checkout-session')
+def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+    session = stripe_utils.create_subscription_checkout_session(uid, request.price_id)
+    if not session:
+        raise HTTPException(status_code=500, detail="Could not create checkout session.")
+    return {"url": session.url, "session_id": session.id}
+
+
+@router.delete('/v1/payments/subscription')
+def cancel_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    subscription = users_db.get_user_subscription(uid)
+    if not subscription.stripe_subscription_id:
+        raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
+
+    updated_sub = stripe_utils.cancel_subscription(subscription.stripe_subscription_id)
+    if not updated_sub:
+        raise HTTPException(status_code=500, detail="Could not cancel subscription with Stripe.")
+
+    subscription.cancel_at_period_end = updated_sub.cancel_at_period_end
+    users_db.update_user_subscription(uid, subscription.dict())
+
+    return {"status": "ok", "message": "Subscription scheduled for cancellation."}
+
+
+@router.get('/v1/payments/session-status/{session_id}')
+def get_checkout_session_status_endpoint(session_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except stripe.error.InvalidRequestError:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    if session.client_reference_id != uid:
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+    if session.payment_status == 'paid':
+        _update_subscription_from_session(uid, session)
+        return {"status": "paid"}
+
+    return {"status": session.status}
+
+
 @router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'])
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
@@ -33,21 +110,56 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     print("stripe_webhook event", event['type'])
 
     if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']  # Contains session details
-        print(f"Payment completed for session: {session['id']}")
+        session = event['data']['object']
+        client_reference_id = session.get('client_reference_id')
 
-        app_id = session['metadata']['app_id']
-        client_reference_id = session['client_reference_id']
-        if not client_reference_id or len(client_reference_id) < 4:
-            raise HTTPException(status_code=400, detail="Invalid client")
-        uid = client_reference_id[4:]
+        # App payments for creators
+        if session['metadata'] and 'app_id' in session['metadata']:
+            print(f"Payment completed for session: {session['id']}")
+            app_id = session['metadata']['app_id']
+            uid = session['client_reference_id']
+            if not uid or len(uid) < 4:
+                raise HTTPException(status_code=400, detail="Invalid client")
+            uid = uid[4:]
 
-        if session.get("subscription"):
-            subscription_id = session["subscription"]
-            stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
+            if session.get("subscription"):
+                subscription_id = session["subscription"]
+                stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
+            paid_app(app_id, uid)
 
-        # paid
-        paid_app(app_id, uid)
+    if event['type'] in [
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+        'customer.subscription.created',
+    ]:
+        subscription_obj = event['data']['object']
+        customer_id = subscription_obj.get('customer')
+        if not customer_id:
+            return {"status": "success", "message": "No customer ID in subscription event."}
+
+        user = users_db.get_user_by_stripe_customer_id(customer_id)
+        if user and user.get('uid'):
+            uid = user['uid']
+            stripe_status = subscription_obj.status
+
+            if event['type'] == 'customer.subscription.deleted' or stripe_status not in ('active', 'trialing'):
+                plan = PlanType.free
+                status = SubscriptionStatus.inactive
+                cancel_at_period_end = False
+            else:
+                plan = PlanType.unlimited
+                status = SubscriptionStatus.active
+                cancel_at_period_end = subscription_obj.cancel_at_period_end
+
+            new_subscription = Subscription(
+                plan=plan,
+                status=status,
+                current_period_end=subscription_obj.current_period_end,
+                stripe_subscription_id=subscription_obj.id,
+                cancel_at_period_end=cancel_at_period_end,
+            )
+            users_db.update_user_subscription(uid, new_subscription.dict())
+            print(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
 
     return {"status": "success"}
 
@@ -234,6 +346,47 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
     if details:
         details['paypalme_url'] = details.get('paypalme_url', '').replace('https://', '')
     return details
+
+
+@router.get("/v1/payments/success", response_class=HTMLResponse)
+async def stripe_success(session_id: str = Query(...)):
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        if (
+            session.client_reference_id
+            and session.get('mode') == 'subscription'
+            and session.get('payment_status') == 'paid'
+        ):
+            _update_subscription_from_session(session.client_reference_id, session)
+    except Exception as e:
+        print(f"Error processing Stripe success redirect: {e}")
+
+    return HTMLResponse(
+        content="""
+        <html>
+            <head><title>Success</title></head>
+            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
+                <h1>Payment Successful!</h1>
+                <p>Your subscription is now active. You can close this window and return to the app.</p>
+            </body>
+        </html>
+    """
+    )
+
+
+@router.get("/v1/payments/cancel", response_class=HTMLResponse)
+async def stripe_cancel():
+    return HTMLResponse(
+        content="""
+        <html>
+            <head><title>Cancelled</title></head>
+            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
+                <h1>Payment Cancelled</h1>
+                <p>Your payment process was cancelled. You can return to the app.</p>
+            </body>
+        </html>
+    """
+    )
 
 
 @router.get("/v1/payment-methods/status")

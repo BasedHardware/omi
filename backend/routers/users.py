@@ -29,8 +29,12 @@ from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
-from models.users import WebhookType
+from datetime import datetime
+
+from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType
 from utils.apps import get_available_app_by_id
+from utils.subscription import FREE_TIER_MONTHLY_SECONDS_LIMIT, FREE_TIER_MINUTES_LIMIT_PER_MONTH
+from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -443,3 +447,58 @@ def get_user_usage_stats_endpoint(
     """Gets daily and monthly usage stats for the authenticated user."""
     stats = user_usage_db.get_current_user_usage(uid, period.value)
     return stats
+
+
+@router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
+def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Gets the user's subscription plan and usage."""
+    subscription = get_user_subscription(uid)
+    usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
+    transcription_seconds_used = usage.get('transcription_seconds', 0)
+
+    # Add features to current subscription
+    if subscription.plan == PlanType.unlimited:
+        subscription.features = ["Unlimited listening time"]
+    else:  # free plan
+        subscription.features = [f"{FREE_TIER_MINUTES_LIMIT_PER_MONTH // 60} hours of listening per month"]
+
+    available_plans: List[SubscriptionPlan] = []
+    monthly_price_id = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
+    annual_price_id = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
+
+    if monthly_price_id:
+        try:
+            price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
+            available_plans.append(
+                SubscriptionPlan(
+                    id=price.id,
+                    title="Unlimited Monthly",
+                    price_string=f"${price.unit_amount / 100:.2f}/{price.recurring.interval}",
+                    description="Billed monthly. Cancel anytime.",
+                    features=["Unlimited listening time"],
+                )
+            )
+        except Exception as e:
+            print(f"Error retrieving monthly price from Stripe: {e}")
+
+    if annual_price_id:
+        try:
+            price = stripe_utils.stripe.Price.retrieve(annual_price_id)
+            available_plans.append(
+                SubscriptionPlan(
+                    id=price.id,
+                    title="Unlimited Annual",
+                    price_string=f"${price.unit_amount / 100:.2f}/{price.recurring.interval}",
+                    description="Save ~16% with annual billing.",
+                    features=["Unlimited listening time"],
+                )
+            )
+        except Exception as e:
+            print(f"Error retrieving annual price from Stripe: {e}")
+
+    return UserSubscriptionResponse(
+        subscription=subscription,
+        transcription_seconds_used=transcription_seconds_used,
+        transcription_seconds_limit=FREE_TIER_MONTHLY_SECONDS_LIMIT,
+        available_plans=available_plans,
+    )

@@ -1,19 +1,26 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UsagePage extends StatefulWidget {
   const UsagePage({super.key});
@@ -26,6 +33,99 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   List<bool> _isMetricVisible = [true, true, true, true];
+  bool _isUpgrading = false;
+  bool _isCancelling = false;
+  Timer? _subscriptionCheckTimer;
+
+  void _startSubscriptionPolling(String sessionId) {
+    int pollCount = 0;
+    const maxPolls = 12; // 60 seconds (12 polls * 5 seconds)
+
+    _subscriptionCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      pollCount++;
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final status = await getCheckoutSessionStatus(sessionId);
+        if (status == 'paid') {
+          timer.cancel();
+          if (mounted) setState(() => _isUpgrading = false);
+          AppSnackbar.showSnackbar('Upgrade successful! You are now on the Unlimited plan.');
+          context.read<UsageProvider>().fetchSubscription();
+        }
+      } catch (e) {
+        debugPrint('Error polling subscription status: $e');
+        // Continue polling
+      }
+
+      if (pollCount >= maxPolls) {
+        timer.cancel();
+        if (mounted) setState(() => _isUpgrading = false);
+        AppSnackbar.showSnackbar('Your upgrade is processing. It may take a few moments to reflect in the app.');
+        context.read<UsageProvider>().fetchSubscription(); // Fetch one last time
+      }
+    });
+  }
+
+  void _cancelUpgradePolling() {
+    _subscriptionCheckTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _isUpgrading = false;
+      });
+    }
+  }
+
+  Future<void> _handleCancelSubscription() async {
+    showDialog(
+        context: context,
+        builder: (ctx) {
+          return getDialog(ctx, () => Navigator.of(ctx).pop(), () async {
+            Navigator.of(ctx).pop(); // Close dialog
+            setState(() => _isCancelling = true);
+            try {
+              final success = await cancelSubscription();
+              if (success) {
+                AppSnackbar.showSnackbar('Your subscription is set to cancel at the end of the period.');
+                context.read<UsageProvider>().fetchSubscription();
+              } else {
+                AppSnackbar.showSnackbarError('Failed to cancel subscription. Please try again.');
+              }
+            } catch (e) {
+              AppSnackbar.showSnackbarError('An error occurred. Please try again.');
+            } finally {
+              if (mounted) {
+                setState(() => _isCancelling = false);
+              }
+            }
+          }, 'Cancel Subscription?', 'Your plan will remain active until the end of your current billing period.');
+        });
+  }
+
+  Future<void> _handleUpgrade(String priceId) async {
+    setState(() => _isUpgrading = true);
+    _subscriptionCheckTimer?.cancel();
+
+    try {
+      final sessionData = await createCheckoutSession(priceId: priceId);
+      if (sessionData != null &&
+          sessionData['url'] != null &&
+          sessionData['session_id'] != null &&
+          await canLaunchUrl(Uri.parse(sessionData['url']!))) {
+        await launchUrl(Uri.parse(sessionData['url']!), mode: LaunchMode.externalApplication);
+        _startSubscriptionPolling(sessionData['session_id']!);
+      } else {
+        AppSnackbar.showSnackbarError('Could not launch upgrade page. Please try again.');
+        if (mounted) setState(() => _isUpgrading = false);
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('An error occurred. Please try again.');
+      if (mounted) setState(() => _isUpgrading = false);
+    }
+  }
 
   Future<void> _shareUsage() async {
     final RenderRepaintBoundary boundary =
@@ -216,6 +316,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     _tabController.addListener(_handleTabSelection);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
+      context.read<UsageProvider>().fetchSubscription();
     });
   }
 
@@ -223,6 +324,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
   void dispose() {
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
+    _subscriptionCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -288,16 +390,309 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             return _buildEmptyState();
           }
 
-          return TabBarView(
-            controller: _tabController,
+          return Column(
             children: [
-              _buildUsageListView(provider.todayUsage, provider.todayHistory, 'today', _screenshotKeys[0]),
-              _buildUsageListView(provider.monthlyUsage, provider.monthlyHistory, 'monthly', _screenshotKeys[1]),
-              _buildUsageListView(provider.yearlyUsage, provider.yearlyHistory, 'yearly', _screenshotKeys[2]),
-              _buildUsageListView(provider.allTimeUsage, provider.allTimeHistory, 'all_time', _screenshotKeys[3]),
+              _buildSubscriptionInfo(context, provider),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildUsageListView(provider.todayUsage, provider.todayHistory, 'today', _screenshotKeys[0]),
+                    _buildUsageListView(provider.monthlyUsage, provider.monthlyHistory, 'monthly', _screenshotKeys[1]),
+                    _buildUsageListView(provider.yearlyUsage, provider.yearlyHistory, 'yearly', _screenshotKeys[2]),
+                    _buildUsageListView(provider.allTimeUsage, provider.allTimeHistory, 'all_time', _screenshotKeys[3]),
+                  ],
+                ),
+              ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionInfo(BuildContext context, UsageProvider provider) {
+    if (provider.isLoading && provider.subscription == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (provider.subscription == null) {
+      return const SizedBox.shrink();
+    }
+
+    final isUnlimited = provider.subscription!.subscription.plan == PlanType.unlimited;
+
+    if (isUnlimited) {
+      final sub = provider.subscription!.subscription;
+      final isCancelled = sub.cancelAtPeriodEnd;
+      String renewalDate = 'N/A';
+      if (sub.currentPeriodEnd != null) {
+        final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
+        renewalDate = DateFormat.yMMMd().format(date);
+      }
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Unlimited Plan',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                ElevatedButton(
+                  onPressed: _isCancelling
+                      ? null
+                      : _isUpgrading
+                          ? () {}
+                          : () {
+                              final plans = provider.subscription?.availablePlans ?? [];
+                              showCupertinoModalPopup(
+                                context: context,
+                                builder: (BuildContext context) => CupertinoActionSheet(
+                                  title: const Text('Manage Subscription'),
+                                  message: isCancelled
+                                      ? Text(
+                                          'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.')
+                                      : null,
+                                  actions: <Widget>[
+                                    ...plans
+                                        .map((plan) => CupertinoActionSheetAction(
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Text('${plan.title} - ${plan.priceString}'),
+                                                  ...plan.features.map((feature) => Text(feature,
+                                                      style: TextStyle(
+                                                          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                                                          fontSize: 13))),
+                                                ],
+                                              ),
+                                              onPressed: () {
+                                                Navigator.pop(context);
+                                                _handleUpgrade(plan.id);
+                                              },
+                                            ))
+                                        .toList(),
+                                    if (!isCancelled)
+                                      CupertinoActionSheetAction(
+                                        isDestructiveAction: true,
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _handleCancelSubscription();
+                                        },
+                                        child: const Text('Cancel Subscription'),
+                                      ),
+                                  ],
+                                  cancelButton: CupertinoActionSheetAction(
+                                    child: const Text('Dismiss'),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: _isCancelling
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : _isUpgrading
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: _cancelUpgradePolling,
+                                  child: const Icon(Icons.cancel, size: 22, color: Colors.white70),
+                                ),
+                              ],
+                            )
+                          : const Text('Manage', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isCancelled ? 'Your plan will cancel on $renewalDate.' : 'Your plan renews on $renewalDate.',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+            ),
+            if (sub.features.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...sub.features.map((feature) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            feature,
+                            style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ))
+            ],
+          ],
+        ),
+      );
+    }
+
+    final sub = provider.subscription!;
+    final hoursUsed = (sub.transcriptionSecondsUsed / 3600);
+    final hoursLimit = (sub.transcriptionSecondsLimit / 3600).round();
+    final percentage = (sub.transcriptionSecondsUsed / sub.transcriptionSecondsLimit).clamp(0.0, 1.0);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Free Plan Usage',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              ElevatedButton(
+                onPressed: _isUpgrading
+                    ? () {}
+                    : () {
+                        final plans = provider.subscription?.availablePlans ?? [];
+
+                        if (plans.isEmpty) {
+                          showDialog(
+                              context: context,
+                              builder: (ctx) {
+                                return getDialog(
+                                  ctx,
+                                  () => Navigator.of(ctx).pop(),
+                                  () {},
+                                  "Not Available",
+                                  "Upgrades are not available at this moment. Please try again later.",
+                                  singleButton: true,
+                                );
+                              });
+                          return;
+                        }
+                        showCupertinoModalPopup(
+                          context: context,
+                          builder: (BuildContext context) => CupertinoActionSheet(
+                            title: const Text('Choose a Plan'),
+                            actions: plans
+                                .map((plan) => CupertinoActionSheetAction(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text('${plan.title} - ${plan.priceString}'),
+                                          ...plan.features.map((feature) => Text(feature,
+                                              style: TextStyle(
+                                                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                                                  fontSize: 13))),
+                                        ],
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        _handleUpgrade(plan.id);
+                                      },
+                                    ))
+                                .toList(),
+                            cancelButton: CupertinoActionSheetAction(
+                              child: const Text('Cancel'),
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                child: _isUpgrading
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: _cancelUpgradePolling,
+                            child: const Icon(Icons.cancel, size: 22, color: Colors.white70),
+                          ),
+                        ],
+                      )
+                    : const Text('Upgrade', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'You have used ${hoursUsed.toStringAsFixed(1)} of $hoursLimit hours of free transcription this month.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: percentage,
+            backgroundColor: Colors.grey.shade700,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+            minHeight: 6,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          if (sub.subscription.features.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...sub.subscription.features.map((feature) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          feature,
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade300),
+                        ),
+                      ),
+                    ],
+                  ),
+                ))
+          ]
+        ],
       ),
     );
   }
@@ -323,7 +718,14 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
   }
 
   Widget _buildUsageListView(UsageStats? stats, List<UsageHistoryPoint>? history, String period, GlobalKey key) {
-    final onRefresh = () => context.read<UsageProvider>().fetchUsageStats(period: period);
+    final onRefresh = () async {
+      final provider = context.read<UsageProvider>();
+      // Using Future.wait to run both fetches concurrently
+      await Future.wait([
+        provider.fetchUsageStats(period: period),
+        provider.fetchSubscription(),
+      ]);
+    };
 
     if (stats == null) {
       return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
