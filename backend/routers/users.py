@@ -7,7 +7,12 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from database import conversations as conversations_db, memories as memories_db, chat as chat_db
+from database import (
+    conversations as conversations_db,
+    memories as memories_db,
+    chat as chat_db,
+    user_usage as user_usage_db,
+)
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -22,6 +27,8 @@ from database.redis_db import (
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
+from typing import Optional
+from models.user_usage import UserUsageResponse, UsagePeriod
 from models.users import WebhookType
 from utils.apps import get_available_app_by_id
 from utils.llm.followup import followup_question_prompt
@@ -421,3 +428,18 @@ def set_preferred_app_for_user(
         raise HTTPException(status_code=500, detail="Failed to store app preference.")
 
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
+
+
+# **************************************
+# ************* Usage ******************
+# **************************************
+
+
+@router.get('/v1/users/me/usage', tags=['v1'], response_model=UserUsageResponse)
+def get_user_usage_stats_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    period: UsagePeriod = UsagePeriod.TODAY,
+):
+    """Gets daily and monthly usage stats for the authenticated user."""
+    stats = user_usage_db.get_current_user_usage(uid, period.value)
+    return stats

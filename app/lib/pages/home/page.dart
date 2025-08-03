@@ -790,13 +790,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               const Icon(
                                 FontAwesomeIcons.solidComment,
                                 size: 14,
-                                color: Colors.white70,
+                                color: Colors.white,
                               ),
                               const SizedBox(width: 6),
                               const Text(
                                 'Ask',
                                 style: TextStyle(
-                                  color: Colors.white70,
+                                  color: Colors.white,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),

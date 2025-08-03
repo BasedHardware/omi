@@ -10,6 +10,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/subscription_page.dart';
 import 'package:omi/pages/settings/webview.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -189,13 +190,27 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Text(
-                        'Usage',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Usage',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Resets Aug 8',
+                            style: TextStyle(
+                              color: Color(0xFF8E8E93),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -208,6 +223,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          const SizedBox(height: 2),
                           const Text(
                             'minutes',
                             style: TextStyle(
@@ -217,62 +233,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                             ),
                           ),
                         ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Enhanced progress bar
-                  Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2C2C2E),
-                      borderRadius: BorderRadius.circular(4),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 2,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: usagePercent,
-                        backgroundColor: Colors.transparent,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          usagePercent > 0.8
-                              ? const Color(0xFFFF3B30) // Red when almost full
-                              : usagePercent > 0.6
-                                  ? const Color(0xFFFF9500) // Orange when getting high
-                                  : const Color(0xFF007AFF), // Blue for normal usage
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Usage percentage and reset date
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${(usagePercent * 100).toInt()}% used',
-                        style: TextStyle(
-                          color: usagePercent > 0.8 ? const Color(0xFFFF3B30) : const Color(0xFF8E8E93),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const Text(
-                        'Resets Aug 8',
-                        style: TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                        ),
                       ),
                     ],
                   ),
@@ -297,6 +257,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               onTap: () {
                 Navigator.pop(context);
                 routeToPage(context, const ProfilePage());
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildSettingsItem(
+              title: 'Usage',
+              icon: const FaIcon(FontAwesomeIcons.chartBar, color: Color(0xFF8E8E93), size: 20),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const UsagePage(),
+                  ),
+                );
               },
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
