@@ -471,6 +471,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
         var minYear = history.map((p) => DateTime.parse(p.date).toLocal().year).reduce((a, b) => a < b ? a : b);
         var maxYear = history.map((p) => DateTime.parse(p.date).toLocal().year).reduce((a, b) => a > b ? a : b);
         minYear--;
+        maxYear++;
 
         final years = List.generate(maxYear - minYear + 1, (i) => minYear + i);
         processedHistory = years.map((year) {
@@ -625,6 +626,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
+            interval: 1,
             getTitlesWidget: (double value, TitleMeta meta) {
               final index = value.toInt();
               if (index >= processedHistory.length) return const SizedBox();
