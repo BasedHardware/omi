@@ -10,7 +10,6 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/subscription_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/pages/settings/webview.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
