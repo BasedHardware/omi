@@ -33,7 +33,7 @@ from datetime import datetime
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
-from utils.subscription import FREE_TIER_MONTHLY_SECONDS_LIMIT, FREE_TIER_MINUTES_LIMIT_PER_MONTH
+from utils.subscription import BASIC_TIER_MONTHLY_SECONDS_LIMIT, BASIC_TIER_MINUTES_LIMIT_PER_MONTH
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
@@ -460,8 +460,8 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     # Add features to current subscription
     if subscription.plan == PlanType.unlimited:
         subscription.features = ["Unlimited listening time"]
-    else:  # free plan
-        subscription.features = [f"{FREE_TIER_MINUTES_LIMIT_PER_MONTH // 60} hours of listening per month"]
+    else:  # basic plan
+        subscription.features = [f"{BASIC_TIER_MINUTES_LIMIT_PER_MONTH} minutes of listening per month"]
 
     # Build available plans for upgrading
     available_plans: List[SubscriptionPlan] = []
@@ -491,7 +491,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                     id=price.id,
                     title="Annual",
                     price_string=f"${price.unit_amount / 100:.2f}/{price.recurring.interval}",
-                    description="Save ~16% with annual billing.",
+                    description="Save 20% with annual billing.",
                 )
             )
         except Exception as e:

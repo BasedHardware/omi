@@ -4,8 +4,8 @@ import database.users as users_db
 import database.user_usage as user_usage_db
 from models.users import PlanType, SubscriptionStatus
 
-FREE_TIER_MINUTES_LIMIT_PER_MONTH = 1200
-FREE_TIER_MONTHLY_SECONDS_LIMIT = FREE_TIER_MINUTES_LIMIT_PER_MONTH * 60
+BASIC_TIER_MINUTES_LIMIT_PER_MONTH = 1200
+BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
 
 
 def is_allowed_to_transcribe(uid: str) -> bool:

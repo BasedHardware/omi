@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from database import users as users_db
 from models.users import Subscription, PlanType, SubscriptionStatus, PlanLimits
-from utils.subscription import FREE_TIER_MONTHLY_SECONDS_LIMIT
+from utils.subscription import BASIC_TIER_MONTHLY_SECONDS_LIMIT
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -43,9 +43,9 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
             status = SubscriptionStatus.active
             limits = PlanLimits(transcription_seconds=None)
         else:
-            plan = PlanType.free
+            plan = PlanType.basic
             status = SubscriptionStatus.inactive
-            limits = PlanLimits(transcription_seconds=FREE_TIER_MONTHLY_SECONDS_LIMIT)
+            limits = PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT)
 
         new_subscription = Subscription(
             plan=plan,
@@ -157,10 +157,10 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             stripe_status = subscription_obj.status
 
             if event['type'] == 'customer.subscription.deleted' or stripe_status not in ('active', 'trialing'):
-                plan = PlanType.free
+                plan = PlanType.basic
                 status = SubscriptionStatus.inactive
                 cancel_at_period_end = False
-                limits = PlanLimits(transcription_seconds=FREE_TIER_MONTHLY_SECONDS_LIMIT)
+                limits = PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT)
             else:
                 plan = PlanType.unlimited
                 status = SubscriptionStatus.active

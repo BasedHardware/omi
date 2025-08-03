@@ -3,7 +3,7 @@ import 'package:json_annotation/json_annotation.dart';
 part 'subscription.g.dart';
 
 enum PlanType {
-  free,
+  basic,
   unlimited,
 }
 

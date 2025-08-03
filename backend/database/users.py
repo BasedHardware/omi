@@ -318,7 +318,7 @@ def set_user_language_preference(uid: str, language: str) -> None:
 
 
 from models.users import PlanLimits, PlanType
-from utils.subscription import FREE_TIER_MONTHLY_SECONDS_LIMIT
+from utils.subscription import BASIC_TIER_MONTHLY_SECONDS_LIMIT
 
 
 def get_user_subscription(uid: str) -> Subscription:
@@ -331,15 +331,20 @@ def get_user_subscription(uid: str) -> Subscription:
             sub_data = user_data['subscription']
             # Migrate old subscriptions that don't have limits
             if 'limits' not in sub_data:
-                if sub_data.get('plan') == PlanType.free.value:
-                    sub_data['limits'] = PlanLimits(transcription_seconds=FREE_TIER_MONTHLY_SECONDS_LIMIT).dict()
+                if sub_data.get('plan') == 'free':
+                    sub_data['plan'] = PlanType.basic.value
+                    sub_data['limits'] = PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT).dict()
                 else:
                     sub_data['limits'] = PlanLimits(transcription_seconds=None).dict()
+                update_user_subscription(uid, sub_data)
+                return Subscription(**sub_data)
+            elif sub_data.get('plan') == 'free':
+                sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
                 return Subscription(**sub_data)
             return Subscription(**sub_data)
 
     # If subscription doesn't exist for the user, create and return a default free plan.
-    default_subscription = Subscription(limits=PlanLimits(transcription_seconds=FREE_TIER_MONTHLY_SECONDS_LIMIT))
+    default_subscription = Subscription(limits=PlanLimits(transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT))
     user_ref.set({'subscription': default_subscription.dict()}, merge=True)
     return default_subscription

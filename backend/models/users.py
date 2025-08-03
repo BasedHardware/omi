@@ -13,7 +13,7 @@ class WebhookType(str, Enum):
 
 
 class PlanType(str, Enum):
-    free = 'free'
+    basic = 'basic'
     unlimited = 'unlimited'
 
 
@@ -28,7 +28,7 @@ class PlanLimits(BaseModel):
 
 
 class Subscription(BaseModel):
-    plan: PlanType = PlanType.free
+    plan: PlanType = PlanType.basic
     status: SubscriptionStatus = SubscriptionStatus.active
     current_period_end: Optional[int] = None
     stripe_subscription_id: Optional[str] = None

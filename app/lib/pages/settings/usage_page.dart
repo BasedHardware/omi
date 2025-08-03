@@ -460,8 +460,8 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       );
     } else {
       final sub = provider.subscription!;
-      final hoursUsed = (sub.transcriptionSecondsUsed / 3600);
-      final hoursLimit = (sub.transcriptionSecondsLimit / 3600).round();
+      final minutesUsed = (sub.transcriptionSecondsUsed / 60);
+      final minutesLimit = (sub.transcriptionSecondsLimit / 60).round();
       final percentage = (sub.transcriptionSecondsLimit > 0)
           ? (sub.transcriptionSecondsUsed / sub.transcriptionSecondsLimit).clamp(0.0, 1.0)
           : 0.0;
@@ -472,7 +472,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Free Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
                   size: 16, color: Colors.grey),
             ],
@@ -486,9 +486,9 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             borderRadius: BorderRadius.circular(3),
           ),
           const SizedBox(height: 4),
-          if (hoursLimit > 0)
+          if (minutesLimit > 0)
             Text(
-              '${hoursUsed.toStringAsFixed(1)} of $hoursLimit hours used',
+              '${minutesUsed.toStringAsFixed(1)} of $minutesLimit minutes used',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
             ),
         ],
@@ -500,7 +500,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Free Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ElevatedButton(
                 onPressed: _isUpgrading ? null : () => _showPlansSheet(provider),
                 style: ElevatedButton.styleFrom(
@@ -511,14 +511,14 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 child: _isUpgrading
                     ? const SizedBox(
                         height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Upgrade', style: TextStyle(color: Colors.white)),
+                    : const Text('Go unlimited', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          if (hoursLimit > 0)
+          if (minutesLimit > 0)
             Text(
-              'You have used ${hoursUsed.toStringAsFixed(1)} of $hoursLimit hours of free transcription this month.',
+              'You have used ${minutesUsed.toStringAsFixed(1)} of $minutesLimit minutes of basic transcription this month.',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
             ),
           const SizedBox(height: 12),
@@ -1246,19 +1246,19 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             ),
             if (title == 'Listening' &&
                 subscription != null &&
-                subscription.subscription.plan == PlanType.free &&
+                subscription.subscription.plan == PlanType.basic &&
                 subscription.transcriptionSecondsLimit > 0) ...[
               const SizedBox(height: 16),
               Builder(builder: (context) {
-                final hoursUsed = (subscription.transcriptionSecondsUsed / 3600);
-                final hoursLimit = (subscription.transcriptionSecondsLimit / 3600).round();
+                final minutesUsed = (subscription.transcriptionSecondsUsed / 60);
+                final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
                 final percentage =
                     (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Monthly free limit: ${hoursUsed.toStringAsFixed(1)} of $hoursLimit hours used',
+                      'Monthly basic limit: ${minutesUsed.toStringAsFixed(1)} of $minutesLimit minutes used',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                     ),
                     const SizedBox(height: 8),

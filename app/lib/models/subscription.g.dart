@@ -29,7 +29,7 @@ Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
     };
 
 const _$PlanTypeEnumMap = {
-  PlanType.free: 'free',
+  PlanType.basic: 'basic',
   PlanType.unlimited: 'unlimited',
 };
 
