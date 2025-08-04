@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -390,7 +391,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
                   children: [
                     // Pause/Resume button
                     GestureDetector(
-                      onTap: () => _toggleRecording(context, provider),
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        _toggleRecording(context, provider);
+                      },
                       child: Container(
                         width: 28,
                         height: 28,
