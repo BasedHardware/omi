@@ -109,6 +109,35 @@ class AppleRemindersService {
     }
   }
 
+  /// Update an existing reminder's title and notes
+  Future<bool> updateReminder({
+    required String oldTitle,
+    required String newTitle,
+    String? newNotes,
+    String? listName,
+  }) async {
+    if (!isAvailable) {
+      throw UnsupportedError('Apple Reminders is only available on iOS and macOS');
+    }
+
+    try {
+      final result = await _channel.invokeMethod('updateReminder', {
+        'oldTitle': oldTitle,
+        'newTitle': newTitle,
+        'newNotes': newNotes,
+        'listName': listName ?? 'Reminders',
+      });
+
+      return result == true;
+    } on PlatformException catch (e) {
+      print('Error updating reminder: ${e.message}');
+      return false;
+    } catch (e) {
+      print('Unexpected error updating reminder: $e');
+      return false;
+    }
+  }
+
   /// Add an action item to Apple Reminders with automatic permission handling
   Future<AppleRemindersResult> addActionItem(String actionItemDescription) async {
     if (!isAvailable) {
@@ -132,6 +161,65 @@ class AppleRemindersService {
     );
 
     return success ? AppleRemindersResult.success : AppleRemindersResult.failed;
+  }
+
+  /// Update an action item's title in Apple Reminders with automatic permission handling
+  Future<AppleRemindersResult> updateActionItem({
+    required String oldTitle,
+    required String newTitle,
+  }) async {
+    if (!isAvailable) {
+      return AppleRemindersResult.unsupported;
+    }
+
+    // Check permission first
+    bool hasPermission = await this.hasPermission();
+    if (!hasPermission) {
+      return AppleRemindersResult.permissionDenied;
+    }
+
+    // Update the reminder
+    final success = await updateReminder(
+      oldTitle: oldTitle,
+      newTitle: newTitle,
+      newNotes: 'From Omi',
+      listName: 'Reminders',
+    );
+
+    return success ? AppleRemindersResult.success : AppleRemindersResult.failed;
+  }
+
+  /// Smart update that tries multiple strategies to find and update the reminder
+  Future<AppleRemindersResult> updateActionItemSmart({
+    required String oldTitle,
+    required String newTitle,
+  }) async {
+    if (!isAvailable) {
+      return AppleRemindersResult.unsupported;
+    }
+
+    // Check permission first
+    bool hasPermission = await this.hasPermission();
+    if (!hasPermission) {
+      return AppleRemindersResult.permissionDenied;
+    }
+
+    try {
+      final result = await _channel.invokeMethod('updateReminderSmart', {
+        'oldTitle': oldTitle,
+        'newTitle': newTitle,
+        'newNotes': 'From Omi',
+        'listName': 'Reminders',
+      });
+
+      return result == true ? AppleRemindersResult.success : AppleRemindersResult.failed;
+    } on PlatformException catch (e) {
+      print('Error updating reminder smartly: ${e.message}');
+      return AppleRemindersResult.failed;
+    } catch (e) {
+      print('Unexpected error updating reminder smartly: $e');
+      return AppleRemindersResult.failed;
+    }
   }
 }
 

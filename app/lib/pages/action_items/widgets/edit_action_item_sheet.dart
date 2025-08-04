@@ -4,18 +4,24 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
 class EditActionItemBottomSheet extends StatefulWidget {
   final ActionItem actionItem;
   final String conversationId;
   final int itemIndex;
+  final bool isExportedToAppleReminders;
+  final VoidCallback? onTitleUpdated;
 
   const EditActionItemBottomSheet({
     super.key,
     required this.actionItem,
     required this.conversationId,
     required this.itemIndex,
+    this.isExportedToAppleReminders = false,
+    this.onTitleUpdated,
   });
 
   @override
@@ -57,6 +63,14 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
     String oldDescription = widget.actionItem.description;
     String newDescription = _textController.text.trim();
 
+    // Check if description actually changed
+    if (oldDescription == newDescription) {
+      if (mounted) {
+        Navigator.pop(context);
+      }
+      return;
+    }
+
     updateActionItemDescription(widget.conversationId, oldDescription, newDescription, widget.itemIndex);
 
     final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
@@ -65,6 +79,26 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       widget.itemIndex, // This should be the index of the item in the conversation's list
       newDescription,
     );
+
+    // Update corresponding Apple Reminder if this action item was exported
+    if (widget.isExportedToAppleReminders && PlatformService.isApple) {
+      try {
+        final service = AppleRemindersService();
+        final result = await service.updateActionItemSmart(
+          oldTitle: oldDescription,
+          newTitle: newDescription,
+        );
+
+        if (result.isSuccess) {
+          debugPrint('Successfully updated reminder in Apple Reminders: $oldDescription -> $newDescription');
+          widget.onTitleUpdated?.call();
+        } else {
+          debugPrint('Failed to update reminder in Apple Reminders: ${result.message}');
+        }
+      } catch (e) {
+        debugPrint('Error updating Apple Reminder: $e');
+      }
+    }
 
     if (mounted) {
       Navigator.pop(context);

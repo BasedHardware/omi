@@ -17,6 +17,10 @@ class AppleRemindersService {
             getReminders(call: call, result: result)
         case "completeReminder":
             completeReminder(call: call, result: result)
+        case "updateReminder":
+            updateReminder(call: call, result: result)
+        case "updateReminderSmart":
+            updateReminderSmart(call: call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -214,6 +218,161 @@ class AppleRemindersService {
                 } catch {
                     print("Error completing reminder: \(error.localizedDescription)")
                     result(false)
+                }
+            }
+        }
+    }
+    
+    private func updateReminderSmart(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+            return
+        }
+        
+        guard let oldTitle = args["oldTitle"] as? String else {
+            result(FlutterError(code: "MISSING_OLD_TITLE", message: "Old title is required", details: nil))
+            return
+        }
+        
+        guard let newTitle = args["newTitle"] as? String else {
+            result(FlutterError(code: "MISSING_NEW_TITLE", message: "New title is required", details: nil))
+            return
+        }
+        
+        let listName = args["listName"] as? String ?? "Reminders"
+        let newNotes = args["newNotes"] as? String
+        
+        // Check permission
+        let status = EKEventStore.authorizationStatus(for: .reminder)
+        guard status == .authorized else {
+            result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
+            return
+        }
+        
+        // Find the calendar
+        let calendars = eventStore.calendars(for: .reminder)
+        guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
+            result(FlutterError(code: "CALENDAR_NOT_FOUND", message: "Calendar not found", details: nil))
+            return
+        }
+        
+        // Create predicate to fetch reminders from this calendar
+        let predicate = eventStore.predicateForReminders(in: [targetCalendar])
+        
+        eventStore.fetchReminders(matching: predicate) { reminders in
+            DispatchQueue.main.async {
+                guard let allReminders = reminders else {
+                    result(FlutterError(code: "FETCH_FAILED", message: "Failed to fetch reminders", details: nil))
+                    return
+                }
+                
+                var targetReminder: EKReminder?
+                
+                // Strategy 1: Try to find by old title
+                targetReminder = allReminders.first { $0.title == oldTitle }
+                
+                // Strategy 2: If not found, try to find by new title (maybe already updated)
+                if targetReminder == nil {
+                    targetReminder = allReminders.first { $0.title == newTitle }
+                    if targetReminder != nil {
+                        // Already has the new title, so it's already up to date
+                        result(true)
+                        return
+                    }
+                }
+                
+                // Strategy 3: Try to find by notes content (reminders from Omi have "From Omi" in notes)
+                if targetReminder == nil {
+                    let oldTitlePrefix = String(oldTitle.prefix(min(10, oldTitle.count)))
+                    let newTitlePrefix = String(newTitle.prefix(min(10, newTitle.count)))
+                    
+                    targetReminder = allReminders.first { reminder in
+                        return reminder.notes?.contains("From Omi") == true && 
+                               (reminder.title?.contains(oldTitlePrefix) == true || 
+                                reminder.title?.contains(newTitlePrefix) == true)
+                    }
+                }
+                
+                guard let reminderToUpdate = targetReminder else {
+                    print("Could not find reminder to update. Old title: \(oldTitle), New title: \(newTitle)")
+                    print("Available reminders: \(allReminders.compactMap { $0.title })")
+                    result(FlutterError(code: "REMINDER_NOT_FOUND", message: "Reminder not found with any strategy", details: nil))
+                    return
+                }
+                
+                // Update the reminder
+                reminderToUpdate.title = newTitle
+                if let newNotes = newNotes {
+                    reminderToUpdate.notes = newNotes
+                }
+                
+                do {
+                    try self.eventStore.save(reminderToUpdate, commit: true)
+                    print("Successfully updated reminder: \(oldTitle) -> \(newTitle)")
+                    result(true)
+                } catch {
+                    print("Error updating reminder: \(error.localizedDescription)")
+                    result(FlutterError(code: "UPDATE_FAILED", message: "Failed to update reminder: \(error.localizedDescription)", details: nil))
+                }
+            }
+        }
+    }
+    
+    private func updateReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+            return
+        }
+        
+        guard let oldTitle = args["oldTitle"] as? String else {
+            result(FlutterError(code: "MISSING_OLD_TITLE", message: "Old title is required", details: nil))
+            return
+        }
+        
+        guard let newTitle = args["newTitle"] as? String else {
+            result(FlutterError(code: "MISSING_NEW_TITLE", message: "New title is required", details: nil))
+            return
+        }
+        
+        let listName = args["listName"] as? String ?? "Reminders"
+        let newNotes = args["newNotes"] as? String
+        
+        // Check permission
+        let status = EKEventStore.authorizationStatus(for: .reminder)
+        guard status == .authorized else {
+            result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
+            return
+        }
+        
+        // Find the calendar
+        let calendars = eventStore.calendars(for: .reminder)
+        guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
+            result(FlutterError(code: "CALENDAR_NOT_FOUND", message: "Calendar not found", details: nil))
+            return
+        }
+        
+        // Create predicate to fetch reminders from this calendar
+        let predicate = eventStore.predicateForReminders(in: [targetCalendar])
+        
+        eventStore.fetchReminders(matching: predicate) { reminders in
+            DispatchQueue.main.async {
+                guard let targetReminder = reminders?.first(where: { $0.title == oldTitle }) else {
+                    result(FlutterError(code: "REMINDER_NOT_FOUND", message: "Reminder with old title not found", details: nil))
+                    return
+                }
+                
+                // Update the reminder
+                targetReminder.title = newTitle
+                if let newNotes = newNotes {
+                    targetReminder.notes = newNotes
+                }
+                
+                do {
+                    try self.eventStore.save(targetReminder, commit: true)
+                    result(true)
+                } catch {
+                    print("Error updating reminder: \(error.localizedDescription)")
+                    result(FlutterError(code: "UPDATE_FAILED", message: "Failed to update reminder: \(error.localizedDescription)", details: nil))
                 }
             }
         }

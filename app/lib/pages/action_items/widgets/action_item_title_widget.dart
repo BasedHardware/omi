@@ -445,6 +445,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           actionItem: item,
           conversationId: widget.conversationId,
           itemIndex: widget.itemIndexInConversation,
+          isExportedToAppleReminders: _isExportedToAppleReminders,
+          onTitleUpdated: () {
+            // Refresh the exported reminders list after successful update
+            widget.onExportedToAppleReminders?.call();
+          },
         );
       },
     );
