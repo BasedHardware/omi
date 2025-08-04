@@ -28,7 +28,7 @@ class AppleRemindersService {
         'title': title,
         'notes': notes,
         'dueDate': dueDate?.millisecondsSinceEpoch,
-        'listName': listName ?? 'Omi Action Items',
+        'listName': listName ?? 'Reminders',
       });
 
       return result == true;
@@ -67,6 +67,31 @@ class AppleRemindersService {
     }
   }
 
+  /// Get existing reminders from the specified list
+  Future<List<String>> getExistingReminders({String? listName}) async {
+    if (!isAvailable) return [];
+
+    try {
+      final result = await _channel.invokeMethod('getReminders', {
+        'listName': listName ?? 'Reminders',
+      });
+
+      if (result is List) {
+        return result.cast<String>();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching reminders: $e');
+      return [];
+    }
+  }
+
+  /// Check if a specific reminder exists
+  Future<bool> reminderExists(String title, {String? listName}) async {
+    final existingReminders = await getExistingReminders(listName: listName);
+    return existingReminders.contains(title);
+  }
+
   /// Add an action item to Apple Reminders with automatic permission handling
   Future<AppleRemindersResult> addActionItem(String actionItemDescription) async {
     if (!isAvailable) {
@@ -85,8 +110,8 @@ class AppleRemindersService {
     // Add the reminder
     final success = await addReminder(
       title: actionItemDescription,
-      notes: 'Added from Omi',
-      listName: 'Omi Action Items',
+      notes: 'From Omi',
+      listName: 'Reminders',
     );
 
     return success ? AppleRemindersResult.success : AppleRemindersResult.failed;

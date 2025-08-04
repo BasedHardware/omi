@@ -18,6 +18,8 @@ class ActionItemTileWidget extends StatefulWidget {
   final bool hasRoundedCorners;
   final bool isLastInGroup;
   final bool isInGroup;
+  final Set<String> exportedToAppleReminders;
+  final VoidCallback? onExportedToAppleReminders;
 
   const ActionItemTileWidget({
     super.key,
@@ -27,6 +29,8 @@ class ActionItemTileWidget extends StatefulWidget {
     this.hasRoundedCorners = true,
     this.isLastInGroup = false,
     this.isInGroup = false,
+    this.exportedToAppleReminders = const <String>{},
+    this.onExportedToAppleReminders,
   });
 
   @override
@@ -35,6 +39,9 @@ class ActionItemTileWidget extends StatefulWidget {
 
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
+
+  // Check if this action item is exported to Apple Reminders
+  bool get _isExportedToAppleReminders => widget.exportedToAppleReminders.contains(widget.actionItem.description);
 
   @override
   void dispose() {
@@ -251,18 +258,71 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                                 Padding(
                                   padding: const EdgeInsets.only(left: 8.0),
                                   child: GestureDetector(
-                                    onTap: () => _exportToAppleReminders(context),
+                                    onTap: _isExportedToAppleReminders ? null : () => _exportToAppleReminders(context),
                                     child: Container(
                                       width: 28,
                                       height: 28,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800]?.withOpacity(0.5),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Icon(
-                                        Icons.add_task_outlined,
-                                        size: 16,
-                                        color: Colors.grey[400],
+                                      // decoration: BoxDecoration(
+                                      //   color: _isExportedToAppleReminders
+                                      //       ? Colors.grey[700]?.withOpacity(0.3)
+                                      //       : Colors.grey[800]?.withOpacity(0.5),
+                                      //   borderRadius: BorderRadius.circular(6),
+                                      // ),
+                                      child: Stack(
+                                        children: [
+                                          Center(
+                                            child: Image.asset(
+                                              'assets/images/apple-reminders-logo.png',
+                                              width: 24,
+                                              height: 24,
+                                              // color: _isExportedToAppleReminders ? Colors.grey[600] : Colors.grey[400],
+                                            ),
+                                          ),
+                                          // Green checkmark overlay when exported
+                                          _isExportedToAppleReminders
+                                              ? Positioned(
+                                                  bottom: 0,
+                                                  right: 0,
+                                                  child: Container(
+                                                    width: 12,
+                                                    height: 12,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.green,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: const Color(0xFF1F1F25),
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.check,
+                                                      size: 8,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                )
+                                              : Positioned(
+                                                  bottom: 0,
+                                                  right: 0,
+                                                  child: Container(
+                                                    width: 12,
+                                                    height: 12,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.yellow,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: const Color(0xFF1F1F25),
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.add,
+                                                      size: 8,
+                                                      color: Colors.black,
+                                                    ),
+                                                  ),
+                                                ),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -382,6 +442,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     final result = await service.addActionItem(widget.actionItem.description);
 
     if (!mounted) return;
+
+    // If successful, notify parent to refresh the exported state
+    if (result.isSuccess) {
+      widget.onExportedToAppleReminders?.call();
+    }
 
     // Show feedback to user
     ScaffoldMessenger.of(context).showSnackBar(

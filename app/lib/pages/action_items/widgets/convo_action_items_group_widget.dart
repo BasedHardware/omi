@@ -12,11 +12,15 @@ import 'action_item_title_widget.dart';
 class ConversationActionItemsGroupWidget extends StatelessWidget {
   final ServerConversation conversation;
   final List<ActionItem> actionItems;
+  final Set<String> exportedToAppleReminders;
+  final VoidCallback? onExportedToAppleReminders;
 
   const ConversationActionItemsGroupWidget({
     super.key,
     required this.conversation,
     required this.actionItems,
+    this.exportedToAppleReminders = const <String>{},
+    this.onExportedToAppleReminders,
   });
 
   @override
@@ -55,7 +59,9 @@ class ConversationActionItemsGroupWidget extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          conversation.structured.title.isNotEmpty ? conversation.structured.title : 'Untitled Conversation',
+                          conversation.structured.title.isNotEmpty
+                              ? conversation.structured.title
+                              : 'Untitled Conversation',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
@@ -95,6 +101,8 @@ class ConversationActionItemsGroupWidget extends StatelessWidget {
               hasRoundedCorners: false,
               isLastInGroup: isLastItem,
               isInGroup: true,
+              exportedToAppleReminders: exportedToAppleReminders,
+              onExportedToAppleReminders: onExportedToAppleReminders,
             );
           }),
           const SizedBox(height: 8),
