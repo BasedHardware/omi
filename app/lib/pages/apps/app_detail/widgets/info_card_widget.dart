@@ -8,7 +8,14 @@ class InfoCardWidget extends StatelessWidget {
   final bool showChips;
   final List<String>? capabilityChips;
   final List<String>? connectionChips;
-  const InfoCardWidget({super.key, required this.onTap, required this.title, required this.description, required this.showChips, this.capabilityChips, this.connectionChips});
+  const InfoCardWidget(
+      {super.key,
+      required this.onTap,
+      required this.title,
+      required this.description,
+      required this.showChips,
+      this.capabilityChips,
+      this.connectionChips});
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +24,12 @@ class InfoCardWidget extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16.0),
-        margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+        margin: EdgeInsets.only(
+          left: MediaQuery.of(context).size.width * 0.05,
+          right: MediaQuery.of(context).size.width * 0.05,
+          top: 12,
+          bottom: 6,
+        ),
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16.0),
@@ -39,7 +51,9 @@ class InfoCardWidget extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              description.decodeString.characters.length > 200 ? '${description.decodeString.characters.take(200).toString().trim()}...' : description.decodeString,
+              description.decodeString.characters.length > 200
+                  ? '${description.decodeString.characters.take(200).toString().trim()}...'
+                  : description.decodeString,
               style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
             ),
             if (showChips && capabilityChips != null) ...[
