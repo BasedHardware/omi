@@ -4,6 +4,8 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 import 'edit_action_item_sheet.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
@@ -50,7 +52,9 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     );
 
     // Check if this specific item has a pending state change
-    final isCompleted = _pendingStates.containsKey(widget.actionItem.description) ? _pendingStates[widget.actionItem.description]! : widget.actionItem.completed;
+    final isCompleted = _pendingStates.containsKey(widget.actionItem.description)
+        ? _pendingStates[widget.actionItem.description]!
+        : widget.actionItem.completed;
 
     BorderRadius borderRadius;
     if (widget.hasRoundedCorners) {
@@ -242,11 +246,33 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                                   ),
                                 ),
                               ),
+                              // Apple Reminders export button (only show on Apple platforms and if not completed)
+                              if (PlatformService.isApple && !isCompleted)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: GestureDetector(
+                                    onTap: () => _exportToAppleReminders(context),
+                                    child: Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[800]?.withOpacity(0.5),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Icon(
+                                        Icons.add_task_outlined,
+                                        size: 16,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
 
                           // Optional date/time for tasks
-                          if (widget.actionItem.description.toLowerCase().contains('february') || widget.actionItem.description.toLowerCase().contains('masterclass'))
+                          if (widget.actionItem.description.toLowerCase().contains('february') ||
+                              widget.actionItem.description.toLowerCase().contains('masterclass'))
                             Padding(
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Container(
@@ -347,5 +373,50 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         );
       },
     );
+  }
+
+  Future<void> _exportToAppleReminders(BuildContext context) async {
+    HapticFeedback.lightImpact();
+
+    final service = AppleRemindersService();
+    final result = await service.addActionItem(widget.actionItem.description);
+
+    if (!mounted) return;
+
+    // Show feedback to user
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              result.isSuccess ? Icons.check_circle : Icons.error,
+              color: result.isSuccess ? Colors.green : Colors.red,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                result.message,
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.grey[900],
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+
+    // Track analytics
+    MixpanelManager().track('Action Item Exported to Apple Reminders', properties: {
+      'conversationId': widget.conversationId,
+      'success': result.isSuccess,
+      'result': result.name,
+    });
   }
 }
