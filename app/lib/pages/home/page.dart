@@ -210,7 +210,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Navigate
@@ -407,11 +408,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       ),
                       Consumer2<HomeProvider, DeviceProvider>(
                         builder: (context, home, deviceProvider, child) {
-                          if (home.isChatFieldFocused || home.isConvoSearchFieldFocused || home.isAppsSearchFieldFocused || home.isMemoriesSearchFieldFocused) {
+                          if (home.isChatFieldFocused ||
+                              home.isConvoSearchFieldFocused ||
+                              home.isAppsSearchFieldFocused ||
+                              home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
                             // Check if OMI device is connected
-                            bool isOmiDeviceConnected = deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+                            bool isOmiDeviceConnected =
+                                deviceProvider.isConnected && deviceProvider.connectedDevice != null;
 
                             return Stack(
                               children: [
@@ -438,7 +443,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(0);
-                                              _controller?.animateToPage(0, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(0,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -469,7 +475,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(1);
-                                              _controller?.animateToPage(1, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(1,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -502,7 +509,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(2);
-                                              _controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(2,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -533,7 +541,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(3);
-                                              _controller?.animateToPage(3, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                              _controller?.animateToPage(3,
+                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
                                               height: 90,
@@ -565,7 +574,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     child: Consumer<CaptureProvider>(
                                       builder: (context, captureProvider, child) {
                                         bool isRecording = captureProvider.recordingState == RecordingState.record;
-                                        bool isInitializing = captureProvider.recordingState == RecordingState.initialising;
+                                        bool isInitializing =
+                                            captureProvider.recordingState == RecordingState.initialising;
                                         return GestureDetector(
                                           onTap: () async {
                                             HapticFeedback.heavyImpact();
@@ -598,67 +608,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       },
                                     ),
                                   ),
-                                // Floating Chat Button - Only show on home page (index 0)
-                                if (home.selectedIndex == 0)
-                                  Positioned(
-                                    right: 20,
-                                    bottom: 110, // Position above the bottom navbar
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.mediumImpact();
-                                        // Navigate to chat page
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const ChatPage(isPivotBottom: false),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        height: 56,
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black,
-                                          borderRadius: BorderRadius.circular(28),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.3),
-                                              spreadRadius: 1,
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Container(
-                                              width: 32,
-                                              height: 32,
-                                              decoration: const BoxDecoration(
-                                                color: Colors.white,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                FontAwesomeIcons.solidCommentDots,
-                                                color: Colors.black,
-                                                size: 16,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            const Text(
-                                              'Chat',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                // Remove the floating chat button - moving it to app bar
                               ],
                             );
                           }
@@ -693,7 +643,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Navigate to conversation capturing page
       if (context.mounted) {
-        var topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty ? captureProvider.conversationProvider!.conversations.first.id : null;
+        var topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
+            ? captureProvider.conversationProvider!.conversations.first.id
+            : null;
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -779,13 +731,85 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                     String transcriptModel = SharedPreferencesUtil().transcriptionModel;
                     SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage || hasSpeech != SharedPreferencesUtil().hasSpeakerProfile || transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
                       if (context.mounted) {
                         context.read<CaptureProvider>().onRecordProfileSettingChanged();
                       }
                     }
                   },
                 ),
+              ),
+              // Chat Button - Only show on home page (index 0)
+              Consumer<HomeProvider>(
+                builder: (context, provider, child) {
+                  if (provider.selectedIndex == 0) {
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        // Navigate to chat page
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChatPage(isPivotBottom: false),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        height: 36,
+                        margin: const EdgeInsets.only(left: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                              Colors.purpleAccent.withValues(alpha: 0.2),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                              Colors.purpleAccent.withValues(alpha: 0.2),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.all(0.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(17.5),
+                            border: Border.all(
+                              color: Colors.pink.withValues(alpha: 0.3),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                FontAwesomeIcons.solidComment,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'Ask',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  } else {
+                    return const SizedBox.shrink();
+                  }
+                },
               ),
             ],
           ),

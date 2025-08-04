@@ -5,6 +5,8 @@ import 'widgets/action_item_shimmer_widget.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -16,6 +18,7 @@ class ActionItemsPage extends StatefulWidget {
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   bool _showGroupedView = false;
   final ScrollController _scrollController = ScrollController();
+  Set<String> _exportedToAppleReminders = <String>{};
 
   @override
   bool get wantKeepAlive => true;
@@ -30,6 +33,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
       }
+      _checkExistingAppleReminders();
     });
   }
 
@@ -38,6 +42,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkExistingAppleReminders() async {
+    if (!PlatformService.isApple) return;
+
+    try {
+      final service = AppleRemindersService();
+      final existingReminders = await service.getExistingReminders();
+
+      if (mounted) {
+        setState(() {
+          _exportedToAppleReminders = existingReminders.toSet();
+        });
+      }
+    } catch (e) {
+      print('Error checking existing Apple Reminders: $e');
+    }
   }
 
   void _onScroll() {
@@ -523,7 +544,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
-        child:   Icon(
+        child: Icon(
               item.completed ? Icons.undo : Icons.check,
               color: Colors.white,
               size: 24,
@@ -538,7 +559,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const   Icon(
+        child: const Icon(
               Icons.delete,
               color: Colors.white,
               size: 24,
@@ -578,6 +599,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       child: ActionItemTileWidget(
         actionItem: item,
         onToggle: (newState) => provider.updateActionItemState(item, newState),
+        exportedToAppleReminders: _exportedToAppleReminders,
+        onExportedToAppleReminders: _checkExistingAppleReminders,
       ),
     );
   }

@@ -124,7 +124,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)), // above search widget
+            const SliverToBoxAdapter(child: SizedBox(height: 12)), // above search widget
             const SliverToBoxAdapter(child: SearchWidget()),
             const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
@@ -156,7 +156,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         onVisibilityChanged: (visibilityInfo) {
                           var provider = Provider.of<ConversationProvider>(context, listen: false);
                           if (provider.previousQuery.isNotEmpty) {
-                            if (visibilityInfo.visibleFraction > 0 && !provider.isLoadingConversations && (provider.totalSearchPages > provider.currentSearchPage)) {
+                            if (visibilityInfo.visibleFraction > 0 &&
+                                !provider.isLoadingConversations &&
+                                (provider.totalSearchPages > provider.currentSearchPage)) {
                               provider.searchMoreConversations();
                             }
                           } else {

@@ -74,7 +74,12 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16.0),
-      margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+      margin: EdgeInsets.only(
+        left: MediaQuery.of(context).size.width * 0.05,
+        right: MediaQuery.of(context).size.width * 0.05,
+        top: 12,
+        bottom: 6,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(16.0),
@@ -86,7 +91,8 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 6.0),
-                child: Text(widget.app.userReview?.score == null ? 'Rate and Review this App' : 'Your Review', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                child: Text(widget.app.userReview?.score == null ? 'Rate and Review this App' : 'Your Review',
+                    style: const TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ],
           ),
@@ -100,7 +106,20 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
               allowHalfRating: true,
               itemCount: 5,
               itemSize: MediaQuery.sizeOf(context).width < 400 ? 28 : 34,
-              itemPadding: const EdgeInsets.symmetric(horizontal: 18),
+              itemPadding: EdgeInsets.symmetric(
+                horizontal: () {
+                  final screenWidth = MediaQuery.sizeOf(context).width;
+                  final itemSize = MediaQuery.sizeOf(context).width < 400 ? 28.0 : 34.0;
+                  final containerPadding = screenWidth * 0.1; // 5% on each side
+                  final cardPadding = 16.0 * 2; // Container padding
+                  final availableWidth =
+                      screenWidth - containerPadding - cardPadding - 8.0; // Minus Padding widget padding
+                  final totalStarWidth = itemSize * 5;
+                  final remainingSpace = availableWidth - totalStarWidth;
+                  final dynamicPadding = remainingSpace / 10; // 4 spaces between stars + some buffer
+                  return dynamicPadding.clamp(8.0, 24.0); // Clamp between reasonable values
+                }(),
+              ),
               itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
               maxRating: 5.0,
               onRatingUpdate: (rating) {
@@ -117,7 +136,13 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
           ClipRRect(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              height: showReviewField ? (showButton ? (MediaQuery.sizeOf(context).height < 680 ? MediaQuery.sizeOf(context).height * 0.28 : MediaQuery.sizeOf(context).height * 0.2) : MediaQuery.sizeOf(context).height * 0.132) : 0,
+              height: showReviewField
+                  ? (showButton
+                      ? (MediaQuery.sizeOf(context).height < 680
+                          ? MediaQuery.sizeOf(context).height * 0.28
+                          : MediaQuery.sizeOf(context).height * 0.2)
+                      : MediaQuery.sizeOf(context).height * 0.132)
+                  : 0,
               child: !showReviewField
                   ? null
                   : SingleChildScrollView(
@@ -171,13 +196,15 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                   textStyle: const TextStyle(color: Colors.black, fontSize: 16),
                                   onPressed: () async {
                                     FocusScope.of(context).unfocus();
-                                    if (rating == widget.app.userReview?.score && reviewController.text == widget.app.userReview?.review) {
+                                    if (rating == widget.app.userReview?.score &&
+                                        reviewController.text == widget.app.userReview?.review) {
                                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                         content: Text("No changes in review to update."),
                                       ));
                                       return;
                                     }
-                                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                                    final connectivityProvider =
+                                        Provider.of<ConnectivityProvider>(context, listen: false);
                                     if (connectivityProvider.isConnected) {
                                       bool isSuccessful = false;
                                       var rev = AppReview(

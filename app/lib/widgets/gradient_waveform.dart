@@ -42,13 +42,30 @@ class GradientWaveform extends StatelessWidget {
     // Use real-time audio levels if provided, otherwise use static bar heights
     List<double> heights;
     if (audioLevels != null && audioLevels!.isNotEmpty) {
-      // Use the most recent audio levels, taking only the last barCount values
-      final recentLevels = audioLevels!.length >= barCount ? audioLevels!.sublist(audioLevels!.length - barCount) : audioLevels!;
-
-      // Pad with default values if needed
       heights = List.filled(barCount, 0.15);
-      for (int i = 0; i < math.min(recentLevels.length, barCount); i++) {
-        heights[i] = recentLevels[i].clamp(0.15, 1.6);
+
+      if (audioLevels!.length >= barCount) {
+        // If we have enough audio levels, use the most recent ones
+        final recentLevels = audioLevels!.sublist(audioLevels!.length - barCount);
+        for (int i = 0; i < barCount; i++) {
+          heights[i] = recentLevels[i].clamp(0.15, 1.6);
+        }
+      } else {
+        // If we have fewer audio levels than bars, distribute them across all bars
+        // by interpolating and repeating the available levels
+        for (int i = 0; i < barCount; i++) {
+          // Map bar index to audio level index with interpolation
+          final sourceIndex = (i * audioLevels!.length / barCount).floor() % audioLevels!.length;
+          final nextIndex = ((sourceIndex + 1) % audioLevels!.length);
+
+          // Simple interpolation between adjacent audio levels
+          final fraction = (i * audioLevels!.length / barCount) - sourceIndex;
+          final currentLevel = audioLevels![sourceIndex];
+          final nextLevel = audioLevels![nextIndex];
+
+          final interpolatedLevel = currentLevel + (nextLevel - currentLevel) * fraction;
+          heights[i] = interpolatedLevel.clamp(0.15, 1.6);
+        }
       }
     } else {
       heights = barHeights ?? [0.2, 0.4, 0.7, 1.0, 0.8, 0.5, 0.3, 0.25];
@@ -509,7 +526,7 @@ class _AnimatedWaveformState extends State<AnimatedWaveform> with SingleTickerPr
         CurvedAnimation(
           parent: _controller,
           curve: Interval(
-            index * 0.1,
+            (index / widget.barCount).clamp(0.0, 0.8),
             1.0,
             curve: Curves.easeInOut,
           ),
@@ -558,15 +575,48 @@ class WaveformPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final totalBarsWidth = barHeights.length * barWidth;
-    final totalSpacing = (barHeights.length - 1) * spacing;
-    final totalWidth = totalBarsWidth + totalSpacing;
+    if (barHeights.isEmpty) return;
+
+    // Calculate ideal dimensions
+    final idealTotalBarsWidth = barHeights.length * barWidth;
+    final idealTotalSpacing = (barHeights.length - 1) * spacing;
+    final idealTotalWidth = idealTotalBarsWidth + idealTotalSpacing;
+
+    // Determine actual dimensions that fit within container
+    late double actualBarWidth;
+    late double actualSpacing;
+    late double actualTotalWidth;
+
+    if (idealTotalWidth <= size.width) {
+      // Ideal dimensions fit, use them as-is
+      actualBarWidth = barWidth;
+      actualSpacing = spacing;
+      actualTotalWidth = idealTotalWidth;
+    } else {
+      // Scale down to fit within container
+      final scaleFactor = (size.width - 8) / idealTotalWidth; // Leave 4px padding on each side
+      actualBarWidth = (barWidth * scaleFactor).clamp(2.0, barWidth); // Minimum 2px bar width
+      actualSpacing = (spacing * scaleFactor).clamp(1.0, spacing); // Minimum 1px spacing
+
+      // Recalculate total width with scaled dimensions
+      final scaledTotalBarsWidth = barHeights.length * actualBarWidth;
+      final scaledTotalSpacing = (barHeights.length - 1) * actualSpacing;
+      actualTotalWidth = scaledTotalBarsWidth + scaledTotalSpacing;
+
+      // If still too wide after scaling, reduce spacing further
+      if (actualTotalWidth > size.width - 8) {
+        final excessWidth = actualTotalWidth - (size.width - 8);
+        final spacingReduction = excessWidth / (barHeights.length - 1);
+        actualSpacing = (actualSpacing - spacingReduction).clamp(0.5, actualSpacing);
+        actualTotalWidth = scaledTotalBarsWidth + ((barHeights.length - 1) * actualSpacing);
+      }
+    }
 
     // Center the waveform horizontally
-    final startX = (size.width - totalWidth) / 2;
+    final startX = (size.width - actualTotalWidth) / 2;
 
     for (int i = 0; i < barHeights.length; i++) {
-      final x = startX + (i * (barWidth + spacing));
+      final x = startX + (i * (actualBarWidth + actualSpacing));
       final barHeight = barHeights[i] * size.height;
       final y = (size.height - barHeight) / 2;
 
@@ -580,14 +630,14 @@ class WaveformPainter extends CustomPainter {
 
       final paint = Paint()
         ..shader = gradient.createShader(
-          Rect.fromLTWH(x, y, barWidth, barHeight),
+          Rect.fromLTWH(x, y, actualBarWidth, barHeight),
         )
         ..strokeCap = StrokeCap.round;
 
       // Draw rounded rectangle bar
       final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, y, barWidth, barHeight),
-        Radius.circular(barWidth / 2),
+        Rect.fromLTWH(x, y, actualBarWidth, barHeight),
+        Radius.circular(actualBarWidth / 2),
       );
 
       canvas.drawRRect(rect, paint);
