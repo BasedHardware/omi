@@ -195,6 +195,39 @@ import EventKit
       result(FlutterError(code: "SAVE_FAILED", message: "Failed to save reminder: \(error.localizedDescription)", details: nil))
     }
   }
+  
+  private func getReminders(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any] else {
+      result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+      return
+    }
+    
+    let listName = args["listName"] as? String ?? "Reminders"
+    
+    // Check permission
+    let status = EKEventStore.authorizationStatus(for: .reminder)
+    guard status == .authorized else {
+      result([]) // Return empty array if no permission
+      return
+    }
+    
+    // Find the calendar
+    let calendars = eventStore.calendars(for: .reminder)
+    guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
+      result([]) // Return empty array if calendar not found
+      return
+    }
+    
+    // Create predicate to fetch reminders from this calendar
+    let predicate = eventStore.predicateForReminders(in: [targetCalendar])
+    
+    eventStore.fetchReminders(matching: predicate) { reminders in
+      DispatchQueue.main.async {
+        let reminderTitles = reminders?.compactMap { $0.title } ?? []
+        result(reminderTitles)
+      }
+    }
+  }
     
 
   override func applicationWillTerminate(_ application: UIApplication) {
