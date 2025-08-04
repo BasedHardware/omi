@@ -20,6 +20,10 @@ class ActionItemTileWidget extends StatefulWidget {
   final bool isInGroup;
   final Set<String> exportedToAppleReminders;
   final VoidCallback? onExportedToAppleReminders;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSelectionToggle;
 
   const ActionItemTileWidget({
     super.key,
@@ -31,6 +35,10 @@ class ActionItemTileWidget extends StatefulWidget {
     this.isInGroup = false,
     this.exportedToAppleReminders = const <String>{},
     this.onExportedToAppleReminders,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onLongPress,
+    this.onSelectionToggle,
   });
 
   @override
@@ -75,297 +83,367 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       borderRadius = BorderRadius.zero;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: borderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      // ClipRRect to enforce rounded corners throughout the dismissible animation
-      clipBehavior: Clip.antiAlias,
-      child: Dismissible(
-        key: Key("${widget.conversationId}_${widget.itemIndexInConversation}"),
-        // Allow horizontal swipe in both directions
-        direction: DismissDirection.horizontal,
-
-        // Background for complete action (swipe right, startToEnd)
-        background: Container(
-          alignment: Alignment.centerLeft,
-          color: Colors.green,
-          child: const Padding(
-            padding: EdgeInsets.only(left: 20),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.check_circle,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ],
+    return GestureDetector(
+      onLongPress: widget.isSelectionMode ? null : widget.onLongPress,
+      onTap: widget.isSelectionMode ? widget.onSelectionToggle : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.isSelected ? const Color(0xFF8B5CF6).withOpacity(0.3) : const Color(0xFF1F1F25),
+          borderRadius: borderRadius,
+          border: widget.isSelected ? Border.all(color: const Color(0xFF8B5CF6), width: 2) : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
-          ),
+          ],
         ),
+        // ClipRRect to enforce rounded corners throughout the dismissible animation
+        clipBehavior: Clip.antiAlias,
+        child: Dismissible(
+          key: Key("${widget.conversationId}_${widget.itemIndexInConversation}"),
+          // Allow horizontal swipe in both directions (disabled in selection mode)
+          direction: widget.isSelectionMode ? DismissDirection.none : DismissDirection.horizontal,
 
-        // Background for delete action (swipe left, endToStart)
-        secondaryBackground: Container(
-          alignment: Alignment.centerRight,
-          color: Colors.red,
-          child: const Padding(
-            padding: EdgeInsets.only(right: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(
-                  Icons.delete,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        confirmDismiss: (direction) async {
-          if (direction == DismissDirection.endToStart) {
-            final prefsUtil = SharedPreferencesUtil();
-            bool dontAskAgain = !(prefsUtil.showActionItemDeleteConfirmation);
-
-            if (dontAskAgain) {
-              context.read<ConversationProvider>().deleteActionItemAndUpdateLocally(
-                    widget.conversationId,
-                    widget.itemIndexInConversation,
-                    widget.actionItem,
-                  );
-              return true;
-            }
-
-            // Delete action (swipe left) - show confirmation dialog
-            return await showDialog<bool>(
-                  context: context,
-                  builder: (context) => ConfirmationDialog(
-                    title: 'Delete Action Item',
-                    description: 'Are you sure you want to delete this action item?',
-                    checkboxText: "Don't ask again",
-                    checkboxValue: dontAskAgain,
-                    onCheckboxChanged: (value) {
-                      prefsUtil.showActionItemDeleteConfirmation = !value;
-                    },
-                    confirmText: 'Delete',
-                    cancelText: 'Cancel',
-                    onConfirm: () {
-                      context.read<ConversationProvider>().deleteActionItemAndUpdateLocally(
-                            widget.conversationId,
-                            widget.itemIndexInConversation,
-                            widget.actionItem,
-                          );
-                      Navigator.pop(context, true);
-                    },
-                    onCancel: () => Navigator.pop(context, false),
-                  ),
-                ) ??
-                false;
-          } else if (direction == DismissDirection.startToEnd) {
-            // Complete action (swipe right) - use same logic as tap
-            _toggleCompletion(context, conversation);
-            return false;
-          }
-          return false;
-        },
-
-        onDismissed: (direction) {},
-
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              MixpanelManager().actionItemTappedForEditOnActionItemsPage(
-                conversationId: widget.conversationId,
-                actionItemDescription: widget.actionItem.description,
-              );
-              _showEditActionItemBottomSheet(context, widget.actionItem);
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+          // Background for complete action (swipe right, startToEnd)
+          background: Container(
+            alignment: Alignment.centerLeft,
+            color: Colors.green,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 20),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: Transform.translate(
-                      offset: const Offset(0, 2),
-                      child: GestureDetector(
-                        onTap: () => _toggleCompletion(context, conversation),
-                        child: AnimatedOpacity(
-                          opacity: 1.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            height: 20,
-                            width: 20,
-                            decoration: BoxDecoration(
-                              color: isCompleted ? Colors.green : Colors.transparent,
-                              border: Border.all(
-                                color: isCompleted ? Colors.green : Colors.grey[400]!,
-                                width: 1.5,
+                  Icon(
+                    Icons.check_circle,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Background for delete action (swipe left, endToStart)
+          secondaryBackground: Container(
+            alignment: Alignment.centerRight,
+            color: Colors.red,
+            child: const Padding(
+              padding: EdgeInsets.only(right: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Icon(
+                    Icons.delete,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          confirmDismiss: (direction) async {
+            if (direction == DismissDirection.endToStart) {
+              final prefsUtil = SharedPreferencesUtil();
+              bool dontAskAgain = !(prefsUtil.showActionItemDeleteConfirmation);
+
+              if (dontAskAgain) {
+                // Delete from Apple Reminders if exported (fire and forget)
+                if (_isExportedToAppleReminders && PlatformService.isApple) {
+                  final service = AppleRemindersService();
+                  service.deleteActionItem(widget.actionItem.description).then((result) {
+                    if (result.isSuccess) {
+                      debugPrint('Deleted reminder from Apple Reminders: ${widget.actionItem.description}');
+                    } else {
+                      debugPrint('Failed to delete reminder from Apple Reminders: ${result.message}');
+                    }
+                  }).catchError((e) {
+                    debugPrint('Error deleting reminder from Apple Reminders: $e');
+                  });
+                }
+
+                context.read<ConversationProvider>().deleteActionItemAndUpdateLocally(
+                      widget.conversationId,
+                      widget.itemIndexInConversation,
+                      widget.actionItem,
+                    );
+
+                // Refresh Apple Reminders state
+                if (widget.onExportedToAppleReminders != null) {
+                  widget.onExportedToAppleReminders!();
+                }
+
+                return true;
+              }
+
+              // Delete action (swipe left) - show confirmation dialog
+              return await showDialog<bool>(
+                    context: context,
+                    builder: (context) => ConfirmationDialog(
+                      title: 'Delete Action Item',
+                      description: 'Are you sure you want to delete this action item?',
+                      checkboxText: "Don't ask again",
+                      checkboxValue: dontAskAgain,
+                      onCheckboxChanged: (value) {
+                        prefsUtil.showActionItemDeleteConfirmation = !value;
+                      },
+                      confirmText: 'Delete',
+                      cancelText: 'Cancel',
+                      onConfirm: () async {
+                        // Delete from Apple Reminders if exported
+                        if (_isExportedToAppleReminders && PlatformService.isApple) {
+                          try {
+                            final service = AppleRemindersService();
+                            await service.deleteActionItem(widget.actionItem.description);
+                            debugPrint('Deleted reminder from Apple Reminders: ${widget.actionItem.description}');
+                          } catch (e) {
+                            debugPrint('Error deleting reminder from Apple Reminders: $e');
+                          }
+                        }
+
+                        context.read<ConversationProvider>().deleteActionItemAndUpdateLocally(
+                              widget.conversationId,
+                              widget.itemIndexInConversation,
+                              widget.actionItem,
+                            );
+
+                        // Refresh Apple Reminders state
+                        if (widget.onExportedToAppleReminders != null) {
+                          widget.onExportedToAppleReminders!();
+                        }
+
+                        Navigator.pop(context, true);
+                      },
+                      onCancel: () => Navigator.pop(context, false),
+                    ),
+                  ) ??
+                  false;
+            } else if (direction == DismissDirection.startToEnd) {
+              // Complete action (swipe right) - use same logic as tap
+              _toggleCompletion(context, conversation);
+              return false;
+            }
+            return false;
+          },
+
+          onDismissed: (direction) {},
+
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.isSelectionMode
+                  ? null
+                  : () {
+                      HapticFeedback.lightImpact();
+                      MixpanelManager().actionItemTappedForEditOnActionItemsPage(
+                        conversationId: widget.conversationId,
+                        actionItemDescription: widget.actionItem.description,
+                      );
+                      _showEditActionItemBottomSheet(context, widget.actionItem);
+                    },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Selection mode checkbox or completion checkbox
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Transform.translate(
+                        offset: const Offset(0, 2),
+                        child: widget.isSelectionMode
+                            ? GestureDetector(
+                                onTap: widget.onSelectionToggle,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  height: 20,
+                                  width: 20,
+                                  decoration: BoxDecoration(
+                                    color: widget.isSelected ? const Color(0xFF8B5CF6) : Colors.transparent,
+                                    border: Border.all(
+                                      color: widget.isSelected ? const Color(0xFF8B5CF6) : Colors.grey[400]!,
+                                      width: 1.5,
+                                    ),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: widget.isSelected
+                                      ? const Icon(
+                                          Icons.check,
+                                          size: 14,
+                                          color: Colors.white,
+                                        )
+                                      : null,
+                                ),
+                              )
+                            : GestureDetector(
+                                onTap: () => _toggleCompletion(context, conversation),
+                                child: AnimatedOpacity(
+                                  opacity: 1.0,
+                                  duration: const Duration(milliseconds: 300),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    height: 20,
+                                    width: 20,
+                                    decoration: BoxDecoration(
+                                      color: isCompleted ? Colors.green : Colors.transparent,
+                                      border: Border.all(
+                                        color: isCompleted ? Colors.green : Colors.grey[400]!,
+                                        width: 1.5,
+                                      ),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: isCompleted
+                                        ? const Icon(
+                                            Icons.check,
+                                            size: 14,
+                                            color: Colors.white,
+                                          )
+                                        : null,
+                                  ),
+                                ),
                               ),
-                              borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
+
+                    // Content
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 14.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.actionItem.description,
+                                    style: TextStyle(
+                                      color: isCompleted ? Colors.grey.shade500 : Colors.white,
+                                      decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                      decorationColor: Colors.grey.shade600,
+                                      fontSize: 16,
+                                      height: 1.3,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                // Apple Reminders export button (only show on Apple platforms and if not completed)
+                                if (PlatformService.isApple && !isCompleted)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8.0),
+                                    child: GestureDetector(
+                                      onTap:
+                                          _isExportedToAppleReminders ? null : () => _exportToAppleReminders(context),
+                                      child: Container(
+                                        width: 28,
+                                        height: 28,
+                                        // decoration: BoxDecoration(
+                                        //   color: _isExportedToAppleReminders
+                                        //       ? Colors.grey[700]?.withOpacity(0.3)
+                                        //       : Colors.grey[800]?.withOpacity(0.5),
+                                        //   borderRadius: BorderRadius.circular(6),
+                                        // ),
+                                        child: Stack(
+                                          children: [
+                                            Center(
+                                              child: Image.asset(
+                                                'assets/images/apple-reminders-logo.png',
+                                                width: 24,
+                                                height: 24,
+                                                // color: _isExportedToAppleReminders ? Colors.grey[600] : Colors.grey[400],
+                                              ),
+                                            ),
+                                            // Green checkmark overlay when exported
+                                            _isExportedToAppleReminders
+                                                ? Positioned(
+                                                    bottom: 0,
+                                                    right: 0,
+                                                    child: Container(
+                                                      width: 12,
+                                                      height: 12,
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.green,
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: const Color(0xFF1F1F25),
+                                                          width: 1,
+                                                        ),
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.check,
+                                                        size: 8,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : Positioned(
+                                                    bottom: 0,
+                                                    right: 0,
+                                                    child: Container(
+                                                      width: 12,
+                                                      height: 12,
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.yellow,
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: const Color(0xFF1F1F25),
+                                                          width: 1,
+                                                        ),
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.add,
+                                                        size: 8,
+                                                        color: Colors.black,
+                                                      ),
+                                                    ),
+                                                  ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                            child: isCompleted
-                                ? const Icon(
-                                    Icons.check,
-                                    size: 14,
-                                    color: Colors.white,
-                                  )
-                                : null,
-                          ),
+
+                            // Optional date/time for tasks
+                            if (widget.actionItem.description.toLowerCase().contains('february') ||
+                                widget.actionItem.description.toLowerCase().contains('masterclass'))
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF35343B),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.notifications_outlined,
+                                        size: 14,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'February 28 - 11:00am',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade400,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
-                  ),
-
-                  // Content
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 14.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  widget.actionItem.description,
-                                  style: TextStyle(
-                                    color: isCompleted ? Colors.grey.shade500 : Colors.white,
-                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                    decorationColor: Colors.grey.shade600,
-                                    fontSize: 16,
-                                    height: 1.3,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              // Apple Reminders export button (only show on Apple platforms and if not completed)
-                              if (PlatformService.isApple && !isCompleted)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8.0),
-                                  child: GestureDetector(
-                                    onTap: _isExportedToAppleReminders ? null : () => _exportToAppleReminders(context),
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      // decoration: BoxDecoration(
-                                      //   color: _isExportedToAppleReminders
-                                      //       ? Colors.grey[700]?.withOpacity(0.3)
-                                      //       : Colors.grey[800]?.withOpacity(0.5),
-                                      //   borderRadius: BorderRadius.circular(6),
-                                      // ),
-                                      child: Stack(
-                                        children: [
-                                          Center(
-                                            child: Image.asset(
-                                              'assets/images/apple-reminders-logo.png',
-                                              width: 24,
-                                              height: 24,
-                                              // color: _isExportedToAppleReminders ? Colors.grey[600] : Colors.grey[400],
-                                            ),
-                                          ),
-                                          // Green checkmark overlay when exported
-                                          _isExportedToAppleReminders
-                                              ? Positioned(
-                                                  bottom: 0,
-                                                  right: 0,
-                                                  child: Container(
-                                                    width: 12,
-                                                    height: 12,
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.green,
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: const Color(0xFF1F1F25),
-                                                        width: 1,
-                                                      ),
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons.check,
-                                                      size: 8,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                )
-                                              : Positioned(
-                                                  bottom: 0,
-                                                  right: 0,
-                                                  child: Container(
-                                                    width: 12,
-                                                    height: 12,
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.yellow,
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: const Color(0xFF1F1F25),
-                                                        width: 1,
-                                                      ),
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons.add,
-                                                      size: 8,
-                                                      color: Colors.black,
-                                                    ),
-                                                  ),
-                                                ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-
-                          // Optional date/time for tasks
-                          if (widget.actionItem.description.toLowerCase().contains('february') ||
-                              widget.actionItem.description.toLowerCase().contains('masterclass'))
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Color(0xFF35343B),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.notifications_outlined,
-                                      size: 14,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'February 28 - 11:00am',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade400,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

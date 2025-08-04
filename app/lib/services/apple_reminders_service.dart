@@ -221,6 +221,52 @@ class AppleRemindersService {
       return AppleRemindersResult.failed;
     }
   }
+
+  /// Delete an existing reminder by title
+  Future<bool> deleteReminder({
+    required String title,
+    String? listName,
+  }) async {
+    if (!isAvailable) {
+      throw UnsupportedError('Apple Reminders is only available on iOS and macOS');
+    }
+
+    try {
+      final result = await _channel.invokeMethod('deleteReminder', {
+        'title': title,
+        'listName': listName ?? 'Reminders',
+      });
+
+      return result == true;
+    } on PlatformException catch (e) {
+      print('Error deleting reminder: ${e.message}');
+      return false;
+    } catch (e) {
+      print('Unexpected error deleting reminder: $e');
+      return false;
+    }
+  }
+
+  /// Delete an action item from Apple Reminders with automatic permission handling
+  Future<AppleRemindersResult> deleteActionItem(String actionItemDescription) async {
+    if (!isAvailable) {
+      return AppleRemindersResult.unsupported;
+    }
+
+    // Check permission first
+    bool hasPermission = await this.hasPermission();
+    if (!hasPermission) {
+      return AppleRemindersResult.permissionDenied;
+    }
+
+    // Delete the reminder
+    final success = await deleteReminder(
+      title: actionItemDescription,
+      listName: 'Reminders',
+    );
+
+    return success ? AppleRemindersResult.success : AppleRemindersResult.failed;
+  }
 }
 
 enum AppleRemindersResult {

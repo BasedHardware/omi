@@ -21,6 +21,8 @@ class AppleRemindersService {
             updateReminder(call: call, result: result)
         case "updateReminderSmart":
             updateReminderSmart(call: call, result: result)
+        case "deleteReminder":
+            deleteReminder(call: call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -373,6 +375,77 @@ class AppleRemindersService {
                 } catch {
                     print("Error updating reminder: \(error.localizedDescription)")
                     result(FlutterError(code: "UPDATE_FAILED", message: "Failed to update reminder: \(error.localizedDescription)", details: nil))
+                }
+            }
+        }
+    }
+    
+    private func deleteReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+            return
+        }
+        
+        guard let title = args["title"] as? String else {
+            result(FlutterError(code: "MISSING_TITLE", message: "Title is required", details: nil))
+            return
+        }
+        
+        let listName = args["listName"] as? String ?? "Reminders"
+        
+        // Check permission
+        let status = EKEventStore.authorizationStatus(for: .reminder)
+        guard status == .authorized else {
+            result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
+            return
+        }
+        
+        // Find the calendar
+        let calendars = eventStore.calendars(for: .reminder)
+        guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
+            result(FlutterError(code: "CALENDAR_NOT_FOUND", message: "Calendar not found", details: nil))
+            return
+        }
+        
+        // Create predicate to fetch reminders from this calendar
+        let predicate = eventStore.predicateForReminders(in: [targetCalendar])
+        
+        eventStore.fetchReminders(matching: predicate) { reminders in
+            DispatchQueue.main.async {
+                guard let allReminders = reminders else {
+                    result(FlutterError(code: "FETCH_FAILED", message: "Failed to fetch reminders", details: nil))
+                    return
+                }
+                
+                var targetReminder: EKReminder?
+                
+                // Strategy 1: Try to find by exact title
+                targetReminder = allReminders.first { $0.title == title }
+                
+                // Strategy 2: Try to find by notes content (reminders from Omi have "From Omi" in notes)
+                if targetReminder == nil {
+                    let titlePrefix = String(title.prefix(min(10, title.count)))
+                    targetReminder = allReminders.first { reminder in
+                        return reminder.notes?.contains("From Omi") == true && 
+                               reminder.title?.contains(titlePrefix) == true
+                    }
+                }
+                
+                guard let reminderToDelete = targetReminder else {
+                    print("Could not find reminder to delete: \(title)")
+                    print("Available reminders: \(allReminders.compactMap { $0.title })")
+                    result(FlutterError(code: "REMINDER_NOT_FOUND", message: "Reminder not found", details: nil))
+                    return
+                }
+                
+                // Delete the reminder
+                do {
+                    try self.eventStore.remove(reminderToDelete, commit: true)
+                    print("Successfully deleted reminder: \(title)")
+                    result(true)
+                } catch {
+                    print("Error deleting reminder: \(error.localizedDescription)")
+                    result(FlutterError(code: "DELETE_FAILED", message: "Failed to delete reminder: \(error.localizedDescription)", details: nil))
                 }
             }
         }

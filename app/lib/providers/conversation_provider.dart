@@ -37,7 +37,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   List<Wal> get missingWals => _missingWals;
 
-  int get missingWalsInSeconds => _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
+  int get missingWalsInSeconds =>
+      _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
 
   double _walsSyncedProgress = 0.0;
 
@@ -185,7 +186,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     // Debounce mechanism: only refresh if enough time has passed since last refresh
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      debugPrint('Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
+      debugPrint(
+          'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
       return;
     }
 
@@ -214,13 +216,19 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     List<ServerConversation> upsertConvos = [];
 
     // processing convos
-    upsertConvos = newConversations.where((c) => c.status == ConversationStatus.processing && processingConversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
+    upsertConvos = newConversations
+        .where((c) =>
+            c.status == ConversationStatus.processing &&
+            processingConversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .toList();
     if (upsertConvos.isNotEmpty) {
       processingConversations.insertAll(0, upsertConvos);
     }
 
     // completed convos
-    upsertConvos = newConversations.where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
+    upsertConvos = newConversations
+        .where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .toList();
     if (upsertConvos.isNotEmpty) {
       conversations.insertAll(0, upsertConvos);
     }
@@ -366,7 +374,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
     conversations.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
-    groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
+    groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed =
+        state;
     notifyListeners();
   }
 
@@ -374,7 +383,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations = await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
+    var newConversations =
+        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     _groupConversationsByDateWithoutNotify();
@@ -423,7 +433,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       }
     } else {
       groupedConversations[memDate] = [conversation];
-      groupedConversations = Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
+      groupedConversations =
+          Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
       idx = 0;
     }
     return (idx, memDate);
@@ -472,7 +483,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   Map<String, DateTime> deleteTimestamps = {};
 
   void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
-    if (lastDeletedConversationId != null && memoriesToDelete.containsKey(lastDeletedConversationId) && DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
+    if (lastDeletedConversationId != null &&
+        memoriesToDelete.containsKey(lastDeletedConversationId) &&
+        DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
       deleteConversationOnServer(lastDeletedConversationId!);
     }
 
@@ -594,9 +607,11 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     List<dynamic> newConversations = syncResult.newConversationIds;
     List<dynamic> updatedConversations = syncResult.updatedConversationIds;
     setIsFetchingConversations(true);
-    List<Future<ServerConversation?>> newConversationsFutures = newConversations.map((item) => getConversationDetails(item)).toList();
+    List<Future<ServerConversation?>> newConversationsFutures =
+        newConversations.map((item) => getConversationDetails(item)).toList();
 
-    List<Future<ServerConversation?>> updatedConversationsFutures = updatedConversations.map((item) => getConversationDetails(item)).toList();
+    List<Future<ServerConversation?>> updatedConversationsFutures =
+        updatedConversations.map((item) => getConversationDetails(item)).toList();
     var syncedConversations = {'new_memories': [], 'updated_memories': []};
     try {
       final newConversationsResponses = await Future.wait(newConversationsFutures);
@@ -630,14 +645,16 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     for (var conversation in syncedConversations['new_memories']!) {
       if (conversation != null && conversation.status == ConversationStatus.completed) {
         var res = getConversationDateAndIndex(conversation);
-        syncedConversationsPointers.add(SyncedConversationPointer(type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
+        syncedConversationsPointers.add(SyncedConversationPointer(
+            type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
       }
     }
     if (syncedConversations['updated_memories'] != []) {
       for (var conversation in syncedConversations['updated_memories']!) {
         if (conversation != null && conversation.status == ConversationStatus.completed) {
           var res = getConversationDateAndIndex(conversation);
-          syncedConversationsPointers.add(SyncedConversationPointer(type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
+          syncedConversationsPointers.add(SyncedConversationPointer(
+              type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
         }
       }
     }
@@ -725,13 +742,17 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     return result;
   }
 
-  Future<void> updateGlobalActionItemState(ServerConversation conversation, String actionItemDescription, bool newState) async {
+  Future<void> updateGlobalActionItemState(
+      ServerConversation conversation, String actionItemDescription, bool newState) async {
     final convoId = conversation.id;
     bool conversationFoundAndUpdated = false;
 
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
-      final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+      final itemIndex = conversations[originalConvoIndex]
+          .structured
+          .actionItems
+          .indexWhere((item) => item.description == actionItemDescription);
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -742,7 +763,10 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (groupedConversations.containsKey(dateKey)) {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
-        final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+        final itemIndex = groupedConversations[dateKey]![groupIndex]
+            .structured
+            .actionItems
+            .indexWhere((item) => item.description == actionItemDescription);
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
@@ -751,7 +775,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
     if (conversationFoundAndUpdated) {
       // Find the item index for the server call
-      final itemIndex = conversation.structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+      final itemIndex =
+          conversation.structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
       if (itemIndex != -1) {
         await setConversationActionItemState(convoId, [itemIndex], [newState]);
       }
@@ -786,16 +811,83 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
     final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
     if (convoIndex != -1) {
-      if (conversations[convoIndex].structured.actionItems.length > itemIndex) {
-        conversations[convoIndex].structured.actionItems.removeAt(itemIndex);
+      // SAFETY FIX: Find current index by ActionItem object instead of using passed index
+      // This prevents deleting wrong items due to stale indices
+      final currentIndex = conversations[convoIndex]
+          .structured
+          .actionItems
+          .indexWhere((item) => item.description == actionItem.description && item.completed == actionItem.completed);
+
+      if (currentIndex != -1) {
+        conversations[convoIndex].structured.actionItems.removeAt(currentIndex);
+      } else {
+        // Fallback to passed index only if item not found by description
+        // This handles edge cases but logs a warning
+        debugPrint('WARNING: Could not find action item by description, using passed index');
+        if (conversations[convoIndex].structured.actionItems.length > itemIndex) {
+          conversations[convoIndex].structured.actionItems.removeAt(itemIndex);
+        }
       }
     }
 
     groupedConversations.forEach((date, convoList) {
       final groupConvoIndex = convoList.indexWhere((c) => c.id == conversationId);
       if (groupConvoIndex != -1) {
-        if (convoList[groupConvoIndex].structured.actionItems.length > itemIndex) {
-          convoList[groupConvoIndex].structured.actionItems.removeAt(itemIndex);
+        // Same safety fix for grouped conversations
+        final currentIndex = convoList[groupConvoIndex]
+            .structured
+            .actionItems
+            .indexWhere((item) => item.description == actionItem.description && item.completed == actionItem.completed);
+
+        if (currentIndex != -1) {
+          convoList[groupConvoIndex].structured.actionItems.removeAt(currentIndex);
+        } else {
+          // Fallback to passed index
+          if (convoList[groupConvoIndex].structured.actionItems.length > itemIndex) {
+            convoList[groupConvoIndex].structured.actionItems.removeAt(itemIndex);
+          }
+        }
+      }
+    });
+
+    notifyListeners();
+  }
+
+  /// NEW METHOD: Safely delete action item by object reference, no index needed
+  Future<void> deleteActionItemSafely(String conversationId, ActionItem actionItem) async {
+    // Delete from server first
+    deleteConversationActionItem(conversationId, actionItem);
+
+    final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIndex != -1) {
+      // Remove by finding exact object match (most reliable)
+      final removed = conversations[convoIndex].structured.actionItems.remove(actionItem);
+      if (!removed) {
+        // Fallback: find by description and completion status
+        final index = conversations[convoIndex]
+            .structured
+            .actionItems
+            .indexWhere((item) => item.description == actionItem.description && item.completed == actionItem.completed);
+        if (index != -1) {
+          conversations[convoIndex].structured.actionItems.removeAt(index);
+        } else {
+          debugPrint('ERROR: Could not find action item to delete: ${actionItem.description}');
+        }
+      }
+    }
+
+    // Same for grouped conversations
+    groupedConversations.forEach((date, convoList) {
+      final groupConvoIndex = convoList.indexWhere((c) => c.id == conversationId);
+      if (groupConvoIndex != -1) {
+        final removed = convoList[groupConvoIndex].structured.actionItems.remove(actionItem);
+        if (!removed) {
+          // Fallback: find by description and completion status
+          final index = convoList[groupConvoIndex].structured.actionItems.indexWhere(
+              (item) => item.description == actionItem.description && item.completed == actionItem.completed);
+          if (index != -1) {
+            convoList[groupConvoIndex].structured.actionItems.removeAt(index);
+          }
         }
       }
     });
