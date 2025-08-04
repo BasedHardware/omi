@@ -384,6 +384,10 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       return const SizedBox.shrink();
     }
 
+    if (provider.subscription?.showSubscriptionUi == false) {
+      return const SizedBox.shrink();
+    }
+
     if (provider.subscription == null) {
       return const SizedBox.shrink();
     }
@@ -477,20 +481,21 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                   size: 16, color: Colors.grey),
             ],
           ),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(
-            value: percentage,
-            backgroundColor: Colors.grey.shade700,
-            valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-            minHeight: 6,
-            borderRadius: BorderRadius.circular(3),
-          ),
-          const SizedBox(height: 4),
-          if (minutesLimit > 0)
+          if (minutesLimit > 0) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: Colors.grey.shade700,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            const SizedBox(height: 4),
             Text(
               '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit minutes used',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
             ),
+          ],
         ],
       );
 
@@ -515,20 +520,21 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (minutesLimit > 0)
+          if (minutesLimit > 0) ...[
+            const SizedBox(height: 12),
             Text(
               'You have used ${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit minutes of basic transcription this month.',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
             ),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(
-            value: percentage,
-            backgroundColor: Colors.grey.shade700,
-            valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-            minHeight: 6,
-            borderRadius: BorderRadius.circular(3),
-          ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: Colors.grey.shade700,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ],
           if (sub.subscription.features.isNotEmpty) ...[
             const SizedBox(height: 12),
             ...sub.subscription.features.map((feature) => Padding(

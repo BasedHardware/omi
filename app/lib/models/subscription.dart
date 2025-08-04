@@ -87,6 +87,8 @@ class UserSubscriptionResponse {
   final int memoriesCreatedLimit;
   @JsonKey(defaultValue: [])
   final List<SubscriptionPlan> availablePlans;
+  @JsonKey(defaultValue: false)
+  final bool showSubscriptionUi;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -99,6 +101,7 @@ class UserSubscriptionResponse {
     required this.memoriesCreatedUsed,
     required this.memoriesCreatedLimit,
     this.availablePlans = const [],
+    this.showSubscriptionUi = true,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) => _$UserSubscriptionResponseFromJson(json);

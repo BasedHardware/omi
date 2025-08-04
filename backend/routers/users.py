@@ -23,6 +23,8 @@ from database.redis_db import (
     user_webhook_status_db,
     set_user_preferred_app,
     set_user_data_protection_level,
+    get_generic_cache,
+    set_generic_cache,
 )
 from database.users import *
 from models.conversation import Geolocation, Conversation
@@ -33,12 +35,7 @@ from datetime import datetime
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
-from utils.subscription import (
-    BASIC_TIER_MINUTES_LIMIT_PER_MONTH,
-    BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-    BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-    BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
-)
+from utils.subscription import get_plan_limits, get_plan_features
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
@@ -457,7 +454,36 @@ def get_user_usage_stats_endpoint(
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
 def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Gets the user's subscription plan and usage."""
+    marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
+    if uid in marketplace_reviewers:
+        unlimited_sub = Subscription(
+            plan=PlanType.unlimited,
+            status=SubscriptionStatus.active,
+            limits=PlanLimits(
+                transcription_seconds=None,
+                words_transcribed=None,
+                insights_gained=None,
+                memories_created=None,
+            ),
+        )
+        return UserSubscriptionResponse(
+            subscription=unlimited_sub,
+            transcription_seconds_used=0,
+            transcription_seconds_limit=0,
+            words_transcribed_used=0,
+            words_transcribed_limit=0,
+            insights_gained_used=0,
+            insights_gained_limit=0,
+            memories_created_used=0,
+            memories_created_limit=0,
+            available_plans=[],
+            show_subscription_ui=False,
+        )
     subscription = get_user_subscription(uid)
+    # Populate dynamic fields for the response
+    subscription.limits = get_plan_limits(subscription.plan)
+    subscription.features = get_plan_features(subscription.plan)
+
     usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
     transcription_seconds_used = usage.get('transcription_seconds', 0)
     words_transcribed_used = usage.get('words_transcribed', 0)
@@ -469,22 +495,6 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     insights_gained_limit = subscription.limits.insights_gained or 0
     memories_created_limit = subscription.limits.memories_created or 0
 
-    # Add features to current subscription
-    if subscription.plan == PlanType.unlimited:
-        subscription.features = [
-            "Unlimited listening time",
-            "Unlimited words transcribed",
-            "Unlimited insights gained",
-            "Unlimited memories created",
-        ]
-    else:  # basic plan
-        subscription.features = [
-            f"{BASIC_TIER_MINUTES_LIMIT_PER_MONTH} minutes of listening per month",
-            f"{BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH:,} words transcribed per month",
-            f"{BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH:,} insights gained per month",
-            f"{BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH} memories created per month",
-        ]
-
     # Build available plans for upgrading
     available_plans: List[SubscriptionPlan] = []
     monthly_price_id = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
@@ -493,12 +503,17 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     unlimited_plan_prices: List[PricingOption] = []
     if monthly_price_id:
         try:
-            price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
+            price_data = get_generic_cache(f'stripe_price:{monthly_price_id}')
+            if not price_data:
+                price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
+                price_data = price.to_dict_recursive()
+                set_generic_cache(f'stripe_price:{monthly_price_id}', price_data, ttl=3600 * 24)  # 24 hours
+
             unlimited_plan_prices.append(
                 PricingOption(
-                    id=price.id,
+                    id=price_data['id'],
                     title="Monthly",
-                    price_string=f"${price.unit_amount / 100:.2f}/{price.recurring.interval}",
+                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
                     description="Billed monthly. Cancel anytime.",
                 )
             )
@@ -507,12 +522,17 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
 
     if annual_price_id:
         try:
-            price = stripe_utils.stripe.Price.retrieve(annual_price_id)
+            price_data = get_generic_cache(f'stripe_price:{annual_price_id}')
+            if not price_data:
+                price = stripe_utils.stripe.Price.retrieve(annual_price_id)
+                price_data = price.to_dict_recursive()
+                set_generic_cache(f'stripe_price:{annual_price_id}', price_data, ttl=3600 * 24)  # 24 hours
+
             unlimited_plan_prices.append(
                 PricingOption(
-                    id=price.id,
+                    id=price_data['id'],
                     title="Annual",
-                    price_string=f"${price.unit_amount / 100:.2f}/{price.recurring.interval}",
+                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
                     description="Save 20% with annual billing.",
                 )
             )

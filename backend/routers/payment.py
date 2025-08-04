@@ -4,12 +4,7 @@ from pydantic import BaseModel
 
 from database import users as users_db
 from models.users import Subscription, PlanType, SubscriptionStatus, PlanLimits
-from utils.subscription import (
-    BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-    BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-    BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-    BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
-)
+from utils.subscription import get_basic_plan_limits
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -32,6 +27,33 @@ class CreateCheckoutRequest(BaseModel):
     price_id: str
 
 
+def _build_subscription_from_stripe_object(stripe_sub: stripe.Subscription) -> Subscription:
+    """Builds a Subscription object from a Stripe Subscription object."""
+    stripe_status = stripe_sub.status
+
+    if stripe_status in ('active', 'trialing'):
+        plan = PlanType.unlimited
+        status = SubscriptionStatus.active
+        limits = PlanLimits(
+            transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
+        )
+        cancel_at_period_end = stripe_sub.cancel_at_period_end
+    else:  # including 'canceled', 'unpaid', etc.
+        plan = PlanType.basic
+        status = SubscriptionStatus.inactive
+        limits = get_basic_plan_limits()
+        cancel_at_period_end = False  # If it's not active, it can't be pending cancellation
+
+    return Subscription(
+        plan=plan,
+        status=status,
+        current_period_end=stripe_sub.current_period_end,
+        stripe_subscription_id=stripe_sub.id,
+        cancel_at_period_end=cancel_at_period_end,
+        limits=limits,
+    )
+
+
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session):
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
@@ -41,32 +63,7 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
 
     if subscription_id:
         stripe_sub = stripe.Subscription.retrieve(subscription_id)
-        stripe_status = stripe_sub.status
-
-        if stripe_status in ('active', 'trialing'):
-            plan = PlanType.unlimited
-            status = SubscriptionStatus.active
-            limits = PlanLimits(
-                transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
-            )
-        else:
-            plan = PlanType.basic
-            status = SubscriptionStatus.inactive
-            limits = PlanLimits(
-                transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-                words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-                insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-                memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
-            )
-
-        new_subscription = Subscription(
-            plan=plan,
-            status=status,
-            current_period_end=stripe_sub.current_period_end,
-            stripe_subscription_id=stripe_sub.id,
-            cancel_at_period_end=stripe_sub.cancel_at_period_end,
-            limits=limits,
-        )
+        new_subscription = _build_subscription_from_stripe_object(stripe_sub)
         users_db.update_user_subscription(uid, new_subscription.dict())
         print(f"Subscription for user {uid} updated from session {session.id}.")
 
@@ -93,19 +90,6 @@ def cancel_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     users_db.update_user_subscription(uid, subscription.dict())
 
     return {"status": "ok", "message": "Subscription scheduled for cancellation."}
-
-
-@router.get('/v1/payments/session-status/{session_id}')
-def get_checkout_session_status_endpoint(session_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    try:
-        session = stripe.checkout.Session.retrieve(session_id)
-    except stripe.error.InvalidRequestError:
-        raise HTTPException(status_code=404, detail="Session not found.")
-
-    if session.client_reference_id != uid:
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    return {"status": session.status}
 
 
 @router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'])
@@ -166,34 +150,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 uid = user['uid']
 
         if uid:
-            stripe_status = subscription_obj.status
-
-            if event['type'] == 'customer.subscription.deleted' or stripe_status not in ('active', 'trialing'):
-                plan = PlanType.basic
-                status = SubscriptionStatus.inactive
-                cancel_at_period_end = False
-                limits = PlanLimits(
-                    transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-                    words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-                    insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-                    memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
-                )
-            else:
-                plan = PlanType.unlimited
-                status = SubscriptionStatus.active
-                cancel_at_period_end = subscription_obj.cancel_at_period_end
-                limits = PlanLimits(
-                    transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
-                )
-
-            new_subscription = Subscription(
-                plan=plan,
-                status=status,
-                current_period_end=subscription_obj.current_period_end,
-                stripe_subscription_id=subscription_obj.id,
-                cancel_at_period_end=cancel_at_period_end,
-                limits=limits,
-            )
+            new_subscription = _build_subscription_from_stripe_object(subscription_obj)
             users_db.update_user_subscription(uid, new_subscription.dict())
             print(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
 

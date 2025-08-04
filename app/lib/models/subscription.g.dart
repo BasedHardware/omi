@@ -95,6 +95,7 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
               ?.map((e) => SubscriptionPlan.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      showSubscriptionUi: json['show_subscription_ui'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$UserSubscriptionResponseToJson(
@@ -110,4 +111,5 @@ Map<String, dynamic> _$UserSubscriptionResponseToJson(
       'memories_created_used': instance.memoriesCreatedUsed,
       'memories_created_limit': instance.memoriesCreatedLimit,
       'available_plans': instance.availablePlans,
+      'show_subscription_ui': instance.showSubscriptionUi,
     };

@@ -387,6 +387,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
+        context.read<UsageProvider>().fetchSubscription();
       } else {
         if (!PlatformManager.instance.isAnalyticsSupported) {
           await PlatformManager.instance.intercom.loginUnidentifiedUser();

@@ -33,17 +33,3 @@ Future<bool> cancelSubscription() async {
   }
   return false;
 }
-
-Future<String?> getCheckoutSessionStatus(String sessionId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/payments/session-status/$sessionId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response != null && response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
-    return jsonResponse['status'] as String?;
-  }
-  return null;
-}

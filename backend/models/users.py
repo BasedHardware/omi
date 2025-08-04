@@ -64,3 +64,4 @@ class UserSubscriptionResponse(BaseModel):
     memories_created_used: int
     memories_created_limit: int
     available_plans: List[SubscriptionPlan] = []
+    show_subscription_ui: bool = True

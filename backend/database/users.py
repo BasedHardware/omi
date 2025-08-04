@@ -223,9 +223,13 @@ def get_user_by_stripe_customer_id(customer_id: str):
 
 
 def update_user_subscription(uid: str, subscription_data: dict):
-    """Updates the user's subscription information."""
+    """Updates the user's subscription information, removing dynamic fields before storing."""
+    subscription_data_to_store = subscription_data.copy()
+    subscription_data_to_store.pop('features', None)
+    subscription_data_to_store.pop('limits', None)
+
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'subscription': subscription_data})
+    user_ref.update({'subscription': subscription_data_to_store})
 
 
 # **************************************
@@ -318,12 +322,7 @@ def set_user_language_preference(uid: str, language: str) -> None:
 
 
 from models.users import PlanLimits, PlanType
-from utils.subscription import (
-    BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-    BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-    BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-    BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
-)
+from utils.subscription import get_basic_plan_limits, get_default_basic_subscription
 
 
 def get_user_subscription(uid: str) -> Subscription:
@@ -334,36 +333,17 @@ def get_user_subscription(uid: str) -> Subscription:
         user_data = user_doc.to_dict()
         if 'subscription' in user_data:
             sub_data = user_data['subscription']
-            # Migrate old subscriptions that don't have limits
-            if 'limits' not in sub_data:
-                if sub_data.get('plan') == 'free':
-                    sub_data['plan'] = PlanType.basic.value
-                    sub_data['limits'] = PlanLimits(
-                        transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-                        words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-                        insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-                        memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
-                    ).dict()
-                else:
-                    sub_data['limits'] = PlanLimits(
-                        transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
-                    ).dict()
-                update_user_subscription(uid, sub_data)
-                return Subscription(**sub_data)
-            elif sub_data.get('plan') == 'free':
+            # Handle migration for old 'free' plan identifier
+            if sub_data.get('plan') == 'free':
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
-                return Subscription(**sub_data)
             return Subscription(**sub_data)
 
     # If subscription doesn't exist for the user, create and return a default free plan.
-    default_subscription = Subscription(
-        limits=PlanLimits(
-            transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-            words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-            insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-            memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
-        )
-    )
-    user_ref.set({'subscription': default_subscription.dict()}, merge=True)
+    default_subscription = get_default_basic_subscription()
+    # Strip dynamic fields before storing
+    sub_to_store = default_subscription.dict()
+    sub_to_store.pop('features', None)
+    sub_to_store.pop('limits', None)
+    user_ref.set({'subscription': sub_to_store}, merge=True)
     return default_subscription

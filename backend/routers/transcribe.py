@@ -57,7 +57,7 @@ from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.speaker_identification import detect_speaker_from_text
 from utils.analytics import record_usage
-from utils.subscription import is_allowed_to_transcribe
+from utils.subscription import has_transcription_credits
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
@@ -82,7 +82,7 @@ async def _listen(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    if not is_allowed_to_transcribe(uid):
+    if not has_transcription_credits(uid):
         await websocket.close(code=4002, reason="Usage limit exceeded")
         return
 
@@ -137,7 +137,7 @@ async def _listen(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
-            if not is_allowed_to_transcribe(uid):
+            if not has_transcription_credits(uid):
                 nonlocal websocket_close_code
                 websocket_close_code = 4002
                 websocket_active = False
