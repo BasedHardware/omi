@@ -6,6 +6,8 @@ import app_links
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
+  private var appleRemindersChannel: FlutterMethodChannel?
+  private let appleRemindersService = AppleRemindersService()
 
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -27,6 +29,12 @@ import app_links
     methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller!.binaryMessenger)
     methodChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleMethodCall(call, result: result)
+    }
+    
+    // Create Apple Reminders method channel
+    appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller!.binaryMessenger)
+    appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.handleAppleRemindersCall(call, result: result)
     }
 
     // here, Without this code the task will not work.
@@ -57,6 +65,10 @@ import app_links
       notificationBodyOnKill = args["description"] as? String
     }
     
+  }
+  
+  private func handleAppleRemindersCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    appleRemindersService.handleMethodCall(call, result: result)
   }
     
 
