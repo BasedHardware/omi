@@ -97,10 +97,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
       var sessionProvider = context.read<ChatSessionProvider>();
-      
+
       // Initialize sessions
       await sessionProvider.loadSessions();
-      
+
       // Refresh messages for the current session
       if (provider.messages.isEmpty) {
         provider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
@@ -126,9 +126,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
-
-
-    @override
+  @override
   Widget build(BuildContext context) {
     super.build(context);
 
@@ -138,7 +136,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          endDrawer: _buildSessionsDrawer(context),
+          // endDrawer: _buildSessionsDrawer(context),
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -180,7 +178,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               ? Center(
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: 32.0),
-                                    child: Text(connectivityProvider.isConnected ? 'No messages yet!\nWhy don\'t you start a conversation?' : 'Please check your internet connection and try again', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                                    child: Text(
+                                        connectivityProvider.isConnected
+                                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
+                                            : 'Please check your internet connection and try again',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.white)),
                                   ),
                                 )
                               : ListView.builder(
@@ -207,7 +210,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           builder: (context) => MessageActionMenu(
                                             message: message.text.decodeString,
                                             onCopy: () async {
-                                              MixpanelManager().track('Chat Message Copied', properties: {'message': message.text});
+                                              MixpanelManager()
+                                                  .track('Chat Message Copied', properties: {'message': message.text});
                                               await Clipboard.setData(ClipboardData(text: message.text.decodeString));
                                               if (context.mounted) {
                                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -226,11 +230,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               }
                                             },
                                             onSelectText: () {
-                                              MixpanelManager().track('Chat Message Text Selected', properties: {'message': message.text});
+                                              MixpanelManager().track('Chat Message Text Selected',
+                                                  properties: {'message': message.text});
                                               routeToPage(context, SelectTextScreen(message: message));
                                             },
                                             onShare: () {
-                                              MixpanelManager().track('Chat Message Shared', properties: {'message': message.text});
+                                              MixpanelManager()
+                                                  .track('Chat Message Shared', properties: {'message': message.text});
                                               Share.share(
                                                 '${message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
                                                 subject: 'Chat with Omi',
@@ -263,7 +269,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                       Navigator.of(context).pop();
                                                     },
                                                     () {
-                                                      MixpanelManager().track('Chat Message Reported', properties: {'message': message.text});
+                                                      MixpanelManager().track('Chat Message Reported',
+                                                          properties: {'message': message.text});
                                                       Navigator.of(context).pop();
                                                       Navigator.of(context).pop();
                                                       context.read<MessageProvider>().removeLocalMessage(message.id);
@@ -298,7 +305,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
                                                 message: message,
                                                 sendMessage: _sendMessageUtil,
-                                                displayOptions: provider.messages.length <= 1 && provider.messageSenderApp(message.appId)?.isNotPersona() == true,
+                                                displayOptions: provider.messages.length <= 1 &&
+                                                    provider.messageSenderApp(message.appId)?.isNotPersona() == true,
                                                 appSender: provider.messageSenderApp(message.appId),
                                                 updateConversation: (ServerConversation conversation) {
                                                   context.read<ConversationProvider>().updateConversation(conversation);
@@ -508,7 +516,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                   maxLines: 1,
                                                   keyboardType: TextInputType.text,
                                                   textCapitalization: TextCapitalization.sentences,
-                                                  style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.0),
+                                                  style:
+                                                      const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.0),
                                                 ),
                                               ),
                                       ),
@@ -551,7 +560,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               } else {
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   const SnackBar(
-                                                    content: Text('Please check your internet connection and try again'),
+                                                    content:
+                                                        Text('Please check your internet connection and try again'),
                                                     duration: Duration(seconds: 2),
                                                   ),
                                                 );
@@ -773,15 +783,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       centerTitle: true,
       actions: [
-        IconButton(
-          icon: const Icon(Icons.history, color: Colors.white),
-          onPressed: () {
-            HapticFeedback.mediumImpact();
-            // Dismiss keyboard before opening drawer
-            FocusScope.of(context).unfocus();
-            scaffoldKey.currentState?.openEndDrawer();
-          },
-        ),
+        // IconButton(
+        //   icon: const Icon(Icons.history, color: Colors.white),
+        //   onPressed: () {
+        //     HapticFeedback.mediumImpact();
+        //     // Dismiss keyboard before opening drawer
+        //     FocusScope.of(context).unfocus();
+        //     scaffoldKey.currentState?.openEndDrawer();
+        //   },
+        // ),
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
@@ -1138,7 +1148,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       height: 0.5,
       color: Colors.grey.shade700,
       margin: const EdgeInsets.symmetric(horizontal: 20),
-        );
+    );
   }
 
   Widget _buildSessionsDrawer(BuildContext context) {
@@ -1304,16 +1314,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         final session = sessionProvider.sessions[index];
         final isSelected = session.id == sessionProvider.currentSessionId;
         final sessionColor = _getSessionColor(index);
-        
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: () => _handleSessionTap(session),
-              onLongPress: sessionProvider.sessions.length > 1 
-                  ? () => _handleDeleteSession(session)
-                  : null,
+              onLongPress: sessionProvider.sessions.length > 1 ? () => _handleDeleteSession(session) : null,
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 padding: const EdgeInsets.all(16),
@@ -1335,9 +1343,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           ),
                           child: Center(
                             child: Text(
-                              session.displayTitle.isNotEmpty 
-                                  ? session.displayTitle[0].toUpperCase()
-                                  : 'C',
+                              session.displayTitle.isNotEmpty ? session.displayTitle[0].toUpperCase() : 'C',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
@@ -1349,9 +1355,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            session.displayTitle.isNotEmpty 
-                                ? session.displayTitle 
-                                : 'Chat Session',
+                            session.displayTitle.isNotEmpty ? session.displayTitle : 'Chat Session',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -1392,13 +1396,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   void _handleSessionTap(ChatSession session) async {
     final sessionProvider = context.read<ChatSessionProvider>();
     final messageProvider = context.read<MessageProvider>();
-    
+
     // Switch to the selected session
     sessionProvider.switchToSession(session);
-    
+
     // Refresh messages for the selected session
     messageProvider.refreshMessages(chatSessionId: session.id);
-    
+
     // Close the drawer
     if (mounted) {
       Navigator.of(context).pop();
@@ -1422,11 +1426,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     if (result == true && mounted) {
       final sessionProvider = context.read<ChatSessionProvider>();
       await sessionProvider.deleteSession(session);
-      
+
       // Refresh messages for the new current session
       final messageProvider = context.read<MessageProvider>();
       await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1447,9 +1451,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     // Close the drawer first
     Navigator.of(context).pop();
-    
+
     await sessionProvider.createNewSession();
-    
+
     // Refresh messages for the new session
     await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
   }
@@ -1457,7 +1461,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   String _formatSessionTime(DateTime createdAt) {
     final now = DateTime.now();
     final difference = now.difference(createdAt);
-    
+
     if (difference.inMinutes < 1) {
       return 'Just now';
     } else if (difference.inMinutes < 60) {
@@ -1484,5 +1488,4 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     ];
     return colors[index % colors.length];
   }
-
 }
