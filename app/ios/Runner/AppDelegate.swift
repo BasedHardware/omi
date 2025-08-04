@@ -78,6 +78,8 @@ import EventKit
       addReminder(call: call, result: result)
     case "getReminders":
       getReminders(call: call, result: result)
+    case "completeReminder":
+      completeReminder(call: call, result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -225,6 +227,57 @@ import EventKit
       DispatchQueue.main.async {
         let reminderTitles = reminders?.compactMap { $0.title } ?? []
         result(reminderTitles)
+      }
+    }
+  }
+  
+  private func completeReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any] else {
+      result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+      return
+    }
+    
+    guard let title = args["title"] as? String else {
+      result(FlutterError(code: "MISSING_TITLE", message: "Title is required", details: nil))
+      return
+    }
+    
+    let listName = args["listName"] as? String ?? "Reminders"
+    
+    // Check permission
+    let status = EKEventStore.authorizationStatus(for: .reminder)
+    guard status == .authorized else {
+      result(false) // Return false if no permission
+      return
+    }
+    
+    // Find the calendar
+    let calendars = eventStore.calendars(for: .reminder)
+    guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
+      result(false) // Return false if calendar not found
+      return
+    }
+    
+    // Create predicate to fetch reminders from this calendar
+    let predicate = eventStore.predicateForReminders(in: [targetCalendar])
+    
+    eventStore.fetchReminders(matching: predicate) { reminders in
+      DispatchQueue.main.async {
+        guard let targetReminder = reminders?.first(where: { $0.title == title && !$0.isCompleted }) else {
+          result(false) // Reminder not found or already completed
+          return
+        }
+        
+        // Mark the reminder as completed
+        targetReminder.isCompleted = true
+        
+        do {
+          try self.eventStore.save(targetReminder, commit: true)
+          result(true)
+        } catch {
+          print("Error completing reminder: \(error.localizedDescription)")
+          result(false)
+        }
       }
     }
   }
