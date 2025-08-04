@@ -504,6 +504,8 @@ class CaptureProvider extends ChangeNotifier
     await streamButton(deviceId);
     await streamAudioToWs(deviceId, codec);
 
+    // Set recording state to deviceRecord when device streaming starts
+    updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
 
@@ -1263,5 +1265,24 @@ class CaptureProvider extends ChangeNotifier
     if (!_systemAudioCaching) {
       _flushSystemAudioBuffer();
     }
+  }
+
+  Future<void> pauseDeviceRecording() async {
+    if (_recordingDevice == null) return;
+    // Pause the BLE stream but keep the device connection
+    await _bleBytesStream?.cancel();
+    await _bleButtonStream?.cancel();
+    _isPaused = true;
+    updateRecordingState(RecordingState.pause);
+    notifyListeners();
+  }
+
+  Future<void> resumeDeviceRecording() async {
+    if (_recordingDevice == null) return;
+    _isPaused = false;
+    // Resume streaming from the device
+    await _initiateDeviceAudioStreaming();
+    updateRecordingState(RecordingState.deviceRecord);
+    notifyListeners();
   }
 }

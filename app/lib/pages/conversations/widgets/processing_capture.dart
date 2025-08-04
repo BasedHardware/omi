@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -112,10 +113,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Check if recording with device vs phone
-                (provider.recordingState == RecordingState.deviceRecord || provider.havingRecordingDevice)
-                    ? _buildDeviceRecordingUI(provider) // Special UI for device recording
-                    : _buildPhoneRecordingUI(provider, header), // Original UI for phone recording
+                // Use unified recording UI for all recording types
+                _buildUnifiedRecordingUI(provider, header),
               ],
             ),
           ),
@@ -143,6 +142,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
         debugPrint('initialising, have to wait');
       } else {
         await provider.streamSystemAudioRecording();
+      }
+    } else if (provider.havingRecordingDevice) {
+      // Device recording logic - add pause/resume for device recording
+      if (recordingState == RecordingState.deviceRecord && !provider.isPaused) {
+        // Pause device recording
+        await provider.pauseDeviceRecording();
+      } else if (provider.isPaused && recordingState == RecordingState.pause) {
+        // Resume device recording
+        await provider.resumeDeviceRecording();
       }
     } else {
       // Phone mic logic - use local state to track pause
@@ -323,88 +331,35 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
     );
   }
 
-  Widget _buildDeviceRecordingUI(CaptureProvider provider) {
-    return Column(
-      children: [
-        const SizedBox(height: 4), // Space above content
-        // Top row with listening tag (left) and transcript preview (right)
-        Padding(
-          padding: const EdgeInsets.only(left: 8, right: 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Left: Listening tag
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF35343B),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Listening',
-                      style: TextStyle(
-                        color: Color(0xFFC9CBCF),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    _buildPulsatingDot(
-                      color: const Color(0xFFFE5D50),
-                      isPulsating: true,
-                    ),
-                  ],
-                ),
-              ),
-              // Right: Transcript preview or placeholder text
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.only(left: 12),
-                  child: provider.segments.isNotEmpty
-                      ? _AutoScrollingText(
-                          text: provider.segments.map((segment) => segment.text).join(' '),
-                        )
-                      : const Text(
-                          'Start speaking...',
-                          style: TextStyle(
-                            color: Color(0xFF6A6B71),
-                            fontSize: 16,
-                            fontStyle: FontStyle.italic,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8), // Bottom padding
-      ],
-    );
-  }
-
-  Widget _buildPhoneRecordingUI(CaptureProvider provider, Widget? header) {
-    // When recording is active, show the new UI design
-    if (provider.recordingState == RecordingState.record ||
+  Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
+    bool isDeviceRecording = provider.havingRecordingDevice &&
+        (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
+    bool isPhoneRecording = provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
-        provider.recordingState == RecordingState.pause ||
-        _isPhoneMicPaused) {
+        _isPhoneMicPaused;
+
+    // Determine pause state based on recording type
+    bool isPaused = false;
+    if (isDeviceRecording) {
+      isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
+    } else if (isPhoneRecording) {
+      isPaused = _isPhoneMicPaused || provider.isPaused;
+    }
+
+    // When recording is active, show the unified UI design
+    if (isDeviceRecording || isPhoneRecording) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row with listening tag (left) and control buttons (right)
+          const SizedBox(height: 4),
+          // Top row with status tag and controls
           Padding(
-            padding: const EdgeInsets.only(left: 12, right: 12),
+            padding: const EdgeInsets.only(left: 8, right: 6),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Left: Listening tag (same design as device recording)
+                // Left: Status tag
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -415,7 +370,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _isPhoneMicPaused ? 'Paused' : 'Listening',
+                        isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
                         style: const TextStyle(
                           color: Color(0xFFC9CBCF),
                           fontSize: 14,
@@ -424,85 +379,57 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
                       ),
                       const SizedBox(width: 6),
                       _buildPulsatingDot(
-                        color: _isPhoneMicPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                        isPulsating: !_isPhoneMicPaused, // Only pulsate when not paused
+                        color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                        isPulsating: !isPaused,
                       ),
                     ],
                   ),
                 ),
-                // Right: Control buttons
+                // Right: Control buttons for both device and phone recording
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Pause/Resume button
                     GestureDetector(
-                      onTap: () => _toggleRecording(context, provider),
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        _toggleRecording(context, provider);
+                      },
                       child: Container(
                         width: 28,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: _isPhoneMicPaused ? const Color(0xFF7C3AED) : const Color(0xFFFF9500),
+                          color: isPaused
+                              ? isDeviceRecording
+                                  ? const Color(0xFFFE5D50)
+                                  : const Color(0xFF7C3AED)
+                              : isDeviceRecording
+                                  ? const Color(0xFF35343B)
+                                  : const Color(0xFFFF9500),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
                           child: FaIcon(
-                            _isPhoneMicPaused ? FontAwesomeIcons.play : FontAwesomeIcons.pause,
+                            isPaused
+                                ? isDeviceRecording
+                                    ? FontAwesomeIcons.microphoneSlash
+                                    : FontAwesomeIcons.play
+                                : isDeviceRecording
+                                    ? FontAwesomeIcons.microphone
+                                    : FontAwesomeIcons.pause,
                             color: Colors.white,
                             size: 12,
                           ),
                         ),
                       ),
                     ),
-                    // const SizedBox(width: 8),
-                    // // Stop button
-                    // GestureDetector(
-                    //   onTap: () async {
-                    //     setState(() {
-                    //       _isPhoneMicPaused = false;
-                    //     });
-                    //     await provider.stopStreamRecording();
-                    //     MixpanelManager().phoneMicRecordingStopped();
-                    //   },
-                    //   child: Container(
-                    //     width: 28,
-                    //     height: 28,
-                    //     decoration: const BoxDecoration(
-                    //       color: Color(0xFFFF3B30),
-                    //       shape: BoxShape.circle,
-                    //     ),
-                    //     child: const Center(
-                    //       child: FaIcon(
-                    //         FontAwesomeIcons.stop,
-                    //         color: Colors.white,
-                    //         size: 12,
-                    //       ),
-                    //     ),
-                    //   ),
-                    // ),
                   ],
                 ),
               ],
             ),
           ),
-          // const SizedBox(height: 8),
-          // Show waveform when recording is active
-          // SizedBox(
-          //   height: 80,
-          //   child: Center(
-          //     child: GradientWaveform(
-          //       width: 380,
-          //       height: 40,
-          //       barCount: 45,
-          //       barWidth: 7,
-          //       spacing: 1,
-          //       audioLevels: provider.recordingState == RecordingState.record ? provider.audioLevels : null,
-          //       animated: true,
-          //       isDeviceRecording: false, // Phone recording
-          //     ),
-          //   ),
-          // ),
           const SizedBox(height: 4),
-          // Show transcript below waveform during recording
+          // Show transcript below controls during recording
           if (provider.segments.isNotEmpty) ...[
             Container(
               width: double.infinity,
