@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
+import 'widgets/action_item_shimmer_widget.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -69,14 +70,52 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
               // Main Content
-              if (provider.isLoading && provider.actionItems.isEmpty)
-                const SliverFillRemaining(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              if (provider.isLoading && provider.actionItems.isEmpty) ...[
+                // Header shimmer
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'To-Do\'s',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[800]?.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap to edit • Checkbox to toggle • Swipe for actions',
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                )
+                ),
+                // Shimmer list
+                _showGroupedView 
+                  ? const ActionItemsGroupedShimmerList()
+                  : const ActionItemsShimmerList(),
+              ]
               else if (provider.actionItems.isEmpty)
                 SliverFillRemaining(
                   child: Center(
@@ -276,15 +315,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
 
-              // Loading indicator for pagination
+              // Loading shimmer for pagination
               if (provider.isFetching)
                 SliverToBoxAdapter(
-                  child: Container(
+                  child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
+                    child: Column(
+                      children: List.generate(3, (index) => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: ActionItemShimmerWidget(),
+                      )),
                     ),
                   ),
                 ),
