@@ -7,10 +7,14 @@ import 'package:provider/provider.dart';
 
 class EditActionItemBottomSheet extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
+  final Set<String>? exportedToAppleReminders;
+  final VoidCallback? onExportedToAppleReminders;
 
   const EditActionItemBottomSheet({
     super.key,
     required this.actionItem,
+    this.exportedToAppleReminders,
+    this.onExportedToAppleReminders,
   });
 
   @override
