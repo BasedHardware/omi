@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
+import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -212,22 +213,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
             GestureDetector(
               child: const Icon(FontAwesomeIcons.solidComments),
               onTap: () async {
-                Navigator.pop(context);
-                context.read<HomeProvider>().setIndex(1);
-                if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
-                  context.read<HomeProvider>().onSelectedIndexChanged!(1);
-                }
+                // Navigate directly to chat page with this app selected
                 var appId = app.id;
                 var appProvider = Provider.of<AppProvider>(context, listen: false);
                 var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-                App? selectedApp;
-                if (appId.isNotEmpty) {
-                  selectedApp = await appProvider.getAppFromId(appId);
-                }
+
+                // Set the selected app
                 appProvider.setSelectedChatAppId(appId);
+
+                // Refresh messages and get the selected app
                 await messageProvider.refreshMessages();
+                App? selectedApp = await appProvider.getAppFromId(appId);
+
+                // Send initial message if chat is empty
                 if (messageProvider.messages.isEmpty) {
                   messageProvider.sendInitialAppMessage(selectedApp);
+                }
+
+                // Navigate directly to chat page
+                if (mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ChatPage(isPivotBottom: false),
+                    ),
+                  );
                 }
               },
             ),
