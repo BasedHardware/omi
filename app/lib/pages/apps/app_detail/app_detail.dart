@@ -214,12 +214,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
           if (app.enabled && app.worksWithChat()) ...[
             GestureDetector(
               child: chatButtonLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ? Container(
+                      width: 16,
+                      height: 16,
+                      alignment: Alignment.center,
+                      child: const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
                       ),
                     )
                   : const Icon(FontAwesomeIcons.solidComments),
