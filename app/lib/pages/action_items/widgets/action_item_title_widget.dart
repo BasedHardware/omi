@@ -403,6 +403,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         }
       });
 
+      // Sync with Apple Reminders if item was exported and is being marked as completed
+      if (newValue && _isExportedToAppleReminders && PlatformService.isApple) {
+        try {
+          final service = AppleRemindersService();
+          final success = await service.completeReminder(itemDescription);
+          if (success) {
+            debugPrint('Successfully completed reminder in Apple Reminders: $itemDescription');
+          } else {
+            debugPrint('Failed to complete reminder in Apple Reminders: $itemDescription');
+          }
+        } catch (e) {
+          debugPrint('Error syncing completion to Apple Reminders: $e');
+        }
+      }
+
       // Track analytics
       MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
         conversationId: widget.conversationId,

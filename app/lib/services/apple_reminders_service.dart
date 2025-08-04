@@ -92,6 +92,23 @@ class AppleRemindersService {
     return existingReminders.contains(title);
   }
 
+  /// Mark a reminder as completed in Apple Reminders
+  Future<bool> completeReminder(String title, {String? listName}) async {
+    if (!isAvailable) return false;
+
+    try {
+      final result = await _channel.invokeMethod('completeReminder', {
+        'title': title,
+        'listName': listName ?? 'Reminders',
+      });
+
+      return result == true;
+    } catch (e) {
+      print('Error completing reminder: $e');
+      return false;
+    }
+  }
+
   /// Add an action item to Apple Reminders with automatic permission handling
   Future<AppleRemindersResult> addActionItem(String actionItemDescription) async {
     if (!isAvailable) {
