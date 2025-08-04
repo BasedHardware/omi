@@ -6,6 +6,8 @@ import 'widgets/convo_action_items_group_widget.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -16,6 +18,7 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   bool _showGroupedView = false;
+  Set<String> _exportedToAppleReminders = <String>{};
 
   @override
   bool get wantKeepAlive => true;
@@ -25,7 +28,25 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MixpanelManager().actionItemsPageOpened();
+      _checkExistingAppleReminders();
     });
+  }
+
+  Future<void> _checkExistingAppleReminders() async {
+    if (!PlatformService.isApple) return;
+
+    try {
+      final service = AppleRemindersService();
+      final existingReminders = await service.getExistingReminders();
+
+      if (mounted) {
+        setState(() {
+          _exportedToAppleReminders = existingReminders.toSet();
+        });
+      }
+    } catch (e) {
+      print('Error checking existing Apple Reminders: $e');
+    }
   }
 
   // Get all action items as a flat list
@@ -59,10 +80,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.build(context);
     return Consumer<ConversationProvider>(
       builder: (context, convoProvider, child) {
-        final Map<ServerConversation, List<ActionItem>> itemsByConversation = convoProvider.conversationsWithActiveActionItems;
+        final Map<ServerConversation, List<ActionItem>> itemsByConversation =
+            convoProvider.conversationsWithActiveActionItems;
 
         // Sort conversations by date (most recent first)
-        final sortedEntries = itemsByConversation.entries.toList()..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
+        final sortedEntries = itemsByConversation.entries.toList()
+          ..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
 
         // Get flattened list for non-grouped view
         final flattenedItems = _getFlattenedActionItems(itemsByConversation);
@@ -213,7 +236,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
 
-              if (sortedEntries.isNotEmpty) _showGroupedView ? _buildGroupedView(sortedEntries) : _buildFlatView(flattenedItems),
+              if (sortedEntries.isNotEmpty)
+                _showGroupedView ? _buildGroupedView(sortedEntries) : _buildFlatView(flattenedItems),
 
               if (sortedEntries.isNotEmpty)
                 SliverToBoxAdapter(
@@ -282,6 +306,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             actionItem: item.actionItem,
                             conversationId: item.conversation.id,
                             itemIndexInConversation: item.itemIndex,
+                            exportedToAppleReminders: _exportedToAppleReminders,
+                            onExportedToAppleReminders: _checkExistingAppleReminders,
                           ),
                         );
                       }
@@ -329,6 +355,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           return ConversationActionItemsGroupWidget(
             conversation: entry.key,
             actionItems: entry.value,
+            exportedToAppleReminders: _exportedToAppleReminders,
+            onExportedToAppleReminders: _checkExistingAppleReminders,
           );
         },
         childCount: sortedEntries.length,
@@ -349,6 +377,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               actionItem: item.actionItem,
               conversationId: item.conversation.id,
               itemIndexInConversation: item.itemIndex,
+              exportedToAppleReminders: _exportedToAppleReminders,
+              onExportedToAppleReminders: _checkExistingAppleReminders,
             ),
           );
         },

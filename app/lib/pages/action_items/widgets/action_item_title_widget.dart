@@ -4,6 +4,8 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 import 'edit_action_item_sheet.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
@@ -16,6 +18,8 @@ class ActionItemTileWidget extends StatefulWidget {
   final bool hasRoundedCorners;
   final bool isLastInGroup;
   final bool isInGroup;
+  final Set<String> exportedToAppleReminders;
+  final VoidCallback? onExportedToAppleReminders;
 
   const ActionItemTileWidget({
     super.key,
@@ -25,6 +29,8 @@ class ActionItemTileWidget extends StatefulWidget {
     this.hasRoundedCorners = true,
     this.isLastInGroup = false,
     this.isInGroup = false,
+    this.exportedToAppleReminders = const <String>{},
+    this.onExportedToAppleReminders,
   });
 
   @override
@@ -33,6 +39,9 @@ class ActionItemTileWidget extends StatefulWidget {
 
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
+
+  // Check if this action item is exported to Apple Reminders
+  bool get _isExportedToAppleReminders => widget.exportedToAppleReminders.contains(widget.actionItem.description);
 
   @override
   void dispose() {
@@ -50,7 +59,9 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     );
 
     // Check if this specific item has a pending state change
-    final isCompleted = _pendingStates.containsKey(widget.actionItem.description) ? _pendingStates[widget.actionItem.description]! : widget.actionItem.completed;
+    final isCompleted = _pendingStates.containsKey(widget.actionItem.description)
+        ? _pendingStates[widget.actionItem.description]!
+        : widget.actionItem.completed;
 
     BorderRadius borderRadius;
     if (widget.hasRoundedCorners) {
@@ -242,11 +253,86 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                                   ),
                                 ),
                               ),
+                              // Apple Reminders export button (only show on Apple platforms and if not completed)
+                              if (PlatformService.isApple && !isCompleted)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: GestureDetector(
+                                    onTap: _isExportedToAppleReminders ? null : () => _exportToAppleReminders(context),
+                                    child: Container(
+                                      width: 28,
+                                      height: 28,
+                                      // decoration: BoxDecoration(
+                                      //   color: _isExportedToAppleReminders
+                                      //       ? Colors.grey[700]?.withOpacity(0.3)
+                                      //       : Colors.grey[800]?.withOpacity(0.5),
+                                      //   borderRadius: BorderRadius.circular(6),
+                                      // ),
+                                      child: Stack(
+                                        children: [
+                                          Center(
+                                            child: Image.asset(
+                                              'assets/images/apple-reminders-logo.png',
+                                              width: 24,
+                                              height: 24,
+                                              // color: _isExportedToAppleReminders ? Colors.grey[600] : Colors.grey[400],
+                                            ),
+                                          ),
+                                          // Green checkmark overlay when exported
+                                          _isExportedToAppleReminders
+                                              ? Positioned(
+                                                  bottom: 0,
+                                                  right: 0,
+                                                  child: Container(
+                                                    width: 12,
+                                                    height: 12,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.green,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: const Color(0xFF1F1F25),
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.check,
+                                                      size: 8,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                )
+                                              : Positioned(
+                                                  bottom: 0,
+                                                  right: 0,
+                                                  child: Container(
+                                                    width: 12,
+                                                    height: 12,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.yellow,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: const Color(0xFF1F1F25),
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.add,
+                                                      size: 8,
+                                                      color: Colors.black,
+                                                    ),
+                                                  ),
+                                                ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
 
                           // Optional date/time for tasks
-                          if (widget.actionItem.description.toLowerCase().contains('february') || widget.actionItem.description.toLowerCase().contains('masterclass'))
+                          if (widget.actionItem.description.toLowerCase().contains('february') ||
+                              widget.actionItem.description.toLowerCase().contains('masterclass'))
                             Padding(
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Container(
@@ -317,6 +403,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         }
       });
 
+      // Sync with Apple Reminders if item was exported and is being marked as completed
+      if (newValue && _isExportedToAppleReminders && PlatformService.isApple) {
+        try {
+          final service = AppleRemindersService();
+          final success = await service.completeReminder(itemDescription);
+          if (success) {
+            debugPrint('Successfully completed reminder in Apple Reminders: $itemDescription');
+          } else {
+            debugPrint('Failed to complete reminder in Apple Reminders: $itemDescription');
+          }
+        } catch (e) {
+          debugPrint('Error syncing completion to Apple Reminders: $e');
+        }
+      }
+
       // Track analytics
       MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
         conversationId: widget.conversationId,
@@ -347,5 +448,55 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         );
       },
     );
+  }
+
+  Future<void> _exportToAppleReminders(BuildContext context) async {
+    HapticFeedback.lightImpact();
+
+    final service = AppleRemindersService();
+    final result = await service.addActionItem(widget.actionItem.description);
+
+    if (!mounted) return;
+
+    // If successful, notify parent to refresh the exported state
+    if (result.isSuccess) {
+      widget.onExportedToAppleReminders?.call();
+    }
+
+    // Show feedback to user
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              result.isSuccess ? Icons.check_circle : Icons.error,
+              color: result.isSuccess ? Colors.green : Colors.red,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                result.message,
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.grey[900],
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+
+    // Track analytics
+    MixpanelManager().track('Action Item Exported to Apple Reminders', properties: {
+      'conversationId': widget.conversationId,
+      'success': result.isSuccess,
+      'result': result.name,
+    });
   }
 }
