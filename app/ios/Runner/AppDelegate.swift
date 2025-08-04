@@ -76,6 +76,8 @@ import EventKit
       requestRemindersPermission(result: result)
     case "addReminder":
       addReminder(call: call, result: result)
+    case "getReminders":
+      getReminders(call: call, result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -124,7 +126,7 @@ import EventKit
     }
     
     let notes = args["notes"] as? String
-    let listName = args["listName"] as? String ?? "Omi Action Items"
+    let listName = args["listName"] as? String ?? "Reminders"
     let dueDate: Date? = {
       if let dueDateMs = args["dueDate"] as? Int64 {
         return Date(timeIntervalSince1970: TimeInterval(dueDateMs) / 1000.0)
