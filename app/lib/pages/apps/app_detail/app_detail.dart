@@ -4,6 +4,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:omi/backend/http/api/apps.dart';
@@ -49,6 +50,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool setupCompleted = false;
   bool appLoading = false;
   bool isLoading = false;
+  bool chatButtonLoading = false;
   Timer? _paymentCheckTimer;
   late App app;
 
@@ -211,35 +213,59 @@ class _AppDetailPageState extends State<AppDetailPage> {
         actions: [
           if (app.enabled && app.worksWithChat()) ...[
             GestureDetector(
-              child: const Icon(FontAwesomeIcons.solidComments),
-              onTap: () async {
-                // Navigate directly to chat page with this app selected
-                var appId = app.id;
-                var appProvider = Provider.of<AppProvider>(context, listen: false);
-                var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+              child: chatButtonLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(FontAwesomeIcons.solidComments),
+              onTap: chatButtonLoading
+                  ? null
+                  : () async {
+                      HapticFeedback.mediumImpact();
 
-                // Set the selected app
-                appProvider.setSelectedChatAppId(appId);
+                      // Prevent multiple clicks
+                      if (chatButtonLoading) return;
 
-                // Refresh messages and get the selected app
-                await messageProvider.refreshMessages();
-                App? selectedApp = await appProvider.getAppFromId(appId);
+                      setState(() => chatButtonLoading = true);
 
-                // Send initial message if chat is empty
-                if (messageProvider.messages.isEmpty) {
-                  messageProvider.sendInitialAppMessage(selectedApp);
-                }
+                      try {
+                        // Navigate directly to chat page with this app selected
+                        var appId = app.id;
+                        var appProvider = Provider.of<AppProvider>(context, listen: false);
+                        var messageProvider = Provider.of<MessageProvider>(context, listen: false);
 
-                // Navigate directly to chat page
-                if (mounted) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ChatPage(isPivotBottom: false),
-                    ),
-                  );
-                }
-              },
+                        // Set the selected app
+                        appProvider.setSelectedChatAppId(appId);
+
+                        // Refresh messages and get the selected app
+                        await messageProvider.refreshMessages();
+                        App? selectedApp = await appProvider.getAppFromId(appId);
+
+                        // Send initial message if chat is empty
+                        if (messageProvider.messages.isEmpty) {
+                          messageProvider.sendInitialAppMessage(selectedApp);
+                        }
+
+                        // Navigate directly to chat page
+                        if (mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ChatPage(isPivotBottom: false),
+                            ),
+                          );
+                        }
+                      } finally {
+                        if (mounted) {
+                          setState(() => chatButtonLoading = false);
+                        }
+                      }
+                    },
             ),
             const SizedBox(width: 24),
           ],
@@ -265,6 +291,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               : GestureDetector(
                   child: const Icon(FontAwesomeIcons.arrowUpFromBracket),
                   onTap: () {
+                    HapticFeedback.mediumImpact();
                     MixpanelManager().track('App Shared', properties: {'appId': app.id});
                     if (app.isNotPersona()) {
                       Share.share(
