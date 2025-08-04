@@ -36,7 +36,7 @@ def get_action_items_with_caching(
         # Cache miss - fetch from database
         action_items = conversations_db.get_action_items(
             uid=uid,
-            limit=None,
+            limit=5000,
             offset=0,
             include_completed=True,
             start_date=start_date,
