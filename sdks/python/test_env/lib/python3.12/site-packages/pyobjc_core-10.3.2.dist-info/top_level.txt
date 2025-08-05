@@ -1,3 +1,0 @@
-PyObjCTest
-PyObjCTools
-objc
