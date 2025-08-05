@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'device_settings.dart';
+import 'package:omi/pages/settings/subscription_page.dart';
 
 enum SettingsMode {
   no_device,
@@ -116,6 +117,141 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     );
   }
 
+  Widget _buildSubscriptionStatusItem() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: FaIcon(FontAwesomeIcons.crown, color: Color(0xFF8E8E93), size: 20),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Text(
+                'Subscription',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            const Text(
+              'Free Plan',
+              style: TextStyle(
+                color: Color(0xFF8E8E93),
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            // No chevron arrow for subscription status
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsageItem() {
+    const int usedMinutes = 1000;
+    const int totalMinutes = 2000;
+    const double usagePercent = usedMinutes / totalMinutes;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const UsagePage()),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 1),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: FaIcon(FontAwesomeIcons.clock, color: Color(0xFF8E8E93), size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with usage numbers
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Usage',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Resets Aug 8',
+                              style: TextStyle(
+                                color: Color(0xFF8E8E93),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${usedMinutes.toString()} / ${totalMinutes.toString()}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'minutes',
+                              style: TextStyle(
+                                color: Color(0xFF8E8E93),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildOmiModeContent(BuildContext context) {
     return Column(
       children: [
@@ -156,6 +292,29 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 );
               },
             ),
+          ],
+        ),
+        const SizedBox(height: 32),
+
+        // Subscription & Usage Section
+        _buildSectionContainer(
+          children: [
+            _buildSubscriptionStatusItem(),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildSettingsItem(
+              title: 'Upgrade Subscription',
+              icon: const FaIcon(FontAwesomeIcons.star, color: Color(0xFF8E8E93), size: 20),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const SubscriptionPage(),
+                  ),
+                );
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildUsageItem(),
           ],
         ),
         const SizedBox(height: 32),
