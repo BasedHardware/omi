@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct ChatView: View {
+    var initialMessage: String = ""
+    var onFirstMessageSent: (() -> Void)? = nil
+    
     @State private var inputText = ""
     @State private var isRecording = false
     @State private var messages: [ChatMessage] = []
@@ -20,30 +23,6 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Welcome message when no conversation has started
-            if messages.isEmpty && showWelcomeMessage {
-                VStack(spacing: 16) {
-                    Text("Hey there! How can I help you today? 😊")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-                    
-                    // Action buttons row
-                    HStack(spacing: 12) {
-                        ActionButton(icon: "square.and.arrow.up", action: {})
-                        ActionButton(icon: "speaker.wave.2", action: {})
-                        ActionButton(icon: "hand.thumbsup", action: {})
-                        ActionButton(icon: "hand.thumbsdown", action: {})
-                        ActionButton(icon: "arrow.clockwise", action: {})
-                    }
-                    .padding(.bottom, 20)
-                }
-                .transition(.opacity.combined(with: .scale))
-                .animation(.easeInOut(duration: 0.3), value: showWelcomeMessage)
-            }
-            
             // Error message display
             if let error = errorMessage {
                 VStack(spacing: 8) {
@@ -59,9 +38,6 @@ struct ChatView: View {
                     
                     Button("Retry Connection") {
                         checkOmiConnection()
-                        if OmiConfig.isConfigured() {
-                            loadInitialMessages()
-                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -86,36 +62,22 @@ struct ChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                 }
-                .frame(maxHeight: 240)
+                .frame(minHeight: 300)
                 .transition(.move(edge: .top))
                 .animation(.easeInOut(duration: 0.3), value: messages.count)
+            } else if showWelcomeMessage {
+                VStack(spacing: 16) {
+                    Text("Ready to chat! 😊")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 20)
+                }
             }
 
             // Input field with enhanced styling
             HStack(spacing: 12) {
-                // Plus button
-                Button(action: {}) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                
-                // Web button
-                Button(action: {}) {
-                    Image(systemName: "globe")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                
-                // Share button
-                Button(action: {}) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .buttonStyle(.plain)
+
                 
                 // Expand button
                 Button(action: {}) {
@@ -182,7 +144,6 @@ struct ChatView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .frame(width: 420)
         .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 24)
@@ -197,6 +158,15 @@ struct ChatView: View {
                     AuthBridge.shared.syncFromFlutterApp()
                     isInitialized = true
                     checkOmiConnection()
+                    
+                    // Auto-send initial message if provided
+                    if !initialMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        inputText = initialMessage
+                        handleSendMessage()
+                        
+                        // Tell the popup to close
+                        onFirstMessageSent?()
+                    }
                 } catch {
                     print("❌ Failed to initialize authentication")
                     errorMessage = "Authentication initialization failed"
@@ -248,71 +218,6 @@ struct ChatView: View {
         }
     }
     
-    private func loadInitialMessages() {
-        guard OmiConfig.isConfigured() else { 
-            errorMessage = "Authentication required. Please sign in to Omi."
-            return 
-        }
-        
-        Task {
-            do {
-                let serverMessages = try await apiClient.getMessages(appId: OmiConfig.selectedAppId)
-                await MainActor.run {
-                    // Convert server messages to local chat messages
-                    messages = serverMessages.reversed().map { serverMessage in
-                        ChatMessage(
-                            content: serverMessage.text,
-                            isUser: serverMessage.sender == "human"
-                        )
-                    }
-                    
-                    // If no messages, get initial message
-                    if messages.isEmpty {
-                        loadInitialMessage()
-                    } else {
-                        showWelcomeMessage = false
-                    }
-                    
-                    // Clear any previous error messages on success
-                    errorMessage = nil
-                }
-            } catch APIError.authenticationRequired {
-                await MainActor.run {
-                    print("⚠️ Authentication required for loading messages")
-                    errorMessage = "Please sign in to Omi to view messages"
-                    showWelcomeMessage = true
-                }
-            } catch {
-                await MainActor.run {
-                    print("❌ Failed to load messages: \(type(of: error))")
-                    errorMessage = "Failed to load messages. Please check your connection."
-                    // Show welcome message as fallback
-                    showWelcomeMessage = true
-                }
-            }
-        }
-    }
-    
-    private func loadInitialMessage() {
-        guard OmiConfig.isConfigured() else { return }
-        
-        Task {
-            do {
-                let initialMessage = try await apiClient.getInitialMessage(appId: OmiConfig.selectedAppId)
-                await MainActor.run {
-                    let chatMessage = ChatMessage(content: initialMessage.text, isUser: false)
-                    messages.append(chatMessage)
-                    showWelcomeMessage = false
-                }
-            } catch {
-                await MainActor.run {
-                    print("❌ Failed to get initial message: \(type(of: error))")
-                    // Keep welcome message
-                }
-            }
-        }
-    }
-
     private func handleSendMessage() {
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard OmiConfig.isConfigured() else {
@@ -473,8 +378,15 @@ struct ActionButton: View {
 #if DEBUG
 struct ChatView_Previews: PreviewProvider {
     static var previews: some View {
-        ChatView()
-            .preferredColorScheme(.dark)
+        Group {
+            ChatView()
+                .preferredColorScheme(.dark)
+                .previewDisplayName("Empty Chat")
+            
+            ChatView(initialMessage: "Hello, how are you today?")
+                .preferredColorScheme(.dark)
+                .previewDisplayName("With Initial Message")
+        }
     }
 }
 #endif
