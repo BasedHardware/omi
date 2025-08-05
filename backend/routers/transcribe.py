@@ -78,6 +78,12 @@ async def _listen(
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(e, uid)
+        return
+
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
@@ -99,13 +105,6 @@ async def _listen(
     stt_service, stt_language, stt_model = get_stt_service_for_language(language)
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
-        return
-
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e, uid)
-        await websocket.close(code=1011, reason="Dirty state")
         return
 
     websocket_active = True

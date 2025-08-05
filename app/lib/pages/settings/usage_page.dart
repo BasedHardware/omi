@@ -179,8 +179,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     final numberFormatter = NumberFormat.decimalPattern('en_US');
 
     String shareText;
-    final baseText =
-        '${userName.isNotEmpty ? '$userName has' : 'I have'} a good omi (omi.me - your always-on assistant)';
+    final baseText = 'Sharing my Omi stats! (omi.me - your always-on AI assistant)';
 
     if (stats != null) {
       final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
@@ -440,7 +439,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
-                        : const Text('Manage', style: TextStyle(color: Colors.white)),
+                        : const Text('Manage Plan', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -516,14 +515,14 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 child: _isUpgrading
                     ? const SizedBox(
                         height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Go unlimited', style: TextStyle(color: Colors.white)),
+                    : const Text('Upgrade to Unlimited', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
           if (minutesLimit > 0) ...[
             const SizedBox(height: 12),
             Text(
-              'You have used ${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit minutes of basic transcription this month.',
+              'Your plan includes $minutesLimit free minutes per month. Upgrade to go unlimited.',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
             ),
             const SizedBox(height: 12),
@@ -625,14 +624,14 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    isUnlimited ? 'Manage Subscription' : 'Choose Your Plan',
+                    isUnlimited ? 'Manage Subscription' : 'Upgrade Your Plan',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     isUnlimited
-                        ? 'You can manage your subscription here.'
+                        ? 'You are on the Unlimited Plan.'
                         : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
@@ -1029,12 +1028,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             return touchedBarSpots
                 .map((barSpot) {
                   final flSpot = barSpot;
-                  final metricNames = [
-                    'Listening (mins)',
-                    'Understanding (words)',
-                    'Insights Gained',
-                    'Memories Created'
-                  ];
+                  final metricNames = ['Listening (mins)', 'Understanding (words)', 'Insights', 'Memories'];
                   final originalIndex = metricColors.indexOf(flSpot.bar.color!);
                   if (originalIndex == -1) return null;
 

@@ -14,6 +14,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -97,7 +98,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
 
       return GestureDetector(
         onTap: () async {
-          if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+          if (provider.outOfCredits || (provider.segments.isEmpty && provider.photos.isEmpty)) return;
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(

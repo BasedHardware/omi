@@ -547,8 +547,8 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 features=[
                     "Unlimited listening time",
                     "Unlimited words transcribed",
-                    "Unlimited insights gained",
-                    "Unlimited memories created",
+                    "Unlimited insights",
+                    "Unlimited memories",
                 ],
                 prices=unlimited_plan_prices,
             )

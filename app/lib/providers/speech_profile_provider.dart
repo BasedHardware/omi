@@ -331,7 +331,7 @@ class SpeechProfileProvider extends ChangeNotifier
   void onStatusChanged(DeviceServiceStatus status) {}
 
   @override
-  void onClosed() {
+  void onClosed([int? closeCode]) {
     // TODO: implement onClosed
   }
 

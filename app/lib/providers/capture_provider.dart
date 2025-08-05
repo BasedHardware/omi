@@ -11,6 +11,7 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -19,9 +20,11 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -35,6 +38,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
@@ -42,6 +46,7 @@ class CaptureProvider extends ChangeNotifier
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
+  UsageProvider? usageProvider;
 
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
@@ -68,6 +73,9 @@ class CaptureProvider extends ChangeNotifier
 
   bool _isAutoReconnecting = false;
   bool get isAutoReconnecting => _isAutoReconnecting;
+
+  DateTime? _lastUsageLimitDialogShown;
+  bool get outOfCredits => usageProvider?.isOutOfCredits ?? false;
 
   Timer? _reconnectTimer;
   int _reconnectCountdown = 5;
@@ -121,10 +129,12 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
     conversationProvider = cp;
     messageProvider = mp;
     peopleProvider = pp;
+    usageProvider = up;
+
     notifyListeners();
   }
 
@@ -830,10 +840,15 @@ class CaptureProvider extends ChangeNotifier
   }
 
   @override
-  void onClosed() {
+  void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
-    debugPrint('[Provider] Socket is closed');
+    debugPrint('[Provider] Socket is closed with code: $closeCode');
+
+    if (closeCode == 4002) {
+      // Refresh subscription to get latest usage data which will reflect the out of credits status.
+      usageProvider?.markAsOutOfCreditsAndRefresh();
+    }
 
     notifyListeners();
     _startKeepAliveServices();
@@ -869,52 +884,6 @@ class CaptureProvider extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('Socket error: $err');
-
-    if (err.toString().contains('4002')) {
-      final context = MyApp.navigatorKey.currentContext;
-      if (context != null) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) {
-            return getDialog(
-              ctx,
-              () => Navigator.of(ctx).pop(),
-              () {
-                // onConfirm = Upgrade
-                Navigator.of(ctx).pop(); // Close first dialog
-                showDialog(
-                  context: context,
-                  builder: (ctx2) {
-                    return getDialog(
-                      ctx2,
-                      () => Navigator.of(ctx2).pop(),
-                      () {},
-                      "Coming Soon!",
-                      "Upgrades are coming soon. Stay tuned!",
-                      singleButton: true,
-                      okButtonText: 'Got it',
-                    );
-                  },
-                );
-              },
-              "Usage Limit Reached",
-              "You have used all your free transcription time for this month. Please upgrade to continue.",
-              okButtonText: 'Upgrade',
-              cancelButtonText: 'Dismiss',
-            );
-          },
-        );
-      }
-
-      if (recordingState == RecordingState.record) {
-        stopStreamRecording();
-      } else if (recordingState == RecordingState.systemAudioRecord) {
-        stopSystemAudioRecording();
-      } else if (_recordingDevice != null) {
-        stopStreamDeviceRecording();
-      }
-    }
 
     // Check for display-related errors
     if (err.toString().contains('Failed to find any displays or windows to capture')) {

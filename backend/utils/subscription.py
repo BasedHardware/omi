@@ -46,8 +46,8 @@ def get_plan_features(plan: PlanType) -> List[str]:
         return [
             "Unlimited listening time",
             "Unlimited words transcribed",
-            "Unlimited insights gained",
-            "Unlimited memories created",
+            "Unlimited insights",
+            "Unlimited memories",
         ]
 
     # Basic plan
@@ -63,14 +63,14 @@ def get_plan_features(plan: PlanType) -> List[str]:
             else "Unlimited words transcribed"
         ),
         (
-            f"{BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH:,} insights gained per month"
+            f"{BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH:,} insights per month"
             if BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH > 0
-            else "Unlimited insights gained"
+            else "Unlimited insights"
         ),
         (
-            f"{BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH} memories created per month"
+            f"{BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH} memories per month"
             if BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH > 0
-            else "Unlimited memories created"
+            else "Unlimited memories"
         ),
     ]
 

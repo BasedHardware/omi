@@ -48,6 +48,7 @@ import 'package:omi/pages/conversation_capturing/page.dart';
 
 import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
+import 'widgets/out_of_credits_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -394,17 +395,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   },
                   child: Stack(
                     children: [
-                      Center(
-                        child: PageView(
-                          controller: _controller,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: const [
-                            ConversationsPage(),
-                            ActionItemsPage(),
-                            MemoriesPage(),
-                            AppsPage(),
-                          ],
-                        ),
+                      Column(
+                        children: [
+                          const OutOfCreditsWidget(),
+                          Expanded(
+                            child: PageView(
+                              controller: _controller,
+                              physics: const NeverScrollableScrollPhysics(),
+                              children: const [
+                                ConversationsPage(),
+                                ActionItemsPage(),
+                                MemoriesPage(),
+                                AppsPage(),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                       Consumer2<HomeProvider, DeviceProvider>(
                         builder: (context, home, deviceProvider, child) {

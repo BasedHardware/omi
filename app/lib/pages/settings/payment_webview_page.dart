@@ -62,7 +62,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Complete Your Purchase'),
+        title: const Text('Complete Your Upgrade'),
         backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(

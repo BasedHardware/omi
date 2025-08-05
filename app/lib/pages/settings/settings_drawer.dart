@@ -135,74 +135,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Subscription & Usage',
-                icon: const FaIcon(FontAwesomeIcons.chartBar, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const UsagePage(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Device Settings',
-                icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const DeviceSettings(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-
-          // Share & Get Section
-          _buildSectionContainer(
-            children: [
-              _buildSettingsItem(
-                title: PlatformService.isIOS ? 'Share Omi for iPhone' : 'Share Omi for Android',
-                icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Colors.white, size: 20),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final String shareUrl = PlatformService.isIOS
-                      ? 'https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163'
-                      : 'https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US';
-                  await Share.share(shareUrl);
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Share Omi for Mac',
-                icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-
-          _buildSectionContainer(
-            children: [
-              _buildSettingsItem(
-                title: 'Profile',
-                icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.pop(context);
-                  routeToPage(context, const ProfilePage());
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: showSubscription ? 'Subscription & Usage' : 'Usage',
+                title: showSubscription ? 'Plan & Usage' : 'Usage Insights',
                 icon: const FaIcon(FontAwesomeIcons.chartBar, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   Navigator.pop(context);

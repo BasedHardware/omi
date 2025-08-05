@@ -37,6 +37,28 @@ class UsageProvider with ChangeNotifier {
   String? _error;
   String? get error => _error;
 
+  bool _forceOutOfCredits = false;
+
+  bool get isOutOfCredits {
+    if (_forceOutOfCredits) return true;
+    if (_subscription == null) return false;
+    if (_subscription!.subscription.plan == PlanType.unlimited) return false;
+    // For basic plan, check if used is >= limit and limit is not 0 (unlimited).
+    if (_subscription!.transcriptionSecondsLimit > 0 &&
+        _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> markAsOutOfCreditsAndRefresh() async {
+    if (!_forceOutOfCredits) {
+      _forceOutOfCredits = true;
+      notifyListeners(); // Immediate UI update
+    }
+    await fetchSubscription(); // Sync with backend
+  }
+
   Future<void> fetchSubscription() async {
     if (_isSubscriptionLoading) return;
 
@@ -51,6 +73,7 @@ class UsageProvider with ChangeNotifier {
       debugPrint('Failed to fetch subscription: $e');
     } finally {
       _isSubscriptionLoading = false;
+      _forceOutOfCredits = false; // Reset optimistic flag
       notifyListeners();
     }
   }
