@@ -23,14 +23,20 @@ from database.redis_db import (
     user_webhook_status_db,
     set_user_preferred_app,
     set_user_data_protection_level,
+    get_generic_cache,
+    set_generic_cache,
 )
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
-from models.users import WebhookType
+from datetime import datetime
+
+from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
+from utils.subscription import get_plan_limits, get_plan_features
+from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -443,3 +449,120 @@ def get_user_usage_stats_endpoint(
     """Gets daily and monthly usage stats for the authenticated user."""
     stats = user_usage_db.get_current_user_usage(uid, period.value)
     return stats
+
+
+@router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
+def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Gets the user's subscription plan and usage."""
+    marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
+    if uid in marketplace_reviewers:
+        unlimited_sub = Subscription(
+            plan=PlanType.unlimited,
+            status=SubscriptionStatus.active,
+            limits=PlanLimits(
+                transcription_seconds=None,
+                words_transcribed=None,
+                insights_gained=None,
+                memories_created=None,
+            ),
+        )
+        return UserSubscriptionResponse(
+            subscription=unlimited_sub,
+            transcription_seconds_used=0,
+            transcription_seconds_limit=0,
+            words_transcribed_used=0,
+            words_transcribed_limit=0,
+            insights_gained_used=0,
+            insights_gained_limit=0,
+            memories_created_used=0,
+            memories_created_limit=0,
+            available_plans=[],
+            show_subscription_ui=False,
+        )
+    subscription = get_user_subscription(uid)
+    # Populate dynamic fields for the response
+    subscription.limits = get_plan_limits(subscription.plan)
+    subscription.features = get_plan_features(subscription.plan)
+
+    usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
+    transcription_seconds_used = usage.get('transcription_seconds', 0)
+    words_transcribed_used = usage.get('words_transcribed', 0)
+    insights_gained_used = usage.get('insights_gained', 0)
+    memories_created_used = usage.get('memories_created', 0)
+
+    transcription_seconds_limit = subscription.limits.transcription_seconds or 0
+    words_transcribed_limit = subscription.limits.words_transcribed or 0
+    insights_gained_limit = subscription.limits.insights_gained or 0
+    memories_created_limit = subscription.limits.memories_created or 0
+
+    # Build available plans for upgrading
+    available_plans: List[SubscriptionPlan] = []
+    monthly_price_id = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
+    annual_price_id = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
+
+    unlimited_plan_prices: List[PricingOption] = []
+    if monthly_price_id:
+        try:
+            price_data = get_generic_cache(f'stripe_price:{monthly_price_id}')
+            if not price_data:
+                price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
+                price_data = price.to_dict_recursive()
+                set_generic_cache(f'stripe_price:{monthly_price_id}', price_data, ttl=3600 * 24)  # 24 hours
+
+            unlimited_plan_prices.append(
+                PricingOption(
+                    id=price_data['id'],
+                    title="Monthly",
+                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                    description="Billed monthly. Cancel anytime.",
+                )
+            )
+        except Exception as e:
+            print(f"Error retrieving monthly price from Stripe: {e}")
+
+    if annual_price_id:
+        try:
+            price_data = get_generic_cache(f'stripe_price:{annual_price_id}')
+            if not price_data:
+                price = stripe_utils.stripe.Price.retrieve(annual_price_id)
+                price_data = price.to_dict_recursive()
+                set_generic_cache(f'stripe_price:{annual_price_id}', price_data, ttl=3600 * 24)  # 24 hours
+
+            unlimited_plan_prices.append(
+                PricingOption(
+                    id=price_data['id'],
+                    title="Annual",
+                    price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                    description="Save 20% with annual billing.",
+                )
+            )
+        except Exception as e:
+            print(f"Error retrieving annual price from Stripe: {e}")
+
+    if unlimited_plan_prices:
+        available_plans.append(
+            SubscriptionPlan(
+                id="unlimited",
+                title="Unlimited",
+                features=[
+                    "Unlimited listening time",
+                    "Unlimited words transcribed",
+                    "Unlimited insights",
+                    "Unlimited memories",
+                ],
+                prices=unlimited_plan_prices,
+            )
+        )
+
+    return UserSubscriptionResponse(
+        subscription=subscription,
+        transcription_seconds_used=transcription_seconds_used,
+        transcription_seconds_limit=transcription_seconds_limit,
+        words_transcribed_used=words_transcribed_used,
+        words_transcribed_limit=words_transcribed_limit,
+        insights_gained_used=insights_gained_used,
+        insights_gained_limit=insights_gained_limit,
+        memories_created_used=memories_created_used,
+        memories_created_limit=memories_created_limit,
+        available_plans=available_plans,
+    )

@@ -204,16 +204,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => ConversationProvider()),
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
+          ChangeNotifierProvider(create: (context) => UsageProvider()),
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider3<ConversationProvider, MessageProvider, PeopleProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+              CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, people, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message, people)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
@@ -247,7 +249,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
           ChangeNotifierProvider(create: (context) => UserProvider()),
-          ChangeNotifierProvider(create: (context) => UsageProvider()),
           ChangeNotifierProvider(create: (context) => ChatSessionProvider()),
         ],
         builder: (context, child) {
@@ -387,6 +388,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
+        context.read<UsageProvider>().fetchSubscription();
       } else {
         if (!PlatformManager.instance.isAnalyticsSupported) {
           await PlatformManager.instance.intercom.loginUnidentifiedUser();

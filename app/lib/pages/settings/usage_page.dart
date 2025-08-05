@@ -1,16 +1,23 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -26,6 +33,64 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   List<bool> _isMetricVisible = [true, true, true, true];
+  bool _isUpgrading = false;
+  bool _isCancelling = false;
+  bool _isSubscriptionExpanded = false;
+
+  Future<void> _handleCancelSubscription() async {
+    showDialog(
+        context: context,
+        builder: (ctx) {
+          return getDialog(ctx, () => Navigator.of(ctx).pop(), () async {
+            Navigator.of(ctx).pop(); // Close dialog
+            setState(() => _isCancelling = true);
+            try {
+              final success = await cancelSubscription();
+              if (success) {
+                AppSnackbar.showSnackbar('Your subscription is set to cancel at the end of the period.');
+                context.read<UsageProvider>().fetchSubscription();
+              } else {
+                AppSnackbar.showSnackbarError('Failed to cancel subscription. Please try again.');
+              }
+            } catch (e) {
+              AppSnackbar.showSnackbarError('An error occurred. Please try again.');
+            } finally {
+              if (mounted) {
+                setState(() => _isCancelling = false);
+              }
+            }
+          }, 'Cancel Subscription?', 'Your plan will remain active until the end of your current billing period.');
+        });
+  }
+
+  Future<void> _handleUpgrade(String priceId) async {
+    setState(() => _isUpgrading = true);
+    try {
+      final sessionData = await createCheckoutSession(priceId: priceId);
+      if (sessionData != null && sessionData['url'] != null && mounted) {
+        final result = await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => PaymentWebViewPage(
+              checkoutUrl: sessionData['url']!,
+            ),
+          ),
+        );
+
+        if (result == true) {
+          AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
+          context.read<UsageProvider>().fetchSubscription();
+        } else {
+          // Optional: handle cancellation or failure
+        }
+      } else {
+        AppSnackbar.showSnackbarError('Could not launch upgrade page. Please try again.');
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('An error occurred. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isUpgrading = false);
+    }
+  }
 
   Future<void> _shareUsage() async {
     final RenderRepaintBoundary boundary =
@@ -114,8 +179,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     final numberFormatter = NumberFormat.decimalPattern('en_US');
 
     String shareText;
-    final baseText =
-        '${userName.isNotEmpty ? '$userName has' : 'I have'} a good omi (omi.me - your always-on assistant)';
+    final baseText = 'Sharing my Omi stats! (omi.me - your always-on AI assistant)';
 
     if (stats != null) {
       final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
@@ -216,6 +280,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     _tabController.addListener(_handleTabSelection);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
+      context.read<UsageProvider>().fetchSubscription();
     });
   }
 
@@ -288,16 +353,397 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             return _buildEmptyState();
           }
 
-          return TabBarView(
-            controller: _tabController,
+          return Column(
             children: [
-              _buildUsageListView(provider.todayUsage, provider.todayHistory, 'today', _screenshotKeys[0]),
-              _buildUsageListView(provider.monthlyUsage, provider.monthlyHistory, 'monthly', _screenshotKeys[1]),
-              _buildUsageListView(provider.yearlyUsage, provider.yearlyHistory, 'yearly', _screenshotKeys[2]),
-              _buildUsageListView(provider.allTimeUsage, provider.allTimeHistory, 'all_time', _screenshotKeys[3]),
+              _buildSubscriptionInfo(context, provider),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildUsageListView(
+                        provider.todayUsage, provider.todayHistory, 'today', _screenshotKeys[0], provider),
+                    _buildUsageListView(
+                        provider.monthlyUsage, provider.monthlyHistory, 'monthly', _screenshotKeys[1], provider),
+                    _buildUsageListView(
+                        provider.yearlyUsage, provider.yearlyHistory, 'yearly', _screenshotKeys[2], provider),
+                    _buildUsageListView(
+                        provider.allTimeUsage, provider.allTimeHistory, 'all_time', _screenshotKeys[3], provider),
+                  ],
+                ),
+              ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionInfo(BuildContext context, UsageProvider provider) {
+    if (provider.isLoading && provider.subscription == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (provider.subscription?.showSubscriptionUi == false) {
+      return const SizedBox.shrink();
+    }
+
+    if (provider.subscription == null) {
+      return const SizedBox.shrink();
+    }
+
+    final isUnlimited = provider.subscription!.subscription.plan == PlanType.unlimited;
+
+    Widget collapsedBody;
+    Widget expandedBody;
+
+    if (isUnlimited) {
+      final sub = provider.subscription!.subscription;
+      final isCancelled = sub.cancelAtPeriodEnd;
+      String renewalDate = 'N/A';
+      if (sub.currentPeriodEnd != null) {
+        final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
+        renewalDate = DateFormat.yMMMd().format(date);
+      }
+      collapsedBody = Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Unlimited Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
+              size: 16, color: Colors.grey),
+        ],
+      );
+
+      expandedBody = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Unlimited Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ElevatedButton(
+                onPressed: _isCancelling || _isUpgrading ? null : () => _showPlansSheet(provider),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                child: _isCancelling
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : _isUpgrading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Manage Plan', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isCancelled ? 'Your plan will cancel on $renewalDate.' : 'Your plan renews on $renewalDate.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+          ),
+          if (sub.features.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...sub.features.map((feature) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Row(children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(feature, style: TextStyle(fontSize: 14, color: Colors.grey.shade300))),
+                  ]),
+                ))
+          ],
+        ],
+      );
+    } else {
+      final sub = provider.subscription!;
+      final minutesUsed = (sub.transcriptionSecondsUsed / 60).round();
+      final minutesLimit = (sub.transcriptionSecondsLimit / 60).round();
+      final percentage = (sub.transcriptionSecondsLimit > 0)
+          ? (sub.transcriptionSecondsUsed / sub.transcriptionSecondsLimit).clamp(0.0, 1.0)
+          : 0.0;
+
+      collapsedBody = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
+                  size: 16, color: Colors.grey),
+            ],
+          ),
+          if (minutesLimit > 0) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: Colors.grey.shade700,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit minutes used',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            ),
+          ],
+        ],
+      );
+
+      expandedBody = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ElevatedButton(
+                onPressed: _isUpgrading ? null : () => _showPlansSheet(provider),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                child: _isUpgrading
+                    ? const SizedBox(
+                        height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Upgrade to Unlimited', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+          if (minutesLimit > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Your plan includes $minutesLimit free minutes per month. Upgrade to go unlimited.',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: Colors.grey.shade700,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ],
+          if (sub.subscription.features.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...sub.subscription.features.map((feature) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Row(children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(feature, style: TextStyle(fontSize: 14, color: Colors.grey.shade300))),
+                  ]),
+                ))
+          ]
+        ],
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _isSubscriptionExpanded = !_isSubscriptionExpanded;
+          });
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.fastOutSlowIn,
+            alignment: Alignment.topCenter,
+            child: _isSubscriptionExpanded ? expandedBody : collapsedBody,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPlansSheet(UsageProvider provider) {
+    final sub = provider.subscription!.subscription;
+    final isUnlimited = sub.plan == PlanType.unlimited;
+    final isCancelled = sub.cancelAtPeriodEnd;
+    final plans = provider.subscription?.availablePlans ?? [];
+    final unlimitedPlan = plans.isNotEmpty ? plans.first : null;
+
+    String renewalDate = 'N/A';
+    if (sub.currentPeriodEnd != null) {
+      final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
+      renewalDate = DateFormat.yMMMd().format(date);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          builder: (BuildContext context, ScrollController scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade700,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    isUnlimited ? 'Manage Subscription' : 'Upgrade Your Plan',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isUnlimited
+                        ? 'You are on the Unlimited Plan.'
+                        : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                  ),
+                  if (isUnlimited && isCancelled) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  if (unlimitedPlan == null || unlimitedPlan.prices.isEmpty)
+                    const Center(
+                        child: Text("Upgrade plans are not available at this moment.",
+                            style: TextStyle(color: Colors.grey))),
+                  if (unlimitedPlan != null)
+                    ...unlimitedPlan.prices.map((price) => _buildPlanOption(price, unlimitedPlan)),
+                  const SizedBox(height: 16),
+                  if (isUnlimited && !isCancelled) ...[
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _handleCancelSubscription();
+                      },
+                      child: const Text('Cancel Subscription', style: TextStyle(color: Colors.red, fontSize: 16)),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Dismiss', style: TextStyle(color: Colors.white, fontSize: 16)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPlanOption(PricingOption price, SubscriptionPlan plan) {
+    final bool isAnnual = price.title.toLowerCase().contains('annual');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2C2C2E),
+        borderRadius: BorderRadius.circular(12),
+        border: isAnnual ? Border.all(color: Colors.deepPurple, width: 1.5) : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.pop(context);
+            _handleUpgrade(price.id);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      price.title,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 8),
+                    if (isAnnual)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.shade300,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text('Best Value', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    const Spacer(),
+                    Text(
+                      price.priceString,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.deepPurple),
+                    ),
+                  ],
+                ),
+                if (price.description != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    price.description!,
+                    style: TextStyle(color: Colors.grey.shade400),
+                  ),
+                ],
+                if (plan.features.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  ...plan.features.map((feature) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check, color: Colors.green, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(feature, style: TextStyle(color: Colors.grey.shade300))),
+                          ],
+                        ),
+                      ))
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -322,8 +768,15 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildUsageListView(UsageStats? stats, List<UsageHistoryPoint>? history, String period, GlobalKey key) {
-    final onRefresh = () => context.read<UsageProvider>().fetchUsageStats(period: period);
+  Widget _buildUsageListView(
+      UsageStats? stats, List<UsageHistoryPoint>? history, String period, GlobalKey key, UsageProvider provider) {
+    final onRefresh = () async {
+      // Using Future.wait to run both fetches concurrently
+      await Future.wait([
+        provider.fetchUsageStats(period: period),
+        provider.fetchSubscription(),
+      ]);
+    };
 
     if (stats == null) {
       return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
@@ -378,6 +831,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 value: transcriptionValue,
                 subtitle: 'Total time Omi has actively listened.',
                 color: Colors.blue.shade300,
+                subscription: provider.subscription,
               ),
               const SizedBox(height: 16),
               _buildUsageCard(
@@ -387,6 +841,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 value: '${numberFormatter.format(stats.wordsTranscribed)} words',
                 subtitle: 'Words understood from your conversations.',
                 color: Colors.green.shade300,
+                subscription: provider.subscription,
               ),
               const SizedBox(height: 16),
               _buildUsageCard(
@@ -396,6 +851,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 value: '${numberFormatter.format(stats.insightsGained)} insights',
                 subtitle: 'Action items, and notes automatically captured.',
                 color: Colors.orange.shade300,
+                subscription: provider.subscription,
               ),
               const SizedBox(height: 16),
               _buildUsageCard(
@@ -405,6 +861,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
                 value: '${numberFormatter.format(stats.memoriesCreated)} memories',
                 subtitle: 'Facts and details remembered for you.',
                 color: Colors.purple.shade300,
+                subscription: provider.subscription,
               ),
             ],
           ),
@@ -571,12 +1028,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             return touchedBarSpots
                 .map((barSpot) {
                   final flSpot = barSpot;
-                  final metricNames = [
-                    'Listening (mins)',
-                    'Understanding (words)',
-                    'Insights Gained',
-                    'Memories Created'
-                  ];
+                  final metricNames = ['Listening (mins)', 'Understanding (words)', 'Insights', 'Memories'];
                   final originalIndex = metricColors.indexOf(flSpot.bar.color!);
                   if (originalIndex == -1) return null;
 
@@ -747,7 +1199,9 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
       required String title,
       required String value,
       required String subtitle,
-      required Color color}) {
+      required Color color,
+      UserSubscriptionResponse? subscription}) {
+    final numberFormatter = NumberFormat.decimalPattern('en_US');
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -794,6 +1248,119 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
               subtitle,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4),
             ),
+            if (title == 'Listening' &&
+                subscription != null &&
+                subscription.subscription.plan == PlanType.basic &&
+                subscription.transcriptionSecondsLimit > 0) ...[
+              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
+                final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
+                final percentage =
+                    (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${numberFormatter.format(minutesUsed)} of $minutesLimit min used this month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      backgroundColor: Colors.grey.shade700,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                );
+              })
+            ],
+            if (title == 'Understanding' &&
+                subscription != null &&
+                subscription.subscription.plan == PlanType.basic &&
+                subscription.wordsTranscribedLimit > 0) ...[
+              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final used = subscription.wordsTranscribedUsed;
+                final limit = subscription.wordsTranscribedLimit;
+                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${numberFormatter.format(used)} of ${numberFormatter.format(limit)} words used this month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      backgroundColor: Colors.grey.shade700,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                );
+              })
+            ],
+            if (title == 'Providing' &&
+                subscription != null &&
+                subscription.subscription.plan == PlanType.basic &&
+                subscription.insightsGainedLimit > 0) ...[
+              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final used = subscription.insightsGainedUsed;
+                final limit = subscription.insightsGainedLimit;
+                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${numberFormatter.format(used)} of ${numberFormatter.format(limit)} insights gained this month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      backgroundColor: Colors.grey.shade700,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                );
+              })
+            ],
+            if (title == 'Remembering' &&
+                subscription != null &&
+                subscription.subscription.plan == PlanType.basic &&
+                subscription.memoriesCreatedLimit > 0) ...[
+              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final used = subscription.memoriesCreatedUsed;
+                final limit = subscription.memoriesCreatedLimit;
+                final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${numberFormatter.format(used)} of ${numberFormatter.format(limit)} memories created this month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: percentage,
+                      backgroundColor: Colors.grey.shade700,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                );
+              })
+            ]
           ],
         ),
       ),
