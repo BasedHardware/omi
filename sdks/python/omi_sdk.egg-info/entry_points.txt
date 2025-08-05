@@ -1,0 +1,2 @@
+[console_scripts]
+omi-scan = omi.bluetooth:print_devices
