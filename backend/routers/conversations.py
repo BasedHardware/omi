@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
@@ -169,7 +169,24 @@ def set_action_item_status(
     for i, action_item_idx in enumerate(data.items_idx):
         if action_item_idx >= len(action_items):
             continue
-        action_items[action_item_idx].completed = data.values[i]
+        
+        action_item = action_items[action_item_idx]
+        new_completed_status = data.values[i]
+        
+        # Set completed status
+        action_item.completed = new_completed_status
+        
+        # Handle created_at backwards compatibility
+        if action_item.created_at is None:
+            action_item.created_at = conversation.created_at
+        
+        # Set completed_at timestamp
+        if new_completed_status:
+            # Mark as completed - set completed_at to current time
+            action_item.completed_at = datetime.now(timezone.utc)
+        else:
+            # Mark as incomplete - clear completed_at
+            action_item.completed_at = None
 
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.dict() for action_item in action_items]

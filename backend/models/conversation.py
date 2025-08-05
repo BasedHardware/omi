@@ -90,6 +90,8 @@ class AppResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False
+    created_at: Optional[datetime] = Field(None, description="When the action item was created")
+    completed_at: Optional[datetime] = Field(None, description="When the action item was completed")
 
     @staticmethod
     def actions_to_string(action_items: List['ActionItem']) -> str:
@@ -109,6 +111,8 @@ class ActionItemWithMetadata(BaseModel):
     description: str = Field(description="The action item description")
     completed: bool = Field(default=False, description="Whether the action item is completed")
     deleted: bool = Field(default=False, description="Whether the action item is deleted")
+    created_at: Optional[datetime] = Field(None, description="When the action item was created")
+    completed_at: Optional[datetime] = Field(None, description="When the action item was completed")
 
 
 class ActionItemsResponse(BaseModel):

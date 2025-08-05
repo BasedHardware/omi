@@ -1,8 +1,18 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 import database.redis_db as redis_db
 import database.conversations as conversations_db
+
+
+def _ensure_timezone_aware(dt: datetime) -> datetime:
+    """
+    Ensure a datetime object is timezone-aware.
+    If naive, assume UTC timezone.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def get_action_items_with_caching(
@@ -31,6 +41,17 @@ def get_action_items_with_caching(
                 item['conversation_created_at'] = datetime.fromisoformat(
                     item['conversation_created_at'].replace('Z', '+00:00')
                 )
+            
+            # Handle new datetime fields
+            if item.get('created_at') and isinstance(item['created_at'], str):
+                item['created_at'] = datetime.fromisoformat(
+                    item['created_at'].replace('Z', '+00:00')
+                )
+            
+            if item.get('completed_at') and isinstance(item['completed_at'], str):
+                item['completed_at'] = datetime.fromisoformat(
+                    item['completed_at'].replace('Z', '+00:00')
+                )
         action_items = cached_action_items
     else:
         # Cache miss - fetch from database
@@ -55,10 +76,16 @@ def get_action_items_with_caching(
             continue
             
         # Apply date range filter (for cached data)
-        if start_date and item['conversation_created_at'] < start_date:
-            continue
-        if end_date and item['conversation_created_at'] > end_date:
-            continue
+        if start_date:
+            item_created_at = _ensure_timezone_aware(item['conversation_created_at'])
+            filter_start_date = _ensure_timezone_aware(start_date)
+            if item_created_at < filter_start_date:
+                continue
+        if end_date:
+            item_created_at = _ensure_timezone_aware(item['conversation_created_at'])
+            filter_end_date = _ensure_timezone_aware(end_date)
+            if item_created_at > filter_end_date:
+                continue
             
         filtered_items.append(item)
     

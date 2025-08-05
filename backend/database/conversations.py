@@ -2,7 +2,7 @@ import copy
 import json
 import uuid
 import zlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional, Dict, Any
 
 from google.cloud import firestore
@@ -17,6 +17,16 @@ from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 
 conversations_collection = 'conversations'
+
+
+def _ensure_timezone_aware(dt: datetime) -> datetime:
+    """
+    Ensure a datetime object is timezone-aware.
+    If naive, assume UTC timezone.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 # *********************************
@@ -462,7 +472,7 @@ def get_action_items(
     for conversation in conversations:
         conversation_id = conversation['id']
         conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
-        conversation_created_at = conversation['created_at']
+        conversation_created_at = _ensure_timezone_aware(conversation['created_at'])
         
         raw_items = conversation.get('structured', {}).get('action_items', [])
         
@@ -479,6 +489,28 @@ def get_action_items(
             if not include_completed and is_completed:
                 continue
                 
+            # Handle backwards compatibility for dates
+            created_at = None
+            completed_at = None
+            
+            if isinstance(item, dict):
+                created_at = item.get('created_at')
+                completed_at = item.get('completed_at')
+            
+            # Ensure timezone awareness for action item dates
+            if created_at is not None:
+                created_at = _ensure_timezone_aware(created_at)
+            if completed_at is not None:
+                completed_at = _ensure_timezone_aware(completed_at)
+            
+            # Fallback to conversation created_at if dates are missing
+            if created_at is None:
+                created_at = conversation_created_at
+            
+            # If item is completed but no completed_at date, use conversation created_at
+            if is_completed and completed_at is None:
+                completed_at = conversation_created_at
+            
             action_item_data = {
                 'id': f"{conversation_id}_{idx}",
                 'conversation_id': conversation_id,
@@ -488,6 +520,8 @@ def get_action_items(
                 'description': item.get('description', item) if isinstance(item, dict) else item,
                 'completed': is_completed,
                 'deleted': item.get('deleted', False) if isinstance(item, dict) else False,
+                'created_at': created_at,
+                'completed_at': completed_at,
             }
             action_items.append(action_item_data)
     

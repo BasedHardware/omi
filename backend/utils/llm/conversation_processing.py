@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -176,6 +176,12 @@ def get_transcript_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
+    
+    # Set created_at for action items if not already set
+    for action_item in response.action_items or []:
+        if action_item.created_at is None:
+            action_item.created_at = datetime.now(timezone.utc)
+    
     return response
 
 
@@ -277,6 +283,12 @@ def get_reprocess_transcript_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
+    
+    # Set created_at for action items if not already set
+    for action_item in response.action_items or []:
+        if action_item.created_at is None:
+            action_item.created_at = datetime.now(timezone.utc)
+    
     return response
 
 
