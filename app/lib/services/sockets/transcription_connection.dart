@@ -19,7 +19,7 @@ abstract interface class ITransctipSegmentSocketServiceListener {
 
   void onConnected();
 
-  void onClosed();
+  void onClosed([int? closeCode]);
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
@@ -95,9 +95,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   @override
-  void onClosed() {
+  void onClosed([int? closeCode]) {
     _listeners.forEach((k, v) {
-      v.onClosed();
+      v.onClosed(closeCode);
     });
   }
 

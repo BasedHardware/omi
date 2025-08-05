@@ -4,6 +4,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
+from models.users import Subscription
 
 
 def is_exists_user(uid: str):
@@ -205,6 +206,32 @@ def get_default_payment_method(uid: str):
     return user_data.get('default_payment_method', None)
 
 
+def set_stripe_customer_id(uid: str, customer_id: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'stripe_customer_id': customer_id})
+
+
+def get_user_by_stripe_customer_id(customer_id: str):
+    users_ref = db.collection('users')
+    query = users_ref.where(filter=FieldFilter('stripe_customer_id', '==', customer_id)).limit(1)
+    docs = list(query.stream())
+    if docs:
+        user_dict = docs[0].to_dict()
+        user_dict['uid'] = docs[0].id
+        return user_dict
+    return None
+
+
+def update_user_subscription(uid: str, subscription_data: dict):
+    """Updates the user's subscription information, removing dynamic fields before storing."""
+    subscription_data_to_store = subscription_data.copy()
+    subscription_data_to_store.pop('features', None)
+    subscription_data_to_store.pop('limits', None)
+
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'subscription': subscription_data_to_store})
+
+
 # **************************************
 # ********* Data Protection ************
 # **************************************
@@ -292,3 +319,31 @@ def set_user_language_preference(uid: str, language: str) -> None:
     """
     user_ref = db.collection('users').document(uid)
     user_ref.set({'language': language}, merge=True)
+
+
+from models.users import PlanLimits, PlanType
+from utils.subscription import get_basic_plan_limits, get_default_basic_subscription
+
+
+def get_user_subscription(uid: str) -> Subscription:
+    """Gets the user's subscription, creating a default free one if it doesn't exist."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get(['subscription'])
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        if 'subscription' in user_data:
+            sub_data = user_data['subscription']
+            # Handle migration for old 'free' plan identifier
+            if sub_data.get('plan') == 'free':
+                sub_data['plan'] = PlanType.basic.value
+                update_user_subscription(uid, sub_data)
+            return Subscription(**sub_data)
+
+    # If subscription doesn't exist for the user, create and return a default free plan.
+    default_subscription = get_default_basic_subscription()
+    # Strip dynamic fields before storing
+    sub_to_store = default_subscription.dict()
+    sub_to_store.pop('features', None)
+    sub_to_store.pop('limits', None)
+    user_ref.set({'subscription': sub_to_store}, merge=True)
+    return default_subscription
