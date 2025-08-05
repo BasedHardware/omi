@@ -5,7 +5,9 @@ from omi.transcribe import transcribe
 from omi.decoder import OmiOpusDecoder
 from asyncio import Queue
 
-OMI_MAC = "8680354F-04B6-6281-8CA4-D987E07D1065"
+# Replace with your Omi device's MAC address (get it by running: omi-scan)
+OMI_MAC = "YOUR_OMI_MAC_ADDRESS_HERE"  
+# Standard Omi audio characteristic UUID
 OMI_CHAR_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 
 def main():
