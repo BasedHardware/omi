@@ -53,7 +53,7 @@ scaling:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
           streaming:
-            requestsPerPod: 30
+            requestsPerPod: 40
         textToSpeech:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
