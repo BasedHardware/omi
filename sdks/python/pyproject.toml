@@ -64,10 +64,9 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/BasedHardware/omi"
+"Homepage" = "https://www.omi.me/"
 "Repository" = "https://github.com/BasedHardware/omi"
-"Bug Reports" = "https://github.com/BasedHardware/omi/issues"
-"Documentation" = "https://docs.omi.com"
+"Documentation" = "https://docs.omi.me/doc"
 
 [project.optional-dependencies]
 dev = [
