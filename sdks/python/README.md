@@ -56,10 +56,15 @@ async def main():
         if pcm_data:
             audio_queue.put_nowait(pcm_data)
     
+    def handle_transcript(transcript):
+        # Custom transcript handling
+        print(f"🎤 {transcript}")
+        # Save to file, send to API, etc.
+    
     # Start transcription and device connection
     await asyncio.gather(
         listen_to_omi(OMI_MAC, OMI_CHAR_UUID, handle_audio),
-        transcribe(audio_queue, DEEPGRAM_API_KEY)
+        transcribe(audio_queue, DEEPGRAM_API_KEY, on_transcript=handle_transcript)
     )
 
 if __name__ == "__main__":
