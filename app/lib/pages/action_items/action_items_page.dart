@@ -1230,63 +1230,60 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     required VoidCallback onPressed,
     required bool isPrimary,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          decoration: BoxDecoration(
-            gradient: isPrimary ? const LinearGradient(
-              colors: [Color(0xFF8B5CF6), Color(0xFFA855F7)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ) : null,
-            color: isPrimary ? null : const Color(0xFF252525),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isPrimary 
-                ? const Color(0xFF8B5CF6).withOpacity(0.5)
-                : const Color(0xFF2A2A2A),
-              width: 1,
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        decoration: BoxDecoration(
+          gradient: isPrimary ? const LinearGradient(
+            colors: [Color(0xFF8B5CF6), Color(0xFFA855F7)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ) : null,
+          color: isPrimary ? null : const Color(0xFF252525),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isPrimary 
+              ? const Color(0xFF8B5CF6).withOpacity(0.5)
+              : const Color(0xFF2A2A2A),
+            width: 1,
+          ),
+          boxShadow: isPrimary ? [
+            BoxShadow(
+              color: const Color(0xFF8B5CF6).withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
             ),
-            boxShadow: isPrimary ? [
-              BoxShadow(
-                color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ] : [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 18,
+          ] : [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isPrimary ? Colors.white : const Color(0xFFE5E5E5),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
                 color: isPrimary ? Colors.white : const Color(0xFFE5E5E5),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
               ),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isPrimary ? Colors.white : const Color(0xFFE5E5E5),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
