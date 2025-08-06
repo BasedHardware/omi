@@ -72,9 +72,28 @@ if __name__ == "__main__":
 ```
 
 ### 4. Run the example
+
+The included example demonstrates connecting to an Omi device and real-time transcription:
+
 ```bash
+# 1. Set your Deepgram API key
+export DEEPGRAM_API_KEY=your_actual_deepgram_key
+
+# 2. Find your Omi device MAC address
+omi-scan
+
+# 3. Update examples/main.py with your device's MAC address
+# Edit line 10: OMI_MAC = "YOUR_DEVICE_MAC_HERE"
+
+# 4. Run the example
 python examples/main.py
 ```
+
+The example will:
+- Connect to your Omi device via Bluetooth
+- Decode incoming Opus audio packets to PCM
+- Transcribe audio in real-time using Deepgram
+- Print transcriptions to the console
 
 ## 📚 API Reference
 
