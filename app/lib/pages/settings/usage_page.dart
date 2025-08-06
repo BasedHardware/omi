@@ -17,7 +17,7 @@ import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -29,41 +29,103 @@ class UsagePage extends StatefulWidget {
   State<UsagePage> createState() => _UsagePageState();
 }
 
-class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMixin {
+class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   List<bool> _isMetricVisible = [true, true, true, true];
   bool _isUpgrading = false;
   bool _isCancelling = false;
   bool _isSubscriptionExpanded = false;
+  late AnimationController _waveController;
+  late AnimationController _notesController;
 
   Future<void> _handleCancelSubscription() async {
-    showDialog(
-        context: context,
-        builder: (ctx) {
-          return getDialog(ctx, () => Navigator.of(ctx).pop(), () async {
-            Navigator.of(ctx).pop(); // Close dialog
-            setState(() => _isCancelling = true);
-            try {
-              final success = await cancelSubscription();
-              if (success) {
-                AppSnackbar.showSnackbar('Your subscription is set to cancel at the end of the period.');
-                context.read<UsageProvider>().fetchSubscription();
-              } else {
-                AppSnackbar.showSnackbarError('Failed to cancel subscription. Please try again.');
-              }
-            } catch (e) {
-              AppSnackbar.showSnackbarError('An error occurred. Please try again.');
-            } finally {
-              if (mounted) {
-                setState(() => _isCancelling = false);
-              }
-            }
-          }, 'Cancel Subscription?', 'Your plan will remain active until the end of your current billing period.');
-        });
+    final provider = context.read<UsageProvider>();
+    final sub = provider.subscription?.subscription;
+    if (sub == null) return;
+
+    String renewalDateInfo = 'at the end of your current billing period';
+    if (sub.currentPeriodEnd != null) {
+      final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
+      renewalDateInfo = 'on ${DateFormat.yMMMd().format(date)}';
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ConfirmationDialog(
+        title: 'Cancel Subscription?',
+        description:
+            'Your plan will remain active until $renewalDateInfo. After that, you will lose access to your unlimited features. Are you sure?',
+        confirmText: 'Confirm Cancellation',
+        cancelText: 'Keep My Plan',
+        onCancel: () => Navigator.of(ctx).pop(false),
+        onConfirm: () => Navigator.of(ctx).pop(true),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      final success = await cancelSubscription();
+      if (success) {
+        AppSnackbar.showSnackbar('Your subscription is set to cancel at the end of the period.');
+        context.read<UsageProvider>().fetchSubscription();
+      } else {
+        AppSnackbar.showSnackbarError('Failed to cancel subscription. Please try again.');
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('An error occurred. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isCancelling = false);
+      }
+    }
   }
 
   Future<void> _handleUpgrade(String priceId) async {
+    final provider = context.read<UsageProvider>();
+
+    // Find the selected pricing option to show in the dialog.
+    PricingOption? selectedPrice;
+    final plans = provider.subscription?.availablePlans ?? [];
+    for (final plan in plans) {
+      for (final price in plan.prices) {
+        if (price.id == priceId) {
+          selectedPrice = price;
+          break;
+        }
+      }
+      if (selectedPrice != null) break;
+    }
+
+    if (selectedPrice == null) {
+      AppSnackbar.showSnackbarError('Selected plan is not available. Please try again.');
+      return;
+    }
+
+    final currentSub = provider.subscription!.subscription;
+
+    if (currentSub.plan == PlanType.unlimited) {
+      final description = "You're switching your Unlimited Plan to the ${selectedPrice.title}.";
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => ConfirmationDialog(
+          title: 'Confirm Plan Change',
+          description: '$description Are you sure you want to proceed?',
+          confirmText: 'Confirm & Proceed',
+          cancelText: 'Cancel',
+          onCancel: () => Navigator.of(ctx).pop(false),
+          onConfirm: () => Navigator.of(ctx).pop(true),
+        ),
+      );
+
+      if (confirmed != true) {
+        return;
+      }
+    }
+
     setState(() => _isUpgrading = true);
     try {
       final sessionData = await createCheckoutSession(priceId: priceId);
@@ -278,6 +340,14 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabSelection);
+    _waveController = AnimationController(
+      duration: const Duration(milliseconds: 18000),
+      vsync: this,
+    )..repeat();
+    _notesController = AnimationController(
+      duration: const Duration(milliseconds: 36000),
+      vsync: this,
+    )..repeat();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
@@ -288,6 +358,8 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
   void dispose() {
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
+    _waveController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -378,6 +450,82 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     );
   }
 
+  Widget _buildFeatureItem({required IconData faIcon, required String text}) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white,
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: FaIcon(
+              faIcon,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getIconForFeature(String featureText) {
+    final text = featureText.toLowerCase();
+    if (text.contains('unlimited') || text.contains('infinity')) {
+      return FontAwesomeIcons.infinity;
+    }
+    if (text.contains('ask omi') || text.contains('anything')) {
+      return FontAwesomeIcons.solidComments;
+    }
+    if (text.contains('memory')) {
+      return FontAwesomeIcons.brain;
+    }
+    if (text.contains('share')) {
+      return FontAwesomeIcons.solidShareFromSquare;
+    }
+    return FontAwesomeIcons.check;
+  }
+
+  Widget _buildExpandedFeatureItem(String featureText) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2.0),
+            child: FaIcon(_getIconForFeature(featureText), color: Colors.deepPurple.shade200, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              featureText,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade300, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSubscriptionInfo(BuildContext context, UsageProvider provider) {
     if (provider.isLoading && provider.subscription == null) {
       return const SizedBox.shrink();
@@ -421,7 +569,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             children: [
               const Text('Unlimited Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ElevatedButton(
-                onPressed: _isCancelling || _isUpgrading ? null : () => _showPlansSheet(provider),
+                onPressed: _isCancelling || _isUpgrading ? null : _showPlansSheet,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepPurple,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -449,15 +597,8 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
           ),
           if (sub.features.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ...sub.features.map((feature) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: Row(children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(feature, style: TextStyle(fontSize: 14, color: Colors.grey.shade300))),
-                  ]),
-                ))
+            const SizedBox(height: 16),
+            ...sub.features.map((feature) => _buildExpandedFeatureItem(feature)),
           ],
         ],
       );
@@ -469,32 +610,28 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
           ? (sub.transcriptionSecondsUsed / sub.transcriptionSecondsLimit).clamp(0.0, 1.0)
           : 0.0;
 
-      collapsedBody = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      collapsedBody = Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
-                  size: 16, color: Colors.grey),
-            ],
+          Expanded(
+            child: Row(
+              children: [
+                const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                if (minutesLimit > 0) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit mins used',
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-          if (minutesLimit > 0) ...[
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: percentage,
-              backgroundColor: Colors.grey.shade700,
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit minutes used',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-            ),
-          ],
+          FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
+              size: 16, color: Colors.grey),
         ],
       );
 
@@ -506,7 +643,7 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             children: [
               const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ElevatedButton(
-                onPressed: _isUpgrading ? null : () => _showPlansSheet(provider),
+                onPressed: _isUpgrading ? null : _showPlansSheet,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepPurple,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -535,15 +672,8 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
             ),
           ],
           if (sub.subscription.features.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ...sub.subscription.features.map((feature) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: Row(children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(feature, style: TextStyle(fontSize: 14, color: Colors.grey.shade300))),
-                  ]),
-                ))
+            const SizedBox(height: 16),
+            ...sub.subscription.features.map((feature) => _buildExpandedFeatureItem(feature)),
           ]
         ],
       );
@@ -577,172 +707,491 @@ class _UsagePageState extends State<UsagePage> with SingleTickerProviderStateMix
     );
   }
 
-  void _showPlansSheet(UsageProvider provider) {
-    final sub = provider.subscription!.subscription;
-    final isUnlimited = sub.plan == PlanType.unlimited;
-    final isCancelled = sub.cancelAtPeriodEnd;
-    final plans = provider.subscription?.availablePlans ?? [];
-    final unlimitedPlan = plans.isNotEmpty ? plans.first : null;
-
-    String renewalDate = 'N/A';
-    if (sub.currentPeriodEnd != null) {
-      final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
-      renewalDate = DateFormat.yMMMd().format(date);
-    }
-
+  void _showPlansSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          builder: (BuildContext context, ScrollController scrollController) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
+        return Consumer<UsageProvider>(builder: (context, provider, child) {
+          final sub = provider.subscription!.subscription;
+          final isUnlimited = sub.plan == PlanType.unlimited;
+          final isCancelled = sub.cancelAtPeriodEnd;
+          final plans = provider.subscription?.availablePlans ?? [];
+          final unlimitedPlan = plans.isNotEmpty ? plans.first : null;
+
+          String renewalDate = 'N/A';
+          if (sub.currentPeriodEnd != null) {
+            final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
+            renewalDate = DateFormat.yMMMd().format(date);
+          }
+          return DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            minChildSize: 0.5,
+            maxChildSize: 0.9,
+            builder: (BuildContext context, ScrollController scrollController) {
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.deepPurple.withOpacity(0.5),
+                      Colors.deepPurple.withOpacity(0.3),
+                      Colors.black.withOpacity(0.8),
+                      Colors.black,
+                    ],
+                    stops: const [0.0, 0.2, 0.6, 1.0],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
                 ),
-              ),
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(20),
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade700,
-                        borderRadius: BorderRadius.circular(2),
+                child: ListView(
+                  controller: scrollController,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade700,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    isUnlimited ? 'Manage Subscription' : 'Upgrade Your Plan',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isUnlimited
-                        ? 'You are on the Unlimited Plan.'
-                        : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                  ),
-                  if (isUnlimited && isCancelled) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                    SizedBox(
+                      height: 150,
+                      width: double.infinity,
+                      child: Stack(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 1,
+                                child: ClipRect(
+                                  child: SizedBox(
+                                    height: 120,
+                                    child: AnimatedBuilder(
+                                      animation: _waveController,
+                                      builder: (context, child) {
+                                        const double totalWidth = 420.0;
+                                        final scrollOffset = (_waveController.value * totalWidth) % totalWidth;
+                                        return Stack(
+                                          children: [
+                                            Positioned(
+                                              left: -totalWidth + scrollOffset,
+                                              top: 0,
+                                              bottom: 0,
+                                              child: Row(
+                                                children: List.generate(60, (index) {
+                                                  final heights = [
+                                                    20.0,
+                                                    32.0,
+                                                    45.0,
+                                                    26.0,
+                                                    52.0,
+                                                    39.0,
+                                                    32.0,
+                                                    45.0,
+                                                    28.0,
+                                                    36.0,
+                                                    41.0,
+                                                    24.0,
+                                                    48.0,
+                                                    37.0,
+                                                    30.0,
+                                                    43.0,
+                                                    22.0,
+                                                    34.0,
+                                                    47.0,
+                                                    29.0,
+                                                    50.0,
+                                                    38.0,
+                                                    33.0,
+                                                    44.0
+                                                  ];
+                                                  final height = heights[index % heights.length];
+
+                                                  return Container(
+                                                    width: 4,
+                                                    height: height,
+                                                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.red.withOpacity(0.7),
+                                                      borderRadius: BorderRadius.circular(2),
+                                                    ),
+                                                  );
+                                                }),
+                                              ),
+                                            ),
+                                            Positioned(
+                                              left: scrollOffset,
+                                              top: 0,
+                                              bottom: 0,
+                                              child: Row(
+                                                children: List.generate(60, (index) {
+                                                  final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
+                                                  final height = heights[index % heights.length];
+
+                                                  return Container(
+                                                    width: 4,
+                                                    height: height,
+                                                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.red.withOpacity(0.7),
+                                                      borderRadius: BorderRadius.circular(2),
+                                                    ),
+                                                  );
+                                                }),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: ClipRect(
+                                  child: SizedBox(
+                                    height: 120,
+                                    child: AnimatedBuilder(
+                                      animation: _notesController,
+                                      builder: (context, child) {
+                                        const double totalWidth = 440.0;
+                                        final scrollOffset = (_notesController.value * totalWidth) % totalWidth;
+                                        return Stack(
+                                          children: [
+                                            Positioned(
+                                              left: -totalWidth + scrollOffset,
+                                              top: 0,
+                                              bottom: 0,
+                                              child: Row(
+                                                children: List.generate(8, (index) {
+                                                  return Container(
+                                                    width: 45,
+                                                    height: 55,
+                                                    margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white.withOpacity(0.95),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color: Colors.black.withOpacity(0.15),
+                                                          blurRadius: 4,
+                                                          offset: const Offset(0, 2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.all(6),
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Container(
+                                                            width: 26,
+                                                            height: 3,
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.black,
+                                                              borderRadius: BorderRadius.circular(1.5),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(height: 4),
+                                                          ...List.generate(
+                                                              5,
+                                                              (i) => Container(
+                                                                    width: i == 4 ? 24 : 35, // Last line shorter
+                                                                    height: 2,
+                                                                    margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                    decoration: BoxDecoration(
+                                                                      color: Colors.grey[350],
+                                                                      borderRadius: BorderRadius.circular(1),
+                                                                    ),
+                                                                  )),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                }),
+                                              ),
+                                            ),
+                                            Positioned(
+                                              left: scrollOffset,
+                                              top: 0,
+                                              bottom: 0,
+                                              child: Row(
+                                                children: List.generate(8, (index) {
+                                                  return Container(
+                                                    width: 45,
+                                                    height: 55,
+                                                    margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white.withOpacity(0.95),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color: Colors.black.withOpacity(0.15),
+                                                          blurRadius: 4,
+                                                          offset: const Offset(0, 2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.all(6),
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Container(
+                                                            width: 26,
+                                                            height: 3,
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.black,
+                                                              borderRadius: BorderRadius.circular(1.5),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(height: 4),
+                                                          ...List.generate(
+                                                              5,
+                                                              (i) => Container(
+                                                                    width: i == 4 ? 24 : 35, // Last line shorter
+                                                                    height: 2,
+                                                                    margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                    decoration: BoxDecoration(
+                                                                      color: Colors.grey[350],
+                                                                      borderRadius: BorderRadius.circular(1),
+                                                                    ),
+                                                                  )),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                }),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Positioned(
+                            left: (MediaQuery.of(context).size.width - 120) / 2,
+                            top: 5,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.blue.withOpacity(0.4),
+                                    blurRadius: 20,
+                                    spreadRadius: 3,
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  'assets/images/omi-without-rope.png',
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 24),
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              isUnlimited ? 'Manage Subscription' : 'Upgrade to Unlimited',
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                          ]),
+                          const SizedBox(height: 8),
+                          Text(
+                            isUnlimited
+                                ? 'You are on the Unlimited Plan.'
+                                : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                          ),
+                          if (isUnlimited && isCancelled) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                            ),
+                          ] else if (isUnlimited && !isCancelled) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Your plan renews on $renewalDate.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                            ),
+                          ],
+                          const SizedBox(height: 32),
+                          if (unlimitedPlan != null) ...[
+                            _buildFeatureItem(faIcon: FontAwesomeIcons.infinity, text: 'Unlimited conversations'),
+                            const SizedBox(height: 16),
+                            _buildFeatureItem(
+                                faIcon: FontAwesomeIcons.solidComments, text: 'Ask Omi anything about your life'),
+                            const SizedBox(height: 16),
+                            _buildFeatureItem(faIcon: FontAwesomeIcons.brain, text: "Unlock Omi's infinite memory"),
+                          ],
+                          const SizedBox(height: 32),
+                          if (unlimitedPlan == null || unlimitedPlan.prices.isEmpty)
+                            const Center(
+                                child: Text("Upgrade plans are not available at this moment.",
+                                    style: TextStyle(color: Colors.grey))),
+                          if (unlimitedPlan != null)
+                            ...unlimitedPlan.prices.map((price) => _buildPlanOption(price, unlimitedPlan)),
+                          const SizedBox(height: 24),
+                          if (isUnlimited && !isCancelled) ...[
+                            TextButton(
+                              onPressed: () {
+                                _handleCancelSubscription();
+                              },
+                              child:
+                                  const Text('Cancel Subscription', style: TextStyle(color: Colors.red, fontSize: 16)),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ],
+                      ),
+                    )
                   ],
-                  const SizedBox(height: 24),
-                  if (unlimitedPlan == null || unlimitedPlan.prices.isEmpty)
-                    const Center(
-                        child: Text("Upgrade plans are not available at this moment.",
-                            style: TextStyle(color: Colors.grey))),
-                  if (unlimitedPlan != null)
-                    ...unlimitedPlan.prices.map((price) => _buildPlanOption(price, unlimitedPlan)),
-                  const SizedBox(height: 16),
-                  if (isUnlimited && !isCancelled) ...[
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleCancelSubscription();
-                      },
-                      child: const Text('Cancel Subscription', style: TextStyle(color: Colors.red, fontSize: 16)),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Dismiss', style: TextStyle(color: Colors.white, fontSize: 16)),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
+                ),
+              );
+            },
+          );
+        });
       },
     );
   }
 
   Widget _buildPlanOption(PricingOption price, SubscriptionPlan plan) {
     final bool isAnnual = price.title.toLowerCase().contains('annual');
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2C2C2E),
-        borderRadius: BorderRadius.circular(12),
-        border: isAnnual ? Border.all(color: Colors.deepPurple, width: 1.5) : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            Navigator.pop(context);
-            _handleUpgrade(price.id);
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final bool isPopular = isAnnual; // Mark annual as popular
+    final String? saveTag = isAnnual ? '2 Months Free' : null;
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        _handleUpgrade(price.id);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isAnnual ? Colors.deepPurple : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          children: [
+            if (isPopular) ...[
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'POPULAR',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       price.title,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(width: 8),
-                    if (isAnnual)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple.shade300,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text('Best Value', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                       ),
-                    const Spacer(),
-                    Text(
-                      price.priceString,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.deepPurple),
                     ),
+                    if (price.description != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        price.description!,
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                if (price.description != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    price.description!,
-                    style: TextStyle(color: Colors.grey.shade400),
-                  ),
-                ],
-                if (plan.features.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  ...plan.features.map((feature) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check, color: Colors.green, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(feature, style: TextStyle(color: Colors.grey.shade300))),
-                          ],
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      price.priceString,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (saveTag != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade800,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ))
-                ],
+                        child: Text(
+                          saveTag,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
-          ),
+          ],
         ),
       ),
     );
