@@ -125,11 +125,21 @@ class HotKeyManager: NSObject {
     hostingController = NSHostingController(rootView: voiceAssistantPopup)
 
     // Window size and position
-    let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
     let initialWindowSize = CGSize(width: 420, height: 300) // Slightly larger for voice popup
+    
+    // Use visibleFrame for accurate positioning that accounts for Dock and menu bar
+    guard let screen = NSScreen.main else {
+        print("❌ Could not get main screen")
+        return
+    }
+    
+    let visibleFrame = screen.visibleFrame
+    let originX = visibleFrame.origin.x + (visibleFrame.width - initialWindowSize.width) / 2
+    let originY = visibleFrame.origin.y - 10 // Just above Dock
+    
     let windowRect = NSRect(
-        x: (screenSize.width - initialWindowSize.width) / 2,
-        y: (screenSize.height - initialWindowSize.height) / 2,
+        x: originX,
+        y: originY,
         width: initialWindowSize.width,
         height: initialWindowSize.height
     )

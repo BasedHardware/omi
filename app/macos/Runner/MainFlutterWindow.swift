@@ -133,6 +133,26 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 self.moveOverlay(x: x, y: y)
                 result(nil)
                 
+            case "setUserDefault":
+                guard let args = call.arguments as? [String: Any],
+                      let key = args["key"] as? String,
+                      let value = args["value"] else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing key or value parameters", details: nil))
+                    return
+                }
+                UserDefaults.standard.set(value, forKey: key)
+                UserDefaults.standard.synchronize()
+                result(nil)
+                
+            case "getUserDefault":
+                guard let args = call.arguments as? [String: Any],
+                      let key = args["key"] as? String else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing key parameter", details: nil))
+                    return
+                }
+                let value = UserDefaults.standard.object(forKey: key)
+                result(value)
+                
             default:
                 result(FlutterMethodNotImplemented)
             }

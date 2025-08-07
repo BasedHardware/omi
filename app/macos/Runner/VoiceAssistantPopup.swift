@@ -146,7 +146,7 @@ class AudioWaveformMonitor: ObservableObject {
         
         // Peak detection for more dynamic response
         let peak = channelDataArray.max(by: { abs($0) < abs($1) }) ?? 0.0
-        let enhancedVolume = max(rms, abs(peak) * 0.3)  // Combine RMS with peak for better dynamics
+        let enhancedVolume = (rms * 0.85) + (abs(peak) * 0.15)  // Favor sustained volume over sharp spikes
         
         DispatchQueue.main.async {
             self.volumeHistory.append(enhancedVolume)
@@ -209,10 +209,10 @@ class AudioWaveformMonitor: ObservableObject {
             }
         }
 
-        // Increased sensitivity: higher multiplier and lower max clamp for more dynamic range
+        // Increased sensitivity: higher multiplier and compressed dynamic range for smoother response
         for i in 0..<magnitudes.count {
-            magnitudes[i] = log10(magnitudes[i] + 1) * 60  // Increased from 40 to 60
-            magnitudes[i] = max(0, min(120, magnitudes[i]))  // Reduced max from 150 to 120
+            magnitudes[i] = log10(magnitudes[i] + 1) * 50  // Reduced from 60 for smoother visual response
+            magnitudes[i] = max(0, min(100, magnitudes[i]))  // Tighter max for better voice range
         }
 
         return magnitudes
@@ -277,7 +277,7 @@ struct CenteredBarWaveformView: View {
     var body: some View {
         HStack(spacing: 1.5) {
             ForEach(Array(audioMonitor.averagedVolumeHistory.enumerated()), id: \.offset) { index, value in
-                let height = max(3, min(50, CGFloat(value) * 120))
+                let height = max(4, min(36, CGFloat(value) * 140))
                 RoundedRectangle(cornerRadius: 1)
                     .fill(LinearGradient(
                         gradient: Gradient(colors: [Color.purple.opacity(0.8), Color.blue.opacity(0.9)]),
@@ -553,7 +553,8 @@ struct VoiceAssistantPopup: View {
     var body: some View {
         VStack {
             popupContent
-                .padding(20)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
                 .frame(width: 400, height: popupHeight)
                 .background(
                     RoundedRectangle(cornerRadius: 24)
@@ -599,7 +600,7 @@ struct VoiceAssistantPopup: View {
     // MARK: - Popup Content
     
     private var popupContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 8) {
             Text(titleText)
                 .font(.title3)
                 .bold()
@@ -673,11 +674,12 @@ struct VoiceAssistantPopup: View {
     }
     
     private var recordingView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             CenteredBarWaveformView(audioMonitor: waveformMonitor)
-                .frame(height: 40) // smaller height
+                .frame(height: 36)
+                .padding(.top, -6)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         popupState = .textInput
@@ -689,23 +691,24 @@ struct VoiceAssistantPopup: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.2))
+                        .cornerRadius(10)
                 }
-                .background(Color.black.opacity(0.2))
-                .cornerRadius(12)
+                .buttonStyle(.plain)
 
                 Button(action: {
                     stopRecordingAndTranscribe()
                 }) {
-                    Text("Stop Recording")
-                        .font(.system(size: 13, weight: .medium))
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color.red))
                 }
-                .background(Color.red.opacity(0.7))
-                .cornerRadius(12)
+                .buttonStyle(.plain)
             }
+            .padding(.bottom, 2)
         }
     }
     
@@ -791,15 +794,15 @@ struct VoiceAssistantPopup: View {
     private var popupHeight: CGFloat {
         switch popupState {
         case .idle:
-            return 280
-        case .recording:
-            return 240
-        case .textInput:
-            return 240
-        case .transcribing:
             return 200
+        case .recording:
+            return 130
+        case .textInput:
+            return 160
+        case .transcribing:
+            return 120
         case .error:
-            return 250
+            return 180
         }
     }
     

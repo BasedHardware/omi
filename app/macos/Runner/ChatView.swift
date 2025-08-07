@@ -1,4 +1,6 @@
 import SwiftUI
+import AVFoundation
+import Speech
 
 struct ChatView: View {
     var initialMessage: String = ""
@@ -11,6 +13,13 @@ struct ChatView: View {
     @State private var showWelcomeMessage = true
     @State private var errorMessage: String?
     @State private var isInitialized = false
+    @FocusState private var isTextFieldFocused: Bool
+    
+    // Voice recording properties
+    @State private var audioEngine: AVAudioEngine?
+    @State private var recognitionTask: SFSpeechRecognitionTask?
+    @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    @State private var transcriptionText: String = ""
     
     // Use lazy initialization to avoid crashes during view creation
     private var apiClient: OmiAPIClient {
@@ -53,14 +62,35 @@ struct ChatView: View {
             
             // Chat messages when conversation has started
             if !messages.isEmpty {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(messages) { message in
-                            ChatMessageView(message: message)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(messages) { message in
+                                ChatMessageView(message: message)
+                                    .id(message.id) // assign unique ID
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    }
+                    .onChange(of: messages.count) { _ in
+                        // Scroll to last message when new one appears
+                        if let last = messages.last {
+                            withAnimation {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
+                    .onAppear {
+                        // Auto-scroll when view first appears and there's message history
+                        if let last = messages.last {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation {
+                                    proxy.scrollTo(last.id, anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
                 }
                 .frame(minHeight: 300)
                 .transition(.move(edge: .top))
@@ -80,7 +110,21 @@ struct ChatView: View {
 
                 
                 // Expand button
-                Button(action: {}) {
+                Button(action: {
+                    // Flush current messages to Flutter
+                    messageSyncManager.flushMessagesToFlutter(messages)
+                    
+                    // Set flag for Flutter to open full chat
+                    UserDefaults.standard.set(true, forKey: "swift_overlay_open_full_chat")
+                    
+                    // Activate Flutter app
+                    NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                    
+                    // Hide current ChatView safely
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NSApp.keyWindow?.orderOut(nil)
+                    }
+                }) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
@@ -93,6 +137,7 @@ struct ChatView: View {
                     .textFieldStyle(PlainTextFieldStyle())
                     .foregroundColor(.white)
                     .font(.system(size: 14))
+                    .focused($isTextFieldFocused)
                     .onSubmit {
                         handleSendMessage()
                     }
@@ -152,12 +197,18 @@ struct ChatView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .onAppear {
+            // Prevent repeated initialization and initial message sending on re-open
+            guard !isInitialized else { return }
+            
             // Safely sync auth data first, then initialize with error handling
             DispatchQueue.main.async {
                 do {
                     AuthBridge.shared.syncFromFlutterApp()
                     isInitialized = true
                     checkOmiConnection()
+                    
+                    // Focus the text field for better user experience
+                    isTextFieldFocused = true
                     
                     // Auto-send initial message if provided
                     if !initialMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -329,24 +380,81 @@ struct ChatView: View {
     }
 
     private func toggleVoiceRecording() {
-        isRecording.toggle()
         if isRecording {
-            startVoiceRecording()
+            stopVoiceRecordingAndTranscribe()
         } else {
-            stopVoiceRecording()
+            startVoiceRecording()
         }
     }
 
     private func startVoiceRecording() {
-        print("Voice recording started (implementation needed)")
-        // TODO: Implement voice recording using AVAudioRecorder
-        // TODO: Send audio to Omi voice message endpoint
+        do {
+            let engine = AVAudioEngine()
+            let request = SFSpeechAudioBufferRecognitionRequest()
+            recognitionRequest = request
+
+            guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
+                errorMessage = "Speech recognizer not available"
+                return
+            }
+
+            let inputNode = engine.inputNode
+            request.shouldReportPartialResults = true
+
+            recognitionTask = recognizer.recognitionTask(with: request) { result, error in
+                if let result = result {
+                    transcriptionText = result.bestTranscription.formattedString
+                    
+                    if result.isFinal {
+                        stopVoiceRecordingAndTranscribe()
+                    }
+                }
+                
+                if let error = error {
+                    print("❌ Transcription error: \(error.localizedDescription)")
+                    stopVoiceRecordingAndTranscribe()
+                }
+            }
+
+            let format = inputNode.outputFormat(forBus: 0)
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+                request.append(buffer)
+            }
+
+            engine.prepare()
+            try engine.start()
+
+            audioEngine = engine
+            isRecording = true
+            transcriptionText = ""
+
+        } catch {
+            print("❌ Failed to start recording: \(error)")
+            errorMessage = "Failed to start voice recording"
+            isRecording = false
+        }
     }
 
-    private func stopVoiceRecording() {
-        print("Voice recording stopped")
+    private func stopVoiceRecordingAndTranscribe() {
+        guard isRecording else { return }  // Prevent duplicate calls
         isRecording = false
-        // TODO: Stop recording and process audio
+
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        audioEngine = nil
+        recognitionRequest = nil
+
+        if !transcriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            inputText = transcriptionText
+            transcriptionText = "" // reset to prevent double-send
+            handleSendMessage()
+        } else {
+            errorMessage = "Could not recognize any speech"
+        }
     }
 }
 

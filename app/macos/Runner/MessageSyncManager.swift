@@ -51,6 +51,25 @@ class MessageSyncManager: ObservableObject {
         }
     }
     
+    /// Flush all current messages to Flutter app (for expand functionality)
+    func flushMessagesToFlutter(_ messages: [ChatMessage]) {
+        let messageDataArray = messages.map { message in
+            MessageSyncData(
+                id: message.id.uuidString,
+                content: message.content,
+                isUser: message.isUser,
+                timestamp: message.timestamp,
+                source: "swift_overlay"
+            )
+        }
+        
+        // Save all messages to UserDefaults
+        if let encoded = try? JSONEncoder().encode(messageDataArray) {
+            userDefaults.set(encoded, forKey: syncKey)
+            print("📤 Flushed \(messages.count) messages to Flutter for expansion")
+        }
+    }
+    
     /// Get messages that were synced from Flutter
     func getMessagesFromFlutter() -> [ChatMessage] {
         guard let data = userDefaults.data(forKey: "flutter_to_swift_messages"),
