@@ -301,10 +301,12 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 50
+  minReplicas: 10
   maxReplicas: 50
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 70
+  # targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 70
+  requestsPerPod: 10
+  failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []

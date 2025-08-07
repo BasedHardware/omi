@@ -1,0 +1,172 @@
+# Provide a name in place of prometheus-stackdriver-exporter for `app:` labels
+nameOverride: ""
+
+# Provide a name to substitute for the full names of resources
+fullnameOverride: ""
+
+# Number of exporters to run
+replicaCount: 1
+
+# Restart policy for container
+restartPolicy: Always
+
+image:
+  repository: prometheuscommunity/stackdriver-exporter
+  # if not set appVersion field from Chart.yaml is used
+  tag: ""
+  pullPolicy: IfNotPresent
+
+  ## Optionally specify an array of imagePullSecrets.
+  ## Secrets must be manually created in the namespace.
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+  ##
+  # pullSecrets:
+  #   - myDockerConfigJsonSecretName
+
+resources: {}
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+securityContext: {}
+
+containerSecurityContext: {}
+
+service:
+  type: ClusterIP
+  httpPort: 9255
+  annotations: {}
+
+## Additional labels to add to all resources
+customLabels: {}
+  # app: prometheus-stackdriver-exporter
+
+secret:
+  labels: {}
+
+stackdriver:
+  # DEPRECATED - The Google Project ID to gather metrics for
+  projectId: "FALSE"
+  # The Google Project IDs to gather metrics for (requires 0.17.0+)
+  projectIds: []
+    # - "google-project-id"
+  # An existing secret which contains credentials.json
+  serviceAccountSecret: ""
+  # Provide custom key for the existing secret to load credentials.json from
+  serviceAccountSecretKey: ""
+  # A service account key JSON file. Must be provided when no existing secret is used, in this case a new secret will be created holding this service account
+  serviceAccountKey: ""
+  # Max number of retries that should be attempted on 503 errors from Stackdriver
+  maxRetries: 0
+  # How long should Stackdriver_exporter wait for a result from the Stackdriver API
+  httpTimeout: 10s
+  # Max time between each request in an exp backoff scenario
+  maxBackoff: 5s
+  # The amount of jitter to introduce in an exp backoff scenario
+  backoffJitter: 1s
+  # The HTTP statuses that should trigger a retry
+  retryStatuses: 503
+  # Drop metrics from attached projects and fetch `project_id` only
+  dropDelegatedProjects: false
+  metrics:
+    # DEPRECATED - The prefixes to gather metrics for, we default to just CPU metrics.
+    typePrefixes: 'compute.googleapis.com/instance/cpu'
+    # The prefixes to gather metrics for (requires 0.17.0+)
+    prefixes: []
+      # - 'compute.googleapis.com/instance/cpu'
+    # The filters to refine the metrics query by using Filter objects that Google provides.
+    # Filter objects: project, group.id, resource.type, resource.labels.[KEY], metric.type, metric.labels.[KEY]
+    # https://cloud.google.com/monitoring/api/v3/filters
+    filters: []
+      # - 'pubsub.googleapis.com/subscription:resource.labels.subscription_id=monitoring.regex.full_match("us-west4.*my-team.*")'
+    # The frequency to request
+    interval: '5m'
+    # How far into the past to offset
+    offset: '0s'
+    # Offset for the Google Stackdriver Monitoring Metrics interval into the past by the ingest delay from the metric's metadata.
+    ingestDelay: false
+    # If enabled will treat all DELTA metrics as an in-memory counter instead of a gauge.
+    aggregateDeltas: false
+    # How long should a delta metric continue to be exported after GCP stops producing a metric
+    aggregateDeltasTTL: '30m'
+
+web:
+  # Port to listen on
+  listenAddress: ':9255'
+  # Path under which to expose metrics.
+  path: /metrics
+
+## Pod affinity
+##
+affinity: {}
+
+annotations: {}
+
+## Pod extra arguments
+##
+extraArgs: {}
+
+## Extra environment variables
+##
+extraEnv: []
+  # - name: GOMAXPROCS
+  #   value: "2"
+
+## Node labels for stackdriver-exporter pod assignment
+## Ref: https://kubernetes.io/docs/user-guide/node-selection/
+##
+nodeSelector: {}
+
+## Node tolerations for stackdriver-exporter scheduling to nodes with taints
+## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+##
+tolerations: []
+  # - key: "key"
+  #   operator: "Equal|Exists"
+  #   value: "value"
+  #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+
+## Pod priority class
+##
+priorityClassName: ""
+
+## Service Account
+##
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: false
+  # The name of the ServiceAccount to use.
+  # If not set and create is false, 'default' is used
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+  annotations: {}
+
+# Enable this if you're using https://github.com/coreos/prometheus-operator
+serviceMonitor:
+  enabled: false
+  namespace: monitoring
+  # additionalLabels is the set of additional labels to add to the ServiceMonitor
+  additionalLabels: {}
+  # How long until a scrape request times out.
+  scrapeTimeout: '10s'
+  # fallback to the prometheus default unless specified
+  interval: 10s
+  # Defaults to what's used if you follow CoreOS [Prometheus Install Instructions](https://github.com/helm/charts/tree/master/stable/prometheus-operator#tldr)
+  honorLabels: true
+  # Whether Prometheus should use the timestamps of the metrics exposed by stackdriver-exporter
+  honorTimestamps: true
+  # MetricRelabelConfigs to apply to samples before ingestion https://github.com/prometheus-operator/prometheus-operator/blob/master/Documentation/api.md#relabelconfig
+  metricRelabelings: []
+  # RelabelConfigs to apply to samples before scraping. https://github.com/prometheus-operator/prometheus-operator/blob/master/Documentation/api.md#relabelconfig
+  relabelings: []
+
+## Custom PrometheusRules to be defined
+## ref: https://github.com/coreos/prometheus-operator#customresourcedefinitions
+prometheusRule:
+  enabled: false
+  additionalLabels: {}
+  namespace: ""
+  rules: []

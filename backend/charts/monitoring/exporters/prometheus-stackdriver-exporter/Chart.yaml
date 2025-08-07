@@ -1,0 +1,17 @@
+apiVersion: v1
+appVersion: v0.18.0
+description: Stackdriver exporter for Prometheus
+home: https://www.stackdriver.com/
+keywords:
+- metrics
+- stackdriver
+- monitoring
+maintainers:
+- email: pahli88@googlemail.com
+  name: rpahli
+  url: https://github.com/rpahli
+name: prometheus-stackdriver-exporter
+sources:
+- https://github.com/prometheus-community/stackdriver_exporter
+- https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-stackdriver-exporter
+version: 4.8.3

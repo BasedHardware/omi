@@ -1,0 +1,36 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "stackdriver-exporter.fullname" .  }}
+  {{- if .Values.serviceMonitor.namespace }}
+  namespace: {{ .Values.serviceMonitor.namespace }}
+  {{- end }}
+  labels:
+    {{- include "stackdriver-exporter.labels" . | indent 4 }}
+    {{- if .Values.serviceMonitor.additionalLabels }}
+    {{- toYaml .Values.serviceMonitor.additionalLabels | nindent 4 }}
+    {{- end }}
+spec:
+  endpoints:
+  - port: http
+    {{- if .Values.serviceMonitor.interval }}
+    interval: {{ .Values.serviceMonitor.interval }}
+    {{- end }}
+    {{- if .Values.serviceMonitor.scrapeTimeout }}
+    scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+    {{- end }}
+    honorLabels: {{ .Values.serviceMonitor.honorLabels }}
+    honorTimestamps: {{ .Values.serviceMonitor.honorTimestamps }}
+    {{- if .Values.serviceMonitor.metricRelabelings }}
+    metricRelabelings:
+    {{- toYaml .Values.serviceMonitor.metricRelabelings | nindent 4 }}
+    {{- end }}
+    {{- if .Values.serviceMonitor.relabelings }}
+    relabelings:
+    {{- toYaml .Values.serviceMonitor.relabelings | nindent 4 }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "stackdriver-exporter.selectorLabels" . | indent 6 }}
+{{- end }}

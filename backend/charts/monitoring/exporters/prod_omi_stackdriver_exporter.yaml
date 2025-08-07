@@ -1,0 +1,15 @@
+stackdriver:
+  projectIds:
+    - "based-hardware"
+  metrics:
+    prefixes:
+      - 'loadbalancing.googleapis.com/https/backend_request_count'
+    filters:
+      - 'loadbalancing.googleapis.com/https/backend_request_count:resource.labels.backend_target_name="custom-domains-api-omi-me-backend-listen-49a4-be"'
+    interval: '1m'
+    offset: '1m'
+
+serviceAccount:
+  create: true
+  annotations:
+    iam.gke.io/gcp-service-account: "prod-omi-prom-stackdriver-gsa@based-hardware.iam.gserviceaccount.com"

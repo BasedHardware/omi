@@ -238,10 +238,10 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 1
+    cpu: 0.7
     memory: 2Gi
   limits:
-    cpu: 2
+    cpu: 1
     memory: 4Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -268,8 +268,10 @@ autoscaling:
   enabled: true
   minReplicas: 1
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 70
+  # targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 70
+  requestsPerPod: 60
+  failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []

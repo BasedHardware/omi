@@ -1,0 +1,157 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "stackdriver-exporter.fullname" . }}
+  labels:
+    {{- include "stackdriver-exporter.labels" . | indent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "stackdriver-exporter.selectorLabels" . | indent 6 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        {{- include "stackdriver-exporter.labels" . | indent 8 }}
+      {{- with .Values.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      serviceAccount: {{ template "stackdriver-exporter.serviceAccountName" . }}
+      serviceAccountName: {{ template "stackdriver-exporter.serviceAccountName" . }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      volumes:
+      {{- if .Values.stackdriver.serviceAccountSecret }}
+        - name: stackdriver-service-account
+          secret:
+            secretName: {{ .Values.stackdriver.serviceAccountSecret | quote }}
+            {{- if and (.Values.stackdriver.serviceAccountSecret) (.Values.stackdriver.serviceAccountSecretKey) }}
+            items:
+              - key: {{ .Values.stackdriver.serviceAccountSecretKey | quote }}
+                path: credentials.json
+            {{- end }}
+      {{- else if .Values.stackdriver.serviceAccountKey }}
+        - name: stackdriver-service-account
+          secret:
+            secretName: {{ template "stackdriver-exporter.fullname" . }}
+      {{- end}}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["stackdriver_exporter"]
+          volumeMounts:
+          {{- if or .Values.stackdriver.serviceAccountSecret .Values.stackdriver.serviceAccountKey }}
+            - name: stackdriver-service-account
+              mountPath: /etc/secrets/service-account/
+          {{- end}}
+          args:
+            {{- if .Values.stackdriver.projectIds }}
+            {{- range .Values.stackdriver.projectIds }}
+            - --google.project-ids={{ . }}
+            {{- end }}
+            {{- else }}
+            - --google.project-id={{ .Values.stackdriver.projectId }}
+            {{- end }}
+            - --monitoring.metrics-interval={{ .Values.stackdriver.metrics.interval }}
+            - --monitoring.metrics-offset={{ .Values.stackdriver.metrics.offset }}
+            {{- if .Values.stackdriver.metrics.prefixes }}
+            {{- range .Values.stackdriver.metrics.prefixes }}
+            - --monitoring.metrics-prefixes={{ . }}
+            {{- end }}
+            {{- else }}
+            - --monitoring.metrics-type-prefixes={{ .Values.stackdriver.metrics.typePrefixes | replace " " "" }}
+            {{- end }}
+            {{- range .Values.stackdriver.metrics.filters }}
+            - --monitoring.filters={{ . }}
+            {{- end }}
+            - --stackdriver.backoff-jitter={{ .Values.stackdriver.backoffJitter }}
+            - --stackdriver.http-timeout={{ .Values.stackdriver.httpTimeout }}
+            - --stackdriver.max-backoff={{ .Values.stackdriver.maxBackoff }}
+            - --stackdriver.max-retries={{ .Values.stackdriver.maxRetries }}
+            - --stackdriver.retry-statuses={{ .Values.stackdriver.retryStatuses }}
+            - --web.listen-address={{ .Values.web.listenAddress }}
+            - --web.telemetry-path={{ .Values.web.path }}
+          {{- if .Values.stackdriver.dropDelegatedProjects }}
+            - --monitoring.drop-delegated-projects
+          {{- end }}
+          {{- if .Values.stackdriver.metrics.ingestDelay }}
+            - --monitoring.metrics-ingest-delay
+          {{- end }}
+          {{- if .Values.stackdriver.metrics.aggregateDeltas }}
+            - --monitoring.aggregate-deltas
+            - --monitoring.aggregate-deltas-ttl={{ .Values.stackdriver.metrics.aggregateDeltasTTL }}
+          {{- end }}
+          {{- if .Values.extraArgs }}
+          {{- range $key, $value := .Values.extraArgs }}
+            {{- if $value }}
+            - --{{ $key }}={{ $value }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- if or .Values.stackdriver.serviceAccountSecret .Values.stackdriver.serviceAccountKey .Values.extraEnv }}
+          env:
+            {{- if or .Values.stackdriver.serviceAccountSecret .Values.stackdriver.serviceAccountKey }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /etc/secrets/service-account/credentials.json
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.service.httpPort }}
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+          {{- if .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,18 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ template "stackdriver-exporter.fullname" . }}
+  labels:
+    {{- include "stackdriver-exporter.labels" . | indent 4 }}
+  {{- if .Values.service.annotations }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.httpPort }}
+      protocol: TCP
+  selector:
+    {{- include "stackdriver-exporter.selectorLabels" . | indent 4 }}
