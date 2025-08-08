@@ -90,6 +90,8 @@ class AppResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False
+    created_at: Optional[datetime] = Field(None, description="When the action item was created")
+    completed_at: Optional[datetime] = Field(None, description="When the action item was completed")
 
     @staticmethod
     def actions_to_string(action_items: List['ActionItem']) -> str:
@@ -98,6 +100,24 @@ class ActionItem(BaseModel):
         return '\n'.join(
             [f"- {item.description} ({'completed' if item.completed else 'pending'})" for item in action_items]
         )
+
+
+class ActionItemWithMetadata(BaseModel):
+    id: str = Field(description="Unique identifier for the action item")
+    conversation_id: str = Field(description="ID of the conversation this action item belongs to")
+    conversation_title: str = Field(description="Title of the conversation")
+    conversation_created_at: datetime = Field(description="When the conversation was created")
+    index: int = Field(description="Index of the action item in the conversation")
+    description: str = Field(description="The action item description")
+    completed: bool = Field(default=False, description="Whether the action item is completed")
+    deleted: bool = Field(default=False, description="Whether the action item is deleted")
+    created_at: Optional[datetime] = Field(None, description="When the action item was created")
+    completed_at: Optional[datetime] = Field(None, description="When the action item was completed")
+
+
+class ActionItemsResponse(BaseModel):
+    action_items: List[ActionItemWithMetadata] = Field(description="List of action items")
+    has_more: bool = Field(description="Whether there are more action items available")
 
 
 class Event(BaseModel):

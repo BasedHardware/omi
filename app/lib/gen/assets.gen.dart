@@ -101,6 +101,10 @@ class $AssetsImagesGen {
   AssetGenImage get appLauncherIconV2 =>
       const AssetGenImage('assets/images/app_launcher_icon_v2.png');
 
+  /// File path: assets/images/apple-reminders-logo.png
+  AssetGenImage get appleRemindersLogo =>
+      const AssetGenImage('assets/images/apple-reminders-logo.png');
+
   /// File path: assets/images/apple_logo.png
   AssetGenImage get appleLogo =>
       const AssetGenImage('assets/images/apple_logo.png');
@@ -365,6 +369,7 @@ class $AssetsImagesGen {
         appLauncherIcon,
         appLauncherIconV1,
         appLauncherIconV2,
+        appleRemindersLogo,
         appleLogo,
         background,
         blob,

@@ -702,4 +702,14 @@ class MixpanelManager {
       'action_item_description': actionItemDescription,
     });
   }
+
+  void actionItemsDateFilterApplied(String filterType) {
+    track('Action Items Date Filter Applied', properties: {
+      'filter_type': filterType,
+    });
+  }
+
+  void actionItemsDateFilterCleared() {
+    track('Action Items Date Filter Cleared');
+  }
 }

@@ -2,7 +2,7 @@ import copy
 import json
 import uuid
 import zlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional, Dict, Any
 
 from google.cloud import firestore
@@ -17,6 +17,16 @@ from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 
 conversations_collection = 'conversations'
+
+
+def _ensure_timezone_aware(dt: datetime) -> datetime:
+    """
+    Ensure a datetime object is timezone-aware.
+    If naive, assume UTC timezone.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 # *********************************
@@ -418,6 +428,111 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
     update_conversation(uid, conversation_id, {'structured.action_items': action_items})
+
+
+def get_action_items(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    include_completed: bool = True,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+):
+    """Fetch action items directly from conversations collection"""
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    
+    # Only get completed conversations with action items
+    conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', 'completed'))
+    
+    # Apply date range filters if provided
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+    
+    # Sort by created_at descending
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    
+    # Get all conversations with action items
+    conversations = []
+    for doc in conversations_ref.stream():
+        conversation_data = doc.to_dict()
+        
+        # Check if conversation has action items
+        structured = conversation_data.get('structured', {})
+        raw_action_items = structured.get('action_items', [])
+        
+        if raw_action_items:
+            # Decrypt conversation data for proper reading
+            decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
+            conversations.append(decrypted_data)
+    
+    # Extract and flatten action items with metadata
+    action_items = []
+    for conversation in conversations:
+        conversation_id = conversation['id']
+        conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
+        conversation_created_at = _ensure_timezone_aware(conversation['created_at'])
+        
+        raw_items = conversation.get('structured', {}).get('action_items', [])
+        
+        for idx, item in enumerate(raw_items):
+            # Skip deleted items
+            if isinstance(item, dict) and item.get('deleted', False):
+                continue
+                
+            # Skip completed items if not requested
+            is_completed = False
+            if isinstance(item, dict):
+                is_completed = item.get('completed', False)
+            
+            if not include_completed and is_completed:
+                continue
+                
+            # Handle backwards compatibility for dates
+            created_at = None
+            completed_at = None
+            
+            if isinstance(item, dict):
+                created_at = item.get('created_at')
+                completed_at = item.get('completed_at')
+            
+            # Ensure timezone awareness for action item dates
+            if created_at is not None:
+                created_at = _ensure_timezone_aware(created_at)
+            if completed_at is not None:
+                completed_at = _ensure_timezone_aware(completed_at)
+            
+            # Fallback to conversation created_at if dates are missing
+            if created_at is None:
+                created_at = conversation_created_at
+            
+            # If item is completed but no completed_at date, use conversation created_at
+            if is_completed and completed_at is None:
+                completed_at = conversation_created_at
+            
+            action_item_data = {
+                'id': f"{conversation_id}_{idx}",
+                'conversation_id': conversation_id,
+                'conversation_title': conversation_title,
+                'conversation_created_at': conversation_created_at,
+                'index': idx,
+                'description': item.get('description', item) if isinstance(item, dict) else item,
+                'completed': is_completed,
+                'deleted': item.get('deleted', False) if isinstance(item, dict) else False,
+                'created_at': created_at,
+                'completed_at': completed_at,
+            }
+            action_items.append(action_item_data)
+    
+    # Sort by newest first
+    action_items.sort(key=lambda x: -x['conversation_created_at'].timestamp())
+    
+    # Apply pagination
+    start_idx = offset
+    end_idx = offset + limit
+    
+    return action_items[start_idx:end_idx]
 
 
 # ******************************
