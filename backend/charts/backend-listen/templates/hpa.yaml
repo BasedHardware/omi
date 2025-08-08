@@ -33,7 +33,7 @@ spec:
     - type: External
       external:
         metric:
-          name: backend_listen_request_per_pod
+          name: backend_listen_requests_per_pod
         target:
           type: Value
           value: {{ .Values.autoscaling.requestsPerPod }}

@@ -11,7 +11,7 @@ rules:
         overrides:
           namespace: { resource: "namespace" }
     - name:
-        as: "backend_listen_request_per_pod"
+        as: "backend_listen_requests_per_pod"
       seriesQuery: 'stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name="custom-domains-api-omi-me-backend-listen-49a4-be"}'
       metricsQuery: '(sum(stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name="custom-domains-api-omi-me-backend-listen-49a4-be"})/sum(kube_deployment_status_replicas{deployment="prod-omi-backend-listen"}))'
       resources:
