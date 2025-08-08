@@ -59,7 +59,7 @@ class TranscriptSegmentLanguageCache:
 
         # Check each new sentence. If any is not in the target language, the whole segment is marked for translation.
         for sentence in sentences:
-            detected_lang = detect_language(sentence)
+            detected_lang = detect_language(sentence, remove_non_lexical=True)
             if detected_lang and detected_lang != target_language:
                 self.cache[segment_id] = (text, False)
                 return False

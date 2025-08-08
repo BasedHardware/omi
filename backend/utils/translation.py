@@ -13,31 +13,132 @@ MAX_DETECTION_CACHE_SIZE = 1000
 
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
 
+# A set of common English non-lexical utterances that can confuse language detectors.
+# This list helps prevent misclassification of short, ambiguous sounds.
+_non_lexical_utterances = {
+    # Hesitations and fillers
+    'ah',
+    'aha',
+    'ahem',
+    'eh',
+    'er',
+    'erm',
+    'ew',
+    'ha',
+    'hah',
+    'harrumph',
+    'hee',
+    'heh',
+    'hm',
+    'hmm',
+    'hmmm',
+    'ho',
+    'huh',
+    'mm',
+    'mmm',
+    'mhm',
+    'mhmm',
+    'oh',
+    'ooh',
+    'um',
+    'uh',
+    'uh-huh',
+    'uh-oh',
+    'whoa',
+    # Interjections and exclamations
+    'ack',
+    'aah',
+    'ach',
+    'agreed',
+    'argh',
+    'aw',
+    'aww',
+    'bam',
+    'bah',
+    'boo',
+    'brr',
+    'cheers',
+    'congrats',
+    'dang',
+    'darn',
+    'duh',
+    'eek',
+    'eep',
+    'encore',
+    'gosh',
+    'grr',
+    'gulp',
+    'haha',
+    'hehe',
+    'hey',
+    'hooray',
+    'hurrah',
+    'huzzah',
+    'jeez',
+    'meh',
+    'ouch',
+    'ow',
+    'oy',
+    'phew',
+    'pfft',
+    'pish',
+    'psst',
+    'shh',
+    'shoo',
+    'tsk',
+    'tut-tut',
+    'ugh',
+    'wahoo',
+    'whew',
+    'whoops',
+    'wow',
+    'yahoo',
+    'yay',
+    'yeah',
+    # Common short responses that can be language-agnostic
+    'yep',
+    'yup',
+    'yo',
+    'yikes',
+    'yowza',
+    'zing',
+}
+
 # Initialize the translation client globally
 _client = translate_v3.TranslationServiceClient()
 _parent = f"projects/{PROJECT_ID}/locations/global"
 _mime_type = "text/plain"
 
 
-def detect_language(text: str) -> str | None:
+def detect_language(text: str, remove_non_lexical: bool = False) -> str | None:
     """
     Detects the language of the provided text using Google Cloud Translate API.
     Uses a cache to avoid redundant detections.
 
     Args:
         text: The text to detect language for
+        remove_non_lexical: If True, removes common non-lexical utterances before detection.
 
     Returns:
         The language code of the detected language (e.g., 'en', 'vi', 'fr') if confidence >= 1,
         or None if no language with sufficient confidence is found
     """
-    if text in detection_cache:
-        detection_cache.move_to_end(text)
-        return detection_cache[text]
+    text_for_detection = text
+    if remove_non_lexical:
+        pattern = r'\b(' + '|'.join(re.escape(word) for word in _non_lexical_utterances) + r')\b'
+        cleaned_text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+        text_for_detection = re.sub(r'\s+', ' ', cleaned_text).strip()
+
+    if not text_for_detection:
+        return None
+
+    if text_for_detection in detection_cache:
+        detection_cache.move_to_end(text_for_detection)
+        return detection_cache[text_for_detection]
 
     try:
         # Call the Google Cloud Translate API to detect language
-        response = _client.detect_language(parent=_parent, content=text, mime_type=_mime_type)
+        response = _client.detect_language(parent=_parent, content=text_for_detection, mime_type=_mime_type)
 
         detected_language = None
         # Return the language code only if confidence is >= 1
@@ -49,7 +150,7 @@ def detect_language(text: str) -> str | None:
 
         if len(detection_cache) >= MAX_DETECTION_CACHE_SIZE:
             detection_cache.popitem(last=False)
-        detection_cache[text] = detected_language
+        detection_cache[text_for_detection] = detected_language
         return detected_language
     except Exception as e:
         print(f"Language detection error: {e}")
