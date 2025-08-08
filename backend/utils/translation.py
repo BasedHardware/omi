@@ -104,6 +104,11 @@ _non_lexical_utterances = {
     'zing',
 }
 
+# Pre-compile the regex pattern for non-lexical utterances for efficiency.
+_non_lexical_utterances_pattern = re.compile(
+    r'\b(' + '|'.join(re.escape(word) for word in _non_lexical_utterances) + r')\b', re.IGNORECASE
+)
+
 # Initialize the translation client globally
 _client = translate_v3.TranslationServiceClient()
 _parent = f"projects/{PROJECT_ID}/locations/global"
@@ -125,8 +130,7 @@ def detect_language(text: str, remove_non_lexical: bool = False) -> str | None:
     """
     text_for_detection = text
     if remove_non_lexical:
-        pattern = r'\b(' + '|'.join(re.escape(word) for word in _non_lexical_utterances) + r')\b'
-        cleaned_text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+        cleaned_text = _non_lexical_utterances_pattern.sub('', text)
         text_for_detection = re.sub(r'\s+', ' ', cleaned_text).strip()
 
     if not text_for_detection:
