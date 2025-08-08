@@ -4,28 +4,22 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/page.dart';
-import 'package:omi/pages/chat/sessions_history_page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
-import 'package:omi/pages/settings/page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -70,6 +64,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       }
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
+         NotificationService.instance.saveNotificationToken();
       }
       if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
         SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
