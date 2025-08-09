@@ -53,6 +53,16 @@
 					<string>$(GOOGLE_REVERSE_CLIENT_ID)</string>
 				</array>
 			</dict>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>omi.auth</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>omi</string>
+				</array>
+			</dict>
 		</array>
 		<key>CFBundleVersion</key>
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
