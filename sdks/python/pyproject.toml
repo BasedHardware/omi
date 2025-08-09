@@ -5,11 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "omi-sdk"
 version = "0.1.0"
-description = "Python SDK for Omi wearable device - connects over Bluetooth and transcribes audio in real time"
+description = "Python SDK for Omi wearable device"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Omi Community", email = "support@omi.com"}
+    {name = "Omi Community", email = "support@omi.me"},
+    {name = "Tae", email = "0xkevtae@gmail.com"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -66,7 +67,7 @@ dependencies = [
 [project.urls]
 "Homepage" = "https://www.omi.me/"
 "Repository" = "https://github.com/BasedHardware/omi"
-"Documentation" = "https://docs.omi.me/doc"
+"Documentation" = "https://docs.omi.me/doc/developer/sdk/python"
 
 [project.optional-dependencies]
 dev = [
