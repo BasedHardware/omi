@@ -92,6 +92,19 @@ prometheus:
         - source_labels: [__meta_kubernetes_pod_node_name]
           action: replace
           target_label: kubernetes_node
+      - job_name: prometheus-stackdriver-metrics
+        scrape_interval: 1s
+        metrics_path: /metrics
+        scheme: http
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+              - "prod-omi-monitoring"
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: "(.*)-prometheus-stackdriver-exporter"
+            action: keep
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
