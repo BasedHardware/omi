@@ -236,7 +236,7 @@ prometheus-adapter:
   # -- Normally, this chart will be installed if `scaling.auto.enabled` is true. However, if you wish
   # to manage the Prometheus adapter in your cluster on your own and not as part of the Deepgram Helm chart,
   # you can force it to not be installed by setting this to `false`.
-  includeDependency:
+  includeDependency: false
   prometheus:
     url: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc
   rules:
