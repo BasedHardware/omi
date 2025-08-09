@@ -3,7 +3,7 @@ from typing import Optional, List
 from models.app import App
 from models.chat import Message, MessageSender
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
-from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium, llm_mini
+from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium, llm_mini, llm_medium_experiment
 
 
 def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: List[Message] = []) -> str:
@@ -66,7 +66,7 @@ The output must be as concise as possible while retaining all necessary informat
 Facts:
 {combined_memories}
     """
-    response = llm_medium.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt)
     return response.content
 
 
@@ -80,7 +80,7 @@ Facts:
 
 Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
 
-    response = llm_medium.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt)
     description = response.content
     return description
 
@@ -88,7 +88,7 @@ Create a natural, memorable description that captures this person's essence. Foc
 def condense_conversations(conversations):
     combined_conversations = "\n".join(conversations)
     prompt = f"""
-You are an AI tasked with condensing context from the recent 100 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
+You are an AI tasked with condensing context from the recent {len(conversations)} conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
 
 **Requirements:**  
 1. Prioritize information based on:  
@@ -115,7 +115,7 @@ The output must be as concise as possible while retaining all necessary context 
 Conversations:
 {combined_conversations}
     """
-    response = llm_medium.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt)
     return response.content
 
 
@@ -152,7 +152,7 @@ Generate the condensed context now.
 Tweets:
 {tweets}
     """
-    response = llm_medium.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt)
     return response.content
 
 
@@ -200,7 +200,7 @@ def generate_persona_intro_message(prompt: str, name: str):
         },
     ]
 
-    response = llm_medium.invoke(messages)
+    response = llm_medium_experiment.invoke(messages)
     return response.content.strip('"').strip()
 
 

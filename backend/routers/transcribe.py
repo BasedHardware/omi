@@ -400,7 +400,6 @@ async def _listen(
             status=ConversationStatus.in_progress,
             source=ConversationSource.openglass if photos else ConversationSource.omi,
         )
-        print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
         return conversation, (0, len(segments))
