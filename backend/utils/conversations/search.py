@@ -37,7 +37,7 @@ def search_conversations(
 
         search_parameters = {
             'q': query,
-            'query_by': 'structured.overview' 'structured.title',
+            'query_by': 'structured.overview, structured.title',
             'filter_by': filter_by,
             'sort_by': 'created_at:desc',
             'per_page': per_page,
