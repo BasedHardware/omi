@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
@@ -29,7 +30,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
   DateTime? _reconnectAt;
-  final int _connectionCheckSeconds = 7;
+  int _connectionCheckSeconds = 20;
+  int _reconnectionAttempts = 0;
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
@@ -115,6 +117,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return connection?.device;
   }
 
+  DateTime _lastBatteryUpdate = DateTime.now();
+
   initiateBleBatteryListener() async {
     if (connectedDevice == null) {
       return;
@@ -123,6 +127,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
+        final now = DateTime.now();
+        if (now.difference(_lastBatteryUpdate).inSeconds < 30) {
+          return;
+        }
+        _lastBatteryUpdate = now;
+        
         batteryLevel = value;
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
@@ -130,8 +140,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             title: "Low Battery Alert",
             body: "Your device is running low on battery. Time for a recharge! 🔋",
           );
-        } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = true;
+        } else if (batteryLevel > 20 && _hasLowBatteryAlerted) {
+          _hasLowBatteryAlerted = false;
         }
         notifyListeners();
       },
@@ -156,7 +166,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           return;
         }
         await scanAndConnectToDevice();
+        
+        _reconnectionAttempts++;
+        _connectionCheckSeconds = math.min(20 + (_reconnectionAttempts * 25), 90);
+        debugPrint("Reconnection attempt $_reconnectionAttempts, next check in $_connectionCheckSeconds seconds");
       } else {
+        _reconnectionAttempts = 0;
+        _connectionCheckSeconds = 20;
         t.cancel();
       }
     });
@@ -259,6 +275,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       );
     });
     MixpanelManager().deviceDisconnected();
+
+    _reconnectionAttempts = 0;
+    _connectionCheckSeconds = 20;
 
     // Retired 1s to prevent the race condition made by standby power of ble device
     Future.delayed(const Duration(seconds: 1), () {
