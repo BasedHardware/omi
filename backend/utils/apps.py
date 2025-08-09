@@ -453,16 +453,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
     user_name = get_user_name(uid)
 
     # Get and condense recent conversations
-    conversations = get_conversations(uid, limit=100)
-    all_person_ids = []
-    for c in conversations:
-        all_person_ids.extend([s.get('person_id') for s in c.get('transcript_segments', []) if s.get('person_id')])
-
-    people = []
-    if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-        people = [Person(**p) for p in people_data]
-    conversation_history = Conversation.conversations_to_string(conversations, people=people)
+    conversations = get_conversations(uid, limit=10)
+    conversation_history = Conversation.conversations_to_string(conversations)
     conversation_history = condense_conversations([conversation_history])
 
     tweets = None
@@ -579,16 +571,8 @@ async def update_persona_prompt(persona: dict):
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent conversations
-    conversations = get_conversations(persona['uid'], limit=100)
-    all_person_ids = []
-    for c in conversations:
-        all_person_ids.extend([s.get('person_id') for s in c.get('transcript_segments', []) if s.get('person_id')])
-
-    people = []
-    if all_person_ids:
-        people_data = users_db.get_people_by_ids(persona['uid'], list(set(all_person_ids)))
-        people = [Person(**p) for p in people_data]
-    conversation_history = Conversation.conversations_to_string(conversations, people=people)
+    conversations = get_conversations(persona['uid'], limit=10)
+    conversation_history = Conversation.conversations_to_string(conversations)
     conversation_history = condense_conversations([conversation_history])
 
     condensed_tweets = None
