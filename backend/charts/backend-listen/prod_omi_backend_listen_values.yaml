@@ -263,9 +263,9 @@ env:
   - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
     value: "0"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
-    value: "price_1RrFym1F8wnoWYvwQgIFhRWD"
+    value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
-    value: "price_1RrG6k1F8wnoWYvwORsU26Mr"
+    value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

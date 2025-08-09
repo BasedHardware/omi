@@ -661,7 +661,7 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = including_combined_segments and stt_language == 'multi' and language not in ["multi", "auto"]
+    translation_enabled = including_combined_segments and (stt_language == 'multi' and language not in ["multi"])
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
@@ -728,7 +728,7 @@ async def _listen(
         nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.6)
 
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue

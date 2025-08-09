@@ -370,9 +370,6 @@ class _DeciderWidgetState extends State<DeciderWidget> {
     initDeepLinks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<ConnectivityProvider>().isConnected) {
-        NotificationService.instance.saveNotificationToken();
-      }
 
       if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -389,6 +386,8 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
         context.read<UsageProvider>().fetchSubscription();
+
+        NotificationService.instance.saveNotificationToken();
       } else {
         if (!PlatformManager.instance.isAnalyticsSupported) {
           await PlatformManager.instance.intercom.loginUnidentifiedUser();
