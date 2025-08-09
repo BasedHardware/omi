@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:talker_flutter/talker_flutter.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class Logger {
   final talker = TalkerFlutter.init();
@@ -17,10 +18,12 @@ class Logger {
 
   static void error(dynamic message) {
     instance.talker.error(message);
+    DebugLogManager.logError(message);
   }
 
   static void warning(dynamic message) {
     instance.talker.warning(message);
+    DebugLogManager.logWarning(message.toString());
   }
 
   static void info(dynamic message) {
@@ -33,6 +36,7 @@ class Logger {
 
   static void handle(dynamic exception, StackTrace? stackTrace, {String? message}) {
     instance.talker.handle(exception, stackTrace, message ?? 'An error occurred. Please try again later.');
+    DebugLogManager.logError(exception, stackTrace, message);
   }
 }
 

@@ -48,6 +48,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -179,6 +180,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
+    if (SharedPreferencesUtil().devLogsToFileEnabled) {
+      DebugLogManager.setEnabled(true);
+    }
     super.initState();
   }
 
@@ -298,6 +302,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 FlutterError.onError = (FlutterErrorDetails details) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     Logger.instance.talker.handle(details.exception, details.stack);
+                    DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
                   });
                 };
                 ErrorWidget.builder = (errorDetails) {
