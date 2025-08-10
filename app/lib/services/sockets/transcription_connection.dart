@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 abstract interface class ITransctipSegmentSocketServiceListener {
   void onMessageEventReceived(MessageEvent event);
@@ -77,6 +78,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     bool ok = await _socket.connect();
     if (!ok) {
       debugPrint("Can not connect to websocket");
+      await DebugLogManager.logWarning('transcription_socket_connect_failed', {
+        'url': Env.apiBaseUrl?.replaceAll('https', 'wss') ?? 'null',
+        'sample_rate': sampleRate,
+        'codec': codec.toString(),
+        'language': language,
+      });
     }
   }
 
@@ -86,6 +93,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (reason != null) {
       debugPrint(reason);
+      await DebugLogManager.logInfo('transcription_socket_stopped', {'reason': reason});
     }
   }
 
@@ -99,6 +107,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _listeners.forEach((k, v) {
       v.onClosed(closeCode);
     });
+    DebugLogManager.logEvent('transcription_socket_closed', {
+      'close_code': closeCode ?? -1,
+    });
   }
 
   @override
@@ -106,6 +117,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _listeners.forEach((k, v) {
       v.onError(err);
     });
+    DebugLogManager.logError(err, trace, 'transcription_socket_error');
   }
 
   @override
@@ -116,6 +128,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       jsonEvent = jsonDecode(event);
     } on FormatException catch (e) {
       debugPrint(e.toString());
+      DebugLogManager.logWarning('transcription_socket_parse_error', {'error': e.toString()});
     }
     if (jsonEvent == null) {
       debugPrint("Can not decode message event json $event");
@@ -144,6 +157,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
 
     debugPrint(event.toString());
+    DebugLogManager.logInfo('transcription_socket_unhandled_message: ${event.toString()}');
   }
 
   @override
@@ -157,6 +171,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       title: 'Internet Connection Lost',
       body: 'Your device is offline. Transcription is paused until connection is restored.',
     );
+    DebugLogManager.logEvent('internet_connection_lost', {});
   }
 
   @override
@@ -171,12 +186,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       body: 'Unable to connect to the transcript service.'
           ' Please restart the app or contact support if the problem persists.',
     );
+    DebugLogManager.logEvent('transcription_socket_max_retries', {});
   }
 
   @override
   void onConnected() {
     _listeners.forEach((k, v) {
       v.onConnected();
+    });
+    DebugLogManager.logEvent('transcription_socket_connected', {
+      'sample_rate': sampleRate,
+      'codec': codec.toString(),
+      'language': language,
+      'include_speech_profile': includeSpeechProfile,
     });
   }
 }

@@ -187,6 +187,11 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
+  // Developer Diagnostics
+  bool get devLogsToFileEnabled => getBool('devLogsToFileEnabled') ?? false;
+
+  set devLogsToFileEnabled(bool value) => saveBool('devLogsToFileEnabled', value);
+
   bool get permissionStoreRecordingsEnabled => getBool('permissionStoreRecordingsEnabled') ?? false;
 
   set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);

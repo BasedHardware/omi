@@ -10,9 +10,6 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
-import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -20,7 +17,6 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -38,7 +34,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
@@ -122,6 +118,7 @@ class CaptureProvider extends ChangeNotifier
         } else if (!nativeRecording && recordingState == RecordingState.systemAudioRecord) {
           updateRecordingState(RecordingState.stop);
           await _socket?.stop(reason: 'native recording stopped during sleep');
+          await DebugLogManager.logEvent('transcription_socket_stop_due_to_sleep', {});
         }
       } catch (e) {
         debugPrint('Could not check state during app resume: $e');
