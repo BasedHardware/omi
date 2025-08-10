@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -37,7 +37,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     setState(() {
       isDeleteing = false;
     });
-    routeToPage(context, const DeciderWidget(), replace: true);
+    routeToPage(context, const AppShell(), replace: true);
   }
 
   @override
