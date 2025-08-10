@@ -107,6 +107,16 @@ async def _listen(
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
+    # Translation language
+    translation_language = None
+    if stt_language == 'multi':
+        if language == "multi":
+            user_language_preference = user_db.get_user_language_preference(uid)
+            if user_language_preference:
+                translation_language = user_language_preference
+        else:
+            translation_language = language
+
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
@@ -660,7 +670,7 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = including_combined_segments and (stt_language == 'multi' and language not in ["multi"])
+    translation_enabled = including_combined_segments and translation_language is not None
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
@@ -673,11 +683,11 @@ async def _listen(
                     continue
 
                 # Language Detection
-                if language_cache.is_in_target_language(segment.id, segment_text, language):
+                if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
                     continue
 
                 # Translation
-                translated_text = translation_service.translate_text_by_sentence(language, segment_text)
+                translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
 
                 if translated_text == segment_text:
                     # If translation is same as original, it's likely in the target language.
@@ -686,7 +696,7 @@ async def _listen(
                     continue
 
                 # Create/Update Translation object
-                translation = Translation(lang=language, text=translated_text)
+                translation = Translation(lang=translation_language, text=translated_text)
                 existing_translation_index = next(
                     (i for i, t in enumerate(segment.translations) if t.lang == language), None
                 )
