@@ -29,6 +29,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/animated_gradient_border.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -163,17 +164,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       : provider.isClearingChat
                           ? const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
-                          borderWidth: 1,
-                          borderRadius: const BorderRadius.all(Radius.circular(16)),
-                          animationDuration: const Duration(milliseconds: 2000),
-                          pulseIntensity: 0.2,
-                          isActive: !home.isChatFieldFocused && !_showVoiceRecorder &&
-                              !(MediaQuery.maybeOf(context)?.accessibleNavigation ?? false),
-                          child: Container(
-                            width: double.maxFinite,
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            child: Column(
->>>>>>> 4cf090e6e (feat(chat): refine AnimatedGradientBorder integration\n\n- Add isActive and backgroundColor props to control animation and background\n- Pause animation when chat field focused, voice recorder open, or accessibleNavigation enabled\n- Clamp opacity and wrap in RepaintBoundary to reduce repaint cost\n- Keep gradient, colors, and styling consistent with current UI)
                               children: [
                                 CircularProgressIndicator(
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
@@ -456,12 +446,25 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Expanded(
-                                child: Container(
-                                  height: 44,
-                                  padding: const EdgeInsets.only(left: 16, right: 8),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
+                                child: AnimatedGradientBorder(
+                                  gradientColors: const [
+                                    Color.fromARGB(127, 208, 208, 208),
+                                    Color.fromARGB(127, 188, 99, 121),
+                                    Color.fromARGB(127, 86, 101, 182),
+                                    Color.fromARGB(127, 126, 190, 236),
+                                  ],
+                                  borderWidth: 1,
+                                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                                  animationDuration: const Duration(milliseconds: 2000),
+                                  pulseIntensity: 0.2,
+                                  isActive: !textFieldFocusNode.hasFocus && !_showVoiceRecorder &&
+                                      !(MediaQuery.maybeOf(context)?.accessibleNavigation ?? false),
+                                  child: Container(
+                                    height: 44,
+                                    padding: const EdgeInsets.only(left: 16, right: 8),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
                                       if (shouldShowMenuButton())
                                         GestureDetector(
                                           onTap: () {
