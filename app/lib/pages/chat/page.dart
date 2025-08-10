@@ -163,6 +163,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       : provider.isClearingChat
                           ? const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
+                          borderWidth: 1,
+                          borderRadius: const BorderRadius.all(Radius.circular(16)),
+                          animationDuration: const Duration(milliseconds: 2000),
+                          pulseIntensity: 0.2,
+                          isActive: !home.isChatFieldFocused && !_showVoiceRecorder &&
+                              !(MediaQuery.maybeOf(context)?.accessibleNavigation ?? false),
+                          child: Container(
+                            width: double.maxFinite,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            child: Column(
+>>>>>>> 4cf090e6e (feat(chat): refine AnimatedGradientBorder integration\n\n- Add isActive and backgroundColor props to control animation and background\n- Pause animation when chat field focused, voice recorder open, or accessibleNavigation enabled\n- Clamp opacity and wrap in RepaintBoundary to reduce repaint cost\n- Keep gradient, colors, and styling consistent with current UI)
                               children: [
                                 CircularProgressIndicator(
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),

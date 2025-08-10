@@ -8,6 +8,8 @@ class AnimatedGradientBorder extends StatefulWidget {
   final BorderRadius borderRadius;
   final Duration animationDuration;
   final double pulseIntensity;
+  final bool isActive;
+  final Color backgroundColor;
 
   const AnimatedGradientBorder({
     super.key,
@@ -17,6 +19,8 @@ class AnimatedGradientBorder extends StatefulWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(16)),
     this.animationDuration = const Duration(seconds: 2),
     this.pulseIntensity = 0.3,
+    this.isActive = true,
+    this.backgroundColor = Colors.transparent,
   });
 
   @override
@@ -44,8 +48,9 @@ class _AnimatedGradientBorderState extends State<AnimatedGradientBorder> with Si
       curve: Curves.easeInOut,
     ));
 
-    // Start the infinite pulse animation
-    _animationController.repeat(reverse: true);
+    if (widget.isActive) {
+      _animationController.repeat(reverse: true);
+    }
   }
 
   @override
@@ -55,26 +60,56 @@ class _AnimatedGradientBorderState extends State<AnimatedGradientBorder> with Si
   }
 
   @override
+  void didUpdateWidget(covariant AnimatedGradientBorder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.animationDuration != widget.animationDuration) {
+      _animationController.duration = widget.animationDuration;
+    }
+
+    if (oldWidget.pulseIntensity != widget.pulseIntensity) {
+      _pulseAnimation = Tween<double>(
+        begin: 1.0 - widget.pulseIntensity,
+        end: 1.0 + widget.pulseIntensity,
+      ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
+    }
+
+    if (oldWidget.isActive != widget.isActive) {
+      if (widget.isActive) {
+        if (!_animationController.isAnimating) {
+          _animationController.repeat(reverse: true);
+        }
+      } else {
+        _animationController.stop();
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
         // Create animated gradient colors with opacity pulse
+        final double factor = _animationController.isAnimating ? _pulseAnimation.value : 1.0;
         final animatedColors = widget.gradientColors.map((color) {
-          return color.withOpacity(color.opacity * _pulseAnimation.value);
+          final double nextOpacity = (color.opacity * factor).clamp(0.0, 1.0).toDouble();
+          return color.withOpacity(nextOpacity);
         }).toList();
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: widget.borderRadius,
-            border: GradientBoxBorder(
-              gradient: LinearGradient(colors: animatedColors),
-              width: widget.borderWidth,
+        return RepaintBoundary(
+          child: Container(
+            decoration: BoxDecoration(
+              color: widget.backgroundColor,
+              borderRadius: widget.borderRadius,
+              border: GradientBoxBorder(
+                gradient: LinearGradient(colors: animatedColors),
+                width: widget.borderWidth,
+              ),
+              shape: BoxShape.rectangle,
             ),
-            shape: BoxShape.rectangle,
+            child: widget.child,
           ),
-          child: widget.child,
         );
       },
     );
