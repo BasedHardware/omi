@@ -1,0 +1,8 @@
+This 3d model is an alternate way of wearing the Omi Ai Wearable device. 
+
+ 
+
+The device housing (Omi Watch Band Main (TPU)) must be printed in TPU unless you use the PLA version (Omi Watch Band Main (PLA Version)) and the rest in some solid filament (PLA in my case). 
+The main axles (Main Axle 1 & 2 ) are fitted through the holes in the main housing. The main links (Main Band Link) are connected together (duh) and you can add or remove some to change the size depending on your arm size. The final link (End Band Link) is used to connect the housing's axle to the rest of the band. 
+
+MAKE SURE TO USE SUPPORT OF THE MAIN LINKS
