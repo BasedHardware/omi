@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
@@ -291,9 +291,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           await SharedPreferencesUtil().clearUserPreferences();
                           personaProvider.setRouting(PersonaProfileRouting.no_device);
                           await signOut();
-                          if (context.mounted) {
-                            routeToPage(context, const DeciderWidget(), replace: true);
-                          }
+                         if (context.mounted){
+                            routeToPage(context, const AppShell(), replace: true);
+                         }
                         },
                         "Sign Out?",
                         "Are you sure you want to sign out?",
@@ -365,7 +365,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         personaProvider.setRouting(PersonaProfileRouting.no_device);
                         await signOut();
                         if (context.mounted) {
-                          routeToPage(context, const DeciderWidget(), replace: true);
+                          routeToPage(context, const AppShell(), replace: true);
                         }
                       },
                       "Sign Out?",
