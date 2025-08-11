@@ -90,6 +90,11 @@ class AppResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False
+    created_at: Optional[datetime] = Field(default=None, description="When the action item was created")
+    updated_at: Optional[datetime] = Field(default=None, description="When the action item was last updated")
+    due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
+    completed_at: Optional[datetime] = Field(default=None, description="When the action item was completed")
+    conversation_id: Optional[str] = Field(default=None, description="ID of the conversation this action item came from")
 
     @staticmethod
     def actions_to_string(action_items: List['ActionItem']) -> str:

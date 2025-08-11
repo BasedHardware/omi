@@ -16,6 +16,7 @@ import database.notifications as notification_db
 import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
+import database.action_items as action_items_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.redis_db import get_user_preferred_app
 from database.vector_db import upsert_vector2, update_vector_metadata
@@ -290,6 +291,37 @@ def _extract_trends(uid: str, conversation: Conversation):
     trends_db.save_trends(conversation, parsed)
 
 
+def _save_action_items(uid: str, conversation: Conversation):
+    """
+    Save action items from a conversation to the dedicated action_items collection.
+    This runs in addition to storing them in the conversation for backward compatibility.
+    """
+    if not conversation.structured or not conversation.structured.action_items:
+        return
+    
+    action_items_data = []
+    now = datetime.now(timezone.utc)
+    
+    for action_item in conversation.structured.action_items:
+        action_item_data = {
+            'description': action_item.description,
+            'completed': action_item.completed,
+            'created_at': action_item.created_at or now,
+            'updated_at': action_item.updated_at or now,
+            'due_at': action_item.due_at,
+            'completed_at': action_item.completed_at,
+            'conversation_id': conversation.id
+        }
+        action_items_data.append(action_item_data)
+    
+    if action_items_data:
+        # Delete existing action items for this conversation first (in case of reprocessing)
+        action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+        # Save new action items
+        action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+        print(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
     tz = notification_db.get_user_time_zone(uid)
@@ -398,6 +430,7 @@ def process_conversation(
         )
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
+        threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
