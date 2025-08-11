@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
@@ -166,7 +166,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                   await signOut();
                   Navigator.of(context).pop();
-                  routeToPage(context, const DeciderWidget(), replace: true);
+                  routeToPage(context, const AppShell(), replace: true);
                 }, "Sign Out?", "Are you sure you want to sign out?");
               },
             );
@@ -219,7 +219,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                 await signOut();
                 Navigator.of(context).pop();
-                routeToPage(context, const DeciderWidget(), replace: true);
+                routeToPage(context, const AppShell(), replace: true);
               }, "Sign Out?", "Are you sure you want to sign out?");
             },
           );
