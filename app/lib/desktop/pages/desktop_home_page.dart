@@ -92,15 +92,15 @@ class _MacWindowButtonState extends State<_MacWindowButton> {
           width: 12,
           height: 12,
           decoration: BoxDecoration(
-            color: _isHovered ? _getButtonColor() : const Color(0xFFFFFFFF).withValues(alpha: 0.07),
+            color: _isHovered ? _getButtonColor() : const Color(0xFFFFFFFF).withOpacity(0.07),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: _isHovered ? _getButtonColor().withValues(alpha: 0.8) : const Color(0xFFD0D0D0),
+              color: _isHovered ? _getButtonColor().withOpacity(0.8) : const Color(0xFFD0D0D0),
               width: 0.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
+                color: Colors.black.withOpacity(0.1),
                 blurRadius: 1,
                 offset: const Offset(0, 0.5),
               ),
@@ -111,8 +111,8 @@ class _MacWindowButtonState extends State<_MacWindowButton> {
                   _getButtonIcon(),
                   size: 8,
                   color: widget.type == MacWindowButtonType.close
-                      ? Colors.white.withValues(alpha: 0.9)
-                      : Colors.black.withValues(alpha: 0.7),
+                      ? Colors.white.withOpacity(0.9)
+                      : Colors.black.withOpacity(0.7),
                 )
               : null,
         ),
@@ -138,7 +138,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   final GlobalKey _profileCardKey = GlobalKey();
 
   bool _isRecordingMinimized = false;
-  bool _isSidebarCollapsed = false;
 
   // Native overlay platform channel
   static const _overlayChannel = MethodChannel('overlayPlatform');
@@ -178,9 +177,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   @override
   void initState() {
     SharedPreferencesUtil().onboardingCompleted = true;
-
-    // Initialize sidebar collapse state
-    _isSidebarCollapsed = SharedPreferencesUtil().sidebarCollapsed;
 
     // Initialize animations
     _sidebarAnimationController = AnimationController(
@@ -460,31 +456,28 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           offset: Offset(-50 * (1 - _sidebarSlideAnimation.value), 0),
           child: Opacity(
             opacity: _sidebarSlideAnimation.value,
-            child: ClipRect(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                width: _isSidebarCollapsed ? 130 : responsive.sidebarWidth(baseWidth: 280),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                  ),
-                  border: const Border(
-                    right: BorderSide(
-                      color: ResponsiveHelper.backgroundTertiary,
-                      width: 1,
-                    ),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(2, 0),
-                    ),
-                  ],
+            child: Container(
+              width: responsive.sidebarWidth(baseWidth: 280),
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
                 ),
+                border: const Border(
+                  right: BorderSide(
+                    color: ResponsiveHelper.backgroundTertiary,
+                    width: 1,
+                  ),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(2, 0),
+                  ),
+                ],
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -496,7 +489,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   // Main navigation section
                   Expanded(
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: _isSidebarCollapsed ? 18 : 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -603,7 +596,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               ),
             ),
           ),
-        ),
         );
       },
     );
@@ -620,67 +612,46 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       margin: const EdgeInsets.symmetric(vertical: 1),
       child: Stack(
         children: [
-                // Navigation item with full container
-      Material(
-        color: Colors.transparent,
-        child: Tooltip(
-          message: _isSidebarCollapsed ? label : '',
-          child: InkWell(
-            onTap: () {
-              MixpanelManager()
-                  .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
-              onTap();
-            },
-            borderRadius: BorderRadius.circular(8),
+          // Navigation item with full container
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                MixpanelManager()
+                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                onTap();
+              },
+              borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: _isSidebarCollapsed ? 0 : 16,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: isSelected ? ResponsiveHelper.backgroundTertiary.withOpacity(0.8) : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: _isSidebarCollapsed
-                    ? Center(
-                        child: Icon(
-                          icon,
+                child: Row(
+                  children: [
+                    Icon(
+                      icon,
+                      color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
                           color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                          size: 18,
                         ),
-                      )
-                    : Row(
-                        children: [
-                          Icon(
-                            icon,
-                            color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: AnimatedOpacity(
-                              opacity: 1.0,
-                              duration: const Duration(milliseconds: 150),
-                              curve: Curves.easeOut,
-                              child: Text(
-                                label,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                                  color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        // Selection accent line spanning full item height
+          // Selection accent line spanning full item height
           if (isSelected)
             Positioned(
               right: 0,
@@ -702,8 +673,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-
-
   void _navigateToIndex(int index, HomeProvider homeProvider) {
     if (homeProvider.selectedIndex == index) return;
 
@@ -713,13 +682,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOut,
     );
-  }
-
-  void _toggleSidebarCollapse() {
-    setState(() {
-      _isSidebarCollapsed = !_isSidebarCollapsed;
-    });
-    SharedPreferencesUtil().sidebarCollapsed = _isSidebarCollapsed;
   }
 
   /// Navigate to create app page (index 5)
@@ -857,11 +819,12 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     }
   }
 
+  // Legacy Flutter floating widget removed - now using native macOS overlay
 
   Widget _buildWindowControls() {
     return Container(
       height: 52,
-      padding: const EdgeInsets.fromLTRB(18, 16, 16, 0),
+      padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
       child: Row(
         children: [
           // Close button
@@ -923,11 +886,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               }
             },
           ),
-          
-          const SizedBox(width: 16),
-          
-          // Collapse/Expand button
-          _buildWindowCollapseButton(),
         ],
       ),
     );
@@ -940,27 +898,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     return _MacWindowButton(
       type: type,
       onTap: onTap,
-    );
-  }
-
-  Widget _buildWindowCollapseButton() {
-    return Material(
-      color: Colors.transparent,
-      child: Tooltip(
-        message: _isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar',
-        child: InkWell(
-          onTap: _toggleSidebarCollapse,
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            padding: const EdgeInsets.all(6),
-                          child: Icon(
-                _isSidebarCollapsed ? FontAwesomeIcons.indent : FontAwesomeIcons.outdent,
-                color: ResponsiveHelper.textSecondary,
-                size: 14,
-              ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -986,114 +923,70 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 width: 1,
               ),
             ),
-            child: ClipRect(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final shouldShowFullLayout = constraints.maxWidth > 160;
-                  
-                  return shouldShowFullLayout && !_isSidebarCollapsed
-                      ? Row(
-                          children: [
-                            // Profile picture
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                                  style: const TextStyle(
-                                    color: ResponsiveHelper.purplePrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
+            child: Row(
+              children: [
+                // Profile picture
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                      style: const TextStyle(
+                        color: ResponsiveHelper.purplePrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
 
-                            const SizedBox(width: 12),
+                const SizedBox(width: 12),
 
-                            // User info
-                            Expanded(
-                              child: AnimatedOpacity(
-                                opacity: shouldShowFullLayout && !_isSidebarCollapsed ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 150),
-                                curve: Curves.easeOut,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      userName.isNotEmpty ? userName : 'User',
-                                      style: const TextStyle(
-                                        color: ResponsiveHelper.textPrimary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      userEmail.isNotEmpty ? userEmail : 'No email set',
-                                      style: const TextStyle(
-                                        color: ResponsiveHelper.textTertiary,
-                                        fontSize: 11,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                // User info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        userName.isNotEmpty ? userName : 'User',
+                        style: const TextStyle(
+                          color: ResponsiveHelper.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        userEmail.isNotEmpty ? userEmail : 'No email set',
+                        style: const TextStyle(
+                          color: ResponsiveHelper.textTertiary,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
 
-                            // Chevron icon
-                            AnimatedOpacity(
-                              opacity: shouldShowFullLayout && !_isSidebarCollapsed ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 150),
-                              curve: Curves.easeOut,
-                              child: const Icon(
-                                FontAwesomeIcons.chevronUp,
-                                color: ResponsiveHelper.textSecondary,
-                                size: 12,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Center(
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                                style: const TextStyle(
-                                  color: ResponsiveHelper.purplePrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                },
-              ),
+                // Chevron icon
+                const Icon(
+                  FontAwesomeIcons.chevronUp,
+                  color: ResponsiveHelper.textSecondary,
+                  size: 12,
+                ),
+              ],
             ),
           ),
         ),
