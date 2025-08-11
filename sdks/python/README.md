@@ -4,6 +4,25 @@ A pip-installable Python SDK for connecting to **Omi wearable devices** over **B
 
 ## 📦 Installation
 
+### Prerequisites
+The Omi SDK requires the Opus audio codec library to be installed on your system:
+
+**macOS:**
+```bash
+brew install opus
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install libopus0 libopus-dev
+```
+
+**CentOS/RHEL/Fedora:**
+```bash
+sudo yum install opus opus-devel  # CentOS/RHEL
+sudo dnf install opus opus-devel  # Fedora
+```
+
 ### Option 1: Install from PyPI (when published)
 ```bash
 pip install omi-sdk
@@ -126,7 +145,8 @@ pip install -e ".[dev]"
 
 ## 🧩 Troubleshooting
 
-- **Bluetooth permission**: Run `omi-scan` to trigger permission prompt on macOS
+- **Opus library error**: Make sure Opus audio codec is installed (see Prerequisites section)
+- **Bluetooth permission errors on macOS**: Go to System Preferences → Privacy & Security → Bluetooth and grant access to Terminal and Python
 - **Python version**: Requires Python 3.10+
 - **Omi device**: Make sure device is powered on and nearby
 - **WebSocket issues**: SDK uses `websockets>=11.0`
