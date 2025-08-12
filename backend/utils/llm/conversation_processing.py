@@ -115,6 +115,16 @@ def get_transcript_structure(
     • Exclude vague or trivial remarks ("We should grab lunch sometime").  
     • Merge duplicates; order by due date → spoken urgency → alphabetical.  
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • IMPORTANT: For each action item, you MUST extract and provide a due_at datetime based on the timing mentioned:
+      - Convert relative times ("tomorrow", "next week") to actual UTC datetime based on {started_at} and {tz}
+      - For "today": use end of day in user's timezone converted to UTC
+      - For "tomorrow": use end of next day in user's timezone converted to UTC  
+      - For "this week": use end of current week (Sunday) in user's timezone converted to UTC
+      - For "next week": use end of next week in user's timezone converted to UTC
+      - For specific dates: convert to end of that day in user's timezone to UTC
+      - For "urgent" or "ASAP": use 2 hours from {started_at}
+      - For "high priority": use end of today
+      - For "when convenient" or no specific time: leave due_at as null
     • Use consistent timing format in parentheses:
       - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
       - Relative timing: (today), (tomorrow), (this week), (next week)
@@ -216,6 +226,16 @@ def get_reprocess_transcript_structure(
     • Exclude vague or trivial remarks ("We should grab lunch sometime").  
     • Merge duplicates; order by due date → spoken urgency → alphabetical.  
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • IMPORTANT: For each action item, you MUST extract and provide a due_at datetime based on the timing mentioned:
+      - Convert relative times ("tomorrow", "next week") to actual UTC datetime based on {started_at} and {tz}
+      - For "today": use end of day in user's timezone converted to UTC
+      - For "tomorrow": use end of next day in user's timezone converted to UTC  
+      - For "this week": use end of current week (Sunday) in user's timezone converted to UTC
+      - For "next week": use end of next week in user's timezone converted to UTC
+      - For specific dates: convert to end of that day in user's timezone to UTC
+      - For "urgent" or "ASAP": use 2 hours from {started_at}
+      - For "high priority": use end of today
+      - For "when convenient" or no specific time: leave due_at as null
     • Use consistent timing format in parentheses:
       - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
       - Relative timing: (today), (tomorrow), (this week), (next week)
