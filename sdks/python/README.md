@@ -1,3 +1,4 @@
+<!-- This file is auto-generated from docs/doc/developer/sdk/python.mdx. Do not edit manually. -->
 # 🎧 Omi Python SDK 
 
 A pip-installable Python SDK for connecting to **Omi wearable devices** over **Bluetooth**, decoding **Opus-encoded audio**, and transcribing it in **real time using Deepgram**.
@@ -153,7 +154,7 @@ pip install -e ".[dev]"
 
 ## 📄 License
 
-MIT License
+MIT License — this is an unofficial SDK built by the community, not affiliated with Omi.
 
 ## 🙌 Credits
 
