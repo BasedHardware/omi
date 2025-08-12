@@ -301,15 +301,15 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 20
+  minReplicas: 10
   maxReplicas: 50
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
       policies:
       - type: Percent
-        value: 25
-        periodSeconds: 60
+        value: 20
+        periodSeconds: 300
     scaleUp:
       stabilizationWindowSeconds: 0
       policies:
