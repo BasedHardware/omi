@@ -315,10 +315,10 @@ autoscaling:
       policies:
       - type: Percent
         value: 100
-        periodSeconds: 0
+        periodSeconds: 1
       - type: Pods
         value: 10
-        periodSeconds: 0
+        periodSeconds: 1
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
