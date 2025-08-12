@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -33,6 +34,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
@@ -40,6 +42,7 @@ class CaptureProvider extends ChangeNotifier
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
+  UsageProvider? usageProvider;
 
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
@@ -66,6 +69,9 @@ class CaptureProvider extends ChangeNotifier
 
   bool _isAutoReconnecting = false;
   bool get isAutoReconnecting => _isAutoReconnecting;
+
+  DateTime? _lastUsageLimitDialogShown;
+  bool get outOfCredits => usageProvider?.isOutOfCredits ?? false;
 
   Timer? _reconnectTimer;
   int _reconnectCountdown = 5;
@@ -112,6 +118,7 @@ class CaptureProvider extends ChangeNotifier
         } else if (!nativeRecording && recordingState == RecordingState.systemAudioRecord) {
           updateRecordingState(RecordingState.stop);
           await _socket?.stop(reason: 'native recording stopped during sleep');
+          await DebugLogManager.logEvent('transcription_socket_stop_due_to_sleep', {});
         }
       } catch (e) {
         debugPrint('Could not check state during app resume: $e');
@@ -119,10 +126,12 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
     conversationProvider = cp;
     messageProvider = mp;
     peopleProvider = pp;
+    usageProvider = up;
+
     notifyListeners();
   }
 
@@ -828,10 +837,15 @@ class CaptureProvider extends ChangeNotifier
   }
 
   @override
-  void onClosed() {
+  void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
-    debugPrint('[Provider] Socket is closed');
+    debugPrint('[Provider] Socket is closed with code: $closeCode');
+
+    if (closeCode == 4002) {
+      // Refresh subscription to get latest usage data which will reflect the out of credits status.
+      usageProvider?.markAsOutOfCreditsAndRefresh();
+    }
 
     notifyListeners();
     _startKeepAliveServices();

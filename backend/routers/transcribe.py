@@ -57,6 +57,7 @@ from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.speaker_identification import detect_speaker_from_text
 from utils.analytics import record_usage
+from utils.subscription import has_transcription_credits
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
@@ -77,8 +78,18 @@ async def _listen(
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(e, uid)
+        return
+
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
+        return
+
+    if not has_transcription_credits(uid):
+        await websocket.close(code=4002, reason="Usage limit exceeded")
         return
 
     # Frame size, codec
@@ -96,12 +107,15 @@ async def _listen(
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e, uid)
-        await websocket.close(code=1011, reason="Dirty state")
-        return
+    # Translation language
+    translation_language = None
+    if stt_language == 'multi':
+        if language == "multi":
+            user_language_preference = user_db.get_user_language_preference(uid)
+            if user_language_preference:
+                translation_language = user_language_preference
+        else:
+            translation_language = language
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
@@ -131,6 +145,12 @@ async def _listen(
                 if transcription_seconds > 0 or words_to_record > 0:
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
+
+            if not has_transcription_credits(uid):
+                nonlocal websocket_close_code
+                websocket_close_code = 4002
+                websocket_active = False
+                break
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
@@ -390,7 +410,6 @@ async def _listen(
             status=ConversationStatus.in_progress,
             source=ConversationSource.openglass if photos else ConversationSource.omi,
         )
-        print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
         return conversation, (0, len(segments))
@@ -651,7 +670,7 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = including_combined_segments and stt_language == 'multi' and language not in ["multi", "auto"]
+    translation_enabled = including_combined_segments and translation_language is not None
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
@@ -664,11 +683,11 @@ async def _listen(
                     continue
 
                 # Language Detection
-                if language_cache.is_in_target_language(segment.id, segment_text, language):
+                if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
                     continue
 
                 # Translation
-                translated_text = translation_service.translate_text_by_sentence(language, segment_text)
+                translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
 
                 if translated_text == segment_text:
                     # If translation is same as original, it's likely in the target language.
@@ -677,7 +696,7 @@ async def _listen(
                     continue
 
                 # Create/Update Translation object
-                translation = Translation(lang=language, text=translated_text)
+                translation = Translation(lang=translation_language, text=translated_text)
                 existing_translation_index = next(
                     (i for i, t in enumerate(segment.translations) if t.lang == language), None
                 )
@@ -718,7 +737,7 @@ async def _listen(
         nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.6)
 
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue

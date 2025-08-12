@@ -219,6 +219,18 @@ env:
     value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
     value: "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
+  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+    value: "1000000"
+  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+    value: "0"
+  - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
+    value: "price_1RrxXL1F8wnoWYvwIddzR902"
+  - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
+    value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -226,10 +238,10 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 1
+    cpu: 0.7
     memory: 2Gi
   limits:
-    cpu: 2
+    cpu: 1
     memory: 4Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -256,8 +268,27 @@ autoscaling:
   enabled: true
   minReplicas: 1
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+  # targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 70
+  requestsPerPod: 60
+  failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []
