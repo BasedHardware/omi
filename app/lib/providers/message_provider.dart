@@ -18,9 +18,6 @@ import 'package:omi/utils/file.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter/material.dart' as flutter;
-import 'package:omi/providers/chat_session_provider.dart';
-import 'package:provider/provider.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
@@ -269,12 +266,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future refreshMessages({bool dropdownSelected = false, String? chatSessionId}) async {
+  Future refreshMessages({bool dropdownSelected = false}) async {
     setLoadingMessages(true);
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
     }
-    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected, chatSessionId: chatSessionId);
+    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
     if (messages.isEmpty) {
       messages = SharedPreferencesUtil().cachedMessages;
     } else {
@@ -293,7 +290,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false, String? chatSessionId}) async {
+  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
@@ -301,7 +298,6 @@ class MessageProvider extends ChangeNotifier {
     setLoadingMessages(true);
     var mes = await getMessagesServer(
       pluginId: appProvider?.selectedChatAppId,
-      chatSessionId: chatSessionId,
       dropdownSelected: dropdownSelected,
     );
     if (!hasCachedMessages) {
@@ -320,9 +316,9 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future clearChat({String? chatSessionId}) async {
+  Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer(pluginId: appProvider?.selectedChatAppId, chatSessionId: chatSessionId);
+    var mes = await clearChatServer(pluginId: appProvider?.selectedChatAppId);
     messages = mes;
     setClearingChat(false);
     notifyListeners();
@@ -435,7 +431,7 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(false);
   }
 
-  Future sendMessageStreamToServer(String text, {String? chatSessionId, flutter.BuildContext? context}) async {
+  Future sendMessageStreamToServer(String text) async {
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -462,9 +458,8 @@ class MessageProvider extends ChangeNotifier {
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
     clearUploadedFiles();
-    bool messageSuccessful = false;
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, chatSessionId: chatSessionId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();
@@ -484,7 +479,6 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
           messages[0] = message;
-          messageSuccessful = true;
           notifyListeners();
           continue;
         }
@@ -501,18 +495,6 @@ class MessageProvider extends ChangeNotifier {
     }
 
     setShowTypingIndicator(false);
-    
-    if (messageSuccessful && chatSessionId != null && context != null) {
-      List<ServerMessage> userMessages = messages.where((m) => m.sender == MessageSender.human).toList();
-      
-      if (userMessages.length <= 2) {
-        Future.delayed(const Duration(milliseconds: 1500), () {
-          if (context.mounted) {
-            _refreshSessionTitleFromBackend(chatSessionId, context);
-          }
-        });
-      }
-    }
   }
 
   Future sendInitialAppMessage(App? app) async {
@@ -525,27 +507,5 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
-  }
-
-  Future<void> _refreshSessionTitleFromBackend(String chatSessionId, flutter.BuildContext? context) async {
-    if (context == null) return;
-    
-    try {
-      final sessionProvider = context.read<ChatSessionProvider>();
-      final currentSession = sessionProvider.currentSession;
-      
-      if (currentSession != null && currentSession.id == chatSessionId) {
-        final updatedSession = await getChatSessionById(chatSessionId);
-        
-        if (updatedSession != null && updatedSession.title != null && 
-            updatedSession.title!.isNotEmpty && !updatedSession.title!.startsWith('New Chat')) {
-          // Update the session in the provider with the AI-generated title
-          await sessionProvider.updateSessionTitle(currentSession, updatedSession.title!);
-          debugPrint('Refreshed session title from backend: ${updatedSession.title}');
-        }
-      }
-    } catch (e) {
-      debugPrint('Error refreshing session title from backend: $e');
-    }
   }
 }
