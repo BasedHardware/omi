@@ -303,6 +303,23 @@ autoscaling:
   enabled: true
   minReplicas: 10
   maxReplicas: 50
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
   requestsPerPod: 10
