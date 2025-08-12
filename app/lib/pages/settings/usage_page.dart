@@ -38,6 +38,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   bool _isSubscriptionExpanded = false;
   late AnimationController _waveController;
   late AnimationController _notesController;
+  late AnimationController _arrowController;
+  late Animation<double> _arrowAnimation;
+  String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
 
   Future<void> _handleCancelSubscription() async {
     final provider = context.read<UsageProvider>();
@@ -81,6 +84,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         setState(() => _isCancelling = false);
       }
     }
+  }
+
+  Future<void> _handleUpgradeWithSelectedPlan() async {
+    final bool isYearly = selectedPlan == 'yearly';
+    final String priceId = isYearly
+        ? 'price_1RtJQ71F8wnoWYvwKMPaGlGY' // Annual plan
+        : 'price_1RtJPm1F8wnoWYvwhVJ38kLb'; // Monthly plan
+
+    await _handleUpgrade(priceId);
   }
 
   Future<void> _handleUpgrade(String priceId) async {
@@ -237,7 +249,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         break;
     }
 
-    final userName = SharedPreferencesUtil().givenName;
     final numberFormatter = NumberFormat.decimalPattern('en_US');
 
     String shareText;
@@ -348,6 +359,20 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 36000),
       vsync: this,
     )..repeat();
+
+    _arrowController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _arrowAnimation = Tween<double>(
+      begin: 0,
+      end: 4,
+    ).animate(CurvedAnimation(
+      parent: _arrowController,
+      curve: Curves.easeInOut,
+    ));
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
@@ -360,6 +385,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     _tabController.dispose();
     _waveController.dispose();
     _notesController.dispose();
+    _arrowController.dispose();
     super.dispose();
   }
 
@@ -711,403 +737,483 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.black,
       builder: (context) {
-        return Consumer<UsageProvider>(builder: (context, provider, child) {
-          final sub = provider.subscription!.subscription;
-          final isUnlimited = sub.plan == PlanType.unlimited;
-          final isCancelled = sub.cancelAtPeriodEnd;
-          final plans = provider.subscription?.availablePlans ?? [];
-          final unlimitedPlan = plans.isNotEmpty ? plans.first : null;
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Consumer<UsageProvider>(builder: (context, provider, child) {
+              final sub = provider.subscription?.subscription;
+              final isUnlimited = sub?.plan == PlanType.unlimited;
+              final isCancelled = sub?.cancelAtPeriodEnd ?? false;
 
-          String renewalDate = 'N/A';
-          if (sub.currentPeriodEnd != null) {
-            final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
-            renewalDate = DateFormat.yMMMd().format(date);
-          }
-          return DraggableScrollableSheet(
-            initialChildSize: 0.9,
-            minChildSize: 0.5,
-            maxChildSize: 0.9,
-            builder: (BuildContext context, ScrollController scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.deepPurple.withOpacity(0.5),
-                      Colors.deepPurple.withOpacity(0.3),
-                      Colors.black.withOpacity(0.8),
-                      Colors.black,
-                    ],
-                    stops: const [0.0, 0.2, 0.6, 1.0],
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                ),
-                child: ListView(
-                  controller: scrollController,
-                  children: [
-                    Center(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 12),
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade700,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+              String renewalDate = 'N/A';
+              if (sub?.currentPeriodEnd != null) {
+                final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
+                renewalDate = DateFormat.yMMMd().format(date);
+              }
+              return DraggableScrollableSheet(
+                initialChildSize: 0.9,
+                minChildSize: 0.5,
+                maxChildSize: 0.9,
+                builder: (BuildContext context, ScrollController scrollController) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.deepPurple.withOpacity(0.5),
+                          Colors.deepPurple.withOpacity(0.3),
+                          Colors.black.withOpacity(0.8),
+                          Colors.black,
+                        ],
+                        stops: const [0.0, 0.2, 0.6, 1.0],
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
                       ),
                     ),
-                    SizedBox(
-                      height: 150,
-                      width: double.infinity,
-                      child: Stack(
-                        children: [
-                          Row(
+                    child: ListView(
+                      controller: scrollController,
+                      children: [
+                        Center(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 24),
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade700,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 150,
+                          width: double.infinity,
+                          child: Stack(
                             children: [
-                              Expanded(
-                                flex: 1,
-                                child: ClipRect(
-                                  child: SizedBox(
-                                    height: 120,
-                                    child: AnimatedBuilder(
-                                      animation: _waveController,
-                                      builder: (context, child) {
-                                        const double totalWidth = 420.0;
-                                        final scrollOffset = (_waveController.value * totalWidth) % totalWidth;
-                                        return Stack(
-                                          children: [
-                                            Positioned(
-                                              left: -totalWidth + scrollOffset,
-                                              top: 0,
-                                              bottom: 0,
-                                              child: Row(
-                                                children: List.generate(60, (index) {
-                                                  final heights = [
-                                                    20.0,
-                                                    32.0,
-                                                    45.0,
-                                                    26.0,
-                                                    52.0,
-                                                    39.0,
-                                                    32.0,
-                                                    45.0,
-                                                    28.0,
-                                                    36.0,
-                                                    41.0,
-                                                    24.0,
-                                                    48.0,
-                                                    37.0,
-                                                    30.0,
-                                                    43.0,
-                                                    22.0,
-                                                    34.0,
-                                                    47.0,
-                                                    29.0,
-                                                    50.0,
-                                                    38.0,
-                                                    33.0,
-                                                    44.0
-                                                  ];
-                                                  final height = heights[index % heights.length];
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 1,
+                                    child: ClipRect(
+                                      child: SizedBox(
+                                        height: 120,
+                                        child: AnimatedBuilder(
+                                          animation: _waveController,
+                                          builder: (context, child) {
+                                            const double totalWidth = 420.0;
+                                            final scrollOffset = (_waveController.value * totalWidth) % totalWidth;
+                                            return Stack(
+                                              children: [
+                                                Positioned(
+                                                  left: -totalWidth + scrollOffset,
+                                                  top: 0,
+                                                  bottom: 0,
+                                                  child: Row(
+                                                    children: List.generate(60, (index) {
+                                                      final heights = [
+                                                        20.0,
+                                                        32.0,
+                                                        45.0,
+                                                        26.0,
+                                                        52.0,
+                                                        39.0,
+                                                        32.0,
+                                                        45.0,
+                                                        28.0,
+                                                        36.0,
+                                                        41.0,
+                                                        24.0,
+                                                        48.0,
+                                                        37.0,
+                                                        30.0,
+                                                        43.0,
+                                                        22.0,
+                                                        34.0,
+                                                        47.0,
+                                                        29.0,
+                                                        50.0,
+                                                        38.0,
+                                                        33.0,
+                                                        44.0
+                                                      ];
+                                                      final height = heights[index % heights.length];
 
-                                                  return Container(
-                                                    width: 4,
-                                                    height: height,
-                                                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.red.withOpacity(0.7),
-                                                      borderRadius: BorderRadius.circular(2),
-                                                    ),
-                                                  );
-                                                }),
-                                              ),
-                                            ),
-                                            Positioned(
-                                              left: scrollOffset,
-                                              top: 0,
-                                              bottom: 0,
-                                              child: Row(
-                                                children: List.generate(60, (index) {
-                                                  final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
-                                                  final height = heights[index % heights.length];
+                                                      return Container(
+                                                        width: 4,
+                                                        height: height,
+                                                        margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.red.withOpacity(0.7),
+                                                          borderRadius: BorderRadius.circular(2),
+                                                        ),
+                                                      );
+                                                    }),
+                                                  ),
+                                                ),
+                                                Positioned(
+                                                  left: scrollOffset,
+                                                  top: 0,
+                                                  bottom: 0,
+                                                  child: Row(
+                                                    children: List.generate(60, (index) {
+                                                      final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
+                                                      final height = heights[index % heights.length];
 
-                                                  return Container(
-                                                    width: 4,
-                                                    height: height,
-                                                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.red.withOpacity(0.7),
-                                                      borderRadius: BorderRadius.circular(2),
-                                                    ),
-                                                  );
-                                                }),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
+                                                      return Container(
+                                                        width: 4,
+                                                        height: height,
+                                                        margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.red.withOpacity(0.7),
+                                                          borderRadius: BorderRadius.circular(2),
+                                                        ),
+                                                      );
+                                                    }),
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: ClipRect(
+                                      child: SizedBox(
+                                        height: 120,
+                                        child: AnimatedBuilder(
+                                          animation: _notesController,
+                                          builder: (context, child) {
+                                            const double totalWidth = 440.0;
+                                            final scrollOffset = (_notesController.value * totalWidth) % totalWidth;
+                                            return Stack(
+                                              children: [
+                                                Positioned(
+                                                  left: -totalWidth + scrollOffset,
+                                                  top: 0,
+                                                  bottom: 0,
+                                                  child: Row(
+                                                    children: List.generate(8, (index) {
+                                                      return Container(
+                                                        width: 45,
+                                                        height: 55,
+                                                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white.withOpacity(0.95),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          boxShadow: [
+                                                            BoxShadow(
+                                                              color: Colors.black.withOpacity(0.15),
+                                                              blurRadius: 4,
+                                                              offset: const Offset(0, 2),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        child: Padding(
+                                                          padding: const EdgeInsets.all(6),
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Container(
+                                                                width: 26,
+                                                                height: 3,
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors.black,
+                                                                  borderRadius: BorderRadius.circular(1.5),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(height: 4),
+                                                              ...List.generate(
+                                                                  5,
+                                                                  (i) => Container(
+                                                                        width: i == 4 ? 24 : 35, // Last line shorter
+                                                                        height: 2,
+                                                                        margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                        decoration: BoxDecoration(
+                                                                          color: Colors.grey[350],
+                                                                          borderRadius: BorderRadius.circular(1),
+                                                                        ),
+                                                                      )),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }),
+                                                  ),
+                                                ),
+                                                Positioned(
+                                                  left: scrollOffset,
+                                                  top: 0,
+                                                  bottom: 0,
+                                                  child: Row(
+                                                    children: List.generate(8, (index) {
+                                                      return Container(
+                                                        width: 45,
+                                                        height: 55,
+                                                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white.withOpacity(0.95),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          boxShadow: [
+                                                            BoxShadow(
+                                                              color: Colors.black.withOpacity(0.15),
+                                                              blurRadius: 4,
+                                                              offset: const Offset(0, 2),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        child: Padding(
+                                                          padding: const EdgeInsets.all(6),
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Container(
+                                                                width: 26,
+                                                                height: 3,
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors.black,
+                                                                  borderRadius: BorderRadius.circular(1.5),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(height: 4),
+                                                              ...List.generate(
+                                                                  5,
+                                                                  (i) => Container(
+                                                                        width: i == 4 ? 24 : 35, // Last line shorter
+                                                                        height: 2,
+                                                                        margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                        decoration: BoxDecoration(
+                                                                          color: Colors.grey[350],
+                                                                          borderRadius: BorderRadius.circular(1),
+                                                                        ),
+                                                                      )),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }),
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Expanded(
-                                flex: 1,
-                                child: ClipRect(
-                                  child: SizedBox(
-                                    height: 120,
-                                    child: AnimatedBuilder(
-                                      animation: _notesController,
-                                      builder: (context, child) {
-                                        const double totalWidth = 440.0;
-                                        final scrollOffset = (_notesController.value * totalWidth) % totalWidth;
-                                        return Stack(
-                                          children: [
-                                            Positioned(
-                                              left: -totalWidth + scrollOffset,
-                                              top: 0,
-                                              bottom: 0,
-                                              child: Row(
-                                                children: List.generate(8, (index) {
-                                                  return Container(
-                                                    width: 45,
-                                                    height: 55,
-                                                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.white.withOpacity(0.95),
-                                                      borderRadius: BorderRadius.circular(8),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color: Colors.black.withOpacity(0.15),
-                                                          blurRadius: 4,
-                                                          offset: const Offset(0, 2),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.all(6),
-                                                      child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        children: [
-                                                          Container(
-                                                            width: 26,
-                                                            height: 3,
-                                                            decoration: BoxDecoration(
-                                                              color: Colors.black,
-                                                              borderRadius: BorderRadius.circular(1.5),
-                                                            ),
-                                                          ),
-                                                          const SizedBox(height: 4),
-                                                          ...List.generate(
-                                                              5,
-                                                              (i) => Container(
-                                                                    width: i == 4 ? 24 : 35, // Last line shorter
-                                                                    height: 2,
-                                                                    margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                    decoration: BoxDecoration(
-                                                                      color: Colors.grey[350],
-                                                                      borderRadius: BorderRadius.circular(1),
-                                                                    ),
-                                                                  )),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  );
-                                                }),
-                                              ),
-                                            ),
-                                            Positioned(
-                                              left: scrollOffset,
-                                              top: 0,
-                                              bottom: 0,
-                                              child: Row(
-                                                children: List.generate(8, (index) {
-                                                  return Container(
-                                                    width: 45,
-                                                    height: 55,
-                                                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.white.withOpacity(0.95),
-                                                      borderRadius: BorderRadius.circular(8),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color: Colors.black.withOpacity(0.15),
-                                                          blurRadius: 4,
-                                                          offset: const Offset(0, 2),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.all(6),
-                                                      child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        children: [
-                                                          Container(
-                                                            width: 26,
-                                                            height: 3,
-                                                            decoration: BoxDecoration(
-                                                              color: Colors.black,
-                                                              borderRadius: BorderRadius.circular(1.5),
-                                                            ),
-                                                          ),
-                                                          const SizedBox(height: 4),
-                                                          ...List.generate(
-                                                              5,
-                                                              (i) => Container(
-                                                                    width: i == 4 ? 24 : 35, // Last line shorter
-                                                                    height: 2,
-                                                                    margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                    decoration: BoxDecoration(
-                                                                      color: Colors.grey[350],
-                                                                      borderRadius: BorderRadius.circular(1),
-                                                                    ),
-                                                                  )),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  );
-                                                }),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
+                              Positioned(
+                                left: (MediaQuery.of(context).size.width - 120) / 2,
+                                top: 5,
+                                child: Container(
+                                  width: 120,
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.withOpacity(0.4),
+                                        blurRadius: 20,
+                                        spreadRadius: 3,
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipOval(
+                                    child: Image.asset(
+                                      'assets/images/omi-without-rope.png',
+                                      fit: BoxFit.cover,
                                     ),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          Positioned(
-                            left: (MediaQuery.of(context).size.width - 120) / 2,
-                            top: 5,
-                            child: Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blue.withOpacity(0.4),
-                                    blurRadius: 20,
-                                    spreadRadius: 3,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 24),
+                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  isUnlimited ? 'Manage Subscription' : 'Upgrade to Unlimited',
+                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                ),
+                              ]),
+                              const SizedBox(height: 8),
+                              Text(
+                                isUnlimited
+                                    ? 'You are on the Unlimited Plan.'
+                                    : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                              ),
+                              if (isUnlimited && isCancelled) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                                ),
+                              ] else if (isUnlimited && !isCancelled) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Your plan renews on $renewalDate.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                                ),
+                              ],
+                              const SizedBox(height: 32),
+                              // Features list
+                              Column(
+                                children: [
+                                  _buildFeatureItem(
+                                    faIcon: FontAwesomeIcons.infinity,
+                                    text: 'Unlimited conversations',
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildFeatureItem(
+                                    faIcon: FontAwesomeIcons.solidComments,
+                                    text: 'Ask Omi anything about your life',
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildFeatureItem(
+                                    faIcon: FontAwesomeIcons.brain,
+                                    text: 'Unlock Omi\'s infinite memory',
                                   ),
                                 ],
                               ),
-                              child: ClipOval(
-                                child: Image.asset(
-                                  'assets/images/omi-without-rope.png',
-                                  fit: BoxFit.cover,
+                              const SizedBox(height: 48),
+
+                              // Yearly plan
+                              _buildHardcodedPlanOption(
+                                isSelected: selectedPlan == 'yearly',
+                                saveTag: '2 Months Free',
+                                isPopular: true,
+                                title: 'Annual Unlimited',
+                                subtitle: '12 months / \$199',
+                                monthlyPrice: '\$16 /mo',
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  setModalState(() => selectedPlan = 'yearly');
+                                  setState(() => selectedPlan = 'yearly');
+                                },
+                              ),
+                              const SizedBox(height: 18),
+
+                              // Monthly plan
+                              _buildHardcodedPlanOption(
+                                isSelected: selectedPlan == 'monthly',
+                                title: 'Monthly Unlimited',
+                                subtitle: null, // Remove subtitle
+                                monthlyPrice: '\$19 /mo',
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  setModalState(() => selectedPlan = 'monthly');
+                                  setState(() => selectedPlan = 'monthly');
+                                },
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Continue button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 56,
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    HapticFeedback.mediumImpact();
+                                    _handleUpgradeWithSelectedPlan();
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.black,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text(
+                                        'Continue',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      AnimatedBuilder(
+                                        animation: _arrowAnimation,
+                                        builder: (context, child) {
+                                          return Transform.translate(
+                                            offset: Offset(_arrowAnimation.value, 0),
+                                            child: const Icon(Icons.arrow_forward, size: 20),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 16),
+                              if (isUnlimited == true && !isCancelled) ...[
+                                TextButton(
+                                  onPressed: () {
+                                    _handleCancelSubscription();
+                                  },
+                                  child: const Text('Cancel Subscription',
+                                      style: TextStyle(color: Colors.red, fontSize: 16)),
+                                ),
+                                const SizedBox(height: 8),
+                              ],
+                            ],
                           ),
-                        ],
-                      ),
+                        )
+                      ],
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 24),
-                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              isUnlimited ? 'Manage Subscription' : 'Upgrade to Unlimited',
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                          ]),
-                          const SizedBox(height: 8),
-                          Text(
-                            isUnlimited
-                                ? 'You are on the Unlimited Plan.'
-                                : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                          ),
-                          if (isUnlimited && isCancelled) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                            ),
-                          ] else if (isUnlimited && !isCancelled) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              'Your plan renews on $renewalDate.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                            ),
-                          ],
-                          const SizedBox(height: 32),
-                          if (unlimitedPlan != null) ...[
-                            _buildFeatureItem(faIcon: FontAwesomeIcons.infinity, text: 'Unlimited conversations'),
-                            const SizedBox(height: 16),
-                            _buildFeatureItem(
-                                faIcon: FontAwesomeIcons.solidComments, text: 'Ask Omi anything about your life'),
-                            const SizedBox(height: 16),
-                            _buildFeatureItem(faIcon: FontAwesomeIcons.brain, text: "Unlock Omi's infinite memory"),
-                          ],
-                          const SizedBox(height: 32),
-                          if (unlimitedPlan == null || unlimitedPlan.prices.isEmpty)
-                            const Center(
-                                child: Text("Upgrade plans are not available at this moment.",
-                                    style: TextStyle(color: Colors.grey))),
-                          if (unlimitedPlan != null)
-                            ...unlimitedPlan.prices.map((price) => _buildPlanOption(price, unlimitedPlan)),
-                          const SizedBox(height: 24),
-                          if (isUnlimited && !isCancelled) ...[
-                            TextButton(
-                              onPressed: () {
-                                _handleCancelSubscription();
-                              },
-                              child:
-                                  const Text('Cancel Subscription', style: TextStyle(color: Colors.red, fontSize: 16)),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                        ],
-                      ),
-                    )
-                  ],
-                ),
+                  );
+                },
               );
-            },
-          );
-        });
+            });
+          },
+        );
       },
     );
   }
 
-  Widget _buildPlanOption(PricingOption price, SubscriptionPlan plan) {
-    final bool isAnnual = price.title.toLowerCase().contains('annual');
-    final bool isPopular = isAnnual; // Mark annual as popular
-    final String? saveTag = isAnnual ? '2 Months Free' : null;
-
+  Widget _buildHardcodedPlanOption({
+    required bool isSelected,
+    required String title,
+    required String? subtitle,
+    required String monthlyPrice,
+    required VoidCallback onTap,
+    String? saveTag,
+    bool isPopular = false,
+  }) {
     return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        _handleUpgrade(price.id);
-      },
+      onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
+          color: const Color(0xFF1F1F25), // Use conversation list background
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isAnnual ? Colors.deepPurple : Colors.transparent,
+            color: isSelected ? Colors.white : Colors.transparent,
             width: 2,
           ),
         ),
         child: Column(
           children: [
+            // Popular badge only at the top
             if (isPopular) ...[
               Row(
                 children: [
@@ -1138,17 +1244,17 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      price.title,
+                      title,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (price.description != null) ...[
+                    if (subtitle != null) ...[
                       const SizedBox(height: 4),
                       Text(
-                        price.description!,
+                        subtitle,
                         style: TextStyle(
                           color: Colors.grey[400],
                           fontSize: 14,
@@ -1161,7 +1267,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      price.priceString,
+                      monthlyPrice,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
