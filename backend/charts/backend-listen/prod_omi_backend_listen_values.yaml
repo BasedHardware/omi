@@ -315,14 +315,14 @@ autoscaling:
       policies:
       - type: Percent
         value: 100
-        periodSeconds: 15
+        periodSeconds: 1
       - type: Pods
-        value: 4
-        periodSeconds: 15
+        value: 10
+        periodSeconds: 1
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
-  requestsPerPod: 10
+  requestsPerPod: 8
   failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
