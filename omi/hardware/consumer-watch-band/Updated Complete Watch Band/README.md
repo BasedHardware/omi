@@ -11,11 +11,16 @@ Next, in the slicer, add the main housing (Omi Watch Band Main (With Band).stl) 
 
 Make sure the holes are properly aligned and the layer height should be .08 (whatever the smallest layer height you can get is).
 
-![Hole Alignment Example](./Screenshot_2025-08-13_114130.png)
+<img width="600" height="820" alt="Screenshot 2025_08-13_112344" src="https://github.com/user-attachments/assets/78badd56-341b-4fe4-a0a6-5a0b7c5a4bdd" />
+
 
 This is what it should look like in the slicer:
-![Slicer Example](./Screenshot_2025-08-13_112344.png)
+
+
+<img width="600" height="647" alt="Screenshot 2025_08-13_114130" src="https://github.com/user-attachments/assets/fe99ae2b-1e14-4f23-beb2-504412d02d6f" />
+
 
 After having printed the model, buckle and unbuckle the clasp at least 10 times to loosen it up a little so that it is easier to put on and remove.
 
 Finally, enjoy!
+
