@@ -8,7 +8,7 @@ from typing import List, AsyncGenerator
 import database.chat as chat_db
 import database.notifications as notification_db
 from database.apps import record_app_usage
-from models.chat import Message, ResponseMessage, MessageConversation
+from models.chat import ChatSession, Message, ResponseMessage, MessageConversation
 from models.conversation import Conversation
 from models.notification_message import NotificationMessage
 from models.app import UsageHistoryType
@@ -133,8 +133,16 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
     message = Message(
         id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
-    chat_db.add_message(uid, message.dict())
 
+    chat_session = chat_db.get_chat_session(uid)
+    chat_session = ChatSession(**chat_session) if chat_session else None
+
+    if chat_session:
+        message.chat_session_id = chat_session.id
+        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
+
+    chat_db.add_message(uid, message.dict())
+    
     # stream
     mdata = base64.b64encode(bytes(message.model_dump_json(), 'utf-8')).decode('utf-8')
     yield f"message: {mdata}\n\n"
@@ -165,6 +173,14 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             type='text',
             memories_id=memories_id,
         )
+        
+        chat_session = chat_db.get_chat_session(uid)
+        chat_session = ChatSession(**chat_session) if chat_session else None
+    
+        if chat_session:
+            ai_message.chat_session_id = chat_session.id
+            chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+        
         chat_db.add_message(uid, ai_message.dict())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 
