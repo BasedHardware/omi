@@ -1,5 +1,9 @@
 grafana:
   enabled: true
+  serviceAccount:
+    create: true
+    annotations:
+      iam.gke.io/gcp-service-account: "prod-omi-grafana-gsa@based-hardware.iam.gserviceaccount.com"
   ingress:
     enabled: true
     annotations:
