@@ -16,6 +16,7 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/onboarding/device_onboarding/device_onboarding_wrapper.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -196,12 +197,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Widget build(BuildContext context) {
     List<Widget> pages = [
       AuthComponent(
-        onSignIn: () {
+        onSignIn: () async {
           SharedPreferencesUtil().hasOmiDevice = true;
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
+          await ensureWelcomeConversation();
           if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {

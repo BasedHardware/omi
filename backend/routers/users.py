@@ -45,6 +45,7 @@ from utils.other.storage import (
     delete_user_person_speech_samples,
 )
 from utils.webhooks import webhook_first_time_setup
+from utils.onboarding import ensure_welcome_conversation
 
 router = APIRouter()
 
@@ -141,6 +142,16 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
         'memory_created': memory_created,
         'realtime_transcript': realtime_transcript,
         'day_summary': day_summary,
+    }
+
+
+@router.post('/v1/users/ensure-welcome-conversation', tags=['v1'])
+def ensure_welcome_conversation_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Creates a welcome / onboarding conversation for first time users."""
+    created = ensure_welcome_conversation(uid)
+    return {
+        'created': created is not None,
+        'conversation': created,
     }
 
 
