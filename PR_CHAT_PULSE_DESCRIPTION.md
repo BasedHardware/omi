@@ -20,7 +20,7 @@ const kChatInputGradient = [
 ];
 ```
 
-2. **Wrap the input bar in a ValueListenableBuilder** to pause animation when typing or recording:
+2. **Wrap the input bar in a `ValueListenableBuilder`** to pause animation when typing or recording:
 
 ```dart
 // Inside the build method where the send bar is built:
@@ -49,13 +49,12 @@ Expanded(
       );
     },
   ),
-);
+),
 ```
 
 Here `_buildInputRow` encapsulates the row with the menu button, text field/voice recorder, and send button to keep your build method tidy.
 
 3. **Export `defaultColors` from `AnimatedGradientBorder` (optional)**
-
 If you prefer to embed the palette within the widget itself and not repeat the gradient list in multiple places, you can add this static constant to `AnimatedGradientBorder`:
 
 ```dart
