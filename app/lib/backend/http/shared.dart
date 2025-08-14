@@ -62,10 +62,16 @@ Future<http.Response?> makeApiCall({
               message: 'Authentication failed. Please sign in again.');
         }
       } else {
-        // Force user to sign in again
-        await signOut();
-        Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-            message: 'Authentication failed. Please sign in again.');
+        
+        bool isServerHealthy = await isServerHealthy(client);
+
+        if (!isServerHealthy) {
+          Logger.handle(Exception('A server error occurred. Please try again later.'), StackTrace.current, message: 'A server error occurred. Please try again later.');
+        } else {
+          // If the server is healthy but the token is still empty, sign out the user as we can't do anything without a valid token
+          await signOut();
+          Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current, message: 'Authentication failed. Please sign in again.',);
+        }
       }
     }
 
@@ -75,6 +81,21 @@ Future<http.Response?> makeApiCall({
     PlatformManager.instance.instabug.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     return null;
   } finally {}
+}
+
+Future<bool> isServerHealthy(http.Client client) async {
+  var healthCheckUrl = '${Env.apiBaseUrl}/health';
+  try {
+    var healthResponse = await _performRequest(client, healthCheckUrl, {}, '', 'GET');
+    if (healthResponse.statusCode == 200) {
+      var data = jsonDecode(healthResponse.body); // if this throws an error, assume the server is not healthy
+      var status = data['status'] ?? '';
+      return status == 'healthy';
+    }
+  } catch (e) {
+    debugPrint('Health check failed: $e');
+  }
+  return false;
 }
 
 Future<http.Response> _performRequest(
