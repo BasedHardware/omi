@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database.action_items as action_items_db
 import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.conversation import *
@@ -10,7 +11,6 @@ from models.conversation import SearchRequest
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
-from utils.conversations.action_items import clear_action_items_cache, should_clear_cache_for_conversation
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -37,11 +37,7 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
     messages = trigger_external_integrations(uid, conversation)
-    
-    # Clear action items cache if the processed conversation has action items
-    if should_clear_cache_for_conversation(conversation.dict()):
-        clear_action_items_cache(uid)
-    
+
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
@@ -67,11 +63,7 @@ def reprocess_conversation(
         language_code = conversation.language or 'en'
 
     processed_conversation = process_conversation(uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id)
-    
-    # Clear action items cache if the reprocessed conversation has action items
-    if should_clear_cache_for_conversation(processed_conversation.dict()):
-        clear_action_items_cache(uid)
-    
+
     return processed_conversation
 
 
@@ -132,8 +124,6 @@ def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_curren
     print('delete_conversation', conversation_id, uid)
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(conversation_id)
-    # Clear action items cache when conversation is deleted
-    clear_action_items_cache(uid)
     return {"status": "Ok"}
 
 
@@ -191,7 +181,30 @@ def set_action_item_status(
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.dict() for action_item in action_items]
     )
-    clear_action_items_cache(uid)
+
+    # Mirror status updates to the standalone action_items collection
+    try:
+        existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+        # Map descriptions to item IDs for quick lookup
+        description_to_ids = {}
+        for ai in existing_items:
+            desc = ai.get('description')
+            if not desc:
+                continue
+            description_to_ids.setdefault(desc, []).append(ai['id'])
+
+        for i, action_item_idx in enumerate(data.items_idx):
+            if action_item_idx >= len(action_items):
+                continue
+            action_item = action_items[action_item_idx]
+            new_completed_status = data.values[i]
+
+            ids = description_to_ids.get(action_item.description, [])
+            for action_item_id in ids:
+                action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
+    except Exception as e:
+        # Don't break conversation route if mirrored update fails
+        print('Failed to mirror action item status update:', e)
     return {"status": "Ok"}
 
 
@@ -218,7 +231,15 @@ def update_action_item_description(
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.dict() for action_item in action_items]
     )
-    clear_action_items_cache(uid)
+
+    # Mirror description update in the standalone action_items collection
+    try:
+        existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+        for ai in existing_items:
+            if ai.get('description') == data.old_description:
+                action_items_db.update_action_item(uid, ai['id'], {'description': data.description})
+    except Exception as e:
+        print('Failed to mirror action item description update:', e)
     return {"status": "Ok"}
 
 
@@ -231,7 +252,15 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
     conversations_db.update_conversation_action_items(
         uid, conversation_id, [action_item.dict() for action_item in updated_action_items]
     )
-    clear_action_items_cache(uid)
+
+    # Mirror deletion in the standalone action_items collection
+    try:
+        existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+        for ai in existing_items:
+            if ai.get('description') == data.description:
+                action_items_db.delete_action_item(uid, ai['id'])
+    except Exception as e:
+        print('Failed to mirror action item deletion:', e)
     return {"status": "Ok"}
 
 

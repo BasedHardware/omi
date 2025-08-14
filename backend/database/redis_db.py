@@ -519,31 +519,7 @@ def delete_cached_mcp_api_key(hashed_key: str):
     r.delete(f'mcp_api_key:{hashed_key}')
 
 
-# ******************************************************
-# ******************* ACTION ITEMS *********************
-# ******************************************************
-
-
-@try_catch_decorator
-def cache_user_action_items(uid: str, action_items_data: List[dict], ttl: int = 600):
-    """Cache processed action items for a user. TTL default is 10 minutes."""
-    key = f'action_items:{uid}'
-    r.set(key, json.dumps(action_items_data, default=str), ex=ttl)
-
-
-@try_catch_decorator
-def get_cached_user_action_items(uid: str) -> Optional[List[dict]]:
-    """Get cached action items for a user."""
-    key = f'action_items:{uid}'
-    data = r.get(key)
-    return json.loads(data) if data else None
-
-
-@try_catch_decorator
-def clear_user_action_items_cache(uid: str):
-    """Clear cached action items for a user when they're modified."""
-    key = f'action_items:{uid}'
-    r.delete(key)
+    
 
 
 # ******************************************************
