@@ -171,8 +171,7 @@ def get_action_items(
     if completed is not None:
         query = query.where(filter=FieldFilter('completed', '==', completed))
     
-    # Order by due date (items with due dates first), then by created date
-    query = query.order_by('due_at', direction=firestore.Query.ASCENDING)
+    # Order by created date
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
     
     # Apply pagination

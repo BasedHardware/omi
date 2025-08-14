@@ -6,11 +6,11 @@ import database.conversations as conversations_db
 import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.conversation import *
-from models.conversation import SearchRequest, ActionItemsResponse, ActionItemWithMetadata
+from models.conversation import SearchRequest
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
-from utils.conversations.action_items import get_action_items_with_caching, clear_action_items_cache, should_clear_cache_for_conversation
+from utils.conversations.action_items import clear_action_items_cache, should_clear_cache_for_conversation
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -528,35 +528,4 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     return {"summary": summary}
 
 
-# *********************************
-# ******** ACTION ITEMS ***********
-# *********************************
 
-@router.get("/v1/action-items", response_model=ActionItemsResponse, tags=['action-items'])
-def get_action_items(
-    limit: int = Query(50, ge=1, le=500, description="Maximum number of action items to return"),
-    offset: int = Query(0, ge=0, description="Number of action items to skip"),
-    include_completed: bool = Query(True, description="Whether to include completed action items"),
-    start_date: Optional[datetime] = Query(None, description="Filter action items from conversations after this date"),
-    end_date: Optional[datetime] = Query(None, description="Filter action items from conversations before this date"),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    action_items_data = get_action_items_with_caching(
-        uid=uid,
-        limit=limit + 1,
-        offset=offset,
-        include_completed=include_completed,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    
-    has_more = len(action_items_data) > limit
-    if has_more:
-        action_items_data = action_items_data[:limit]
-    
-    action_items = [ActionItemWithMetadata(**item) for item in action_items_data]
-    
-    return ActionItemsResponse(
-        action_items=action_items,
-        has_more=has_more,
-    )
