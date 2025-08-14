@@ -84,7 +84,7 @@ Future<http.Response?> makeApiCall({
 }
 
 Future<bool> isServerHealthy(http.Client client) async {
-  var healthCheckUrl = '${Env.apiBaseUrl}/health';
+  var healthCheckUrl = '${Env.apiBaseUrl}v1/health';
   try {
     var healthResponse = await _performRequest(client, healthCheckUrl, {}, '', 'GET');
     if (healthResponse.statusCode == 200) {
