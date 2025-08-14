@@ -25,7 +25,8 @@ from routers import (
     memories,
     mcp,
     oauth,
-)  # Added oauth
+    health
+)
 
 from utils.other.timeout import TimeoutMiddleware
 
@@ -57,10 +58,12 @@ app.include_router(sync.router)
 
 app.include_router(apps.router)
 app.include_router(custom_auth.router)
-app.include_router(oauth.router)  # Added oauth router
+app.include_router(oauth.router)
 
 app.include_router(payment.router)
 app.include_router(mcp.router)
+
+app.include_router(health.router)
 
 
 methods_timeout = {
