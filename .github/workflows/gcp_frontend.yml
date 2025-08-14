@@ -44,7 +44,7 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f web/frontend/Dockerfile.datadog .
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f web/frontend/Dockerfile .
             
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
       - name: Deploy to Cloud Run
