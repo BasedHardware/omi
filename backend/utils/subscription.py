@@ -1,10 +1,22 @@
 import os
 from datetime import datetime
 from typing import List
+import os
 
 import database.users as users_db
 import database.user_usage as user_usage_db
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
+
+
+def get_plan_type_from_price_id(price_id: str) -> PlanType:
+    """Determines the plan type based on the Stripe price ID."""
+    unlimited_monthly_price = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
+    unlimited_annual_price = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
+
+    if price_id in (unlimited_monthly_price, unlimited_annual_price):
+        return PlanType.unlimited
+    return PlanType.basic
+
 
 BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', '0'))
 BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
