@@ -22,7 +22,7 @@ class TranscriptSegment(BaseModel):
     start: float
     end: float
     translations: Optional[List[Translation]] = []
-    speech_profile_processed: bool = False
+    speech_profile_processed: bool = True
 
     def __init__(self, **data):
         super().__init__(**data)

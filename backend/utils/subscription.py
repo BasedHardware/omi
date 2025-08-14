@@ -76,19 +76,19 @@ def get_plan_features(plan: PlanType) -> List[str]:
 
 
 def has_transcription_credits(uid: str) -> bool:
-    """Checks if a user has transcribing credits."""
-    subscription = users_db.get_user_subscription(uid)
-
-    if subscription.status != SubscriptionStatus.active:
+    """
+    Checks if a user has transcribing credits by verifying their valid subscription and usage.
+    """
+    subscription = users_db.get_user_valid_subscription(uid)
+    if not subscription:
         return False
 
+    usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
     limits = get_plan_limits(subscription.plan)
 
-    # For unlimited plans, the limit will be None
-    if limits.transcription_seconds is None:
-        return True
+    # Check transcription seconds (0 means unlimited)
+    if limits.transcription_seconds and limits.transcription_seconds > 0:
+        if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
+            return False
 
-    # For plans with a limit, check usage
-    usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
-    transcription_seconds_used = usage.get('transcription_seconds', 0)
-    return transcription_seconds_used < limits.transcription_seconds
+    return True
