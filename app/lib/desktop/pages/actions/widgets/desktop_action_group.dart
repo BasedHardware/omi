@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -111,7 +109,6 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     }
 
     try {
-      await updateActionItemDescription(item.conversationId, originalText, newText, item.index);
       
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       await provider.updateActionItemDescription(item, newText);
