@@ -479,17 +479,25 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
             available_plans=[],
             show_subscription_ui=False,
         )
-    subscription = get_user_subscription(uid)
+    subscription = get_user_valid_subscription(uid)
+    if not subscription:
+        # Return default basic plan if no valid subscription
+        subscription = get_default_basic_subscription()
+
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
     subscription.features = get_plan_features(subscription.plan)
 
+    # Get current usage
     usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
+
+    # Calculate usage metrics
     transcription_seconds_used = usage.get('transcription_seconds', 0)
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
     memories_created_used = usage.get('memories_created', 0)
 
+    # Get limits from subscription (0 means unlimited)
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
