@@ -371,4 +371,5 @@ def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
         if period_end_dt >= datetime.now(timezone.utc):
             return subscription
 
-    return None
+    # Fallback to default basic subscription
+    return get_default_basic_subscription()
