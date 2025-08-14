@@ -62,7 +62,6 @@ Future<http.Response?> makeApiCall({
               message: 'Authentication failed. Please sign in again.');
         }
       } else {
-        
         bool isServerHealthy = await isServerHealthy(client);
 
         if (!isServerHealthy) {
