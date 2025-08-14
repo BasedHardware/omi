@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/backend/http/api/conversations.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +24,7 @@ class EditActionItemBottomSheet extends StatefulWidget {
 class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
   late TextEditingController _textController;
   late bool _isCompleted;
+  DateTime? _selectedDueDate;
 
   @override
   void initState() {
@@ -33,6 +34,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       TextPosition(offset: _textController.text.length),
     );
     _isCompleted = widget.actionItem.completed;
+    _selectedDueDate = widget.actionItem.dueAt;
   }
 
   @override
@@ -53,15 +55,25 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
     }
 
     String newDescription = _textController.text.trim();
-    if (newDescription == widget.actionItem.description) {
+    bool descriptionChanged = newDescription != widget.actionItem.description;
+    bool dueDateChanged = _selectedDueDate != widget.actionItem.dueAt;
+    
+    if (!descriptionChanged && !dueDateChanged) {
       Navigator.pop(context);
       return;
     }
 
-    String oldDescription = widget.actionItem.description;
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     
-    await provider.updateActionItemDescription(widget.actionItem, newDescription);
+    // Update description if changed
+    if (descriptionChanged) {
+      await provider.updateActionItemDescription(widget.actionItem, newDescription);
+    }
+    
+    // Update due date if changed
+    if (dueDateChanged) {
+      await provider.updateActionItemDueDate(widget.actionItem, _selectedDueDate);
+    }
     
     if (mounted) {
       Navigator.pop(context);
@@ -72,26 +84,6 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
           duration: Duration(seconds: 2),
         ),
       );
-    }
-
-    try {
-      await updateActionItemDescription(
-        widget.actionItem.conversationId, 
-        oldDescription, 
-        newDescription, 
-        widget.actionItem.index
-      );
-    } catch (e) {
-      if (mounted) {
-        await provider.updateActionItemDescription(widget.actionItem, oldDescription);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update action item: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
     }
   }
 
@@ -120,6 +112,48 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       }
     }
   }
+
+  Future<void> _openDateTimePicker() async {
+    final DateTime? result = await showCupertinoModalPopup<DateTime>(
+      context: context,
+      builder: (context) => DateTimePickerSheet(
+        initialDateTime: _selectedDueDate,
+        minimumDate: widget.actionItem.createdAt,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedDueDate = result;
+      });
+    }
+  }
+
+  void _clearDueDate() {
+    setState(() {
+      _selectedDueDate = null;
+    });
+  }
+
+  String _formatDueDateWithTime(DateTime date) {
+    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final months = ['January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    // Format date as "Wednesday, June 25"
+    final dayName = weekdays[date.weekday - 1];
+    final monthName = months[date.month - 1];
+    
+    // Format time as "8:12am"
+    final hour = date.hour;
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'pm' : 'am';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    
+    return '$dayName, $monthName ${date.day} - $displayHour:$minute$period';
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -240,6 +274,51 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                 }
               },
             ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: _openDateTimePicker,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.schedule_outlined,
+                      size: 20,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        _selectedDueDate != null 
+                          ? _formatDueDateWithTime(_selectedDueDate!)
+                          : 'Add due date',
+                        style: TextStyle(
+                          color: _selectedDueDate != null 
+                            ? Colors.white 
+                            : Colors.grey.shade500,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    if (_selectedDueDate != null)
+                      GestureDetector(
+                        onTap: () {
+                          _clearDueDate();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.close,
+                            size: 18,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -278,6 +357,255 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DateTimePickerSheet extends StatefulWidget {
+  final DateTime? initialDateTime;
+  final DateTime? minimumDate;
+
+  const DateTimePickerSheet({
+    super.key,
+    this.initialDateTime,
+    this.minimumDate,
+  });
+
+  @override
+  State<DateTimePickerSheet> createState() => _DateTimePickerSheetState();
+}
+
+class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
+  late DateTime _selectedDateTime;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    final minimumDate = widget.minimumDate ?? now;
+    
+    if (widget.initialDateTime != null) {
+      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) 
+          ? minimumDate 
+          : widget.initialDateTime!;
+    } else {
+      _selectedDateTime = now.isBefore(minimumDate) ? minimumDate : now;
+    }
+  }
+
+
+
+  @override
+  Widget build(BuildContext context) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final currentMonth = months[_selectedDateTime.month - 1];
+    final currentYear = _selectedDateTime.year;
+    final minimumDate = widget.minimumDate ?? DateTime.now();
+    
+    // Check if we can go to previous month
+    final canGoPrevious = _selectedDateTime.year > minimumDate.year || 
+                         (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
+    
+    return Material(
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.65,
+        decoration: const BoxDecoration(
+          color: Color(0xFF1F1F25),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade600,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header with navigation
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 17,
+                      ),
+                    ),
+                  ),
+                  
+                  // Month/Year navigation
+                  Row(
+                    children: [
+                      CupertinoButton(
+                        padding: const EdgeInsets.all(8),
+                        onPressed: canGoPrevious ? () {
+                          final newMonth = _selectedDateTime.month == 1 ? 12 : _selectedDateTime.month - 1;
+                          final newYear = _selectedDateTime.month == 1 ? _selectedDateTime.year - 1 : _selectedDateTime.year;
+                          
+                          setState(() {
+                            _selectedDateTime = DateTime(
+                              newYear,
+                              newMonth,
+                              _selectedDateTime.day,
+                              _selectedDateTime.hour,
+                              _selectedDateTime.minute,
+                            );
+                          });
+                        } : null,
+                        child: Icon(
+                          Icons.chevron_left,
+                          color: canGoPrevious ? Colors.grey.shade400 : Colors.grey.shade700,
+                          size: 24,
+                        ),
+                      ),
+                      
+                      Text(
+                        '$currentMonth $currentYear',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      
+                      CupertinoButton(
+                        padding: const EdgeInsets.all(8),
+                        onPressed: () {
+                          setState(() {
+                            _selectedDateTime = DateTime(
+                              _selectedDateTime.month == 12 ? _selectedDateTime.year + 1 : _selectedDateTime.year,
+                              _selectedDateTime.month == 12 ? 1 : _selectedDateTime.month + 1,
+                              _selectedDateTime.day,
+                              _selectedDateTime.hour,
+                              _selectedDateTime.minute,
+                            );
+                          });
+                        },
+                        child: Icon(
+                          Icons.chevron_right,
+                          color: Colors.grey.shade400,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.pop(context, _selectedDateTime),
+                    child: const Text(
+                      'Done',
+                      style: TextStyle(
+                        color: Colors.deepPurpleAccent,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Selected date and time display
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.deepPurpleAccent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.deepPurpleAccent.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    color: Colors.deepPurpleAccent,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${months[_selectedDateTime.month - 1]} ${_selectedDateTime.day}, ${_selectedDateTime.year}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.access_time,
+                    color: Colors.deepPurpleAccent,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_selectedDateTime.hour > 12 ? _selectedDateTime.hour - 12 : (_selectedDateTime.hour == 0 ? 12 : _selectedDateTime.hour)}:${_selectedDateTime.minute.toString().padLeft(2, '0')} ${_selectedDateTime.hour >= 12 ? 'PM' : 'AM'}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.deepPurpleAccent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Simplified Date and Time Picker
+            Expanded(
+              child: Theme(
+                data: ThemeData.dark().copyWith(
+                  cupertinoOverrideTheme: const CupertinoThemeData(
+                    brightness: Brightness.dark,
+                    primaryColor: Colors.deepPurpleAccent,
+                    textTheme: CupertinoTextThemeData(
+                      dateTimePickerTextStyle: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                      ),
+                    ),
+                  ),
+                ),
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.dateAndTime,
+                  initialDateTime: _selectedDateTime,
+                  minimumDate: widget.minimumDate ?? DateTime.now(),
+                  maximumDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                  use24hFormat: false,
+                  backgroundColor: const Color(0xFF1F1F25),
+                  onDateTimeChanged: (DateTime newDateTime) {
+                    setState(() {
+                      _selectedDateTime = newDateTime;
+                    });
+                  },
+                ),
+              ),
+            ),
+
+            // Bottom safe area
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
           ],
         ),
       ),

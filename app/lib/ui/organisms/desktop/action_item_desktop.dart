@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -97,7 +97,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     }
 
     try {
-      await updateActionItemDescription(widget.actionItem.conversationId, originalText, newText, widget.actionItem.index);
+     // await updateActionItemDescription(widget.actionItem.conversationId, originalText, newText, widget.actionItem.index);
       
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       await provider.updateActionItemDescription(widget.actionItem, newText);
@@ -151,6 +151,143 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   }
 
   bool get _hasChanges => _textController.text.trim() != widget.actionItem.description;
+
+  Widget _buildDueDateChip() {
+    if (widget.actionItem.dueAt == null) return const SizedBox.shrink();
+
+    final now = DateTime.now();
+    final dueDate = widget.actionItem.dueAt!;
+    final isOverdue = dueDate.isBefore(now) && !widget.actionItem.completed;
+    final isToday = _isSameDay(dueDate, now);
+    final isTomorrow = _isSameDay(dueDate, now.add(const Duration(days: 1)));
+    final isThisWeek = dueDate.isAfter(now) && dueDate.isBefore(now.add(const Duration(days: 7)));
+
+    Color chipColor;
+    Color textColor;
+    IconData icon;
+    String dueDateText;
+
+    if (widget.actionItem.completed) {
+      chipColor = ResponsiveHelper.backgroundTertiary.withOpacity(0.3);
+      textColor = ResponsiveHelper.textTertiary;
+      icon = FontAwesomeIcons.check;
+      dueDateText = _formatDueDate(dueDate);
+    } else if (isOverdue) {
+      chipColor = Colors.red.withOpacity(0.15);
+      textColor = Colors.red.shade300;
+      icon = FontAwesomeIcons.triangleExclamation;
+      dueDateText = 'Overdue';
+    } else if (isToday) {
+      chipColor = Colors.orange.withOpacity(0.15);
+      textColor = Colors.orange.shade300;
+      icon = FontAwesomeIcons.calendarDay;
+      dueDateText = 'Today';
+    } else if (isTomorrow) {
+      chipColor = Colors.blue.withOpacity(0.15);
+      textColor = Colors.blue.shade300;
+      icon = FontAwesomeIcons.calendar;
+      dueDateText = 'Tomorrow';
+    } else if (isThisWeek) {
+      chipColor = Colors.green.withOpacity(0.15);
+      textColor = Colors.green.shade300;
+      icon = FontAwesomeIcons.calendarWeek;
+      dueDateText = _formatDueDate(dueDate);
+    } else {
+      chipColor = ResponsiveHelper.purplePrimary.withOpacity(0.15);
+      textColor = ResponsiveHelper.purplePrimary;
+      icon = FontAwesomeIcons.clock;
+      dueDateText = _formatDueDate(dueDate);
+    }
+
+    return GestureDetector(
+      onTap: _isEditing ? null : () => _openDateTimePicker(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: chipColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: textColor.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 12,
+              color: textColor,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              dueDateText,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+  String _formatDueDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = date.difference(now).inDays;
+    
+    if (difference == 0) {
+      return 'Today';
+    } else if (difference == 1) {
+      return 'Tomorrow';
+    } else if (difference == -1) {
+      return 'Yesterday';
+    } else if (difference > 1 && difference <= 7) {
+      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdays[date.weekday - 1];
+    } else {
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}';
+    }
+  }
+
+  Future<void> _openDateTimePicker() async {
+    final DateTime? result = await showCupertinoModalPopup<DateTime>(
+      context: context,
+      builder: (context) => _DateTimePickerSheet(
+        initialDateTime: widget.actionItem.dueAt,
+        minimumDate: widget.actionItem.createdAt ?? DateTime.now(),
+      ),
+    );
+
+    if (result != null) {
+      try {
+        final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+        await provider.updateActionItemDueDate(widget.actionItem, result);
+        _showSavedMessage();
+      } catch (e) {
+        debugPrint('Error updating action item due date: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to update due date'),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -223,17 +360,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                           ),
                         ),
                   const SizedBox(height: 8),
-                  Row(children: [
-                    const SizedBox(width: 6),
-                    Expanded(
-                        child: Text(
-                            widget.actionItem.conversationTitle.isNotEmpty
-                                ? widget.actionItem.conversationTitle
-                                : 'Untitled Conversation',
-                            style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),),
-                  ]),
+                  if (widget.actionItem.dueAt != null) 
+                    _buildDueDateChip(),
                 ],
               ),
             ),
@@ -267,6 +395,23 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                   style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
             ],),),
         PopupMenuItem<String>(
+            value: 'due_date',
+            child: Row(children: [
+              const Icon(FontAwesomeIcons.calendar, color: ResponsiveHelper.textSecondary, size: 14),
+              const SizedBox(width: 8),
+              Text(widget.actionItem.dueAt != null ? 'Edit Due Date' : 'Set Due Date',
+                  style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
+            ],),),
+        if (widget.actionItem.dueAt != null)
+          const PopupMenuItem<String>(
+              value: 'clear_due_date',
+              child: Row(children: [
+                Icon(FontAwesomeIcons.xmark, color: ResponsiveHelper.textSecondary, size: 14),
+                SizedBox(width: 8),
+                Text('Clear Due Date',
+                    style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
+              ],),),
+        PopupMenuItem<String>(
             value: 'delete',
             child: Row(children: [
               Icon(FontAwesomeIcons.trash, color: Colors.red.shade400, size: 14),
@@ -283,9 +428,34 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       case 'toggle':
         _toggleCompletion(context);
         break;
+      case 'due_date':
+        _openDateTimePicker();
+        break;
+      case 'clear_due_date':
+        _clearDueDate();
+        break;
       case 'delete':
         _showDeleteConfirmation(context);
         break;
+    }
+  }
+
+  void _clearDueDate() async {
+    try {
+      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      await provider.updateActionItemDueDate(widget.actionItem, null);
+      _showSavedMessage();
+    } catch (e) {
+      debugPrint('Error clearing action item due date: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to clear due date'),
+          backgroundColor: Colors.red.shade400,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -293,7 +463,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     HapticFeedback.lightImpact();
     final newValue = !widget.actionItem.completed;
     MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
-      conversationId: widget.actionItem.conversationId,
+      conversationId: widget.actionItem.conversationId!,
       actionItemDescription: widget.actionItem.description,
       isCompleted: newValue,
     );
@@ -319,5 +489,251 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         );
       }
     });
+  }
+}
+
+class _DateTimePickerSheet extends StatefulWidget {
+  final DateTime? initialDateTime;
+  final DateTime? minimumDate;
+
+  const _DateTimePickerSheet({
+    this.initialDateTime,
+    this.minimumDate,
+  });
+
+  @override
+  State<_DateTimePickerSheet> createState() => _DateTimePickerSheetState();
+}
+
+class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
+  late DateTime _selectedDateTime;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    final minimumDate = widget.minimumDate ?? now;
+    
+    if (widget.initialDateTime != null) {
+      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) 
+          ? minimumDate 
+          : widget.initialDateTime!;
+    } else {
+      _selectedDateTime = now.isBefore(minimumDate) ? minimumDate : now;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final currentMonth = months[_selectedDateTime.month - 1];
+    final currentYear = _selectedDateTime.year;
+    final minimumDate = widget.minimumDate ?? DateTime.now();
+    
+    // Check if we can go to previous month
+    final canGoPrevious = _selectedDateTime.year > minimumDate.year || 
+                         (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
+    
+    return Material(
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.65,
+        decoration: const BoxDecoration(
+          color: ResponsiveHelper.backgroundSecondary,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 20),
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.textTertiary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header with navigation
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: ResponsiveHelper.textSecondary,
+                        fontSize: 17,
+                      ),
+                    ),
+                  ),
+                  
+                  // Month/Year navigation
+                  Row(
+                    children: [
+                      CupertinoButton(
+                        padding: const EdgeInsets.all(8),
+                        onPressed: canGoPrevious ? () {
+                          final newMonth = _selectedDateTime.month == 1 ? 12 : _selectedDateTime.month - 1;
+                          final newYear = _selectedDateTime.month == 1 ? _selectedDateTime.year - 1 : _selectedDateTime.year;
+                          
+                          setState(() {
+                            _selectedDateTime = DateTime(
+                              newYear,
+                              newMonth,
+                              _selectedDateTime.day,
+                              _selectedDateTime.hour,
+                              _selectedDateTime.minute,
+                            );
+                          });
+                        } : null,
+                        child: Icon(
+                          Icons.chevron_left,
+                          color: canGoPrevious ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
+                          size: 24,
+                        ),
+                      ),
+                      
+                      Text(
+                        '$currentMonth $currentYear',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: ResponsiveHelper.textPrimary,
+                        ),
+                      ),
+                      
+                      CupertinoButton(
+                        padding: const EdgeInsets.all(8),
+                        onPressed: () {
+                          setState(() {
+                            _selectedDateTime = DateTime(
+                              _selectedDateTime.month == 12 ? _selectedDateTime.year + 1 : _selectedDateTime.year,
+                              _selectedDateTime.month == 12 ? 1 : _selectedDateTime.month + 1,
+                              _selectedDateTime.day,
+                              _selectedDateTime.hour,
+                              _selectedDateTime.minute,
+                            );
+                          });
+                        },
+                        child: const Icon(
+                          Icons.chevron_right,
+                          color: ResponsiveHelper.textSecondary,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.pop(context, _selectedDateTime),
+                    child: const Text(
+                      'Done',
+                      style: TextStyle(
+                        color: ResponsiveHelper.purplePrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Selected date and time display
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.purplePrimary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    FontAwesomeIcons.calendar,
+                    color: ResponsiveHelper.purplePrimary,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${months[_selectedDateTime.month - 1]} ${_selectedDateTime.day}, ${_selectedDateTime.year}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: ResponsiveHelper.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    FontAwesomeIcons.clock,
+                    color: ResponsiveHelper.purplePrimary,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_selectedDateTime.hour > 12 ? _selectedDateTime.hour - 12 : (_selectedDateTime.hour == 0 ? 12 : _selectedDateTime.hour)}:${_selectedDateTime.minute.toString().padLeft(2, '0')} ${_selectedDateTime.hour >= 12 ? 'PM' : 'AM'}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: ResponsiveHelper.purplePrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Date and Time Picker
+            Expanded(
+              child: Theme(
+                data: ThemeData.dark().copyWith(
+                  cupertinoOverrideTheme: const CupertinoThemeData(
+                    brightness: Brightness.dark,
+                    primaryColor: ResponsiveHelper.purplePrimary,
+                    textTheme: CupertinoTextThemeData(
+                      dateTimePickerTextStyle: TextStyle(
+                        color: ResponsiveHelper.textPrimary,
+                        fontSize: 20,
+                      ),
+                    ),
+                  ),
+                ),
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.dateAndTime,
+                  initialDateTime: _selectedDateTime,
+                  minimumDate: widget.minimumDate ?? DateTime.now(),
+                  maximumDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                  use24hFormat: false,
+                  backgroundColor: ResponsiveHelper.backgroundSecondary,
+                  onDateTimeChanged: (DateTime newDateTime) {
+                    setState(() {
+                      _selectedDateTime = newDateTime;
+                    });
+                  },
+                ),
+              ),
+            ),
+
+            // Bottom safe area
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
+          ],
+        ),
+      ),
+    );
   }
 }

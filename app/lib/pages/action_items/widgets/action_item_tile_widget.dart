@@ -34,6 +34,107 @@ class ActionItemTileWidget extends StatelessWidget {
     );
   }
 
+  Widget _buildDueDateChip() {
+    if (actionItem.dueAt == null) return const SizedBox.shrink();
+
+    final now = DateTime.now();
+    final dueDate = actionItem.dueAt!;
+    final isOverdue = dueDate.isBefore(now) && !actionItem.completed;
+    final isToday = _isSameDay(dueDate, now);
+    final isTomorrow = _isSameDay(dueDate, now.add(const Duration(days: 1)));
+    final isThisWeek = dueDate.isAfter(now) && dueDate.isBefore(now.add(const Duration(days: 7)));
+
+    Color chipColor;
+    Color textColor;
+    IconData icon;
+    String dueDateText;
+
+    if (actionItem.completed) {
+      chipColor = Colors.grey.withOpacity(0.2);
+      textColor = Colors.grey.shade500;
+      icon = Icons.check_circle_outline;
+      dueDateText = _formatDueDate(dueDate);
+    } else if (isOverdue) {
+      chipColor = Colors.red.withOpacity(0.15);
+      textColor = Colors.red.shade300;
+      icon = Icons.warning_amber_rounded;
+      dueDateText = 'Overdue';
+    } else if (isToday) {
+      chipColor = Colors.orange.withOpacity(0.15);
+      textColor = Colors.orange.shade300;
+      icon = Icons.today;
+      dueDateText = 'Today';
+    } else if (isTomorrow) {
+      chipColor = Colors.blue.withOpacity(0.15);
+      textColor = Colors.blue.shade300;
+      icon = Icons.event;
+      dueDateText = 'Tomorrow';
+    } else if (isThisWeek) {
+      chipColor = Colors.green.withOpacity(0.15);
+      textColor = Colors.green.shade300;
+      icon = Icons.calendar_today;
+      dueDateText = _formatDueDate(dueDate);
+    } else {
+      chipColor = Colors.purple.withOpacity(0.15);
+      textColor = Colors.purple.shade300;
+      icon = Icons.schedule;
+      dueDateText = _formatDueDate(dueDate);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: chipColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: textColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            dueDateText,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+  String _formatDueDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = date.difference(now).inDays;
+    
+    if (difference == 0) {
+      return 'Today';
+    } else if (difference == 1) {
+      return 'Tomorrow';
+    } else if (difference == -1) {
+      return 'Yesterday';
+    } else if (difference > 1 && difference <= 7) {
+      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdays[date.weekday - 1];
+    } else {
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}';
+    }
+  }
+
   Widget _buildAppleRemindersIcon(BuildContext context) {
     final isExported = exportedToAppleReminders?.contains(actionItem.description) ?? false;
     
@@ -260,17 +361,26 @@ class ActionItemTileWidget extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              // Action item text
+              // Action item text and due date
               Expanded(
-                child: Text(
-                  actionItem.description,
-                  style: TextStyle(
-                    color: actionItem.completed ? Colors.grey.shade400 : Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    decoration: actionItem.completed ? TextDecoration.lineThrough : null,
-                    decorationColor: Colors.grey.shade400,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      actionItem.description,
+                      style: TextStyle(
+                        color: actionItem.completed ? Colors.grey.shade400 : Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        decoration: actionItem.completed ? TextDecoration.lineThrough : null,
+                        decorationColor: Colors.grey.shade400,
+                      ),
+                    ),
+                    if (actionItem.dueAt != null) ...[
+                      const SizedBox(height: 6),
+                      _buildDueDateChip(),
+                    ],
+                  ],
                 ),
               ),
               // Apple Reminders icon (only show on Apple platforms)

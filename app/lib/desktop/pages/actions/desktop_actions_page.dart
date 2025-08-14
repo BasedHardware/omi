@@ -7,8 +7,6 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/ui/organisms/action_item.dart';
-import 'package:omi/pages/action_items/widgets/action_item_filter_sheet.dart';
-import 'widgets/desktop_action_group.dart';
 
 class DesktopActionsPage extends StatefulWidget {
   const DesktopActionsPage({super.key});
@@ -22,7 +20,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   @override
   bool get wantKeepAlive => true;
 
-  bool _showGroupedView = false;
   final ScrollController _scrollController = ScrollController();
 
   late AnimationController _fadeController;
@@ -197,198 +194,46 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   }
 
   Widget _buildHeader(List<ActionItemWithMetadata> incompleteItems) {
-    return Consumer<ActionItemsProvider>(
-      builder: (context, provider, child) {
-        final incompleteCount = incompleteItems.length;
-        final hasActiveFilter = provider.selectedStartDate != null || provider.selectedEndDate != null;
-
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  // Title section
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(
-                              FontAwesomeIcons.listCheck,
-                              color: ResponsiveHelper.textSecondary,
-                              size: 18,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'Action Items',
-                              style: TextStyle(
-                                color: ResponsiveHelper.textPrimary,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$incompleteCount pending tasks',
-                          style: const TextStyle(
-                            color: ResponsiveHelper.textSecondary,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          // Title section
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(
+                      FontAwesomeIcons.listCheck,
+                      color: ResponsiveHelper.textSecondary,
+                      size: 18,
                     ),
-                  ),
-
-                  // Control buttons
-                  Row(
-                    children: [
-                      // Date Filter Button
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => ActionItemFilterSheet.show(context),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            height: 44,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: hasActiveFilter
-                                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(12),
-                              border: hasActiveFilter
-                                  ? Border.all(
-                                      color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                                      width: 1,
-                                    )
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  FontAwesomeIcons.calendarDays,
-                                  color: hasActiveFilter 
-                                    ? ResponsiveHelper.purplePrimary 
-                                    : ResponsiveHelper.textSecondary,
-                                  size: 16,
-                                ),
-                                if (hasActiveFilter) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: const BoxDecoration(
-                                      color: ResponsiveHelper.purplePrimary,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
+                    SizedBox(width: 12),
+                    Text(
+                      'Action Items',
+                      style: TextStyle(
+                        color: ResponsiveHelper.textPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(width: 8),
-                      // View toggle button
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _showGroupedView = !_showGroupedView;
-                            });
-                            MixpanelManager().actionItemsViewToggled(_showGroupedView);
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            height: 44,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: _showGroupedView
-                                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(12),
-                              border: _showGroupedView
-                                  ? Border.all(
-                                      color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                                      width: 1,
-                                    )
-                                  : null,
-                            ),
-                            child: Icon(
-                              _showGroupedView ? FontAwesomeIcons.layerGroup : FontAwesomeIcons.list,
-                              color: _showGroupedView ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              // Filter status indicator
-              if (hasActiveFilter) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                      width: 1,
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        FontAwesomeIcons.filter,
-                        size: 12,
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.8),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _getDateFilterDescription(provider),
-                        style: TextStyle(
-                          color: ResponsiveHelper.purplePrimary.withOpacity(0.9),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const Spacer(),
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            provider.clearDateFilter();
-                            MixpanelManager().actionItemsDateFilterCleared();
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              FontAwesomeIcons.xmark,
-                              size: 10,
-                              color: ResponsiveHelper.purplePrimary.withOpacity(0.8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${incompleteItems.length} pending tasks',
+                  style: const TextStyle(
+                    color: ResponsiveHelper.textSecondary,
+                    fontSize: 14,
                   ),
                 ),
               ],
-            ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -411,7 +256,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       slivers: [
         // Pending tasks section
         if (incompleteItems.isNotEmpty)
-          _showGroupedView ? _buildGroupedView(incompleteItems, false) : _buildFlatView(incompleteItems, false),
+          _buildFlatView(incompleteItems, false),
 
         // Completed tasks section
         if (completedItems.isNotEmpty) ...[
@@ -448,7 +293,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ),
             ),
           ),
-          _showGroupedView ? _buildGroupedView(completedItems, true) : _buildFlatView(completedItems, true),
+          _buildFlatView(completedItems, true),
         ] else ...[
           SliverToBoxAdapter(
             child: Container(
@@ -569,126 +414,38 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   }
 
   Widget _buildModernEmptyState() {
-    return Consumer<ActionItemsProvider>(
-      builder: (context, provider, child) {
-        final hasActiveFilters = provider.selectedStartDate != null || provider.selectedEndDate != null;
-        
-        Widget content = Container(
-          padding: const EdgeInsets.all(40),
-          margin: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.1),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 30,
-                offset: const Offset(0, 15),
-              ),
-            ],
+    Widget content = Container(
+      padding: const EdgeInsets.all(40),
+      margin: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
           ),
-          child: hasActiveFilters 
-            ? _buildFilteredEmptyState(provider)
-            : _buildFirstTimeEmptyState(),
-        );
+        ],
+      ),
+      child: _buildFirstTimeEmptyState(),
+    );
 
-        return Center(
-          child: _animationsInitialized
-              ? FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: content,
-                )
-              : content,
-        );
-      },
+    return Center(
+      child: _animationsInitialized
+          ? FadeTransition(
+              opacity: _fadeAnimation,
+              child: content,
+            )
+          : content,
     );
   }
 
-  Widget _buildFilteredEmptyState(ActionItemsProvider provider) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _animationsInitialized
-            ? AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: 1.0 + (_pulseAnimation.value * 0.05),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        FontAwesomeIcons.calendarXmark,
-                        size: 48,
-                        color: ResponsiveHelper.purplePrimary,
-                      ),
-                    ),
-                  );
-                },
-              )
-            : Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  FontAwesomeIcons.calendarXmark,
-                  size: 48,
-                  color: ResponsiveHelper.purplePrimary,
-                ),
-              ),
-        const SizedBox(height: 24),
-        const Text(
-          'No Action Items Found',
-          style: TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          _getFilterEmptyDescription(provider),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildActionButton(
-              icon: FontAwesomeIcons.sliders,
-              label: 'Adjust Filter',
-              onPressed: () => ActionItemFilterSheet.show(context),
-              isPrimary: true,
-            ),
-            const SizedBox(width: 12),
-            _buildActionButton(
-              icon: FontAwesomeIcons.xmark,
-              label: 'Clear Filter',
-              onPressed: () {
-                provider.clearDateFilter();
-                MixpanelManager().actionItemsDateFilterCleared();
-              },
-              isPrimary: false,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildFirstTimeEmptyState() {
     return Column(
@@ -750,103 +507,9 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    required bool isPrimary,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          decoration: BoxDecoration(
-            color: isPrimary 
-              ? ResponsiveHelper.purplePrimary
-              : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isPrimary 
-                ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
-                : ResponsiveHelper.backgroundTertiary,
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isPrimary ? Colors.white : ResponsiveHelper.textSecondary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isPrimary ? Colors.white : ResponsiveHelper.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildGroupedView(List<ActionItemWithMetadata> items, bool showCompleted) {
-    // Group items by conversation title
-    final Map<String, List<ActionItemWithMetadata>> groupedItems = {};
-    for (final item in items) {
-      if (item.completed == showCompleted) {
-        groupedItems.putIfAbsent(item.conversationTitle, () => []).add(item);
-      }
-    }
 
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final conversationTitle = groupedItems.keys.elementAt(index);
-          final conversationItems = groupedItems[conversationTitle]!;
 
-          Widget groupWidget = DesktopActionGroup(
-            conversationTitle: conversationTitle,
-            actionItems: conversationItems,
-          );
-
-          return AnimatedContainer(
-            duration: Duration(milliseconds: 300 + (index * 50)),
-            curve: Curves.easeOutCubic,
-            child: _animationsInitialized
-                ? FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: Offset(0, 0.1 + (index * 0.02)),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: _slideController,
-                        curve: Interval(
-                          (index * 0.1).clamp(0.0, 0.8),
-                          1.0,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      )),
-                      child: groupWidget,
-                    ),
-                  )
-                : groupWidget,
-          );
-        },
-        childCount: groupedItems.length,
-      ),
-    );
-  }
 
   Widget _buildFlatView(List<ActionItemWithMetadata> items, bool showCompleted) {
     final filteredItems = items.where((item) => item.completed == showCompleted).toList();
@@ -889,89 +552,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-  String _getDateFilterDescription(ActionItemsProvider provider) {
-    final startDate = provider.selectedStartDate;
-    final endDate = provider.selectedEndDate;
-    
-    if (startDate != null && endDate != null) {
-      // Check if it's today
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day);
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-      
-      if (_isSameDay(startDate, todayStart) && _isSameDay(endDate, todayEnd)) {
-        return 'Filtered by Today';
-      }
-      
-      // Check if it's yesterday
-      final yesterday = now.subtract(const Duration(days: 1));
-      final yesterdayStart = DateTime(yesterday.year, yesterday.month, yesterday.day);
-      final yesterdayEnd = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
-      
-      if (_isSameDay(startDate, yesterdayStart) && _isSameDay(endDate, yesterdayEnd)) {
-        return 'Filtered by Yesterday';
-      }
-      
-      // Check if it's this week
-      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-      final startOfWeekFormatted = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-      
-      if (_isSameDay(startDate, startOfWeekFormatted) && _isSameDay(endDate, now)) {
-        return 'Filtered by This Week';
-      }
-      
-      // Check if it's this month
-      final startOfMonth = DateTime(now.year, now.month, 1);
-      
-      if (_isSameDay(startDate, startOfMonth) && _isSameDay(endDate, now)) {
-        return 'Filtered by This Month';
-      }
-      
-      // Default: show date range
-      return 'Filtered: ${_formatDate(startDate)} - ${_formatDate(endDate)}';
-    } else if (startDate != null) {
-      return 'Filtered from ${_formatDate(startDate)}';
-    } else if (endDate != null) {
-      return 'Filtered until ${_formatDate(endDate)}';
-    }
-    
-    return 'Date filter active';
-  }
 
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year && 
-           date1.month == date2.month && 
-           date1.day == date2.day;
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  String _formatDateForDisplay(DateTime date) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-
-  String _getFilterEmptyDescription(ActionItemsProvider provider) {
-    final startDate = provider.selectedStartDate;
-    final endDate = provider.selectedEndDate;
-    
-    if (startDate != null && endDate != null) {
-      final daysDiff = endDate.difference(startDate).inDays;
-      if (daysDiff == 0) {
-        return 'No action items were created on ${_formatDateForDisplay(startDate)}. Try expanding your date range or clearing the filter.';
-      }
-      return 'No action items found in the selected ${daysDiff + 1}-day period. Try adjusting your date range for more results.';
-    } else if (startDate != null) {
-      return 'No action items found from ${_formatDateForDisplay(startDate)} onwards. Try selecting a different start date.';
-    } else if (endDate != null) {
-      return 'No action items found until ${_formatDateForDisplay(endDate)}. Try extending the end date or clearing the filter.';
-    }
-    
-    return 'No action items match your current filter criteria. Try adjusting your settings.';
-  }
 }
 
 

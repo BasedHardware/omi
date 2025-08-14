@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
-import 'widgets/action_item_filter_sheet.dart';
+
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -18,7 +17,6 @@ class ActionItemsPage extends StatefulWidget {
 }
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
-  bool _showGroupedView = false;
   final ScrollController _scrollController = ScrollController();
   Set<String> _exportedToAppleReminders = <String>{};
 
@@ -135,9 +133,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
                 // Shimmer list
-                _showGroupedView 
-                  ? const ActionItemsGroupedShimmerList()
-                  : const ActionItemsShimmerList(),
+                  const ActionItemsShimmerList(),
               ]
               else if (provider.actionItems.isEmpty)
                 SliverFillRemaining(
@@ -182,77 +178,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 
                               ],
                             ),
-                            Row(
-                              children: [
-                                // Date Filter Button
-                                GestureDetector(
-                                  onTap: () => ActionItemFilterSheet.show(context),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: (provider.selectedStartDate != null || provider.selectedEndDate != null)
-                                        ? Colors.deepPurpleAccent.withOpacity(0.2)
-                                        : Colors.grey[800]?.withOpacity(0.5),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: (provider.selectedStartDate != null || provider.selectedEndDate != null)
-                                        ? Border.all(color: Colors.deepPurpleAccent, width: 1)
-                                        : null,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.date_range,
-                                          size: 16,
-                                          color: (provider.selectedStartDate != null || provider.selectedEndDate != null)
-                                            ? Colors.deepPurpleAccent 
-                                            : Colors.white70,
-                                        ),
-                                        if (provider.selectedStartDate != null || provider.selectedEndDate != null) ...[
-                                          const SizedBox(width: 4),
-                                          Container(
-                                            width: 6,
-                                            height: 6,
-                                            decoration: const BoxDecoration(
-                                              color: Colors.deepPurpleAccent,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                // View Toggle Button
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _showGroupedView = !_showGroupedView;
-                                    });
-                                    MixpanelManager().actionItemsViewToggled(_showGroupedView);
-                                  },
-                                  child: Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: BoxDecoration(
-                                      color: _showGroupedView 
-                                        ? Colors.deepPurpleAccent.withOpacity(0.2)
-                                        : Colors.grey[800]?.withOpacity(0.5),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: _showGroupedView 
-                                        ? Border.all(color: Colors.deepPurpleAccent, width: 1)
-                                        : null,
-                                    ),
-                                    child: Icon(
-                                      _showGroupedView ? Icons.view_agenda : Icons.view_list,
-                                      size: 16,
-                                      color: _showGroupedView ? Colors.deepPurpleAccent : Colors.white70,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -267,27 +193,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 fontSize: 12,
                               ),
                             ),
-                            if (provider.selectedStartDate != null || provider.selectedEndDate != null) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.filter_alt,
-                                    size: 12,
-                                    color: Colors.deepPurpleAccent.withOpacity(0.7),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _getDateFilterDescription(provider),
-                                    style: TextStyle(
-                                      color: Colors.deepPurpleAccent.withOpacity(0.7),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -298,9 +204,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
               // Incomplete Items
               if (provider.actionItems.isNotEmpty)
-                _showGroupedView 
-                  ? _buildGroupedIncompleteItems(incompleteItems, provider)
-                  : _buildFlatIncompleteItems(incompleteItems, provider),
+                _buildFlatIncompleteItems(incompleteItems, provider),
 
               // Completed Section Header
               if (provider.actionItems.isNotEmpty)
@@ -350,9 +254,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
               // Completed Items
               if (provider.actionItems.isNotEmpty && completedItems.isNotEmpty)
-                _showGroupedView 
-                  ? _buildGroupedCompletedItems(completedItems, provider)
-                  : _buildFlatCompletedItems(completedItems, provider)
+                _buildFlatCompletedItems(completedItems, provider)
               else if (provider.actionItems.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -442,58 +344,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildGroupedIncompleteItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
-    // Group items by conversation title
-    final Map<String, List<ActionItemWithMetadata>> groupedItems = {};
-    for (final item in items) {
-      groupedItems.putIfAbsent(item.conversationTitle, () => []).add(item);
-    }
 
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, groupIndex) {
-          final conversationTitle = groupedItems.keys.elementAt(groupIndex);
-          final conversationItems = groupedItems[conversationTitle]!;
-
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Conversation group header
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800]?.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    conversationTitle,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Action items for this conversation
-                ...conversationItems.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: _buildDismissibleActionItem(
-                    item: item,
-                    provider: provider,
-                  ),
-                )),
-              ],
-            ),
-          );
-        },
-        childCount: groupedItems.length,
-      ),
-    );
-  }
 
   Widget _buildFlatCompletedItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
     return SliverList(
@@ -516,58 +367,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildGroupedCompletedItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
-    // Group items by conversation title
-    final Map<String, List<ActionItemWithMetadata>> groupedItems = {};
-    for (final item in items) {
-      groupedItems.putIfAbsent(item.conversationTitle, () => []).add(item);
-    }
 
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, groupIndex) {
-          final conversationTitle = groupedItems.keys.elementAt(groupIndex);
-          final conversationItems = groupedItems[conversationTitle]!;
-
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Conversation group header
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800]?.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    conversationTitle,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Action items for this conversation
-                ...conversationItems.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: _buildDismissibleActionItem(
-                    item: item,
-                    provider: provider,
-                  ),
-                )),
-              ],
-            ),
-          );
-        },
-        childCount: groupedItems.length,
-      ),
-    );
-  }
 
   Widget _buildDismissibleActionItem({
     required ActionItemWithMetadata item,
@@ -884,173 +684,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
 
-  String _getDateFilterDescription(ActionItemsProvider provider) {
-    final startDate = provider.selectedStartDate;
-    final endDate = provider.selectedEndDate;
-    
-    if (startDate != null && endDate != null) {
-      // Check if it's today
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day);
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-      
-      if (_isSameDay(startDate, todayStart) && _isSameDay(endDate, todayEnd)) {
-        return 'Filtered by Today';
-      }
-      
-      // Check if it's yesterday
-      final yesterday = now.subtract(const Duration(days: 1));
-      final yesterdayStart = DateTime(yesterday.year, yesterday.month, yesterday.day);
-      final yesterdayEnd = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
-      
-      if (_isSameDay(startDate, yesterdayStart) && _isSameDay(endDate, yesterdayEnd)) {
-        return 'Filtered by Yesterday';
-      }
-      
-      // Check if it's this week
-      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-      final startOfWeekFormatted = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-      
-      if (_isSameDay(startDate, startOfWeekFormatted) && _isSameDay(endDate, now)) {
-        return 'Filtered by This Week';
-      }
-      
-      // Check if it's this month
-      final startOfMonth = DateTime(now.year, now.month, 1);
-      
-      if (_isSameDay(startDate, startOfMonth) && _isSameDay(endDate, now)) {
-        return 'Filtered by This Month';
-      }
-      
-      // Default: show date range
-      return 'Filtered: ${_formatDate(startDate)} - ${_formatDate(endDate)}';
-    } else if (startDate != null) {
-      return 'Filtered from ${_formatDate(startDate)}';
-    } else if (endDate != null) {
-      return 'Filtered until ${_formatDate(endDate)}';
-    }
-    
-    return 'Date filter active';
-  }
 
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year && 
-           date1.month == date2.month && 
-           date1.day == date2.day;
-  }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
 
-  String _formatDateForDisplay(DateTime date) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
 
   Widget _buildSmartEmptyState(ActionItemsProvider provider) {
-    final hasActiveFilters = provider.selectedStartDate != null || provider.selectedEndDate != null;
-    
     return Center(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400),
         padding: const EdgeInsets.all(32.0),
-        child: hasActiveFilters 
-          ? _buildFilteredEmptyState(provider)
-          : _buildFirstTimeEmptyState(),
+        child: _buildFirstTimeEmptyState(),
       ),
     );
   }
 
-  Widget _buildFilteredEmptyState(ActionItemsProvider provider) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF8B5CF6).withOpacity(0.1),
-                const Color(0xFFA855F7).withOpacity(0.05),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: const Color(0xFF8B5CF6).withOpacity(0.2),
-              width: 1,
-            ),
-          ),
-          child: const Icon(
-            Icons.filter_alt_off_rounded,
-            size: 36,
-            color: Color(0xFF8B5CF6),
-          ),
-        ),
-        
-        const SizedBox(height: 24),
-        
-        // Primary heading
-        const Text(
-          'No Action Items Found',
-          style: TextStyle(
-            color: Color(0xFFFFFFFF),
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.5,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        
-        const SizedBox(height: 12),
-        
-        Text(
-          _getFilterEmptyDescription(provider),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Color(0xFFB0B0B0),
-            fontSize: 16,
-            height: 1.5,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        
-        const SizedBox(height: 32),
-        
-        // Action buttons
-        Column(
-          children: [
-            // Primary action - Modify filter
-            _buildActionButton(
-              icon: Icons.tune_rounded,
-              label: 'Adjust Filter',
-              onPressed: () => ActionItemFilterSheet.show(context),
-              isPrimary: true,
-            ),
-            
-            const SizedBox(height: 12),
-            
-            // Secondary action - Clear filter
-            _buildActionButton(
-              icon: Icons.clear_rounded,
-              label: 'Clear Filter',
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-                provider.clearDateFilter();
-                MixpanelManager().actionItemsDateFilterCleared();
-              },
-              isPrimary: false,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildFirstTimeEmptyState() {
     return Column(
@@ -1224,88 +872,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    required bool isPrimary,
-  }) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-        decoration: BoxDecoration(
-          gradient: isPrimary ? const LinearGradient(
-            colors: [Color(0xFF8B5CF6), Color(0xFFA855F7)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ) : null,
-          color: isPrimary ? null : const Color(0xFF252525),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isPrimary 
-              ? const Color(0xFF8B5CF6).withOpacity(0.5)
-              : const Color(0xFF2A2A2A),
-            width: 1,
-          ),
-          boxShadow: isPrimary ? [
-            BoxShadow(
-              color: const Color(0xFF8B5CF6).withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ] : [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isPrimary ? Colors.white : const Color(0xFFE5E5E5),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                color: isPrimary ? Colors.white : const Color(0xFFE5E5E5),
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  String _getFilterEmptyDescription(ActionItemsProvider provider) {
-    final startDate = provider.selectedStartDate;
-    final endDate = provider.selectedEndDate;
-    
-    if (startDate != null && endDate != null) {
-      final daysDiff = endDate.difference(startDate).inDays;
-      if (daysDiff == 0) {
-        return 'No action items were created on ${_formatDateForDisplay(startDate)}. Try expanding your date range or clearing the filter.';
-      }
-      return 'No action items found in the selected ${daysDiff + 1}-day period. Try adjusting your date range for more results.';
-    } else if (startDate != null) {
-      return 'No action items found from ${_formatDateForDisplay(startDate)} onwards. Try selecting a different start date.';
-    } else if (endDate != null) {
-      return 'No action items found until ${_formatDateForDisplay(endDate)}. Try extending the end date or clearing the filter.';
-    }
-    
-    return 'No action items match your current filter criteria. Try adjusting your settings.';
-  }
+
+
 
 }

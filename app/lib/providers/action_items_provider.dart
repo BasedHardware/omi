@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:omi/backend/http/api/conversations.dart' as api;
+import 'package:omi/backend/http/api/action_items.dart' as api;
 import 'package:omi/backend/schema/schema.dart';
 
 class ActionItemsProvider extends ChangeNotifier {
@@ -13,8 +13,7 @@ class ActionItemsProvider extends ChangeNotifier {
   
   bool _includeCompleted = true;
   
-  DateTime? _selectedStartDate;
-  DateTime? _selectedEndDate;
+
   
   // Debounce mechanism for refresh
   Timer? _refreshDebounceTimer;
@@ -27,8 +26,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
-  DateTime? get selectedStartDate => _selectedStartDate;
-  DateTime? get selectedEndDate => _selectedEndDate;
+
 
   // Group action items by completion status
   List<ActionItemWithMetadata> get incompleteItems => 
@@ -63,13 +61,11 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final response = await api.getActionItems(
-        limit: 100,
-        offset: 0,
-        includeCompleted: _includeCompleted,
-        startDate: _selectedStartDate,
-        endDate: _selectedEndDate,
-      );
+             final response = await api.getActionItems(
+         limit: 100,
+         offset: 0,
+         completed: _includeCompleted ? null : false,
+       );
 
           _actionItems = response.actionItems;
     _hasMore = response.hasMore;
@@ -92,13 +88,11 @@ class ActionItemsProvider extends ChangeNotifier {
     setFetching(true);
 
     try {
-      final response = await api.getActionItems(
-        limit: 50,
-        offset: _actionItems.length,
-        includeCompleted: _includeCompleted,
-        startDate: _selectedStartDate,
-        endDate: _selectedEndDate,
-      );
+             final response = await api.getActionItems(
+         limit: 50,
+         offset: _actionItems.length,
+         completed: _includeCompleted ? null : false,
+       );
 
       _actionItems.addAll(response.actionItems);
       _hasMore = response.hasMore;
@@ -118,13 +112,14 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      final success = await api.updateActionItemStateByMetadata(
-        item.conversationId,
-        item.index,
-        newState,
+      final success = await api.updateActionItem(
+        item.id,
+        description: item.description,
+        completed: newState,
+        dueAt: item.dueAt,
       );
 
-      if (!success) {
+      if (success == null) {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         debugPrint('Failed to update action item state on server');
@@ -137,21 +132,63 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<void> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
-    final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
-    if (itemInList != null) {
+    try {
+      final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
+      if (itemInList != null) {
+        notifyListeners();
+      }
+
+      final updatedItem = await api.updateActionItem(
+        item.id,
+        description: newDescription,
+      );
+
+      if (updatedItem != null) {
+        // Update the local item with server response
+        final index = _actionItems.indexWhere((i) => i.id == item.id);
+        if (index != -1) {
+          _actionItems[index] = updatedItem;
+          notifyListeners();
+        }
+      } else {
+        // Revert on failure
+        _findAndUpdateItemDescription(item.id, item.description);
+        notifyListeners();
+        debugPrint('Failed to update action item description on server');
+      }
+    } catch (e) {
+      _findAndUpdateItemDescription(item.id, item.description);
       notifyListeners();
+      debugPrint('Error updating action item description: $e');
+    }
+  }
+
+  Future<void> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
+    try {
+      final updatedItem = await api.updateActionItem(
+        item.id,
+        dueAt: dueDate,
+      );
+
+      if (updatedItem != null) {
+        // Update the local item with server response
+        final index = _actionItems.indexWhere((i) => i.id == item.id);
+        if (index != -1) {
+          _actionItems[index] = updatedItem;
+          notifyListeners();
+        }
+      } else {
+        debugPrint('Failed to update action item due date on server');
+      }
+    } catch (e) {
+      debugPrint('Error updating action item due date: $e');
     }
   }
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
     try {
-      final success = await api.deleteConversationActionItem(
-        item.conversationId,
-        ActionItem(
-          item.description,
-          completed: item.completed,
-          deleted: false,
-        ),
+      final success = await api.deleteActionItem(
+        item.id,
       );
 
       if (success) {
@@ -194,19 +231,7 @@ class ActionItemsProvider extends ChangeNotifier {
     // TODO: Add analytics for completed action items toggle
   }
 
-  Future<void> setDateFilter(DateTime? startDate, DateTime? endDate) async {
-    _selectedStartDate = startDate;
-    _selectedEndDate = endDate;
-    
-    await fetchActionItems(showShimmer: true);
-  }
 
-  Future<void> clearDateFilter() async {
-    _selectedStartDate = null;
-    _selectedEndDate = null;
-    
-    await fetchActionItems(showShimmer: true);
-  }
 
   Future<void> refreshActionItems() async {
     final now = DateTime.now();
@@ -239,3 +264,4 @@ class ActionItemsProvider extends ChangeNotifier {
     super.dispose();
   }
 } 
+
