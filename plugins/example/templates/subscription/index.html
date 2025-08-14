@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #000000;
+            min-height: 100vh;
+            color: white;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .social-proof {
+            background: rgba(147, 51, 234, 0.1);
+            border: 1px solid rgba(147, 51, 234, 0.3);
+            border-radius: 50px;
+            padding: 0.5rem 1.5rem;
+            display: inline-block;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .review-highlights {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .highlight-tag {
+            background: rgba(147, 51, 234, 0.2);
+            border: 1px solid rgba(147, 51, 234, 0.4);
+            color: #e5e7eb;
+            padding: 0.4rem 1rem;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .highlight-tag:hover {
+            background: rgba(147, 51, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .crown-icon {
+            font-size: 3rem;
+            color: #9333ea;
+            margin-bottom: 1rem;
+            display: inline-block;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px rgba(147, 51, 234, 0.5); }
+            to { text-shadow: 0 0 20px rgba(147, 51, 234, 0.8), 0 0 30px rgba(147, 51, 234, 0.6); }
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            color: white;
+            background: linear-gradient(135deg, #ffffff 0%, #e5e7eb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.1;
+        }
+
+        .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.85;
+            margin-bottom: 1rem;
+            font-weight: 400;
+        }
+
+        .value-prop {
+            font-size: 1.1rem;
+            color: #4ade80;
+            font-weight: 600;
+            margin-bottom: 2rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, #1F1F25 0%, #2A2A2E 100%);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #9333ea, #7c3aed, #6366f1);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(147, 51, 234, 0.2);
+            border-color: rgba(147, 51, 234, 0.3);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            font-size: 2.8rem;
+            margin-bottom: 1.5rem;
+            color: #9333ea;
+            display: block;
+        }
+
+        .feature-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.8rem;
+            color: white;
+        }
+
+        .feature-description {
+            opacity: 0.85;
+            line-height: 1.6;
+            font-size: 1rem;
+        }
+
+        .pricing-section {
+            margin-top: 4rem;
+            position: relative;
+        }
+
+        .pricing-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .pricing-header h2 {
+            font-size: 2.8rem;
+            margin-bottom: 1rem;
+            font-weight: 800;
+        }
+
+        .pricing-subheader {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            margin-bottom: 1rem;
+        }
+
+        .urgency-banner {
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            display: inline-block;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .pricing-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .pricing-card {
+            background: linear-gradient(135deg, #1F1F25 0%, #2A2A2E 100%);
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            transition: all 0.4s ease;
+            overflow: hidden;
+        }
+
+        .pricing-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(147, 51, 234, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .pricing-card:hover::before {
+            left: 100%;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-12px) scale(1.02);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+        }
+
+        .pricing-card.popular {
+            border-color: #9333ea;
+            box-shadow: 0 0 40px rgba(147, 51, 234, 0.4);
+            transform: scale(1.05);
+        }
+
+        .pricing-card.popular:hover {
+            transform: translateY(-12px) scale(1.07);
+        }
+
+        .popular-badge {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #9333ea, #7c3aed);
+            color: white;
+            padding: 0.6rem 2rem;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(147, 51, 234, 0.4);
+        }
+
+        .savings-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            transform: rotate(12deg);
+        }
+
+        .plan-name {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            color: white;
+        }
+
+        .plan-subtitle {
+            font-size: 1rem;
+            opacity: 0.7;
+            margin-bottom: 1.5rem;
+        }
+
+        .price-container {
+            margin-bottom: 1.5rem;
+        }
+
+        .plan-price {
+            font-size: 3.5rem;
+            font-weight: 900;
+            margin-bottom: 0.2rem;
+            color: #9333ea;
+            line-height: 1;
+        }
+
+        .plan-period {
+            opacity: 0.8;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .original-price {
+            text-decoration: line-through;
+            opacity: 0.6;
+            font-size: 1.2rem;
+            margin-right: 0.5rem;
+        }
+
+        .plan-savings {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            padding: 0.6rem 1.2rem;
+            border-radius: 25px;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            display: inline-block;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .value-highlight {
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            color: #ffd700;
+            padding: 0.5rem 1rem;
+            border-radius: 15px;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+            font-size: 0.9rem;
+        }
+
+        .plan-features {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+
+        .plan-features li {
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .plan-features li i {
+            color: #4ade80;
+            margin-right: 0.75rem;
+            font-size: 1.1rem;
+        }
+
+        .cta-button {
+            width: 100%;
+            padding: 1.2rem 2rem;
+            background: linear-gradient(135deg, #9333ea, #7c3aed);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 8px 25px rgba(147, 51, 234, 0.3);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(147, 51, 234, 0.5);
+            background: linear-gradient(135deg, #7c3aed, #6366f1);
+        }
+
+        .cta-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.6s;
+        }
+
+        .cta-button:hover::before {
+            left: 100%;
+        }
+
+        .cta-button.secondary {
+            background: transparent;
+            border: 2px solid #9333ea;
+            color: #9333ea;
+        }
+
+        .cta-button.secondary:hover {
+            background: #9333ea;
+            color: white;
+        }
+
+        .guarantee {
+            font-size: 0.85rem;
+            opacity: 0.7;
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .error-message {
+            background: #1F1F25;
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+            padding: 1rem;
+            border-radius: 16px;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 4rem;
+            opacity: 0.7;
+        }
+
+        .testimonials {
+            margin: 4rem 0;
+            text-align: center;
+        }
+
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .testimonial {
+            background: linear-gradient(135deg, #1F1F25 0%, #2A2A2E 100%);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .testimonial::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #9333ea, #7c3aed);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .testimonial:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(147, 51, 234, 0.2);
+            border-color: rgba(147, 51, 234, 0.3);
+        }
+
+        .testimonial:hover::before {
+            opacity: 1;
+        }
+
+        .testimonial-text {
+            font-style: italic;
+            margin-bottom: 1.5rem;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .testimonial-author {
+            font-weight: 600;
+            color: #9333ea;
+            font-size: 0.9rem;
+        }
+
+        .wall-of-love-section {
+            margin-top: 4rem;
+        }
+
+        .testimonial-embed {
+            max-width: 1000px;
+            margin: 0 auto;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .faq-section {
+            margin: 4rem 0;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .faq-item {
+            background: #1F1F25;
+            border-radius: 16px;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .faq-question {
+            padding: 1.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .faq-answer {
+            padding: 0 1.5rem 1.5rem;
+            opacity: 0.8;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            .pricing-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .plan-price {
+                font-size: 3rem;
+            }
+
+            .pricing-card.popular {
+                transform: none;
+            }
+
+            .feature-card {
+                text-align: center;
+            }
+
+            .testimonial-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .review-highlights {
+                gap: 0.5rem;
+            }
+
+            .highlight-tag {
+                font-size: 0.8rem;
+                padding: 0.3rem 0.8rem;
+            }
+
+            .testimonial-embed iframe {
+                height: 500px;
+            }
+
+            .testimonials h2 + div {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+
+            .wall-of-love-section h3 + div {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="social-proof">
+                <i class="fas fa-users"></i> Join thousands of users who've upgraded
+            </div>
+            <i class="fas fa-crown crown-icon"></i>
+            <h1>Upgrade to Unlimited</h1>
+            <p class="subtitle">Your Omi, unleashed. Go unlimited for endless possibilities.</p>
+            <p class="value-prop">💰 Save up to $38 with annual billing</p>
+            
+            <div class="review-highlights">
+                <span class="highlight-tag">🚀 Impressive technology</span>
+                <span class="highlight-tag">📈 Enhances productivity</span>
+                <span class="highlight-tag">🎨 Elegant design</span>
+                <span class="highlight-tag">🔓 Open source advantage</span>
+                <span class="highlight-tag">🧠 Great for ADHD</span>
+                <span class="highlight-tag">🔄 Seamless integration</span>
+            </div>
+        </div>
+
+        {% if request.query_params.get('error') == 'missing_uid' %}
+        <div class="error-message">
+            <i class="fas fa-exclamation-triangle"></i>
+            Error: User ID is required to proceed with subscription.
+        </div>
+        {% elif request.query_params.get('error') == 'redirect_failed' %}
+        <div class="error-message">
+            <i class="fas fa-exclamation-triangle"></i>
+            Error: Failed to redirect to payment. Please try again.
+        </div>
+        {% endif %}
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <i class="fas fa-infinity feature-icon"></i>
+                <h3 class="feature-title">Unlimited conversations</h3>
+                <p class="feature-description">No limits on your conversations with Omi. Talk as much as you want, whenever you want.</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-comments feature-icon"></i>
+                <h3 class="feature-title">Ask Omi anything about your life</h3>
+                <p class="feature-description">Get insights about your life, memories, and conversations. Omi remembers everything.</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-brain feature-icon"></i>
+                <h3 class="feature-title">Unlock Omi's infinite memory</h3>
+                <p class="feature-description">Never forget an important moment again with Omi's complete memory capabilities.</p>
+            </div>
+        </div>
+
+        <div class="pricing-section">
+            <div class="pricing-header">
+                <h2>Choose Your Plan</h2>
+                <p class="pricing-subheader">Select the perfect plan for your needs</p>
+                <div class="urgency-banner">
+                    <i class="fas fa-clock"></i> Limited time: Save 2 months free on annual plans
+                </div>
+            </div>
+
+            <div class="pricing-cards">
+                <div class="pricing-card popular">
+                    <div class="popular-badge">Most Popular</div>
+                    <div class="savings-badge">Save $38</div>
+                    <h3 class="plan-name">Annual Unlimited</h3>
+                    <p class="plan-subtitle">Best value for power users</p>
+                    <div class="price-container">
+                        <div class="plan-price">$16</div>
+                        <div class="plan-period">per month, billed annually</div>
+                        <div><span class="original-price">$228</span> $199/year</div>
+                    </div>
+                    <div class="plan-savings">Save 2 months free!</div>
+                    <div class="value-highlight">
+                        <i class="fas fa-star"></i> 17% savings vs monthly
+                    </div>
+                    <ul class="plan-features">
+                        <li><i class="fas fa-check"></i> Unlimited conversations</li>
+                        <li><i class="fas fa-check"></i> Ask Omi anything about your life</li>
+                        <li><i class="fas fa-check"></i> Unlock Omi's infinite memory</li>
+                        <li><i class="fas fa-check"></i> Priority support</li>
+                        <li><i class="fas fa-check"></i> Early access to new features</li>
+                        <li><i class="fas fa-check"></i> Advanced analytics</li>
+                    </ul>
+                    <a href="https://buy.stripe.com/aFaaEP4dC9h4cAm0H86wE1F?client_reference_id={{ uid }}" class="cta-button">
+                        Start Annual Plan
+                        <i class="fas fa-arrow-right" style="margin-left: 0.5rem;"></i>
+                    </a>
+                    <div class="guarantee">
+                        <i class="fas fa-shield-alt"></i> 30-day money-back guarantee
+                    </div>
+                </div>
+
+                <div class="pricing-card">
+                    <h3 class="plan-name">Monthly Unlimited</h3>
+                    <p class="plan-subtitle">Perfect for trying out</p>
+                    <div class="price-container">
+                        <div class="plan-price">$19</div>
+                        <div class="plan-period">per month</div>
+                    </div>
+                    <ul class="plan-features">
+                        <li><i class="fas fa-check"></i> Unlimited conversations</li>
+                        <li><i class="fas fa-check"></i> Ask Omi anything about your life</li>
+                        <li><i class="fas fa-check"></i> Unlock Omi's infinite memory</li>
+                        <li><i class="fas fa-check"></i> Priority support</li>
+                        <li><i class="fas fa-check"></i> Cancel anytime</li>
+                    </ul>
+                    <a href="https://buy.stripe.com/bJedR1bG4bpcbwiahI6wE1G?client_reference_id={{ uid }}" class="cta-button secondary">
+                        Start Monthly Plan
+                        <i class="fas fa-arrow-right" style="margin-left: 0.5rem;"></i>
+                    </a>
+                    <div class="guarantee">
+                        <i class="fas fa-shield-alt"></i> Cancel anytime, no questions asked
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="testimonials">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+                <h2 style="margin: 0;">What Our Users Say</h2>
+                <a href="https://testimonial.to/omi/all" target="_blank" rel="noopener noreferrer" 
+                   style="background: linear-gradient(135deg, #9333ea, #7c3aed); color: white; padding: 0.8rem 1.5rem; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-heart"></i> Share Your Review
+                </a>
+            </div>
+            <div class="testimonial-grid">
+                <div class="testimonial">
+                    <div class="testimonial-text">
+                        "This thing is incredible. I was so weary it would not be good because it's open source... but this is software so much more valuable and better than almost all the similar saas products or hardware solutions. This is going to change everything. I am absolutely blown away."
+                    </div>
+                    <div class="testimonial-author">- IamBrittneyWilson</div>
+                </div>
+                <div class="testimonial">
+                    <div class="testimonial-text">
+                        "It's small, simple, and fits into my day without getting in the way! What's really cool is how it blends into everyday life, giving you support that feels natural and really gets how real life works. Your privacy is well taken care of... you control your data, decide where to store it, and can delete it whenever you want."
+                    </div>
+                    <div class="testimonial-author">- Sashank Pappu, LinkedIn</div>
+                </div>
+                <div class="testimonial">
+                    <div class="testimonial-text">
+                        "I've been wearing mine daily for a few months and have come to rely on it for feedback/retrospective as well as helping with ADHD. Lots of useful practical and fun apps, more every day."
+                    </div>
+                    <div class="testimonial-author">- colcamp</div>
+                </div>
+                <div class="testimonial">
+                    <div class="testimonial-text">
+                        "Hard to stress this well enough: OMI is such a frecken powerful device to have on you. It is SO functional and seamless. I can't wait for the consumer version that I ordered to arrive."
+                    </div>
+                    <div class="testimonial-author">- Lyondhür 🇳🇿</div>
+                </div>
+                <div class="testimonial">
+                    <div class="testimonial-text">
+                        "Been trying this @omidotme it's freaking incredible! It can listen to u all day and record convo plus to do list for you! Can analyze your convo to make u better at what u do."
+                    </div>
+                    <div class="testimonial-author">- skygodkingdom</div>
+                </div>
+                <div class="testimonial">
+                    <div class="testimonial-text">
+                        "Not going to lie, I'm pretty impressed with @omidotme. I've had the bee.computer for months now, but just received my Omi and I'm in LOVE. Everyone should look into this thing."
+                    </div>
+                    <div class="testimonial-author">- Retraced Echoes</div>
+                </div>
+            </div>
+            
+            <!-- Embedded Wall of Love Widget -->
+            <div class="wall-of-love-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin: 3rem 0 2rem 0; flex-wrap: wrap; gap: 1rem;">
+                    <h3 style="margin: 0; font-size: 1.8rem;">See More Reviews</h3>
+                    <a href="https://testimonial.to/omi/all" target="_blank" rel="noopener noreferrer" 
+                       style="background: transparent; border: 2px solid #9333ea; color: #9333ea; padding: 0.6rem 1.2rem; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 0.85rem; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-external-link-alt"></i> View All Reviews
+                    </a>
+                </div>
+                <div class="testimonial-embed">
+                    <iframe 
+                        src="https://testimonial.to/omi/all?theme=dark&hideDate=on&randomize=on&showSource=on" 
+                        width="100%" 
+                        height="600" 
+                        frameborder="0" 
+                        scrolling="yes"
+                        style="border-radius: 16px; background: #1F1F25;">
+                    </iframe>
+                </div>
+            </div>
+        </div>
+
+        <div class="faq-section">
+            <h2 style="text-align: center; margin-bottom: 2rem;">Frequently Asked Questions</h2>
+            <div class="faq-item">
+                <div class="faq-question">
+                    Can I cancel anytime?
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="faq-answer">
+                    Yes! You can cancel your subscription at any time. For annual plans, you'll continue to have access until the end of your billing period.
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">
+                    What's included in unlimited?
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="faq-answer">
+                    Unlimited conversations, infinite memory storage, priority support, and access to all premium features including advanced AI insights.
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">
+                    Is there a money-back guarantee?
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="faq-answer">
+                    Yes! We offer a 30-day money-back guarantee on all plans. If you're not satisfied, we'll refund your payment in full.
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2024 Omi. All rights reserved. | Secure payments powered by Stripe | <i class="fas fa-lock"></i> SSL Encrypted</p>
+        </div>
+    </div>
+
+    <script>
+        // Get UID from URL parameters if not provided by template
+        const urlParams = new URLSearchParams(window.location.search);
+        const uid = urlParams.get('uid') || '{{ uid }}';
+        
+        // Update button links with UID if needed
+        if (uid && uid !== '{{ uid }}') {
+            const buttons = document.querySelectorAll('.cta-button');
+            buttons.forEach(button => {
+                const href = button.getAttribute('href');
+                if (href && !href.includes('uid=')) {
+                    button.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'uid=' + encodeURIComponent(uid));
+                }
+            });
+        }
+
+        // Add click tracking
+        document.querySelectorAll('.cta-button').forEach(button => {
+            button.addEventListener('click', function(e) {
+                const plan = this.href.includes('annual') ? 'annual' : 'monthly';
+                console.log(`User clicked ${plan} plan with UID: ${uid}`);
+                
+                // Add loading state
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Redirecting...';
+                this.style.pointerEvents = 'none';
+            });
+        });
+
+        // Add some interactive effects
+        document.querySelectorAll('.pricing-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-10px) scale(1.02)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+    </script>
+</body>
+</html>
