@@ -7,7 +7,11 @@ import app_links
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
+  private var appleNotesChannel: FlutterMethodChannel?
+  private var appleCalendarChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
+  private let appleNotesService = AppleNotesService()
+  private let appleCalendarService = AppleCalendarService()
 
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -35,6 +39,18 @@ import app_links
     appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller!.binaryMessenger)
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleRemindersCall(call, result: result)
+    }
+    
+    // Create Apple Notes method channel
+    appleNotesChannel = FlutterMethodChannel(name: "com.omi.apple_notes", binaryMessenger: controller!.binaryMessenger)
+    appleNotesChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.appleNotesService.handleMethodCall(call, result: result)
+    }
+    
+    // Create Apple Calendar method channel
+    appleCalendarChannel = FlutterMethodChannel(name: "com.omi.apple_calendar", binaryMessenger: controller!.binaryMessenger)
+    appleCalendarChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.appleCalendarService.handleMethodCall(call, result: result)
     }
 
     // here, Without this code the task will not work.

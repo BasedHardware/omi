@@ -23,32 +23,54 @@ class AppleRemindersService {
     }
     
     private func hasRemindersPermission(result: @escaping FlutterResult) {
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        result(status == .authorized)
+        if #available(iOS 17.0, *) {
+            // iOS 17+ has new authorization status
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            result(status == .fullAccess || status == .writeOnly)
+        } else {
+            // iOS 16 and below
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            result(status == .authorized)
+        }
     }
     
     private func requestRemindersPermission(result: @escaping FlutterResult) {
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        
-        if status == .authorized {
-            result(true)
-            return
-        }
-        
-        if status == .denied || status == .restricted {
-            result(false)
-            return
-        }
-        
-        // Request permission
-        eventStore.requestAccess(to: .reminder) { granted, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("Error requesting reminders permission: \(error.localizedDescription)")
-                    result(false)
-                    return
+        if #available(iOS 17.0, *) {
+            // iOS 17+ uses requestFullAccessToReminders
+            eventStore.requestFullAccessToReminders { granted, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error requesting reminders permission: \(error.localizedDescription)")
+                        result(false)
+                        return
+                    }
+                    result(granted)
                 }
-                result(granted)
+            }
+        } else {
+            // iOS 16 and below
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            
+            if status == .authorized {
+                result(true)
+                return
+            }
+            
+            if status == .denied || status == .restricted {
+                result(false)
+                return
+            }
+            
+            // Request permission
+            eventStore.requestAccess(to: .reminder) { granted, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error requesting reminders permission: \(error.localizedDescription)")
+                        result(false)
+                        return
+                    }
+                    result(granted)
+                }
             }
         }
     }
@@ -74,8 +96,16 @@ class AppleRemindersService {
         }()
         
         // Check permission
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        guard status == .authorized else {
+        let hasPermission: Bool
+        if #available(iOS 17.0, *) {
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            hasPermission = (status == .fullAccess || status == .writeOnly)
+        } else {
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            hasPermission = (status == .authorized)
+        }
+        
+        guard hasPermission else {
             result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
             return
         }
@@ -144,8 +174,16 @@ class AppleRemindersService {
         let listName = args["listName"] as? String ?? "Reminders"
         
         // Check permission
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        guard status == .authorized else {
+        let hasPermission: Bool
+        if #available(iOS 17.0, *) {
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            hasPermission = (status == .fullAccess || status == .writeOnly)
+        } else {
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            hasPermission = (status == .authorized)
+        }
+        
+        guard hasPermission else {
             result([]) // Return empty array if no permission
             return
         }
@@ -182,8 +220,16 @@ class AppleRemindersService {
         let listName = args["listName"] as? String ?? "Reminders"
         
         // Check permission
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        guard status == .authorized else {
+        let hasPermission: Bool
+        if #available(iOS 17.0, *) {
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            hasPermission = (status == .fullAccess || status == .writeOnly)
+        } else {
+            let status = EKEventStore.authorizationStatus(for: .reminder)
+            hasPermission = (status == .authorized)
+        }
+        
+        guard hasPermission else {
             result(false) // Return false if no permission
             return
         }
