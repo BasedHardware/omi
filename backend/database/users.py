@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
-from models.users import Subscription
+from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
+from utils.subscription import get_default_basic_subscription
 
 
 def is_exists_user(uid: str):
@@ -321,10 +323,6 @@ def set_user_language_preference(uid: str, language: str) -> None:
     user_ref.set({'language': language}, merge=True)
 
 
-from models.users import PlanLimits, PlanType
-from utils.subscription import get_basic_plan_limits, get_default_basic_subscription
-
-
 def get_user_subscription(uid: str) -> Subscription:
     """Gets the user's subscription, creating a default free one if it doesn't exist."""
     user_ref = db.collection('users').document(uid)
@@ -347,3 +345,30 @@ def get_user_subscription(uid: str) -> Subscription:
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
     return default_subscription
+
+
+def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
+    """
+    Gets the user's subscription if it is currently valid for use.
+
+    A subscription is considered valid if:
+    - It's a basic (free) plan with 'active' status.
+    - It's a paid plan with a 'current_period_end' that has not passed yet.
+      This allows users to use the service until the end of the billing period
+      they paid for, even after cancelling.
+
+    Returns the Subscription object if valid, otherwise None.
+    """
+    subscription = get_user_subscription(uid)
+
+    # Basic (free) plans are only valid if their status is active.
+    if subscription.plan == PlanType.basic:
+        return subscription if subscription.status == SubscriptionStatus.active else None
+
+    # For paid plans (e.g., unlimited), validity is determined by the period end.
+    if subscription.current_period_end:
+        period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
+        if period_end_dt >= datetime.now(timezone.utc):
+            return subscription
+
+    return None
