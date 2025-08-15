@@ -190,7 +190,7 @@ def set_json_speech_profiles(result):
         if 'name' not in parsed_part:
             continue  # means is an audio name
         parsed_json[parsed_part['name']] = parsed_part
-    print(parsed_json)
+    # print(parsed_json)
     # for uid in parsed_json.keys():
     #     set_user_has_speech_profile(uid)
     return list(parsed_json.keys())
