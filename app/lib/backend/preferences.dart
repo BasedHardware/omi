@@ -350,6 +350,10 @@ class SharedPreferencesUtil {
 
   String get calendarType => getString('calendarType2') ?? 'manual';
 
+  set taskExportDestination(String value) => saveString('taskExportDestination', value);
+
+  String get taskExportDestination => getString('taskExportDestination') ?? '';
+
   //--------------------------------- Auth ------------------------------------//
 
   String get authToken => getString('authToken') ?? '';

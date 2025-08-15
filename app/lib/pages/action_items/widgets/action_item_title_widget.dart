@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/services/apple_notes_service.dart';
+import 'package:omi/services/apple_calendar_service.dart';
+import 'package:omi/models/action_item_integration.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 import 'edit_action_item_sheet.dart';
@@ -39,15 +43,76 @@ class ActionItemTileWidget extends StatefulWidget {
 
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
+  
+  // Integration selection
+  ActionItemIntegration _selectedIntegration = ActionItemIntegration.appleReminders;
+  final Map<String, Set<String>> _exportedItems = {
+    'reminders': <String>{},
+    'notes': <String>{},
+    'calendar': <String>{},
+  };
+
+  // Track in-flight export requests keyed by "integration:description"
+  final Set<String> _pendingExports = <String>{};
+
+  bool get _isPendingForCurrent {
+    final key = '${_selectedIntegration.name}:${widget.actionItem.description}';
+    return _pendingExports.contains(key);
+  }
 
   // Check if this action item is exported to Apple Reminders
   bool get _isExportedToAppleReminders => widget.exportedToAppleReminders.contains(widget.actionItem.description);
+  
+  // Check if exported to current integration
+  bool get _isExportedToCurrent {
+    if (_selectedIntegration == ActionItemIntegration.appleReminders) {
+      return _isExportedToAppleReminders;
+    } else if (_selectedIntegration == ActionItemIntegration.appleNotes) {
+      return _exportedItems['notes']?.contains(widget.actionItem.description) ?? false;
+    } else if (_selectedIntegration == ActionItemIntegration.appleCalendar) {
+      return _exportedItems['calendar']?.contains(widget.actionItem.description) ?? false;
+    }
+    return false;
+  }
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedIntegration();
+  }
+  
   @override
   void dispose() {
     // Clean up any pending state for this item when widget is disposed
     _pendingStates.remove(widget.actionItem.description);
     super.dispose();
+  }
+  
+  Future<void> _loadSavedIntegration() async {
+    try {
+      final prefs = SharedPreferencesUtil();
+      final savedName = prefs.taskExportDestination;
+      if (savedName.isNotEmpty) {
+        final integration = ActionItemIntegration.values.firstWhere(
+          (e) => e.name == savedName,
+          orElse: () => ActionItemIntegration.appleReminders,
+        );
+        if (mounted) {
+          setState(() => _selectedIntegration = integration);
+        }
+      }
+    } catch (_) {
+      // If reading prefs fails, fall back to default without crashing UI
+    }
+  }
+  
+  Future<void> _saveIntegration(ActionItemIntegration integration) async {
+    try {
+      final prefs = SharedPreferencesUtil();
+      prefs.taskExportDestination = integration.name;
+    } catch (_) {
+      // Non-fatal: selection persists in memory even if prefs write fails
+    }
   }
 
   @override
@@ -253,79 +318,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                                   ),
                                 ),
                               ),
-                              // Apple Reminders export button (only show on Apple platforms and if not completed)
+                              // Export button with dropdown (only show on Apple platforms and if not completed)
                               if (PlatformService.isApple && !isCompleted)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 8.0),
-                                  child: GestureDetector(
-                                    onTap: _isExportedToAppleReminders ? null : () => _exportToAppleReminders(context),
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      // decoration: BoxDecoration(
-                                      //   color: _isExportedToAppleReminders
-                                      //       ? Colors.grey[700]?.withOpacity(0.3)
-                                      //       : Colors.grey[800]?.withOpacity(0.5),
-                                      //   borderRadius: BorderRadius.circular(6),
-                                      // ),
-                                      child: Stack(
-                                        children: [
-                                          Center(
-                                            child: Image.asset(
-                                              'assets/images/apple-reminders-logo.png',
-                                              width: 24,
-                                              height: 24,
-                                              // color: _isExportedToAppleReminders ? Colors.grey[600] : Colors.grey[400],
-                                            ),
-                                          ),
-                                          // Green checkmark overlay when exported
-                                          _isExportedToAppleReminders
-                                              ? Positioned(
-                                                  bottom: 0,
-                                                  right: 0,
-                                                  child: Container(
-                                                    width: 12,
-                                                    height: 12,
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.green,
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: const Color(0xFF1F1F25),
-                                                        width: 1,
-                                                      ),
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons.check,
-                                                      size: 8,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                )
-                                              : Positioned(
-                                                  bottom: 0,
-                                                  right: 0,
-                                                  child: Container(
-                                                    width: 12,
-                                                    height: 12,
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.yellow,
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: const Color(0xFF1F1F25),
-                                                        width: 1,
-                                                      ),
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons.add,
-                                                      size: 8,
-                                                      color: Colors.black,
-                                                    ),
-                                                  ),
-                                                ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                  child: _buildExportButton(context),
                                 ),
                             ],
                           ),
@@ -498,5 +495,332 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       'success': result.isSuccess,
       'result': result.name,
     });
+  }
+
+  Widget _buildExportButton(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Main export button with original Apple logo style
+        GestureDetector(
+          onTap: (_isExportedToCurrent || _isPendingForCurrent) ? null : () => _exportActionItem(context),
+          child: Container(
+            width: 28,
+            height: 28,
+            child: Stack(
+              children: [
+                Center(
+                  child: _selectedIntegration.isSvg
+                      ? SvgPicture.asset(
+                          _selectedIntegration.fullAssetPath!,
+                          width: 24,
+                          height: 24,
+                        )
+                      : Image.asset(
+                          _selectedIntegration.fullAssetPath!,
+                          width: 24,
+                          height: 24,
+                        ),
+                ),
+                // Status indicator (checkmark or plus) - same as original
+                _isExportedToCurrent
+                    ? Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF1F1F25),
+                              width: 1,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            size: 8,
+                            color: Colors.white,
+                          ),
+                        ),
+                      )
+                    : Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Colors.yellow,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF1F1F25),
+                              width: 1,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 8,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ),
+        // Small dropdown arrow
+        const SizedBox(width: 2),
+        GestureDetector(
+          onTap: () => _showIntegrationPicker(context),
+          child: Icon(
+            Icons.arrow_drop_down,
+            size: 16,
+            color: Colors.grey[500],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showIntegrationPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F1F25),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Export to',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ...ActionItemIntegration.values.map((integration) {
+              final isSelected = integration == _selectedIntegration;
+              return ListTile(
+                leading: integration.isSvg
+                    ? SvgPicture.asset(
+                        integration.fullAssetPath!,
+                        width: 24,
+                        height: 24,
+                      )
+                    : Image.asset(
+                        integration.fullAssetPath!,
+                        width: 24,
+                        height: 24,
+                      ),
+                title: Text(
+                  integration.displayName,
+                  style: TextStyle(
+                    color: isSelected ? Colors.blue : Colors.white,
+                  ),
+                ),
+                trailing: isSelected
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () {
+                  setState(() => _selectedIntegration = integration);
+                  _saveIntegration(integration);
+                  Navigator.pop(context);
+                },
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportActionItem(BuildContext context) async {
+    HapticFeedback.lightImpact();
+
+    if (_isExportedToCurrent || _isPendingForCurrent) {
+      return;
+    }
+
+    final key = '${_selectedIntegration.name}:${widget.actionItem.description}';
+    setState(() {
+      _pendingExports.add(key);
+    });
+
+    try {
+      if (_selectedIntegration == ActionItemIntegration.appleReminders) {
+        await _exportToAppleReminders(context);
+      } else if (_selectedIntegration == ActionItemIntegration.appleNotes) {
+        await _exportToAppleNotes(context);
+      } else if (_selectedIntegration == ActionItemIntegration.appleCalendar) {
+        await _exportToAppleCalendar(context);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pendingExports.remove(key);
+        });
+      }
+    }
+  }
+
+  Future<void> _exportToAppleNotes(BuildContext context) async {
+    final service = AppleNotesService();
+    final result = await service.shareActionItem(widget.actionItem.description);
+
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      (_exportedItems['notes'] ??= <String>{})
+          .add(widget.actionItem.description);
+      setState(() {});
+      
+      // Show consistent feedback like Reminders
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  result.message,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.grey[900],
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+      
+      // Track analytics
+      MixpanelManager().track('Action Item Exported to Apple Notes', properties: {
+        'conversationId': widget.conversationId,
+        'success': true,
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.error,
+                color: Colors.red,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  result.message,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.grey[900],
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportToAppleCalendar(BuildContext context) async {
+    final service = AppleCalendarService();
+    final result = await service.createEvent(widget.actionItem.description);
+
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      _exportedItems['calendar'] ??= <String>{};
+      _exportedItems['calendar']!.add(widget.actionItem.description);
+      setState(() {});
+      
+      // Show consistent feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  result.message,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.grey[900],
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+      
+      // Track analytics
+      MixpanelManager().track('Action Item Exported to Apple Calendar', properties: {
+        'conversationId': widget.conversationId,
+        'success': true,
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                Icons.error,
+                color: Colors.red,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  result.message,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.grey[900],
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
   }
 }
