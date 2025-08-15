@@ -552,3 +552,18 @@ def get_migration_status(uid: str) -> dict:
 def clear_migration_status(uid: str):
     key = f"migration_status:{uid}"
     r.delete(key)
+
+
+# ******************************************************
+# ************** CREDIT LIMIT NOTIFICATIONS ************
+# ******************************************************
+
+
+def set_credit_limit_notification_sent(uid: str, ttl: int = 60 * 60 * 6):
+    """Cache that credit limit notification was sent to user (6 hours TTL by default)"""
+    r.set(f'users:{uid}:credit_limit_notification_sent', '1', ex=ttl)
+
+
+def has_credit_limit_notification_been_sent(uid: str) -> bool:
+    """Check if credit limit notification was already sent to user recently"""
+    return r.exists(f'users:{uid}:credit_limit_notification_sent')
