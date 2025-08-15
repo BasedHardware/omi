@@ -1614,7 +1614,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           sideTitles: SideTitles(
             showTitles: true,
             reservedSize: 40,
-            interval: maxY > 1 ? (maxY / 4).roundToDouble() : 0.25,
+            interval: maxY > 1 ? ((maxY / 4).roundToDouble() > 0 ? (maxY / 4).roundToDouble() : 1.0) : 0.25,
             getTitlesWidget: (value, meta) {
               if (value == meta.max) return const SizedBox();
               return SideTitleWidget(
