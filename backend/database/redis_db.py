@@ -423,8 +423,15 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     return url.decode()
 
 
-def get_filter_category_items(uid: str, category: str) -> List[str]:
-    val = r.smembers(f'users:{uid}:filters:{category}')
+def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
+    key = f'users:{uid}:filters:{category}'
+    if limit:
+        # Get random sample if limit specified
+        val = r.srandmember(key, limit)
+    else:
+        # Get all items (existing behavior)
+        val = r.smembers(key)
+
     if not val:
         return []
     return [x.decode() for x in val]
