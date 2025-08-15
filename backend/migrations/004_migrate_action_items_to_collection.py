@@ -150,15 +150,30 @@ def process_conversation_batch(conversations_batch: List[Dict[str, Any]], batch_
                 if not description:
                     continue
                 
+                # Use conversation's started_at date, fallback to now if not available
+                conversation_started_at = conv_data.get('started_at')
+                if conversation_started_at:
+                    # Handle both datetime objects and timestamp formats
+                    if hasattr(conversation_started_at, 'timestamp'):
+                        # Firestore timestamp object
+                        base_date = datetime.fromtimestamp(conversation_started_at.timestamp(), tz=timezone.utc)
+                    elif isinstance(conversation_started_at, datetime):
+                        # Already a datetime object
+                        base_date = conversation_started_at.replace(tzinfo=timezone.utc) if conversation_started_at.tzinfo is None else conversation_started_at
+                    else:
+                        # Fallback to now if format is unexpected
+                        base_date = datetime.now(timezone.utc)
+                else:
+                    base_date = datetime.now(timezone.utc)
+                
                 # Create action item data for the new collection
-                now = datetime.now(timezone.utc)
                 action_item_data = {
                     'description': description,
                     'completed': completed,
-                    'created_at': now,
-                    'updated_at': now,
+                    'created_at': base_date,
+                    'updated_at': base_date,
                     'due_at': None,  # Legacy items don't have due dates
-                    'completed_at': now if completed else None,
+                    'completed_at': base_date if completed else None,
                     'conversation_id': conversation_id
                 }
                 
