@@ -61,6 +61,7 @@ from utils.subscription import has_transcription_credits
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
+from utils.notifications import send_credit_limit_notification
 
 router = APIRouter()
 
@@ -89,6 +90,12 @@ async def _listen(
         return
 
     if not has_transcription_credits(uid):
+        # Send credit limit notification (with Redis caching to prevent spam)
+        try:
+            await send_credit_limit_notification(uid)
+        except Exception as e:
+            print(f"Error sending credit limit notification: {e}")
+
         await websocket.close(code=4002, reason="Usage limit exceeded")
         return
 
@@ -147,6 +154,12 @@ async def _listen(
                 last_usage_record_timestamp = current_time
 
             if not has_transcription_credits(uid):
+                # Send credit limit notification (with Redis caching to prevent spam)
+                try:
+                    await send_credit_limit_notification(uid)
+                except Exception as e:
+                    print(f"Error sending credit limit notification: {e}")
+
                 nonlocal websocket_close_code
                 websocket_close_code = 4002
                 websocket_active = False
