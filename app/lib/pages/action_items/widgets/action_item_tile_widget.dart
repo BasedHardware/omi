@@ -4,7 +4,7 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'edit_action_item_sheet.dart';
+import 'action_item_form_sheet.dart';
 
 class ActionItemTileWidget extends StatelessWidget {
   final ActionItemWithMetadata actionItem;
@@ -26,7 +26,7 @@ class ActionItemTileWidget extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => EditActionItemBottomSheet(
+      builder: (context) => ActionItemFormSheet(
         actionItem: actionItem,
         exportedToAppleReminders: exportedToAppleReminders,
         onExportedToAppleReminders: onExportedToAppleReminders,

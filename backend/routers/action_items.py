@@ -3,8 +3,6 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
-from models.conversation import ActionItem, ActionItemsResponse
-from models.shared import EmptyResponse
 from utils.other import endpoints as auth
 from pydantic import BaseModel, Field
 
@@ -28,11 +26,11 @@ class ActionItemResponse(BaseModel):
     id: str
     description: str
     completed: bool
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
-    due_at: Optional[datetime]
-    completed_at: Optional[datetime]
-    conversation_id: Optional[str]
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    due_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    conversation_id: Optional[str] = None
 
 
 # *****************************

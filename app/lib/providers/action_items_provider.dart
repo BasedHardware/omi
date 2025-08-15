@@ -205,6 +205,54 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> createActionItem({
+    required String description,
+    DateTime? dueAt,
+    String? conversationId,
+    bool completed = false,
+  }) async {
+    final optimisticItem = ActionItemWithMetadata(
+      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      description: description,
+      completed: completed,
+      dueAt: dueAt,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      conversationId: conversationId,
+    );
+
+    _actionItems.insert(0, optimisticItem);
+    notifyListeners();
+
+    try {
+      final newItem = await api.createActionItem(
+        description: description,
+        dueAt: dueAt,
+        conversationId: conversationId,
+        completed: completed,
+      );
+
+      if (newItem != null) {
+        final index = _actionItems.indexWhere((item) => item.id == optimisticItem.id);
+        if (index != -1) {
+          _actionItems[index] = newItem;
+          notifyListeners();
+        }
+        return true;
+      } else {
+        _actionItems.removeWhere((item) => item.id == optimisticItem.id);
+        notifyListeners();
+        debugPrint('Failed to create action item on server');
+        return false;
+      }
+    } catch (e) {
+      _actionItems.removeWhere((item) => item.id == optimisticItem.id);
+      notifyListeners();
+      debugPrint('Error creating action item: $e');
+      return false;
+    }
+  }
+
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
     if (mainIndex != -1) {

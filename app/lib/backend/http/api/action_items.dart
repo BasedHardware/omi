@@ -61,9 +61,11 @@ Future<ActionItemWithMetadata?> createActionItem({
   required String description,
   DateTime? dueAt,
   String? conversationId,
+  bool completed = false,
 }) async {
   var requestBody = {
     'description': description,
+    'completed': completed,
   };
   
   if (dueAt != null) {

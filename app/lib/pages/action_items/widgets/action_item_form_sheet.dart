@@ -5,23 +5,25 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:provider/provider.dart';
 
-class EditActionItemBottomSheet extends StatefulWidget {
-  final ActionItemWithMetadata actionItem;
+class ActionItemFormSheet extends StatefulWidget {
+  final ActionItemWithMetadata? actionItem; // null for create, non-null for edit
   final Set<String>? exportedToAppleReminders;
   final VoidCallback? onExportedToAppleReminders;
 
-  const EditActionItemBottomSheet({
+  const ActionItemFormSheet({
     super.key,
-    required this.actionItem,
+    this.actionItem,
     this.exportedToAppleReminders,
     this.onExportedToAppleReminders,
   });
 
+  bool get isEditing => actionItem != null;
+
   @override
-  State<EditActionItemBottomSheet> createState() => _EditActionItemBottomSheetState();
+  State<ActionItemFormSheet> createState() => _ActionItemFormSheetState();
 }
 
-class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
+class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   late TextEditingController _textController;
   late bool _isCompleted;
   DateTime? _selectedDueDate;
@@ -29,12 +31,18 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _textController = TextEditingController(text: widget.actionItem.description);
-    _textController.selection = TextSelection.fromPosition(
-      TextPosition(offset: _textController.text.length),
-    );
-    _isCompleted = widget.actionItem.completed;
-    _selectedDueDate = widget.actionItem.dueAt;
+    if (widget.isEditing) {
+      _textController = TextEditingController(text: widget.actionItem!.description);
+      _textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _textController.text.length),
+      );
+      _isCompleted = widget.actionItem!.completed;
+      _selectedDueDate = widget.actionItem!.dueAt;
+    } else {
+      _textController = TextEditingController();
+      _isCompleted = false;
+      _selectedDueDate = null;
+    }
   }
 
   @override
@@ -54,44 +62,102 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       return;
     }
 
-    String newDescription = _textController.text.trim();
-    bool descriptionChanged = newDescription != widget.actionItem.description;
-    bool dueDateChanged = _selectedDueDate != widget.actionItem.dueAt;
-    
-    if (!descriptionChanged && !dueDateChanged) {
-      Navigator.pop(context);
-      return;
-    }
-
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     
-    // Update description if changed
-    if (descriptionChanged) {
-      await provider.updateActionItemDescription(widget.actionItem, newDescription);
-    }
+    Navigator.pop(context);
     
-    // Update due date if changed
-    if (dueDateChanged) {
-      await provider.updateActionItemDueDate(widget.actionItem, _selectedDueDate);
-    }
-    
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Action item updated'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
+    if (widget.isEditing) {
+      // Editing existing item
+      String newDescription = _textController.text.trim();
+      bool descriptionChanged = newDescription != widget.actionItem!.description;
+      bool dueDateChanged = _selectedDueDate != widget.actionItem!.dueAt;
+      bool completionChanged = _isCompleted != widget.actionItem!.completed;
+      
+      if (!descriptionChanged && !dueDateChanged && !completionChanged) {
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action item updated'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      try {
+        if (descriptionChanged) {
+          await provider.updateActionItemDescription(widget.actionItem!, newDescription);
+        }
+        
+        if (dueDateChanged) {
+          await provider.updateActionItemDueDate(widget.actionItem!, _selectedDueDate);
+        }
+
+        if (completionChanged) {
+          await provider.updateActionItemState(widget.actionItem!, _isCompleted);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update action item'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action item created'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      try {
+        final success = await provider.createActionItem(
+          description: _textController.text.trim(),
+          dueAt: _selectedDueDate,
+          completed: _isCompleted,
+        );
+        
+        if (!success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to create action item'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to create action item'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
     }
   }
 
   void _deleteActionItem() async {
+    if (!widget.isEditing) return;
+    
     Navigator.pop(context);
 
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    final success = await provider.deleteActionItem(widget.actionItem);
+    final success = await provider.deleteActionItem(widget.actionItem!);
     
     if (mounted) {
       if (success) {
@@ -118,7 +184,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
       context: context,
       builder: (context) => DateTimePickerSheet(
         initialDateTime: _selectedDueDate,
-        minimumDate: widget.actionItem.createdAt,
+        minimumDate: widget.isEditing ? widget.actionItem!.createdAt : DateTime.now(),
       ),
     );
 
@@ -152,8 +218,6 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
     
     return '$dayName, $monthName ${date.day} - $displayHour:$minute$period';
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -193,8 +257,11 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                             _isCompleted = value;
                           });
 
-                          final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-                          await provider.updateActionItemState(widget.actionItem, value);
+                          // Only update immediately if editing
+                          if (widget.isEditing) {
+                            final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+                            await provider.updateActionItemState(widget.actionItem!, value);
+                          }
                         },
                       ),
                     ),
@@ -208,50 +275,51 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                     ),
                   ],
                 ),
-                // Delete button
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () {
-                    // Show delete confirmation dialog
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        backgroundColor: const Color(0xFF1F1F25),
-                        title: const Text(
-                          'Delete Action Item',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        content: Text(
-                          'Are you sure you want to delete this action item?',
-                          style: TextStyle(color: Colors.grey.shade300),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(color: Colors.grey.shade400),
-                            ),
+                // Delete button (only for edit mode)
+                if (widget.isEditing)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () {
+                      // Show delete confirmation dialog
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          backgroundColor: const Color(0xFF1F1F25),
+                          title: const Text(
+                            'Delete Action Item',
+                            style: TextStyle(color: Colors.white),
                           ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context, true); // Close dialog
-                              _deleteActionItem();
-                            },
-                            child: const Text(
-                              'Delete',
-                              style: TextStyle(color: Colors.red),
-                            ),
+                          content: Text(
+                            'Are you sure you want to delete this action item?',
+                            style: TextStyle(color: Colors.grey.shade300),
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(color: Colors.grey.shade400),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context, true); // Close dialog
+                                _deleteActionItem();
+                              },
+                              child: const Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
               ],
             ),
             const SizedBox(height: 12),
-            // Text field for editing the action item
+            // Text field for editing/creating the action item
             TextField(
               controller: _textController,
               autofocus: true,
@@ -262,10 +330,15 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                 fontSize: 16,
                 height: 1.4,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 isDense: true,
+                hintText: widget.isEditing ? null : 'What needs to be done?',
+                hintStyle: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 16,
+                ),
               ),
               onSubmitted: (value) {
                 FocusScope.of(context).unfocus();
@@ -339,7 +412,7 @@ class _EditActionItemBottomSheetState extends State<EditActionItemBottomSheet> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Press done to save',
+                        'Press done to ${widget.isEditing ? 'save' : 'create'}',
                         style: TextStyle(
                           color: Colors.grey.shade400,
                           fontSize: 11,
@@ -396,8 +469,6 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -411,6 +482,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                          (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
     
     return Material(
+      color: Colors.transparent,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       child: Container(
         height: MediaQuery.of(context).size.height * 0.65,
         decoration: const BoxDecoration(

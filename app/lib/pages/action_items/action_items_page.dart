@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
+import 'widgets/action_item_form_sheet.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -68,6 +70,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         provider.loadMoreActionItems();
       }
     }
+  }
+
+  void _showCreateActionItemSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const ActionItemFormSheet(),
+    );
   }
 
   @override
@@ -178,7 +189,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 
                               ],
                             ),
-
+                            // Create button
+                            SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: ElevatedButton(
+                                onPressed: _showCreateActionItemSheet,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppStyles.backgroundSecondary,
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.zero,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Icon(Icons.add, size: 18),
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
