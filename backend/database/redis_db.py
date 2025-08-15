@@ -559,8 +559,8 @@ def clear_migration_status(uid: str):
 # ******************************************************
 
 
-def set_credit_limit_notification_sent(uid: str, ttl: int = 60 * 60 * 6):
-    """Cache that credit limit notification was sent to user (6 hours TTL by default)"""
+def set_credit_limit_notification_sent(uid: str, ttl: int = 60 * 60 * 24):
+    """Cache that credit limit notification was sent to user (24 hours TTL by default)"""
     r.set(f'users:{uid}:credit_limit_notification_sent', '1', ex=ttl)
 
 
