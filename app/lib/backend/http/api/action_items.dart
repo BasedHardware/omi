@@ -10,6 +10,8 @@ Future<ActionItemsResponse> getActionItems({
   int offset = 0,
   bool? completed,
   String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
 }) async {
   String url = '${Env.apiBaseUrl}v1/action-items?limit=$limit&offset=$offset';
   
@@ -18,6 +20,12 @@ Future<ActionItemsResponse> getActionItems({
   }
   if (conversationId != null) {
     url += '&conversation_id=$conversationId';
+  }
+  if (startDate != null) {
+    url += '&start_date=${startDate.toIso8601String()}';
+  }
+  if (endDate != null) {
+    url += '&end_date=${endDate.toIso8601String()}';
   }
   
   var response = await makeApiCall(

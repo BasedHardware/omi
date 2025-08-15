@@ -13,7 +13,9 @@ class ActionItemsProvider extends ChangeNotifier {
   
   bool _includeCompleted = true;
   
-
+  // Date range filter
+  DateTime? _startDate;
+  DateTime? _endDate;
   
   // Debounce mechanism for refresh
   Timer? _refreshDebounceTimer;
@@ -26,6 +28,9 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
+  DateTime? get startDate => _startDate;
+  DateTime? get endDate => _endDate;
+  bool get hasActiveFilter => _startDate != null || _endDate != null;
 
 
   // Group action items by completion status
@@ -61,14 +66,16 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-             final response = await api.getActionItems(
-         limit: 100,
-         offset: 0,
-         completed: _includeCompleted ? null : false,
-       );
+      final response = await api.getActionItems(
+        limit: 100,
+        offset: 0,
+        completed: _includeCompleted ? null : false,
+        startDate: _startDate,
+        endDate: _endDate,
+      );
 
-          _actionItems = response.actionItems;
-    _hasMore = response.hasMore;
+      _actionItems = response.actionItems;
+      _hasMore = response.hasMore;
     } catch (e) {
       debugPrint('Error fetching action items: $e');
     } finally {
@@ -88,11 +95,13 @@ class ActionItemsProvider extends ChangeNotifier {
     setFetching(true);
 
     try {
-             final response = await api.getActionItems(
-         limit: 50,
-         offset: _actionItems.length,
-         completed: _includeCompleted ? null : false,
-       );
+      final response = await api.getActionItems(
+        limit: 50,
+        offset: _actionItems.length,
+        completed: _includeCompleted ? null : false,
+        startDate: _startDate,
+        endDate: _endDate,
+      );
 
       _actionItems.addAll(response.actionItems);
       _hasMore = response.hasMore;
@@ -277,6 +286,18 @@ class ActionItemsProvider extends ChangeNotifier {
     _includeCompleted = !_includeCompleted;
     fetchActionItems(showShimmer: true);
     // TODO: Add analytics for completed action items toggle
+  }
+
+  void setDateRangeFilter(DateTime? startDate, DateTime? endDate) {
+    _startDate = startDate;
+    _endDate = endDate;
+    fetchActionItems(showShimmer: true);
+  }
+
+  void clearDateRangeFilter() {
+    _startDate = null;
+    _endDate = null;
+    fetchActionItems(showShimmer: true);
   }
 
 
