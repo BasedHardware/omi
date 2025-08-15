@@ -806,8 +806,9 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
     Your task is to identify the correct fields that can be related to the question and can help answering.
 
-    You must choose for each field, only the ones available in the JSON below.
-    Find as many as possible that can relate to the question asked.
+    The JSON below contains samples of available filters as suggestions, but you are not limited to only these options. 
+    However, you must choose from the ones that are actually available in the provided lists.
+    Find as many as possible that can relate to the question asked, prioritizing the most relevant ones.
     ```
     {json.dumps(filters_available, indent=2)}
     ```
