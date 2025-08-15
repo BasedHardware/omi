@@ -55,16 +55,10 @@ Future<http.Response?> makeApiCall({
         // Retry the request with the new token
         response = await _performRequest(client, url, headers, body, method);
         Logger.log('Token refreshed and request retried');
-        if (response.statusCode == 401) {
-          // Force user to sign in again
-          await signOut();
-          Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
-              message: 'Authentication failed. Please sign in again.');
-        }
       } else {
-        bool isServerHealthy = await isServerHealthy(client);
+        bool isApiHealthy = await checkApiHealth(client);
 
-        if (!isServerHealthy) {
+        if (!isApiHealthy) {
           Logger.handle(Exception('A server error occurred. Please try again later.'), StackTrace.current, message: 'A server error occurred. Please try again later.');
         } else {
           // If the server is healthy but the token is still empty, sign out the user as we can't do anything without a valid token
@@ -82,7 +76,7 @@ Future<http.Response?> makeApiCall({
   } finally {}
 }
 
-Future<bool> isServerHealthy(http.Client client) async {
+Future<bool> checkApiHealth(http.Client client) async {
   var healthCheckUrl = '${Env.apiBaseUrl}v1/health';
   try {
     var healthResponse = await _performRequest(client, healthCheckUrl, {}, '', 'GET');
