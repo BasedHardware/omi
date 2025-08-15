@@ -68,6 +68,10 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     if 'updated_at' not in action_item_data:
         action_item_data['updated_at'] = datetime.now(timezone.utc)
     
+    # Set completed_at if the item is being created as completed
+    if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+        action_item_data['completed_at'] = datetime.now(timezone.utc)
+    
     doc_ref = action_items_ref.add(action_item_data)[1]
     
     return doc_ref.id
@@ -100,6 +104,10 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
             action_item_data['created_at'] = datetime.now(timezone.utc)
         if 'updated_at' not in action_item_data:
             action_item_data['updated_at'] = datetime.now(timezone.utc)
+        
+        # Set completed_at if the item is being created as completed
+        if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+            action_item_data['completed_at'] = datetime.now(timezone.utc)
         
         doc_ref = action_items_ref.document()
         batch.set(doc_ref, action_item_data)

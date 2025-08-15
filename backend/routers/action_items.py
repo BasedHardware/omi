@@ -12,6 +12,7 @@ router = APIRouter()
 # Request models specific to action items
 class CreateActionItemRequest(BaseModel):
     description: str = Field(description="The action item description")
+    completed: bool = Field(default=False, description="Whether the action item is completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
     conversation_id: Optional[str] = Field(default=None, description="ID of the conversation this action item came from")
 
@@ -45,7 +46,7 @@ def create_action_item(
     """Create a new action item."""
     action_item_data = {
         'description': request.description,
-        'completed': False,
+        'completed': request.completed,
         'due_at': request.due_at,
         'conversation_id': request.conversation_id,
     }
