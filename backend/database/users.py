@@ -202,6 +202,28 @@ def set_default_payment_method(uid: str, payment_method_id: str):
     user_ref.update({'default_payment_method': payment_method_id})
 
 
+def get_welcome_conversation_created(uid: str) -> bool:
+    """Returns True if the welcome conversation was already created for this user."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        return False
+    data = user_doc.to_dict()
+    return bool(data.get('welcome_conversation_created', False))
+
+
+def set_welcome_conversation_created(uid: str, conversation_id: str) -> None:
+    """Marks the welcome conversation as created and stores metadata."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'welcome_conversation_created': True,
+            'welcome_conversation_id': conversation_id,
+        },
+        merge=True,
+    )
+
+
 def get_default_payment_method(uid: str):
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict()

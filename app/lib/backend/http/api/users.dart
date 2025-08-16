@@ -206,6 +206,22 @@ Future<bool> updatePersonName(String personId, String newName) async {
   return response.statusCode == 200;
 }
 
+Future<bool> ensureWelcomeConversation() async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/ensure-welcome-conversation',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  try {
+    if (response.statusCode == 200) {
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 Future<bool> deletePerson(String personId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people/$personId',
