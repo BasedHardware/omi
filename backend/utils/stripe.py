@@ -33,24 +33,31 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
     return price
 
 
-def create_subscription_checkout_session(uid: str, price_id: str):
+def create_subscription_checkout_session(uid: str, price_id: str, idempotency_key: str = None):
     """Create a Stripe Checkout session for a subscription."""
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
         cancel_url = urljoin(base_url, 'v1/payments/cancel')
-        checkout_session = stripe.checkout.Session.create(
-            client_reference_id=uid,
-            payment_method_types=['card'],
-            line_items=[
+        
+        # session creation parameters
+        session_params = {
+            'client_reference_id': uid,
+            'payment_method_types': ['card'],
+            'line_items': [
                 {
                     'price': price_id,
                     'quantity': 1,
                 },
             ],
-            mode='subscription',
-            success_url=success_url,
-            cancel_url=cancel_url,
-        )
+            'mode': 'subscription',
+            'success_url': success_url,
+            'cancel_url': cancel_url,
+        }
+        
+        if idempotency_key:
+            session_params['idempotency_key'] = idempotency_key
+            
+        checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
     except Exception as e:
         print(f"Error creating checkout session: {e}")
