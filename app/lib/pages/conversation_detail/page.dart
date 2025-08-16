@@ -27,7 +27,6 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
-import '../action_items/widgets/action_item_title_widget.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'package:omi/pages/settings/developer.dart';
