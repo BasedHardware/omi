@@ -100,4 +100,60 @@ void sd_on();
 void sd_off();
 
 bool is_sd_on();
+
+/**
+ * @brief Global variable indicating if chunk recording is active
+ */
+extern bool chunk_active;
+
+/**
+ * @brief Global flag to enable/disable chunking system
+ * Set to false to use legacy file system, true for chunking
+ */
+extern bool chunking_enabled;
+
+/**
+ * @brief Generate a timestamp-based audio file name
+ *
+ * Creates a file name based on current timestamp for chunked recording
+ * Format: audio/YYYYMMDD_HHMMSS.txt
+ * 
+ * @return dynamically allocated string with file path, must be freed with k_free()
+ */
+char* generate_timestamp_audio_filename(void);
+
+/**
+ * @brief Initialize a new chunk file for recording
+ *
+ * Creates a new audio file with timestamp-based naming for 5-minute chunks
+ * 
+ * @return 0 if successful, negative errno code if error
+ */
+int initialize_chunk_file(void);
+
+/**
+ * @brief Check if current chunk should be rotated (5 minutes elapsed)
+ *
+ * Checks if the current recording chunk has been active for 5 minutes
+ * 
+ * @return true if chunk should be rotated, false otherwise
+ */
+bool should_rotate_chunk(void);
+
+/**
+ * @brief Start a new recording chunk
+ *
+ * Finalizes current chunk and starts a new one with timestamp-based naming
+ * 
+ * @return 0 if successful, negative errno code if error
+ */
+int start_new_chunk(void);
+
+/**
+ * @brief Mark system boot as complete to enable chunking
+ *
+ * Should be called after all system initialization is complete
+ */
+void set_system_boot_complete(void);
+
 #endif
