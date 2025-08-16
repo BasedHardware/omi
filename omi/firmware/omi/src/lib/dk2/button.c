@@ -253,10 +253,8 @@ void check_button_level(struct k_work *work_item)
         notify_unpress();
 
         // Reset
-        current_time = 0;
         btn_press_start_time = 0;
         btn_release_time = 0;
-        btn_last_tap_time = 0;
     }
     if (event == BUTTON_EVENT_RELEASE)
     {
