@@ -1,16 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
@@ -21,6 +18,7 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
 
 class UsagePage extends StatefulWidget {
   const UsagePage({super.key});
@@ -32,7 +30,7 @@ class UsagePage extends StatefulWidget {
 class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
-  List<bool> _isMetricVisible = [true, true, true, true];
+  final List<bool> _isMetricVisible = [true, true, true, true];
   bool _isUpgrading = false;
   bool _isCancelling = false;
   bool _isSubscriptionExpanded = false;
@@ -41,6 +39,73 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late AnimationController _arrowController;
   late Animation<double> _arrowAnimation;
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
+  Map<String, dynamic>? _availablePlans;
+  bool _isLoadingPlans = false;
+
+  Future<void> _loadAvailablePlans() async {
+    if (_isLoadingPlans) return;
+    
+    setState(() => _isLoadingPlans = true);
+    try {
+      final response = await getAvailablePlans();
+      if (response != null) {
+        setState(() {
+          _availablePlans = response;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading available plans: $e');
+    } finally {
+      setState(() => _isLoadingPlans = false);
+    }
+  }
+
+  Map<String, dynamic>? _getCurrentPlanDetails() {
+    if (_availablePlans == null) return null;
+    
+    final provider = context.read<UsageProvider>();
+    final sub = provider.subscription?.subscription;
+    if (sub == null || sub.stripeSubscriptionId?.isEmpty != false) return null;
+    
+    try {
+      // Find the current plan in available plans based on is_active flag
+      final plans = _availablePlans!['plans'] as List;
+      final currentPlan = plans.firstWhere(
+        (plan) => plan['is_active'] == true,
+        orElse: () => null,
+      );
+      
+      return currentPlan;
+    } catch (e) {
+      debugPrint('Error getting current plan details: $e');
+      return null;
+    }
+  }
+
+  Widget _buildDynamicPlanOption({
+    required bool isSelected,
+    required Map<String, dynamic> planData,
+    String? saveTag,
+    bool isPopular = false,
+    required VoidCallback onTap,
+  }) {
+    final title = '${planData['title']} Unlimited';
+    final priceString = planData['price_string'] as String;
+    final interval = planData['interval'] as String;
+    final unitAmount = planData['unit_amount'] as int;
+    final isActive = planData['is_active'] as bool? ?? false;
+    
+    return _buildHardcodedPlanOption(
+      isSelected: isSelected,
+      saveTag: saveTag,
+      isPopular: isPopular,
+      title: title,
+      subtitle: interval == 'year' ? '12 months / \$${unitAmount / 100}' : null,
+      monthlyPrice: priceString,
+      onTap: isActive ? () {} : onTap,
+      isActive: isActive,
+    );
+  }
 
   Future<void> _handleCancelSubscription() async {
     final provider = context.read<UsageProvider>();
@@ -88,10 +153,134 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   Future<void> _handleUpgradeWithSelectedPlan() async {
     final bool isYearly = selectedPlan == 'yearly';
-    final String priceId = isYearly
-        ? 'price_1RtJQ71F8wnoWYvwKMPaGlGY' // Annual plan
-        : 'price_1RtJPm1F8wnoWYvwhVJ38kLb'; // Monthly plan
-
+    
+    // Get the price ID from the available plans
+    if (_availablePlans == null) {
+      AppSnackbar.showSnackbarError('Could not load available plans. Please try again.');
+      return;
+    }
+    
+    final plans = _availablePlans!['plans'] as List;
+    final selectedPlanData = plans.firstWhere(
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+      orElse: () => null,
+    );
+    
+    if (selectedPlanData == null) {
+      AppSnackbar.showSnackbarError('Selected plan is not available. Please try again.');
+      return;
+    }
+    
+    final priceId = selectedPlanData['id'] as String;
+    
+    // Check if user is upgrading from monthly to annual
+    final provider = context.read<UsageProvider>();
+    final currentSub = provider.subscription?.subscription;
+    final isUpgradingFromMonthlyToAnnual = currentSub?.plan == PlanType.unlimited && 
+                                          currentSub?.status == SubscriptionStatus.active &&
+                                          isYearly;
+    
+    if (isUpgradingFromMonthlyToAnnual) {
+      // Show confirmation popup for monthly to annual upgrade
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1F1F25),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.payment, color: Colors.deepPurple, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Upgrade to Annual Plan',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Important Billing Information:',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildBillingInfoItem(
+                icon: Icons.schedule,
+                text: 'Your current monthly plan will continue until the end of your billing period',
+              ),
+              const SizedBox(height: 8),
+              _buildBillingInfoItem(
+                icon: Icons.credit_card,
+                text: 'Your existing payment method will be charged automatically when your monthly plan ends',
+              ),
+              const SizedBox(height: 8),
+              _buildBillingInfoItem(
+                icon: Icons.calendar_today,
+                text: 'Your 12-month annual subscription will start automatically after the charge',
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.deepPurple, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'You\'ll get 13 months of coverage total (current month + 12 months annual)',
+                        style: TextStyle(
+                          color: Colors.deepPurple.shade300,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Confirm Upgrade'),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmed != true) {
+        return;
+      }
+    }
+    
     await _handleUpgrade(priceId);
   }
 
@@ -140,24 +329,39 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
     setState(() => _isUpgrading = true);
     try {
-      final sessionData = await createCheckoutSession(priceId: priceId);
-      if (sessionData != null && sessionData['url'] != null && mounted) {
-        final result = await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => PaymentWebViewPage(
-              checkoutUrl: sessionData['url']!,
-            ),
-          ),
-        );
-
-        if (result == true) {
-          AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
+      Map<String, dynamic>? result;
+      
+      // If user already has unlimited monthly plan
+      if (currentSub.plan == PlanType.unlimited && currentSub.status == SubscriptionStatus.active) {
+        result = await upgradeSubscription(priceId: priceId);
+        if (result != null) {
+          final daysRemaining = result['days_remaining'] as int? ?? 0;
+          AppSnackbar.showSnackbar('Plan change scheduled! You\'ll be charged now but get 13 months of annual coverage.');
           context.read<UsageProvider>().fetchSubscription();
         } else {
-          // Optional: handle cancellation or failure
+          AppSnackbar.showSnackbarError('Could not schedule plan change. Please try again.');
         }
       } else {
-        AppSnackbar.showSnackbarError('Could not launch upgrade page. Please try again.');
+        // New subscription
+        final sessionData = await createCheckoutSession(priceId: priceId);
+        if (sessionData != null && sessionData['url'] != null && mounted) {
+          final checkoutResult = await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => PaymentWebViewPage(
+                checkoutUrl: sessionData['url']!,
+              ),
+            ),
+          );
+
+          if (checkoutResult == true) {
+            AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
+            context.read<UsageProvider>().fetchSubscription();
+          } else {
+            // Optional: handle cancellation or failure
+          }
+        } else {
+          AppSnackbar.showSnackbarError('Could not launch upgrade page. Please try again.');
+        }
       }
     } catch (e) {
       AppSnackbar.showSnackbarError('An error occurred. Please try again.');
@@ -198,9 +402,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     textPainter.layout();
 
     // Define sizes and padding
-    final double logoHeight = 20 * 3.0; // Scaled logo height
+    const double logoHeight = 20 * 3.0; // Scaled logo height
     final double logoWidth = (logoImage.width / logoImage.height) * logoHeight;
-    final double padding = 4 * 3.0;
+    const double padding = 4 * 3.0;
     final double totalWatermarkWidth = logoWidth + padding + textPainter.width;
     final double totalWatermarkHeight = logoHeight > textPainter.height ? logoHeight : textPainter.height;
 
@@ -252,7 +456,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final numberFormatter = NumberFormat.decimalPattern('en_US');
 
     String shareText;
-    final baseText = 'Sharing my Omi stats! (omi.me - your always-on AI assistant)';
+    const baseText = 'Sharing my Omi stats! (omi.me - your always-on AI assistant)';
 
     if (stats != null) {
       final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
@@ -377,6 +581,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
     });
+
+    // Load available plans
+    _loadAvailablePlans();
   }
 
   @override
@@ -1044,7 +1251,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                                 const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
                                 const SizedBox(width: 8),
                                 Text(
-                                  isUnlimited ? 'Manage Subscription' : 'Upgrade to Unlimited',
+                                  isUnlimited ? 'Change Plan' : 'Upgrade to Unlimited',
                                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                 ),
                               ]),
@@ -1093,77 +1300,266 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                               ),
                               const SizedBox(height: 48),
 
-                              // Yearly plan
-                              _buildHardcodedPlanOption(
-                                isSelected: selectedPlan == 'yearly',
-                                saveTag: '2 Months Free',
-                                isPopular: true,
-                                title: 'Annual Unlimited',
-                                subtitle: '12 months / \$199',
-                                monthlyPrice: '\$16 /mo',
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  setModalState(() => selectedPlan = 'yearly');
-                                  setState(() => selectedPlan = 'yearly');
-                                },
-                              ),
-                              const SizedBox(height: 18),
+                              // Check if user is on annual plan
+                              if (isUnlimited && !isCancelled) ...[
+                                // Get current plan details to check if it's annual
+                                Builder(builder: (context) {
+                                  final currentPlan = _getCurrentPlanDetails();
+                                  final isOnAnnualPlan = currentPlan?['interval'] == 'year';
+                                  
+                                  if (isOnAnnualPlan) {
+                                    // User is on annual plan - only show cancel option
+                                    return Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          const Icon(Icons.check_circle_outline, color: Colors.blue, size: 32),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'You\'re on the Annual Plan',
+                                            style: TextStyle(
+                                              color: Colors.blue.shade300,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'You already have the best value plan. No changes needed.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: Colors.blue.shade400,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } else {
+                                    // User is on monthly plan - show upgrade options
+                                    return Column(
+                                      children: [
+                                        if (_isLoadingPlans) ...[
+                                          _buildShimmerPlanOption(),
+                                          const SizedBox(height: 18),
+                                          _buildShimmerPlanOption(),
+                                        ] else if (_availablePlans != null) ...[
+                                          _buildDynamicPlanOption(
+                                            isSelected: selectedPlan == 'yearly',
+                                            planData: (_availablePlans!['plans'] as List).firstWhere(
+                                              (plan) => plan['interval'] == 'year',
+                                            ),
+                                            saveTag: '2 Months Free',
+                                            isPopular: true,
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              setModalState(() => selectedPlan = 'yearly');
+                                              setState(() => selectedPlan = 'yearly');
+                                            },
+                                          ),
+                                          const SizedBox(height: 18),
 
-                              // Monthly plan
-                              _buildHardcodedPlanOption(
-                                isSelected: selectedPlan == 'monthly',
-                                title: 'Monthly Unlimited',
-                                subtitle: null, // Remove subtitle
-                                monthlyPrice: '\$19 /mo',
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  setModalState(() => selectedPlan = 'monthly');
-                                  setState(() => selectedPlan = 'monthly');
-                                },
-                              ),
-                              const SizedBox(height: 24),
+                                          _buildDynamicPlanOption(
+                                            isSelected: selectedPlan == 'monthly',
+                                            planData: (_availablePlans!['plans'] as List).firstWhere(
+                                              (plan) => plan['interval'] == 'month',
+                                            ),
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              setModalState(() => selectedPlan = 'monthly');
+                                              setState(() => selectedPlan = 'monthly');
+                                            },
+                                          ),
+                                        ] else ...[
+                                          Container(
+                                            padding: const EdgeInsets.all(20),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                const Icon(Icons.error_outline, color: Colors.red, size: 32),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  'Unable to load plans',
+                                                  style: TextStyle(
+                                                    color: Colors.red.shade300,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'Please check your connection and try again',
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(
+                                                    color: Colors.red.shade400,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                TextButton(
+                                                  onPressed: () {
+                                                    _loadAvailablePlans();
+                                                  },
+                                                  child: const Text(
+                                                    'Retry',
+                                                    style: TextStyle(color: Colors.red),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    );
+                                  }
+                                }),
+                              ] else if (!isUnlimited) ...[
+                                // User is on basic plan - show upgrade options
+                                if (_isLoadingPlans) ...[
+                                  _buildShimmerPlanOption(),
+                                  const SizedBox(height: 18),
+                                  _buildShimmerPlanOption(),
+                                ] else if (_availablePlans != null) ...[
+                                  _buildDynamicPlanOption(
+                                    isSelected: selectedPlan == 'yearly',
+                                    planData: (_availablePlans!['plans'] as List).firstWhere(
+                                      (plan) => plan['interval'] == 'year',
+                                    ),
+                                    saveTag: '2 Months Free',
+                                    isPopular: true,
+                                    onTap: () {
+                                      HapticFeedback.lightImpact();
+                                      setModalState(() => selectedPlan = 'yearly');
+                                      setState(() => selectedPlan = 'yearly');
+                                    },
+                                  ),
+                                  const SizedBox(height: 18),
 
-                              // Continue button
-                              SizedBox(
-                                width: double.infinity,
-                                height: 56,
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    HapticFeedback.mediumImpact();
-                                    _handleUpgradeWithSelectedPlan();
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white,
-                                    foregroundColor: Colors.black,
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(
+                                  _buildDynamicPlanOption(
+                                    isSelected: selectedPlan == 'monthly',
+                                    planData: (_availablePlans!['plans'] as List).firstWhere(
+                                      (plan) => plan['interval'] == 'month',
+                                    ),
+                                    onTap: () {
+                                      HapticFeedback.lightImpact();
+                                      setModalState(() => selectedPlan = 'monthly');
+                                      setState(() => selectedPlan = 'monthly');
+                                    },
+                                  ),
+                                ] else ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        const Icon(Icons.error_outline, color: Colors.red, size: 32),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Unable to load plans',
+                                          style: TextStyle(
+                                            color: Colors.red.shade300,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Please check your connection and try again',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.red.shade400,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextButton(
+                                          onPressed: () {
+                                            _loadAvailablePlans();
+                                          },
+                                          child: const Text(
+                                            'Retry',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text(
-                                        'Continue',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                ],
+                              ],
+                              const SizedBox(height: 24),
+
+                              // Continue button - only show for non-annual unlimited users
+                              Builder(builder: (context) {
+                                final currentPlan = _getCurrentPlanDetails();
+                                final isOnAnnualPlan = currentPlan?['interval'] == 'year';
+                                final shouldShowContinueButton = !isOnAnnualPlan && !_isLoadingPlans && _availablePlans != null;
+                                
+                                if (!shouldShowContinueButton) {
+                                  return const SizedBox.shrink();
+                                }
+                                
+                                return SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    onPressed: _isUpgrading ? null : () {
+                                      HapticFeedback.mediumImpact();
+                                      _handleUpgradeWithSelectedPlan();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _isUpgrading ? Colors.grey : Colors.white,
+                                      foregroundColor: _isUpgrading ? Colors.white : Colors.black,
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
-                                      const SizedBox(width: 8),
-                                      AnimatedBuilder(
-                                        animation: _arrowAnimation,
-                                        builder: (context, child) {
-                                          return Transform.translate(
-                                            offset: Offset(_arrowAnimation.value, 0),
-                                            child: const Icon(Icons.arrow_forward, size: 20),
-                                          );
-                                        },
-                                      ),
-                                    ],
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        if (_isUpgrading) ...[
+                                          const SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          ),
+                                        ] else ...[
+                                          const Text(
+                                            'Continue',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          AnimatedBuilder(
+                                            animation: _arrowAnimation,
+                                            builder: (context, child) {
+                                              return Transform.translate(
+                                                offset: Offset(_arrowAnimation.value, 0),
+                                                child: const Icon(Icons.arrow_forward, size: 20),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ),
+                                );
+                              }),
                               const SizedBox(height: 16),
                               if (isUnlimited == true && !isCancelled) ...[
                                 TextButton(
@@ -1198,6 +1594,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     required VoidCallback onTap,
     String? saveTag,
     bool isPopular = false,
+    bool isActive = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1293,12 +1690,118 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                         ),
                       ),
                     ],
+                    if (isActive) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade800,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Active',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerPlanOption() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25), // Use conversation list background
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        children: [
+          // Popular badge only at the top
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Shimmer.fromColors(
+                      baseColor: Colors.white.withOpacity(0.1),
+                      highlightColor: Colors.white.withOpacity(0.3),
+                      child: Container(
+                        height: 18,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Shimmer.fromColors(
+                      baseColor: Colors.white.withOpacity(0.1),
+                      highlightColor: Colors.white.withOpacity(0.3),
+                      child: Container(
+                        height: 14,
+                        width: 100,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Shimmer.fromColors(
+                    baseColor: Colors.white.withOpacity(0.1),
+                    highlightColor: Colors.white.withOpacity(0.3),
+                    child: Container(
+                      height: 18,
+                      width: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Shimmer.fromColors(
+                    baseColor: Colors.white.withOpacity(0.1),
+                    highlightColor: Colors.white.withOpacity(0.3),
+                    child: Container(
+                      height: 14,
+                      width: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1759,10 +2262,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final numberFormatter = NumberFormat.decimalPattern('en_US');
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [
-            const Color(0xFF2A2A2E),
-            const Color(0xFF1F1F25),
+            Color(0xFF2A2A2E),
+            Color(0xFF1F1F25),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1919,6 +2422,26 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBillingInfoItem({required IconData icon, required String text}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.green, size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
