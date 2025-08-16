@@ -167,9 +167,17 @@ class CaptureProvider extends ChangeNotifier
   // Audio level tracking for waveform visualization
   final List<double> _audioLevels = List.generate(8, (_) => 0.15);
   List<double> get audioLevels => List.from(_audioLevels);
+  DateTime _lastVisualizationUpdate = DateTime.now();
 
   void _processAudioBytesForVisualization(List<int> bytes) {
     if (bytes.isEmpty) return;
+
+    // Throttle visualization updates to reduce battery drain
+    final now = DateTime.now();
+    if (now.difference(_lastVisualizationUpdate).inMilliseconds < 100) {
+      return;
+    }
+    _lastVisualizationUpdate = now;
 
     double rms = 0;
 
@@ -317,7 +325,8 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  // Just incase the ble connection get loss
+  // Just in case the BLE connection gets lost
+  
   void _watchVoiceCommands(String deviceId, DateTime session) {
     Timer.periodic(const Duration(seconds: 3), (t) async {
       debugPrint("voice command watch");
@@ -813,7 +822,7 @@ class CaptureProvider extends ChangeNotifier
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     ServiceManager.instance().systemAudio.stop();
-    _isPaused = false; // Clear paused state when stopping
+    _isPaused = false;
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
     await _cleanupCurrentState();
   }
@@ -832,8 +841,8 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    _isPaused = false; // Clear paused state
-    await streamSystemAudioRecording(); // Re-trigger the recording flow
+    _isPaused = false; // Clear paused state when stopping
+    await streamSystemAudioRecording();
   }
 
   @override
@@ -853,7 +862,7 @@ class CaptureProvider extends ChangeNotifier
 
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 45), (t) async {
       debugPrint("[Provider] keep alive...");
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
