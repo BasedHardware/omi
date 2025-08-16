@@ -42,6 +42,9 @@ static bool system_boot_complete = false;  // Prevent chunking during boot
 bool chunking_enabled = true;  // GLOBAL FLAG: Set to true to enable chunking system
 #define CHUNK_DURATION_MS (0.5 * 60 * 1000)  // 5 minutes in milliseconds for production
 
+// Persistent chunk counter for unique filenames across reboots
+static uint32_t chunk_counter = 0;
+
 // Forward declarations
 int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry);
 
@@ -114,6 +117,10 @@ int mount_sd_card(void)
         // Use new chunking system - skip legacy file processing
         LOG_INF("Using chunking system");
         file_count = 1;  // Set to 1 for compatibility
+        
+        // Load the persistent chunk counter
+        chunk_counter = get_chunk_counter();
+        LOG_INF("Loaded chunk counter: %d", chunk_counter);
     } else {
         // Use legacy file system - restore original logic
         LOG_INF("Using legacy file system");
@@ -468,6 +475,58 @@ int get_offset()
     return offset_ptr[0];
 }
 
+int save_chunk_counter(uint32_t counter)
+{
+    uint8_t buf[4] = {
+        counter & 0xFF,
+        (counter >> 8) & 0xFF,
+        (counter >> 16) & 0xFF, 
+        (counter >> 24) & 0xFF 
+    };
+
+    struct fs_file_t write_file;
+    fs_file_t_init(&write_file);
+    int res = fs_open(&write_file, "/SD:/chunk_counter.txt", FS_O_WRITE | FS_O_CREATE);
+    if (res) 
+    {
+        LOG_ERR("error opening chunk counter file %d", res);
+        return -1;
+    }
+    res = fs_write(&write_file, &buf, 4);
+    if (res < 0)
+    {
+        LOG_ERR("error writing chunk counter file %d", res);
+        return -1;
+    }
+    fs_close(&write_file);
+    return 0;
+}
+
+int get_chunk_counter(void)
+{
+    uint8_t buf[4];
+    struct fs_file_t read_file;
+    fs_file_t_init(&read_file);
+    int rc = fs_open(&read_file, "/SD:/chunk_counter.txt", FS_O_READ);
+    if (rc < 0)
+    {
+        // File doesn't exist, start with counter 0
+        LOG_INF("chunk counter file doesn't exist, starting with 0");
+        return 0;
+    }
+    rc = fs_read(&read_file, &buf, 4);
+    if (rc < 0)
+    {
+        LOG_ERR("error reading chunk counter file %d", rc);
+        fs_close(&read_file);
+        return 0; // Default to 0 on error
+    }
+    fs_close(&read_file);
+    uint32_t *counter_ptr = (uint32_t*)buf;
+    LOG_INF("loaded chunk counter: %d", counter_ptr[0]);
+    return counter_ptr[0];
+}
+
 void sd_off()
  {
 //    gpio_pin_set_dt(&sd_en_gpio_pin, 0);  
@@ -488,24 +547,26 @@ bool is_sd_on()
 
 char* generate_timestamp_audio_filename(void)
 {
+    // Increment and save the chunk counter for unique filenames across reboots
+    chunk_counter++;
+    save_chunk_counter(chunk_counter);
+    
     int64_t current_time = k_uptime_get();
     
     // Simple timestamp based on uptime (in seconds since boot)
-    // This avoids dependency on RTC but still provides unique filenames
     uint32_t uptime_seconds = current_time / 1000;
     uint32_t hours = (uptime_seconds / 3600) % 24;
     uint32_t minutes = (uptime_seconds / 60) % 60;
     uint32_t seconds = uptime_seconds % 60;
     
-    char *filename = k_malloc(32);
+    char *filename = k_malloc(40);
     if (filename == NULL) {
         return NULL;
     }
     
-    // Format: audio/Hhhmmsss.txt (H=hours, m=minutes, s=seconds since boot)
-    snprintf(filename, 32, "audio/%03d%02d%02d.txt", 
-             (int)hours, (int)minutes, (int)seconds);
-    
+    // Format: audio/chunk_HHMMSS_NNNNN.bin (with unique counter after timestamp)
+    snprintf(filename, 40, "audio/chunk_%02d%02d%02d_%05d.bin", 
+             (int)hours, (int)minutes, (int)seconds, (int)chunk_counter);
     return filename;
 }
 

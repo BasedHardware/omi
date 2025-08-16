@@ -113,10 +113,10 @@ extern bool chunk_active;
 extern bool chunking_enabled;
 
 /**
- * @brief Generate a timestamp-based audio file name
+ * @brief Generate a unique audio file name
  *
- * Creates a file name based on current timestamp for chunked recording
- * Format: audio/YYYYMMDD_HHMMSS.txt
+ * Creates a file name with persistent counter and timestamp for chunked recording
+ * Format: audio/chunk_NNNNN_HHMMSS.bin (where NNNNN is persistent counter)
  * 
  * @return dynamically allocated string with file path, must be freed with k_free()
  */
@@ -125,7 +125,7 @@ char* generate_timestamp_audio_filename(void);
 /**
  * @brief Initialize a new chunk file for recording
  *
- * Creates a new audio file with timestamp-based naming for 5-minute chunks
+ * Creates a new audio file with chunk_HHMMSS.bin naming for 5-minute chunks
  * 
  * @return 0 if successful, negative errno code if error
  */
@@ -155,5 +155,24 @@ int start_new_chunk(void);
  * Should be called after all system initialization is complete
  */
 void set_system_boot_complete(void);
+
+/**
+ * @brief Save chunk counter to persistent storage
+ *
+ * Saves the current chunk counter value to SD card for persistence across reboots
+ * 
+ * @param counter The counter value to save
+ * @return 0 if successful, negative errno code if error
+ */
+int save_chunk_counter(uint32_t counter);
+
+/**
+ * @brief Load chunk counter from persistent storage
+ *
+ * Loads the chunk counter value from SD card, returns 0 if file doesn't exist
+ * 
+ * @return The loaded counter value, or 0 if file doesn't exist or on error
+ */
+int get_chunk_counter(void);
 
 #endif
