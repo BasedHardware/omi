@@ -68,6 +68,10 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     if 'updated_at' not in action_item_data:
         action_item_data['updated_at'] = datetime.now(timezone.utc)
     
+    # Set completed_at if the item is being created as completed
+    if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+        action_item_data['completed_at'] = datetime.now(timezone.utc)
+    
     doc_ref = action_items_ref.add(action_item_data)[1]
     
     return doc_ref.id
@@ -100,6 +104,10 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
             action_item_data['created_at'] = datetime.now(timezone.utc)
         if 'updated_at' not in action_item_data:
             action_item_data['updated_at'] = datetime.now(timezone.utc)
+        
+        # Set completed_at if the item is being created as completed
+        if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+            action_item_data['completed_at'] = datetime.now(timezone.utc)
         
         doc_ref = action_items_ref.document()
         batch.set(doc_ref, action_item_data)
@@ -143,6 +151,8 @@ def get_action_items(
     uid: str,
     conversation_id: Optional[str] = None,
     completed: Optional[bool] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
     limit: Optional[int] = None,
     offset: int = 0
 ) -> List[dict]:
@@ -153,6 +163,8 @@ def get_action_items(
         uid: User ID
         conversation_id: Filter by conversation ID (None for standalone items)
         completed: Filter by completion status
+        start_date: Filter by start date (inclusive)
+        end_date: Filter by end date (inclusive)
         limit: Maximum number of items to return
         offset: Number of items to skip
     
@@ -171,8 +183,7 @@ def get_action_items(
     if completed is not None:
         query = query.where(filter=FieldFilter('completed', '==', completed))
     
-    # Order by due date (items with due dates first), then by created date
-    query = query.order_by('due_at', direction=firestore.Query.ASCENDING)
+    # Order by created date
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
     
     # Apply pagination
@@ -188,7 +199,37 @@ def get_action_items(
     for doc in docs:
         data = doc.to_dict()
         data['id'] = doc.id
-        action_items.append(_prepare_action_item_for_read(data))
+        action_item = _prepare_action_item_for_read(data)
+        
+        # Apply date range filter in memory if needed
+        if start_date is not None or end_date is not None:
+            created_at = action_item.get('created_at')
+            due_at = action_item.get('due_at')
+            
+            # Check if either created_at or due_at falls within the date range
+            date_in_range = False
+            
+            if created_at is not None:
+                if start_date is not None and created_at < start_date:
+                    pass  # created_at is before start_date
+                elif end_date is not None and created_at > end_date:
+                    pass  # created_at is after end_date
+                else:
+                    date_in_range = True
+            
+            if not date_in_range and due_at is not None:
+                if start_date is not None and due_at < start_date:
+                    pass  # due_at is before start_date
+                elif end_date is not None and due_at > end_date:
+                    pass  # due_at is after end_date
+                else:
+                    date_in_range = True
+            
+            # If we have date filters but no dates fall in range, skip this item
+            if not date_in_range:
+                continue
+        
+        action_items.append(action_item)
     
     return action_items
 
