@@ -191,7 +191,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                           currentSub?.status == SubscriptionStatus.active &&
                                           isYearly;
     
-    if (isUpgradingFromMonthlyToAnnual) {
+    if (isUpgradingFromMonthlyToAnnual && currentSub?.cancelAtPeriodEnd != true) {
       // Show confirmation popup for monthly to annual upgrade
       final confirmed = await showDialog<bool>(
         context: context,
@@ -342,8 +342,8 @@ class _PlansSheetState extends State<PlansSheet> {
     try {
       Map<String, dynamic>? result;
       
-      // If user already has unlimited monthly plan
-      if (currentSub.plan == PlanType.unlimited && currentSub.status == SubscriptionStatus.active) {
+      // If user already has unlimited monthly plan and it's not canceled
+      if (currentSub.plan == PlanType.unlimited && currentSub.status == SubscriptionStatus.active && !currentSub.cancelAtPeriodEnd) {
         result = await upgradeSubscription(priceId: priceId);
         if (result != null) {
           final daysRemaining = result['days_remaining'] as int? ?? 0;
@@ -353,7 +353,7 @@ class _PlansSheetState extends State<PlansSheet> {
           AppSnackbar.showSnackbarError('Could not schedule plan change. Please try again.');
         }
       } else {
-        // New subscription
+        // New subscription (for basic users or canceled subscriptions)
         final sessionData = await createCheckoutSession(priceId: priceId);
         if (sessionData != null && sessionData['url'] != null && mounted) {
           final checkoutResult = await Navigator.of(context).push(
@@ -936,6 +936,80 @@ class _PlansSheetState extends State<PlansSheet> {
                                     );
                                   }
                                 }),
+                              ] else if (isUnlimited && isCancelled) ...[
+                                // User has canceled subscription - show available plans to resubscribe
+                                if (_isLoadingPlans) ...[
+                                  _buildShimmerPlanOption(),
+                                  const SizedBox(height: 18),
+                                  _buildShimmerPlanOption(),
+                                ] else if (_availablePlans != null) ...[
+                                  _buildDynamicPlanOption(
+                                    isSelected: selectedPlan == 'yearly',
+                                    planData: (_availablePlans!['plans'] as List).firstWhere(
+                                      (plan) => plan['interval'] == 'year',
+                                    ),
+                                    saveTag: '2 Months Free',
+                                    isPopular: true,
+                                    onTap: () {
+                                      HapticFeedback.lightImpact();
+                                      setState(() => selectedPlan = 'yearly');
+                                    },
+                                  ),
+                                  const SizedBox(height: 18),
+
+                                  _buildDynamicPlanOption(
+                                    isSelected: selectedPlan == 'monthly',
+                                    planData: (_availablePlans!['plans'] as List).firstWhere(
+                                      (plan) => plan['interval'] == 'month',
+                                    ),
+                                    onTap: () {
+                                      HapticFeedback.lightImpact();
+                                      setState(() => selectedPlan = 'monthly');
+                                    },
+                                  ),
+                                ] else ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        const Icon(Icons.error_outline, color: Colors.red, size: 32),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Unable to load plans',
+                                          style: TextStyle(
+                                            color: Colors.red.shade300,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Please check your connection and try again',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.red.shade400,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextButton(
+                                          onPressed: () {
+                                            _loadAvailablePlans();
+                                          },
+                                          child: const Text(
+                                            'Retry',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ] else if (!isUnlimited) ...[
                                 // User is on basic plan - show upgrade options
                                 if (_isLoadingPlans) ...[
@@ -1018,7 +1092,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                 final currentPlan = _getCurrentPlanDetails();
                                 final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                                 final hasScheduledUpgrade = _hasScheduledUpgrade();
-                                final shouldShowContinueButton = !isOnAnnualPlan && !hasScheduledUpgrade && !_isLoadingPlans && _availablePlans != null;
+                                final shouldShowContinueButton = !isOnAnnualPlan && !hasScheduledUpgrade && !isCancelled && !_isLoadingPlans && _availablePlans != null;
                                 
                                 if (!shouldShowContinueButton) {
                                   return const SizedBox.shrink();
@@ -1052,6 +1126,64 @@ class _PlansSheetState extends State<PlansSheet> {
                                         ] else ...[
                                           const Text(
                                             'Continue',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          AnimatedBuilder(
+                                            animation: widget.arrowAnimation,
+                                            builder: (context, child) {
+                                              return Transform.translate(
+                                                offset: Offset(widget.arrowAnimation.value, 0),
+                                                child: const Icon(Icons.arrow_forward, size: 20),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                              
+                              // Continue button for canceled subscriptions
+                              Builder(builder: (context) {
+                                final shouldShowResubscribeButton = isCancelled && !_isLoadingPlans && _availablePlans != null;
+                                
+                                if (!shouldShowResubscribeButton) {
+                                  return const SizedBox.shrink();
+                                }
+                                
+                                return SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    onPressed: _isUpgrading ? null : () {
+                                      HapticFeedback.mediumImpact();
+                                      _handleUpgradeWithSelectedPlan();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _isUpgrading ? Colors.grey : Colors.white,
+                                      foregroundColor: _isUpgrading ? Colors.white : Colors.black,
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        if (_isUpgrading) ...[
+                                          const SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          ),
+                                        ] else ...[
+                                          const Text(
+                                            'Resubscribe',
                                             style: TextStyle(
                                               fontSize: 18,
                                               fontWeight: FontWeight.w600,
