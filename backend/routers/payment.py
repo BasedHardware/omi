@@ -3,6 +3,7 @@ import stripe
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
+import time
 
 from database import users as users_db, notifications as notifications_db
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
@@ -54,7 +55,7 @@ class AvailablePlansResponse(BaseModel):
 def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Get available subscription plans with their price IDs and billing intervals."""
     try:
-        # Get price IDs from environment variables
+
         monthly_price_id = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
         annual_price_id = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
         
@@ -81,28 +82,20 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                     if customer_id:
                         try:
                             # Get all subscription schedules for this customer
-                            schedules = stripe.SubscriptionSchedule.list(customer=customer_id, limit=10)
-                            print(f"Found {len(schedules.data)} subscription schedules for customer {customer_id}")
+                            schedules = stripe.SubscriptionSchedule.list(customer=customer_id, limit=2)
                             
                             for schedule in schedules.data:
-                                print(f"Schedule {schedule.id}: status={schedule.status}")
                                 # Check if this is an active schedule (not completed or canceled)
                                 if schedule.status in ['active', 'not_started']:
-                                    # Get the price ID from the scheduled phase (second phase)
                                     if hasattr(schedule, 'phases') and schedule.phases and len(schedule.phases) > 1:
-                                        phase = schedule.phases[1]  # Second phase is the scheduled upgrade
-                                        # Access items as a property, not a method
+                                        phase = schedule.phases[1]
                                         if hasattr(phase, 'items') and phase.items:
-                                            # Convert to dict to access properly
                                             phase_dict = phase.to_dict()
                                             if phase_dict.get('items') and len(phase_dict['items']) > 0:
                                                 scheduled_price_id = phase_dict['items'][0]['price']
-                                                print(f"Found scheduled upgrade to price: {scheduled_price_id}")
                                                 break
                         except Exception as e:
                             print(f"Error checking subscription schedules: {e}")
-                            import traceback
-                            traceback.print_exc()
                             
             except Exception as e:
                 print(f"Error retrieving current subscription: {e}")
@@ -225,8 +218,6 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             from_subscription=stripe_sub['id'], 
         )
 
-        print(f"schedule: {schedule}")
-        
         # Update the schedule with the new phase (annual plan)
         updated_schedule = stripe.SubscriptionSchedule.modify(
             schedule.id,
@@ -261,7 +252,6 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         users_db.update_user_subscription(uid, current_subscription.dict())
         
         # Calculate remaining days
-        import time
         remaining_seconds = stripe_sub['current_period_end'] - int(time.time())
         remaining_days = max(0, remaining_seconds // 86400)  # Convert seconds to days
         
@@ -354,8 +344,6 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
-
-    print("stripe_webhook event", event['type'])
 
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
