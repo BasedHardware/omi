@@ -10,6 +10,7 @@
 #include <zephyr/sys/atomic.h>
 #include <string.h>
 #include "sdcard.h"
+#include "sdcard_config.h"
 
 LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -24,24 +25,21 @@ struct gpio_dt_spec sd_en_gpio_pin = { .port = DEVICE_DT_GET(DT_NODELABEL(gpio0)
 
 uint8_t file_count = 0;
 
-#define MAX_PATH_LENGTH 32
 static char current_full_path[MAX_PATH_LENGTH];
 static char read_buffer[MAX_PATH_LENGTH];
 static char write_buffer[MAX_PATH_LENGTH];
 
 uint32_t file_num_array[2];    
 
-static const char *disk_mount_pt = "/SD:/";
+static const char *disk_mount_pt = SDCARD_MOUNT_POINT;
 
 bool sd_enabled = false;
 
 // Chunking variables
-static char current_chunk_filename[64];
+static char current_chunk_filename[CHUNK_FILENAME_MAX_LENGTH];
 bool chunk_active = false;  // Made non-static for external access
 static bool system_boot_complete = false;  // Prevent chunking during boot
 bool chunking_enabled = true;  // GLOBAL FLAG: Set to true to enable chunking system
-
-#define CHUNK_DURATION_CYCLES 50  //600  // 5 minutes = 600 cycles of 500ms each
 static atomic_t chunk_cycle_counter = ATOMIC_INIT(0);  // Thread-safe counter for 500ms cycles
 
 // Persistent chunk counter for unique filenames across reboots
@@ -101,7 +99,7 @@ int mount_sd_card(void)
         return -1;
     }
     
-    res = fs_mkdir("/SD:/audio");
+    res = fs_mkdir(SDCARD_AUDIO_PATH);
 
     if (res == FR_OK) 
     {
@@ -118,19 +116,33 @@ int mount_sd_card(void)
     }
 
     if (chunking_enabled) {
-        // Use new chunking system - skip legacy file processing
+        // ======================================================================
+        // NEW CHUNKING SYSTEM
+        // ======================================================================
+        // This is the new audio chunk recording system that creates time-based
+        // chunks for better file management and power management. This should be the default mode.
         LOG_INF("Using chunking system");
         file_count = 1;  // Set to 1 for compatibility
         
         // Load the persistent chunk counter
-        chunk_counter = get_chunk_counter();
+        int ret = get_chunk_counter(&chunk_counter);
+        if (ret < 0) {
+            LOG_ERR("Failed to load chunk counter: %d", ret);
+            chunk_counter = 0; // Use default value on error
+        }
         LOG_INF("Loaded chunk counter: %d", chunk_counter);
     } else {
-        // Use legacy file system - restore original logic
-        LOG_INF("Using legacy file system");
+        // ======================================================================
+        // LEGACY FILE SYSTEM (DEPRECATED)
+        // ======================================================================
+        // This is the old file system that uses numbered files (a01.txt, etc.)
+        // It is maintained for backward compatibility but should be removed
+        // in future versions once chunking is fully validated.
+        // TODO: Remove this legacy system in a future release
+        LOG_INF("Using legacy file system (DEPRECATED)");
         struct fs_dir_t audio_dir_entry;
         fs_dir_t_init(&audio_dir_entry);
-        err = fs_opendir(&audio_dir_entry,"/SD:/audio");
+        err = fs_opendir(&audio_dir_entry, SDCARD_AUDIO_PATH);
         if (err) 
         {
             LOG_ERR("error while opening directory: %d", err);
@@ -167,7 +179,7 @@ int mount_sd_card(void)
     }
    
     struct fs_dirent info_file_entry; //check if the info file exists. if not, generate new info file
-    const char *info_path = "/SD:/info.txt";
+    const char *info_path = SDCARD_INFO_FILE;
     res = fs_stat(info_path,&info_file_entry); //for later
     if (res) 
     {
@@ -246,7 +258,6 @@ int read_audio_data(uint8_t *buf, int amount,int offset)
     struct fs_file_t read_file;
    	fs_file_t_init(&read_file); 
     uint8_t *temp_ptr = buf;
-    struct fs_dirent entry;  
 
 	int rc = fs_open(&read_file, read_buffer, FS_O_READ | FS_O_RDWR);
     rc = fs_seek(&read_file,offset,FS_SEEK_SET);
@@ -261,15 +272,28 @@ int read_audio_data(uint8_t *buf, int amount,int offset)
     return rc;
 }
 
-int write_to_file(uint8_t *data,uint32_t length)
+int write_to_file(uint8_t *data, uint32_t length)
 {
     struct fs_file_t write_file;
-	fs_file_t_init(&write_file);
+    fs_file_t_init(&write_file);
     uint8_t *write_ptr = data;
-   	fs_open(&write_file, write_buffer , FS_O_WRITE | FS_O_APPEND);
-	fs_write(&write_file, write_ptr, length);
+    
+    int ret = fs_open(&write_file, write_buffer, FS_O_WRITE | FS_O_APPEND);
+    if (ret < 0) {
+        LOG_ERR("Failed to open file for writing: %d", ret);
+        return ret;
+    }
+    
+    ret = fs_write(&write_file, write_ptr, length);
     fs_close(&write_file);
-    return 0;
+    
+    if (ret < 0) {
+        LOG_ERR("Failed to write to file: %d", ret);
+        return ret;
+    }
+    
+    // Return number of bytes written (positive value) or error (negative)
+    return ret;
 }
     
 int initialize_audio_file(uint8_t num) 
@@ -279,8 +303,8 @@ int initialize_audio_file(uint8_t num)
     {
         return -1;
     }
-    k_free(header);
     create_file(header);
+    k_free(header);
     return 0;
 }
 
@@ -395,13 +419,13 @@ int clear_audio_directory()
             return -1;
         }  
     }
-    res = fs_unlink("/SD:/audio");
+    res = fs_unlink(SDCARD_AUDIO_PATH);
     if (res) 
     {
         LOG_ERR("error deleting file");
         return -1;
     }
-    res = fs_mkdir("/SD:/audio");
+    res = fs_mkdir(SDCARD_AUDIO_PATH);
     if (res) 
     {
         LOG_ERR("failed to make directory");
@@ -432,7 +456,7 @@ int save_offset(uint32_t offset)
 
     struct fs_file_t write_file;
     fs_file_t_init(&write_file);
-    int res = fs_open(&write_file, "/SD:/info.txt" , FS_O_WRITE | FS_O_CREATE);
+    int res = fs_open(&write_file, SDCARD_INFO_FILE, FS_O_WRITE | FS_O_CREATE);
     if (res) 
     {
         LOG_ERR("error opening file %d",res);
@@ -453,7 +477,7 @@ int get_offset()
     uint8_t buf[4];
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
-    int rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
+    int rc = fs_open(&read_file, SDCARD_INFO_FILE, FS_O_READ | FS_O_RDWR);
     if (rc < 0)
     {
         LOG_ERR("error opening file %d",rc);
@@ -490,45 +514,59 @@ int save_chunk_counter(uint32_t counter)
 
     struct fs_file_t write_file;
     fs_file_t_init(&write_file);
-    int res = fs_open(&write_file, "/SD:/chunk_counter.txt", FS_O_WRITE | FS_O_CREATE);
-    if (res) 
+    int res = fs_open(&write_file, SDCARD_CHUNK_COUNTER_FILE, FS_O_WRITE | FS_O_CREATE);
+    if (res < 0) 
     {
         LOG_ERR("error opening chunk counter file %d", res);
-        return -1;
+        return res;
     }
     res = fs_write(&write_file, &buf, 4);
     if (res < 0)
     {
         LOG_ERR("error writing chunk counter file %d", res);
-        return -1;
+        fs_close(&write_file);
+        return res;
     }
     fs_close(&write_file);
     return 0;
 }
 
-int get_chunk_counter(void)
+int get_chunk_counter(uint32_t *counter)
 {
+    if (counter == NULL) {
+        return -EINVAL;
+    }
+    
     uint8_t buf[4];
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
-    int rc = fs_open(&read_file, "/SD:/chunk_counter.txt", FS_O_READ);
+    int rc = fs_open(&read_file, SDCARD_CHUNK_COUNTER_FILE, FS_O_READ);
     if (rc < 0)
     {
         // File doesn't exist, start with counter 0
         LOG_INF("chunk counter file doesn't exist, starting with 0");
+        *counter = 0;
         return 0;
     }
+    
     rc = fs_read(&read_file, &buf, 4);
+    fs_close(&read_file);
+    
     if (rc < 0)
     {
         LOG_ERR("error reading chunk counter file %d", rc);
-        fs_close(&read_file);
-        return 0; // Default to 0 on error
+        return rc; // Return the actual error code
     }
-    fs_close(&read_file);
+    
+    if (rc != 4) {
+        LOG_ERR("incomplete read of chunk counter, got %d bytes", rc);
+        return -EIO;
+    }
+    
     uint32_t *counter_ptr = (uint32_t*)buf;
-    LOG_INF("loaded chunk counter: %d", counter_ptr[0]);
-    return counter_ptr[0];
+    *counter = counter_ptr[0];
+    LOG_INF("loaded chunk counter: %d", *counter);
+    return 0;
 }
 
 void sd_off()
@@ -553,7 +591,11 @@ char* generate_timestamp_audio_filename(void)
 {
     // Increment and save the chunk counter for unique filenames across reboots
     chunk_counter++;
-    save_chunk_counter(chunk_counter);
+    int ret = save_chunk_counter(chunk_counter);
+    if (ret < 0) {
+        LOG_ERR("Failed to save chunk counter: %d", ret);
+        // Continue anyway - we can still generate filename with current counter
+    }
     
     int64_t current_time = k_uptime_get();
     
@@ -563,29 +605,43 @@ char* generate_timestamp_audio_filename(void)
     uint32_t minutes = (uptime_seconds / 60) % 60;
     uint32_t seconds = uptime_seconds % 60;
     
-    char *filename = k_malloc(40);
+    char *filename = k_malloc(CHUNK_FILENAME_MAX_LENGTH);
     if (filename == NULL) {
+        LOG_ERR("Failed to allocate memory for chunk filename");
         return NULL;
     }
     
     // Format: audio/chunk_HHMMSS_NNNNN.bin (with unique counter after timestamp)
-    snprintf(filename, 40, "audio/chunk_%02d%02d%02d_%05d.bin", 
-             (int)hours, (int)minutes, (int)seconds, (int)chunk_counter);
+    int len = snprintf(filename, CHUNK_FILENAME_MAX_LENGTH, CHUNK_FILENAME_FORMAT, 
+                      (int)hours, (int)minutes, (int)seconds, (int)chunk_counter);
+    
+    if (len >= 40 || len < 0) {
+        LOG_ERR("Filename too long or formatting error");
+        k_free(filename);
+        return NULL;
+    }
+    
+    LOG_DBG("Generated chunk filename: %s", filename);
     return filename;
 }
 
 int initialize_chunk_file(void)
 {
     // Safety check - ensure chunking is enabled and SD is properly initialized
-    if (!chunking_enabled || !sd_enabled) {
-        LOG_ERR("Cannot initialize chunk - chunking disabled or SD not enabled");
-        return -1;
+    if (!chunking_enabled) {
+        LOG_ERR("Cannot initialize chunk - chunking disabled");
+        return SDCARD_ERR_CHUNKING_DISABLED;
+    }
+    
+    if (!sd_enabled) {
+        LOG_ERR("Cannot initialize chunk - SD not enabled");
+        return SDCARD_ERR_SD_NOT_ENABLED;
     }
     
     char *filename = generate_timestamp_audio_filename();
     if (filename == NULL) {
-        LOG_ERR("Failed to generate chunk filename");
-        return -1;
+        LOG_ERR("Failed to generate chunk filename - out of memory");
+        return SDCARD_ERR_FILENAME_GENERATION;
     }
     
     // Copy to current chunk filename buffer
@@ -598,7 +654,10 @@ int initialize_chunk_file(void)
     
     if (ret == 0) {
         // Update write buffer to point to new file
-        snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, current_chunk_filename);
+        int len = snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, current_chunk_filename);
+        if (len >= sizeof(write_buffer)) {
+            LOG_ERR("Write buffer path too long, truncated");
+        }
         atomic_set(&chunk_cycle_counter, 0);     // Thread-safe: Reset cycle counter for new chunk
         chunk_active = true;
         atomic_set(&should_rotate_flag, 0);      // Thread-safe: Reset rotation flag for new chunk
@@ -607,6 +666,9 @@ int initialize_chunk_file(void)
         LOG_INF("Chunk will rotate in %d cycles (%d seconds)", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
     } else {
         LOG_ERR("Failed to create chunk file: %d", ret);
+        // Reset chunk state on failure
+        chunk_active = false;
+        memset(current_chunk_filename, 0, sizeof(current_chunk_filename));
     }
     
     return ret;

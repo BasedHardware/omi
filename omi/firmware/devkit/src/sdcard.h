@@ -1,6 +1,9 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
+#include <stdint.h>
+#include "sdcard_config.h"
+
 /**
  * @brief Mount the SD Card. Initializes the audio files 
  *
@@ -181,6 +184,12 @@ int save_chunk_counter(uint32_t counter);
  * 
  * @return The loaded counter value, or 0 if file doesn't exist or on error
  */
-int get_chunk_counter(void);
+/**
+ * @brief Get the persistent chunk counter value
+ * 
+ * @param counter Pointer to store the counter value
+ * @return 0 if successful, negative errno code if error
+ */
+int get_chunk_counter(uint32_t *counter);
 
 #endif
