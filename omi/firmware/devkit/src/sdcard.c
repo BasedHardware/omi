@@ -7,6 +7,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/sys/check.h>
+#include <zephyr/sys/atomic.h>
 #include <string.h>
 #include "sdcard.h"
 
@@ -35,15 +36,18 @@ static const char *disk_mount_pt = "/SD:/";
 bool sd_enabled = false;
 
 // Chunking variables
-static int64_t chunk_start_time = 0;
 static char current_chunk_filename[64];
 bool chunk_active = false;  // Made non-static for external access
 static bool system_boot_complete = false;  // Prevent chunking during boot
 bool chunking_enabled = true;  // GLOBAL FLAG: Set to true to enable chunking system
-#define CHUNK_DURATION_MS (0.5 * 60 * 1000)  // 5 minutes in milliseconds for production
+
+#define CHUNK_DURATION_CYCLES 50  //600  // 5 minutes = 600 cycles of 500ms each
+static atomic_t chunk_cycle_counter = ATOMIC_INIT(0);  // Thread-safe counter for 500ms cycles
 
 // Persistent chunk counter for unique filenames across reboots
 static uint32_t chunk_counter = 0;
+
+static atomic_t should_rotate_flag = ATOMIC_INIT(0);  // Thread-safe flag (0=false, 1=true)
 
 // Forward declarations
 int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry);
@@ -595,11 +599,12 @@ int initialize_chunk_file(void)
     if (ret == 0) {
         // Update write buffer to point to new file
         snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, current_chunk_filename);
-        chunk_start_time = k_uptime_get();
+        atomic_set(&chunk_cycle_counter, 0);     // Thread-safe: Reset cycle counter for new chunk
         chunk_active = true;
+        atomic_set(&should_rotate_flag, 0);      // Thread-safe: Reset rotation flag for new chunk
         LOG_INF("NEW AUDIO CHUNK CREATED: %s", current_chunk_filename);
         LOG_INF("File path: %s", write_buffer);
-        LOG_INF("Chunk will rotate in %d seconds", CHUNK_DURATION_MS / 1000);
+        LOG_INF("Chunk will rotate in %d cycles (%d seconds)", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
     } else {
         LOG_ERR("Failed to create chunk file: %d", ret);
     }
@@ -618,19 +623,35 @@ bool should_rotate_chunk(void)
         return true; // No active chunk, should start one
     }
     
-    int64_t current_time = k_uptime_get();
-    int64_t elapsed_time = current_time - chunk_start_time;
+    // Thread-safe: Atomic read of the rotation flag
+    return atomic_get(&should_rotate_flag) != 0;
+}
+
+void check_chunk_rotation_timing(void)
+{
+    // This function should be called every 500ms from main loop
+    // Only check timing if chunking is enabled and chunk is active
+    if (!chunking_enabled || !sd_enabled || !system_boot_complete || !chunk_active) {
+        atomic_set(&should_rotate_flag, 0);  // Clear flag
+        atomic_set(&chunk_cycle_counter, 0); // Reset counter when not active
+        return;
+    }
     
-    return elapsed_time >= CHUNK_DURATION_MS;
+    // Thread-safe: Atomic increment of the cycle counter
+    uint32_t current_cycles = atomic_inc(&chunk_cycle_counter);
+    
+    // Set the flag if we've reached the target number of cycles
+    if (current_cycles >= CHUNK_DURATION_CYCLES) {
+        atomic_set(&should_rotate_flag, 1);
+    }
 }
 
 int start_new_chunk(void)
 {
     if (chunk_active) {
-        int64_t current_time = k_uptime_get();
-        int64_t chunk_duration = current_time - chunk_start_time;
+        uint32_t cycles = atomic_get(&chunk_cycle_counter);  // Thread-safe read
         LOG_INF("FINALIZING CHUNK: %s", current_chunk_filename);
-        LOG_INF("Duration: %d seconds", (int)(chunk_duration / 1000));
+        LOG_INF("Duration: %d cycles (%d seconds)", cycles, cycles / 2);
         // Current chunk is automatically finalized when we stop writing to it
     }
     

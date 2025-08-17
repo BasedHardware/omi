@@ -132,13 +132,21 @@ char* generate_timestamp_audio_filename(void);
 int initialize_chunk_file(void);
 
 /**
- * @brief Check if current chunk should be rotated (5 minutes elapsed)
+ * @brief Check if current chunk should be rotated
  *
- * Checks if the current recording chunk has been active for 5 minutes
  * 
  * @return true if chunk should be rotated, false otherwise
  */
 bool should_rotate_chunk(void);
+
+/**
+ * @brief Check chunk rotation timing using cycle counter
+ *
+ * Should be called every 500ms from main loop.
+ * Uses simple counter instead of k_uptime_get() for maximum efficiency.
+ * Counts 500ms cycles and rotates after 600 cycles (5 minutes).
+ */
+void check_chunk_rotation_timing(void);
 
 /**
  * @brief Start a new recording chunk

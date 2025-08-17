@@ -352,6 +352,10 @@ int main(void)
     while (1)
     {
         set_led_state();
+        
+        //Check chunk rotation timing every 500ms instead of on every audio packet
+        check_chunk_rotation_timing();
+        
         k_msleep(500);
     }
 
