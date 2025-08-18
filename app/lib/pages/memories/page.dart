@@ -109,7 +109,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                 children: [
                   Expanded(
                     child: Text(
-                      'Memory moved to Trash.',
+                      'Memory Deleted.',
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ),
