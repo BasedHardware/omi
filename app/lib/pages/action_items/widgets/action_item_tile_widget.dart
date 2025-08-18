@@ -3,10 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/services/apple_calendar_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/models/action_item_integration.dart';
+import 'package:omi/backend/preferences_export_extension.dart';
+import 'package:omi/backend/preferences.dart';
 import 'action_item_form_sheet.dart';
 
-class ActionItemTileWidget extends StatelessWidget {
+class ActionItemTileWidget extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
   final Function(bool) onToggle;
   final Set<String>? exportedToAppleReminders;
@@ -20,6 +24,39 @@ class ActionItemTileWidget extends StatelessWidget {
     this.onExportedToAppleReminders,
   });
 
+  @override
+  State<ActionItemTileWidget> createState() => _ActionItemTileWidgetState();
+}
+
+class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
+  ActionItemIntegration _selectedIntegration = ActionItemIntegration.appleReminders;
+  final Map<String, Set<String>> _exportedItems = {
+    'reminders': <String>{},
+    'calendar': <String>{},
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSelectedIntegration();
+  }
+
+  void _loadSelectedIntegration() {
+    final util = SharedPreferencesUtil();
+    setState(() {
+      _selectedIntegration = util.getTaskExportDestination();
+    });
+  }
+
+  bool _isExportedToCurrent() {
+    switch (_selectedIntegration) {
+      case ActionItemIntegration.appleReminders:
+        return widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
+      case ActionItemIntegration.appleCalendar:
+        return _exportedItems['calendar']?.contains(widget.actionItem.description) ?? false;
+    }
+  }
+
   void _showEditSheet(BuildContext context) {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
@@ -27,19 +64,19 @@ class ActionItemTileWidget extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => ActionItemFormSheet(
-        actionItem: actionItem,
-        exportedToAppleReminders: exportedToAppleReminders,
-        onExportedToAppleReminders: onExportedToAppleReminders,
+        actionItem: widget.actionItem,
+        exportedToAppleReminders: widget.exportedToAppleReminders,
+        onExportedToAppleReminders: widget.onExportedToAppleReminders,
       ),
     );
   }
 
   Widget _buildDueDateChip() {
-    if (actionItem.dueAt == null) return const SizedBox.shrink();
+    if (widget.actionItem.dueAt == null) return const SizedBox.shrink();
 
     final now = DateTime.now();
-    final dueDate = actionItem.dueAt!;
-    final isOverdue = dueDate.isBefore(now) && !actionItem.completed;
+    final dueDate = widget.actionItem.dueAt!;
+    final isOverdue = dueDate.isBefore(now) && !widget.actionItem.completed;
     final isToday = _isSameDay(dueDate, now);
     final isTomorrow = _isSameDay(dueDate, now.add(const Duration(days: 1)));
     final isThisWeek = dueDate.isAfter(now) && dueDate.isBefore(now.add(const Duration(days: 7)));
@@ -49,7 +86,7 @@ class ActionItemTileWidget extends StatelessWidget {
     IconData icon;
     String dueDateText;
 
-    if (actionItem.completed) {
+    if (widget.actionItem.completed) {
       chipColor = Colors.grey.withOpacity(0.2);
       textColor = Colors.grey.shade500;
       icon = Icons.check_circle_outline;
@@ -135,11 +172,75 @@ class ActionItemTileWidget extends StatelessWidget {
     }
   }
 
-  Widget _buildAppleRemindersIcon(BuildContext context) {
-    final isExported = exportedToAppleReminders?.contains(actionItem.description) ?? false;
+  Widget _buildExportSection(BuildContext context) {
+    if (!PlatformService.isIOS) return const SizedBox.shrink();
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildExportDropdown(),
+        const SizedBox(width: 8),
+        _buildExportButton(context),
+      ],
+    );
+  }
+
+  Widget _buildExportDropdown() {
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<ActionItemIntegration>(
+          value: _selectedIntegration,
+          isDense: true,
+          icon: const Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey),
+          style: const TextStyle(fontSize: 12, color: Colors.white),
+          dropdownColor: const Color(0xFF2A2A32),
+          onChanged: (ActionItemIntegration? value) {
+            if (value != null) {
+              setState(() {
+                _selectedIntegration = value;
+              });
+              final util = SharedPreferencesUtil();
+              util.setTaskExportDestination(value);
+            }
+          },
+          items: ActionItemIntegration.values.map((ActionItemIntegration integration) {
+            return DropdownMenuItem<ActionItemIntegration>(
+              value: integration,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/${integration.imagePath}',
+                    width: 16,
+                    height: 16,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.apps, size: 16),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    integration.title.replaceAll('Apple ', ''),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExportButton(BuildContext context) {
+    final isExported = _isExportedToCurrent();
     
     return GestureDetector(
-      onTap: () => _handleAppleRemindersExport(context),
+      onTap: () => _onExportPressed(context),
       child: Container(
         width: 32,
         height: 32,
@@ -149,7 +250,7 @@ class ActionItemTileWidget extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Apple Reminders logo
+            // Dynamic integration logo
             Container(
               width: 24,
               height: 24,
@@ -159,10 +260,11 @@ class ActionItemTileWidget extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: Image.asset(
-                  Assets.images.appleRemindersLogo.path,
+                  'assets/images/${_selectedIntegration.imagePath}',
                   width: 24,
                   height: 24,
                   fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.apps, size: 24),
                 ),
               ),
             ),
@@ -194,13 +296,135 @@ class ActionItemTileWidget extends StatelessWidget {
     );
   }
 
+  void _onExportPressed(BuildContext context) {
+    switch (_selectedIntegration) {
+      case ActionItemIntegration.appleReminders:
+        _handleAppleRemindersExport(context);
+        break;
+      case ActionItemIntegration.appleCalendar:
+        _handleAppleCalendarExport(context);
+        break;
+    }
+  }
+
+  Future<void> _handleAppleCalendarExport(BuildContext context) async {
+    if (!PlatformService.isIOS) return;
+
+    HapticFeedback.mediumImpact();
+
+    final isAlreadyExported = _exportedItems['calendar']?.contains(widget.actionItem.description) ?? false;
+    
+    if (isAlreadyExported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Already added to Apple Calendar'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check permissions and request if needed
+    bool hasPermission = await AppleCalendarService.requestPermission();
+    
+    if (!hasPermission) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Permission denied for Apple Calendar'),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show loading state
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Adding to Apple Calendar...'),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+
+    // Add to Apple Calendar
+    final success = await AppleCalendarService.addEvent(
+      title: widget.actionItem.description,
+      notes: 'From Omi',
+      dueDate: widget.actionItem.dueAt,
+    );
+    
+    if (context.mounted) {
+      // Clear the loading snackbar
+      ScaffoldMessenger.of(context).clearSnackBars();
+      
+      // Show result
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                success ? Icons.check_circle : Icons.error, 
+                color: Colors.white, 
+                size: 20
+              ),
+              const SizedBox(width: 8),
+              Text(success ? 'Added to Apple Calendar' : 'Failed to add to Calendar'),
+            ],
+          ),
+          backgroundColor: success ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // If successful, update the exported list
+      if (success) {
+        setState(() {
+          _exportedItems['calendar']?.add(widget.actionItem.description);
+        });
+      }
+    }
+  }
+
   Future<void> _handleAppleRemindersExport(BuildContext context) async {
     if (!PlatformService.isApple) return;
 
     HapticFeedback.mediumImpact();
 
     final service = AppleRemindersService();
-    final isAlreadyExported = exportedToAppleReminders?.contains(actionItem.description) ?? false;
+    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
     
     if (isAlreadyExported) {
       // Show message that it's already exported
@@ -275,7 +499,7 @@ class ActionItemTileWidget extends StatelessWidget {
 
     // Add to Apple Reminders
     final success = await service.addReminder(
-      title: actionItem.description,
+      title: widget.actionItem.description,
       notes: 'From Omi',
       listName: 'Reminders',
     );
@@ -305,7 +529,7 @@ class ActionItemTileWidget extends StatelessWidget {
 
       // If successful, update the exported list
       if (success) {
-        onExportedToAppleReminders?.call();
+        widget.onExportedToAppleReminders?.call();
       }
     }
   }
@@ -319,7 +543,7 @@ class ActionItemTileWidget extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: actionItem.completed 
+          color: widget.actionItem.completed 
             ? Colors.grey.withOpacity(0.2)
             : Colors.transparent,
           width: 1,
@@ -335,23 +559,23 @@ class ActionItemTileWidget extends StatelessWidget {
             children: [
               // Custom checkbox with better styling
               GestureDetector(
-                onTap: () => onToggle(!actionItem.completed),
+                onTap: () => widget.onToggle(!widget.actionItem.completed),
                 child: Container(
                   width: 24,
                   height: 24,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: actionItem.completed 
+                      color: widget.actionItem.completed 
                         ? Colors.deepPurpleAccent 
                         : Colors.grey.shade600,
                       width: 2,
                     ),
-                    color: actionItem.completed 
+                    color: widget.actionItem.completed 
                       ? Colors.deepPurpleAccent 
                       : Colors.transparent,
                   ),
-                  child: actionItem.completed
+                  child: widget.actionItem.completed
                     ? const Icon(
                         Icons.check,
                         color: Colors.white,
@@ -367,26 +591,26 @@ class ActionItemTileWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      actionItem.description,
+                      widget.actionItem.description,
                       style: TextStyle(
-                        color: actionItem.completed ? Colors.grey.shade400 : Colors.white,
+                        color: widget.actionItem.completed ? Colors.grey.shade400 : Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w400,
-                        decoration: actionItem.completed ? TextDecoration.lineThrough : null,
+                        decoration: widget.actionItem.completed ? TextDecoration.lineThrough : null,
                         decorationColor: Colors.grey.shade400,
                       ),
                     ),
-                    if (actionItem.dueAt != null) ...[
+                    if (widget.actionItem.dueAt != null) ...[
                       const SizedBox(height: 6),
                       _buildDueDateChip(),
                     ],
                   ],
                 ),
               ),
-              // Apple Reminders icon (only show on Apple platforms)
-              if (PlatformService.isApple) ...[
+              // Export section (only show on Apple platforms)
+              if (PlatformService.isIOS) ...[
                 const SizedBox(width: 12),
-                _buildAppleRemindersIcon(context),
+                _buildExportSection(context),
               ],
             ],
           ),
