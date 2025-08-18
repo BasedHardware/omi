@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/services/app_review_service.dart';
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -19,6 +20,7 @@ class ActionItemsPage extends StatefulWidget {
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   bool _showGroupedView = false;
   Set<String> _exportedToAppleReminders = <String>{};
+  final AppReviewService _appReviewService = AppReviewService();
 
   @override
   bool get wantKeepAlive => true;
@@ -46,6 +48,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       }
     } catch (e) {
       print('Error checking existing Apple Reminders: $e');
+    }
+  }
+
+  // checks if it's the first action item completed
+  Future<void> onActionItemCompleted() async {
+    final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
+
+    if (!hasCompletedFirst) {
+      await _appReviewService.markFirstActionItemCompleted();
+
+      if (mounted) {
+        await _appReviewService.showReviewPromptIfNeeded(context);
+      }
     }
   }
 
@@ -379,6 +394,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               itemIndexInConversation: item.itemIndex,
               exportedToAppleReminders: _exportedToAppleReminders,
               onExportedToAppleReminders: _checkExistingAppleReminders,
+              onActionItemCompleted: onActionItemCompleted,
             ),
           );
         },

@@ -13,6 +13,7 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
@@ -756,6 +757,7 @@ class ActionItemDetailWidget extends StatefulWidget {
 
 class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
+  final AppReviewService _appReviewService = AppReviewService();
 
   @override
   void dispose() {
@@ -889,6 +891,11 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       if (currentIndex != -1) {
         if (newValue) {
           MixpanelManager().checkedActionItem(provider.conversation, currentIndex);
+          
+          if (!await _appReviewService.hasCompletedFirstActionItem()) {
+            await _appReviewService.markFirstActionItemCompleted();
+            _appReviewService.showReviewPromptIfNeeded(context);
+            }
         } else {
           MixpanelManager().uncheckedActionItem(provider.conversation, currentIndex);
         }
