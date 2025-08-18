@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/ui/organisms/action_item.dart';
-import 'widgets/desktop_action_group.dart';
 
 class DesktopActionsPage extends StatefulWidget {
   const DesktopActionsPage({super.key});
@@ -22,7 +20,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   @override
   bool get wantKeepAlive => true;
 
-  bool _showGroupedView = false;
+  final ScrollController _scrollController = ScrollController();
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -36,6 +34,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
@@ -45,6 +45,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -79,51 +80,36 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     (() async {
       MixpanelManager().actionItemsPageOpened();
 
+      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      if (provider.actionItems.isEmpty) {
+        provider.fetchActionItems(showShimmer: true);
+      }
+
       _fadeController.forward();
       _slideController.forward();
     }).withPostFrameCallback();
   }
 
-  // Get all action items as a flat list
-  List<ActionItemData> _getFlattenedActionItems(Map<ServerConversation, List<ActionItem>> itemsByConversation) {
-    final result = <ActionItemData>[];
-
-    for (final entry in itemsByConversation.entries) {
-      for (final item in entry.value) {
-        if (item.deleted) continue;
-        result.add(
-          ActionItemData(
-            actionItem: item,
-            conversation: entry.key,
-            itemIndex: entry.key.structured.actionItems.indexOf(item),
-          ),
-        );
+  void _onScroll() {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (!provider.isFetching && provider.hasMore) {
+        provider.loadMoreActionItems();
       }
     }
-
-    // Sort by completion status (incomplete first)
-    result.sort((a, b) {
-      if (a.actionItem.completed == b.actionItem.completed) return 0;
-      return a.actionItem.completed ? 1 : -1;
-    });
-
-    return result;
   }
+
+
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<ConversationProvider>(
-      builder: (context, convoProvider, _) {
-        final Map<ServerConversation, List<ActionItem>> itemsByConversation =
-            convoProvider.conversationsWithActiveActionItems;
-
-        // Sort conversations by date (most recent first)
-        final sortedEntries = itemsByConversation.entries.toList()
-          ..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
-
-        // Get flattened list for non-grouped view
-        final flattenedItems = _getFlattenedActionItems(itemsByConversation);
+    return Consumer<ActionItemsProvider>(
+      builder: (context, provider, _) {
+        // Get incomplete and complete items
+        final incompleteItems = provider.incompleteItems;
+        final completedItems = provider.completedItems;
+        final allItems = provider.actionItems;
 
         return Container(
           decoration: BoxDecoration(
@@ -149,17 +135,17 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                   ),
                   child: Column(
                     children: [
-                      _buildHeader(flattenedItems),
+                      _buildHeader(incompleteItems),
                       Expanded(
                         child: _animationsInitialized
                             ? FadeTransition(
                                 opacity: _fadeAnimation,
                                 child: SlideTransition(
                                   position: _slideAnimation,
-                                  child: _buildActionsContent(convoProvider, sortedEntries, flattenedItems),
+                                  child: _buildActionsContent(provider, allItems, incompleteItems, completedItems),
                                 ),
                               )
-                            : _buildActionsContent(convoProvider, sortedEntries, flattenedItems),
+                            : _buildActionsContent(provider, allItems, incompleteItems, completedItems),
                       ),
                     ],
                   ),
@@ -207,9 +193,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-  Widget _buildHeader(List<ActionItemData> flattenedItems) {
-    final incompleteCount = flattenedItems.where((item) => !item.actionItem.completed).length;
-
+  Widget _buildHeader(List<ActionItemWithMetadata> incompleteItems) {
     return Container(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -239,7 +223,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$incompleteCount pending tasks',
+                  '${incompleteItems.length} pending tasks',
                   style: const TextStyle(
                     color: ResponsiveHelper.textSecondary,
                     fontSize: 14,
@@ -248,67 +232,34 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ],
             ),
           ),
-
-          // View toggle button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                setState(() {
-                  _showGroupedView = !_showGroupedView;
-                });
-                MixpanelManager().actionItemsViewToggled(_showGroupedView);
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _showGroupedView
-                      ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                      : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: _showGroupedView
-                      ? Border.all(
-                          color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                          width: 1,
-                        )
-                      : null,
-                ),
-                child: Icon(
-                  _showGroupedView ? FontAwesomeIcons.layerGroup : FontAwesomeIcons.list,
-                  color: _showGroupedView ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-                  size: 16,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
   Widget _buildActionsContent(
-    ConversationProvider convoProvider,
-    List<MapEntry<ServerConversation, List<ActionItem>>> sortedEntries,
-    List<ActionItemData> flattenedItems,
+    ActionItemsProvider provider,
+    List<ActionItemWithMetadata> allItems,
+    List<ActionItemWithMetadata> incompleteItems,
+    List<ActionItemWithMetadata> completedItems,
   ) {
-    if (convoProvider.isLoadingConversations && sortedEntries.isEmpty) {
+    if (provider.isLoading && allItems.isEmpty) {
       return _buildModernLoadingState();
     }
 
-    if (sortedEntries.isEmpty) {
+    if (allItems.isEmpty) {
       return _buildModernEmptyState();
     }
 
     return CustomScrollView(
+      controller: _scrollController,
       slivers: [
         // Pending tasks section
-        if (flattenedItems.any((item) => !item.actionItem.completed))
-          _showGroupedView ? _buildGroupedView(sortedEntries, false) : _buildFlatView(flattenedItems, false),
+        if (incompleteItems.isNotEmpty)
+          _buildFlatView(incompleteItems, false),
 
         // Completed tasks section
-        if (flattenedItems.any((item) => item.actionItem.completed)) ...[
+        if (completedItems.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
@@ -330,7 +281,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '${flattenedItems.where((item) => item.actionItem.completed).length}',
+                      '${completedItems.length}',
                       style: const TextStyle(
                         color: ResponsiveHelper.textTertiary,
                         fontSize: 12,
@@ -342,7 +293,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ),
             ),
           ),
-          _showGroupedView ? _buildGroupedView(sortedEntries, true) : _buildFlatView(flattenedItems, true),
+          _buildFlatView(completedItems, true),
         ] else ...[
           SliverToBoxAdapter(
             child: Container(
@@ -372,6 +323,19 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
             ),
           ),
         ],
+
+        // Loading indicator for pagination
+        if (provider.isFetching)
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                ),
+              ),
+            ),
+          ),
 
         const SliverPadding(padding: EdgeInsets.only(bottom: 20)),
       ],
@@ -468,63 +432,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _animationsInitialized
-              ? AnimatedBuilder(
-                  animation: _pulseController,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: 1.0 + (_pulseAnimation.value * 0.05),
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(
-                          FontAwesomeIcons.circleCheck,
-                          size: 48,
-                          color: ResponsiveHelper.purplePrimary,
-                        ),
-                      ),
-                    );
-                  },
-                )
-              : Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(
-                    FontAwesomeIcons.circleCheck,
-                    size: 48,
-                    color: ResponsiveHelper.purplePrimary,
-                  ),
-                ),
-          const SizedBox(height: 24),
-          const Text(
-            '✅ No Action Items',
-            style: TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Tasks and to-dos from your conversations will appear here once they are created.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: ResponsiveHelper.textSecondary,
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
+      child: _buildFirstTimeEmptyState(),
     );
 
     return Center(
@@ -537,54 +445,74 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-  Widget _buildGroupedView(List<MapEntry<ServerConversation, List<ActionItem>>> sortedEntries, bool showCompleted) {
-    final filteredEntries = sortedEntries.where((entry) {
-      final items = entry.value.where((item) => !item.deleted && item.completed == showCompleted).toList();
-      return items.isNotEmpty;
-    }).toList();
 
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final entry = filteredEntries[index];
-          final filteredItems = entry.value.where((item) => !item.deleted && item.completed == showCompleted).toList();
 
-          Widget groupWidget = DesktopActionGroup(
-            conversation: entry.key,
-            actionItems: filteredItems,
-          );
-
-          return AnimatedContainer(
-            duration: Duration(milliseconds: 300 + (index * 50)),
-            curve: Curves.easeOutCubic,
-            child: _animationsInitialized
-                ? FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: Offset(0, 0.1 + (index * 0.02)),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: _slideController,
-                        curve: Interval(
-                          (index * 0.1).clamp(0.0, 0.8),
-                          1.0,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      )),
-                      child: groupWidget,
+  Widget _buildFirstTimeEmptyState() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _animationsInitialized
+            ? AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: 1.0 + (_pulseAnimation.value * 0.05),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(
+                        FontAwesomeIcons.circleCheck,
+                        size: 48,
+                        color: ResponsiveHelper.purplePrimary,
+                      ),
                     ),
-                  )
-                : groupWidget,
-          );
-        },
-        childCount: filteredEntries.length,
-      ),
+                  );
+                },
+              )
+            : Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  FontAwesomeIcons.circleCheck,
+                  size: 48,
+                  color: ResponsiveHelper.purplePrimary,
+                ),
+              ),
+        const SizedBox(height: 24),
+        const Text(
+          '✅ No Action Items',
+          style: TextStyle(
+            color: ResponsiveHelper.textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Tasks and to-dos from your conversations will appear here once they are created.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: ResponsiveHelper.textSecondary,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildFlatView(List<ActionItemData> items, bool showCompleted) {
-    final filteredItems = items.where((item) => item.actionItem.completed == showCompleted).toList();
+
+
+
+
+  Widget _buildFlatView(List<ActionItemWithMetadata> items, bool showCompleted) {
+    final filteredItems = items.where((item) => item.completed == showCompleted).toList();
 
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -592,9 +520,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
           final item = filteredItems[index];
 
           Widget itemWidget = DesktopActionItem(
-            actionItem: item.actionItem,
-            conversation: item.conversation,
-            itemIndex: item.itemIndex,
+            actionItem: item,
           );
 
           return AnimatedContainer(
@@ -625,19 +551,11 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       ),
     );
   }
+
+
 }
 
-class ActionItemData {
-  final ActionItem actionItem;
-  final ServerConversation conversation;
-  final int itemIndex;
 
-  ActionItemData({
-    required this.actionItem,
-    required this.conversation,
-    required this.itemIndex,
-  });
-}
 
 extension PostFrameCallback on Function {
   void withPostFrameCallback() {

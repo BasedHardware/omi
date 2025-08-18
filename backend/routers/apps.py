@@ -270,7 +270,7 @@ async def update_persona(
 @router.get('/v1/personas', tags=['v1'])
 def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
     app = get_persona_by_uid(uid)
-    print(app)
+    # print(app)
     app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='Persona not found')
