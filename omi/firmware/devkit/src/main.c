@@ -211,7 +211,7 @@ int main(void)
         LOG_ERR("Failed to mount SD card (err %d)", err);
         return err;
     }
-    k_msleep(500);
+    k_msleep(500);  // Reduced but still present - SD card needs time to be ready
 
     LOG_PRINTK("\n");
     LOG_INF("Initializing storage...\n");
@@ -220,6 +220,8 @@ int main(void)
     if (err)
     {
         LOG_ERR("Failed to initialize storage (err %d)", err);
+    } else {
+        LOG_INF("Storage initialized successfully");
     }
 #endif
 
@@ -340,6 +342,9 @@ int main(void)
     k_msleep(1000);
     set_led_blue(false);
 
+    // Mark boot as complete to enable chunking
+    set_system_boot_complete();
+
     // Main loop
     LOG_PRINTK("\n");
     LOG_INF("Entering main loop...\n");
@@ -347,6 +352,10 @@ int main(void)
     while (1)
     {
         set_led_state();
+        
+        //Check chunk rotation timing every 500ms instead of on every audio packet
+        check_chunk_rotation_timing();
+        
         k_msleep(500);
     }
 
