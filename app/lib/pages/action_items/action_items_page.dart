@@ -85,8 +85,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         provider.loadMoreActionItems();
       }
     }
-      }
-    }
   }
 
   void _showCreateActionItemSheet() {
