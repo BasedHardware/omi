@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
@@ -96,11 +97,66 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  void deleteMemory(Memory memory) async {
-    await deleteMemoryServer(memory.id);
+  Memory? _lastDeletedMemory;
+  Timer? _deletionTimer;
+  String? _pendingDeletionId;
+
+  Memory? get lastDeletedMemory => _lastDeletedMemory;
+
+  void deleteMemory(Memory memory) {
+    _cancelDeletionTimer();
+
+    _lastDeletedMemory = memory;
+    _pendingDeletionId = memory.id;
+
     _memories.remove(memory);
     _unreviewed.remove(memory);
     _setCategories();
+    notifyListeners();
+
+    _startDeletionTimer();
+  }
+
+  void _cancelDeletionTimer() {
+    if (_deletionTimer != null && _deletionTimer!.isActive) {
+      _deletionTimer!.cancel();
+      _deletionTimer = null;
+    }
+  }
+
+  void _startDeletionTimer() {
+    _deletionTimer = Timer(const Duration(seconds: 10), () {
+      _executeServerDeletion();
+    });
+  }
+
+  Future<void> _executeServerDeletion() async {
+    if (_pendingDeletionId != null) {
+      await deleteMemoryServer(_pendingDeletionId!);
+      _pendingDeletionId = null;
+    }
+  }
+
+  // Restore the last deleted memory
+  Future<bool> restoreLastDeletedMemory() async {
+    if (_lastDeletedMemory == null) return false;
+
+    _cancelDeletionTimer();
+    _pendingDeletionId = null;
+
+    _memories.add(_lastDeletedMemory!);
+    if (!_lastDeletedMemory!.reviewed &&
+        _lastDeletedMemory!.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1)))) {
+      _unreviewed.add(_lastDeletedMemory!);
+    }
+
+    _setCategories();
+    notifyListeners();
+
+    final restoredMemory = _lastDeletedMemory;
+    _lastDeletedMemory = null;
+
+    return true;
   }
 
   void deleteAllMemories() async {
