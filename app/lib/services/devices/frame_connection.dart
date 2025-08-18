@@ -263,7 +263,9 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {}
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
+    return null;
+  }
 
   @override
   Future<StreamSubscription?> performGetBleAudioBytesListener(
@@ -443,11 +445,12 @@ class FrameDeviceConnection extends DeviceConnection {
     return Future.value(<int>[]);
   }
 
-  // @override
-  //  Future<List<int>> performGetStorageList() {
+  @override
+  Future<List<String>> performGetStorageFileNames() {
+    // Frame devices don't have storage functionality like OMI devices
+    return Future.value(<String>[]);
+  }
 
-  //   return <int>[];
-  //  }
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,

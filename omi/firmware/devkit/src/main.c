@@ -127,10 +127,12 @@ int main(void)
     NRF_POWER->RESETREAS=1;
 
     LOG_INF("Booting...\n");
+    printf("[DEBUG] main: DEVICE BOOT STARTED - firmware is loading\n");
 
     LOG_INF("Model: %s", CONFIG_BT_DIS_MODEL);
     LOG_INF("Firmware revision: %s", CONFIG_BT_DIS_FW_REV_STR);
     LOG_INF("Hardware revision: %s", CONFIG_BT_DIS_HW_REV_STR);
+    printf("[DEBUG] main: Device info printed - continuing boot sequence\n");
 
     LOG_DBG("Reset reason: %d\n", reset_reason);
 
@@ -348,13 +350,29 @@ int main(void)
     // Main loop
     LOG_PRINTK("\n");
     LOG_INF("Entering main loop...\n");
+    printf("[DEBUG] main: Main loop started - device is alive\n");
 
+    static uint32_t heartbeat_counter = 0;
+    
     while (1)
     {
         set_led_state();
         
         //Check chunk rotation timing every 500ms instead of on every audio packet
         check_chunk_rotation_timing();
+        
+        // Update file cache every 10 seconds (in main thread - safe for fs_opendir)
+        if (heartbeat_counter % 20 == 0) {
+            printf("[DEBUG] main: Updating file cache (MAIN THREAD CONTEXT)\n");
+            update_files_cache();
+        }
+        
+        // Print heartbeat every 10 seconds (20 iterations * 500ms = 10s)
+        heartbeat_counter++;
+        if (heartbeat_counter % 20 == 0) {
+            printf("[DEBUG] main: HEARTBEAT %u - device alive and running (connected=%s)\n", 
+                   heartbeat_counter, is_connected ? "true" : "false");
+        }
         
         k_msleep(500);
     }

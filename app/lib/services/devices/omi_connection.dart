@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
@@ -11,9 +12,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
-import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:image/image.dart' as img;
 
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
@@ -348,7 +347,7 @@ class OmiDeviceConnection extends DeviceConnection {
                     (storageValue[baseIndex + 1] << 8) |
                     (storageValue[baseIndex + 2] << 16) |
                     (storageValue[baseIndex + 3] << 24)) &
-                0xFFFFFFFF as int)
+                0xFFFFFFFF)
             .toSigned(32);
         storageLengths.add(result);
       }
@@ -446,7 +445,81 @@ class OmiDeviceConnection extends DeviceConnection {
         .write([command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
     return true;
   }
-  // Future<List<int>> performGetStorageList();
+  
+  @override
+  Future<List<String>> performGetStorageFileNames() async {
+    debugPrint('perform storage file names called');
+    if (_storageService == null) {
+      if (device.name == 'Omi DevKit 2') {
+        // Should only report incase of DevKit 2 because only DevKit 2 has storage service
+        logServiceNotFoundError('Storage', deviceId);
+      }
+      return Future.value(<String>[]);
+    }
+
+    debugPrint('Looking for storage file names characteristic: $storageFileNamesCharacteristicUuid');
+    debugPrint('Available characteristics in storage service: ${_storageService!.characteristics.map((c) => c.uuid.toString()).join(', ')}');
+    
+    var fileNamesCharacteristic = getCharacteristic(_storageService!, storageFileNamesCharacteristicUuid);
+    if (fileNamesCharacteristic == null) {
+      debugPrint('Storage File Names characteristic not found - firmware may not support this feature yet');
+      debugPrint('Expected UUID: $storageFileNamesCharacteristicUuid');
+      debugPrint('Available UUIDs: ${_storageService!.characteristics.map((c) => c.uuid.toString()).toList()}');
+      
+      // Fallback: Return mock data based on storage list until firmware is updated
+      var storageList = await performGetStorageList();
+      List<String> mockFileNames = [];
+      for (int i = 0; i < storageList.length && i < 10; i++) {
+        if (storageList[i] > 0) {
+          // Generate mock chunk filenames for existing files
+          var timestamp = DateTime.now().subtract(Duration(hours: i));
+          var timeStr = "${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}${timestamp.second.toString().padLeft(2, '0')}";
+          var counter = i.toString().padLeft(5, '0');
+          mockFileNames.add("chunk_${timeStr}_$counter.b");
+        }
+      }
+      debugPrint('Using mock file names: ${mockFileNames.length} files');
+      return mockFileNames;
+    }
+    
+    debugPrint('Found storage file names characteristic successfully!');
+
+    List<int> fileNamesData;
+    try {
+      fileNamesData = await fileNamesCharacteristic.read();
+    } catch (e, stackTrace) {
+      logCrashMessage('Storage file names', deviceId, e, stackTrace);
+      debugPrint('Error reading file names characteristic - falling back to mock data');
+      // Fallback on error: Return mock data based on storage list
+      var storageList = await performGetStorageList();
+      List<String> mockFileNames = [];
+      for (int i = 0; i < storageList.length && i < 10; i++) {
+        if (storageList[i] > 0) {
+          var timestamp = DateTime.now().subtract(Duration(hours: i));
+          var timeStr = "${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}${timestamp.second.toString().padLeft(2, '0')}";
+          var counter = i.toString().padLeft(5, '0');
+          mockFileNames.add("chunk_${timeStr}_$counter.b");
+        }
+      }
+      return mockFileNames;
+    }
+
+    List<String> fileNames = [];
+    if (fileNamesData.isNotEmpty) {
+      String fileNamesString = String.fromCharCodes(fileNamesData);
+      // Remove null terminators and split by newlines
+      fileNamesString = fileNamesString.replaceAll('\x00', '');
+      if (fileNamesString.isNotEmpty) {
+        fileNames = fileNamesString
+            .split('\n')
+            .where((name) => name.isNotEmpty)
+            .toList();
+      }
+    }
+
+    debugPrint('Storage file names: ${fileNames.length} files: ${fileNames.join(', ')}');
+    return fileNames;
+  }
 
   @override
   Future performCameraStartPhotoController() async {
@@ -485,7 +558,6 @@ class OmiDeviceConnection extends DeviceConnection {
     print('cameraStopPhotoController');
   }
 
-  @override
   Future performCameraTakePhoto() async {
     if (_omiService == null) {
       logServiceNotFoundError('Omi', deviceId);
@@ -679,13 +751,13 @@ class OmiDeviceConnection extends DeviceConnection {
                         (value[baseIndex + 1] << 8) |
                         (value[baseIndex + 2] << 16) |
                         (value[baseIndex + 3] << 24)) &
-                    0xFFFFFFFF as int)
+                    0xFFFFFFFF)
                 .toSigned(32);
             var temp = ((value[baseIndex + 4] |
                         (value[baseIndex + 5] << 8) |
                         (value[baseIndex + 6] << 16) |
                         (value[baseIndex + 7] << 24)) &
-                    0xFFFFFFFF as int)
+                    0xFFFFFFFF)
                 .toSigned(32);
             double axisValue = result + (temp / 1000000);
             accelerometerData.add(axisValue);

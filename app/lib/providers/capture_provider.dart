@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -216,6 +219,8 @@ class CaptureProvider extends ChangeNotifier
       recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
+  
+  BtDevice? get recordingDevice => _recordingDevice;
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -1163,7 +1168,13 @@ class CaptureProvider extends ChangeNotifier
   * */
 
   List<int> currentStorageFiles = <int>[];
+  List<String> currentStorageFileNames = <String>[];
   int sdCardFileNum = 1;
+  
+  // Individual file download tracking
+  Map<String, bool> _downloadingFiles = <String, bool>{};
+  Map<String, double> _downloadProgress = <String, double>{};
+  List<String> _downloadedChunkFiles = <String>[];
 
 // To show the progress of the download in the UI
   int currentTotalBytesReceived = 0;
@@ -1186,17 +1197,43 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> updateStorageList() async {
-    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty) {
-      debugPrint('No storage files found');
-      SharedPreferencesUtil().deviceIsV2 = false;
-      debugPrint('Device is not V2');
+    if (_recordingDevice == null) {
+      debugPrint('No recording device available for storage list update');
       return;
     }
-    totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
-    totalBytesReceived = storageOffset;
-    notifyListeners();
+    
+    // Check if device is connected before trying to read storage
+    var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+    if (connection == null || !await connection.isConnected()) {
+      debugPrint('Device not connected - skipping storage list update');
+      // Clear previous data when device is not connected
+      currentStorageFiles = <int>[];
+      currentStorageFileNames = <String>[];
+      notifyListeners();
+      return;
+    }
+    
+    try {
+      currentStorageFiles = await _getStorageList(_recordingDevice!.id);
+      currentStorageFileNames = await _getStorageFileNames(_recordingDevice!.id);
+      
+      if (currentStorageFiles.isEmpty) {
+        debugPrint('No storage files found');
+        SharedPreferencesUtil().deviceIsV2 = false;
+        debugPrint('Device is not V2');
+        return;
+      }
+      totalStorageFileBytes = currentStorageFiles[0];
+      var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
+      totalBytesReceived = storageOffset;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error updating storage list: $e');
+      // Clear data on error
+      currentStorageFiles = <int>[];
+      currentStorageFileNames = <String>[];
+      notifyListeners();
+    }
   }
 
   Future<void> initiateStorageBytesStreaming() async {
@@ -1272,6 +1309,352 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
+  }
+
+  Future<List<String>> _getStorageFileNames(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageFileNames();
+  }
+  
+  // Individual file download functions
+  bool isDownloadingFile(String fileName) {
+    return _downloadingFiles[fileName] ?? false;
+  }
+  
+  double getDownloadProgress(String fileName) {
+    return _downloadProgress[fileName] ?? 0.0;
+  }
+  
+  List<String> get downloadedChunkFiles => List.unmodifiable(_downloadedChunkFiles);
+  
+  Future<bool> deleteFileFromDevice(String fileName) async {
+    if (_recordingDevice == null) {
+      debugPrint('No recording device available for file deletion');
+      return false;
+    }
+    
+    debugPrint('Deleting file from device: $fileName');
+    
+    try {
+      // Find the file index in our current file list (1-based indexing for firmware)
+      int fileIndex = currentStorageFileNames.indexOf(fileName);
+      if (fileIndex == -1) {
+        debugPrint('File $fileName not found in current file list');
+        throw Exception('File not found in device file list');
+      }
+      
+      // Firmware uses 1-based indexing
+      int firmwareFileNum = fileIndex + 1;
+      
+      var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+      if (connection == null) {
+        throw Exception('Device connection failed');
+      }
+      
+      debugPrint('Deleting file at index $fileIndex ($firmwareFileNum for firmware): $fileName');
+      
+      // Send delete command (command 1 = DELETE_COMMAND, 1-based file number)
+      bool deleteSuccess = await connection.writeToStorage(firmwareFileNum, 1, 0);
+      if (!deleteSuccess) {
+        throw Exception('Failed to send delete command');
+      }
+      
+      // Wait a bit for the deletion to complete
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
+      // Refresh the file list to reflect the deletion
+      await updateStorageList();
+      
+      debugPrint('Successfully deleted $fileName from device');
+      
+      // Show success notification
+      if (!PlatformService.isDesktop) {
+        NotificationService.instance.createNotification(
+          notificationId: 11,
+          title: 'File Deleted',
+          body: 'Successfully deleted $fileName from device SD card',
+        );
+      }
+      
+      return true;
+      
+    } catch (e) {
+      debugPrint('Error deleting file $fileName: $e');
+      
+      // Show error notification
+      if (!PlatformService.isDesktop) {
+        NotificationService.instance.createNotification(
+          notificationId: 12,
+          title: 'Delete Failed',
+          body: 'Failed to delete $fileName: ${e.toString()}',
+        );
+      }
+      
+      return false;
+    }
+  }
+  
+  Future<void> loadDownloadedFiles() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory('${directory.path}/downloaded_chunks');
+      
+      if (await downloadsDir.exists()) {
+        final files = await downloadsDir.list().toList();
+        _downloadedChunkFiles = files
+            .where((file) => file is File && file.path.endsWith('.b'))
+            .map((file) => path.basename(file.path))
+            .toList();
+        
+        debugPrint('Loaded ${_downloadedChunkFiles.length} downloaded chunk files');
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading downloaded files: $e');
+    }
+  }
+  
+  Future<void> deleteDownloadedFile(String fileName) async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/downloaded_chunks/$fileName');
+      
+      if (await file.exists()) {
+        await file.delete();
+        _downloadedChunkFiles.remove(fileName);
+        notifyListeners();
+        debugPrint('Deleted downloaded file: $fileName');
+      }
+    } catch (e) {
+      debugPrint('Error deleting file $fileName: $e');
+    }
+  }
+  
+  Future<void> downloadChunkFile(String fileName, {bool deleteAfterDownload = false}) async {
+    if (_recordingDevice == null) {
+      debugPrint('No recording device available for file download');
+      return;
+    }
+    
+    if (isDownloadingFile(fileName)) {
+      debugPrint('File $fileName is already being downloaded');
+      return;
+    }
+    
+    debugPrint('Starting download for chunk file: $fileName');
+    _downloadingFiles[fileName] = true;
+    _downloadProgress[fileName] = 0.0;
+    notifyListeners();
+    
+    try {
+      // Find the file index in our current file list (1-based indexing for firmware)
+      int fileIndex = currentStorageFileNames.indexOf(fileName);
+      if (fileIndex == -1) {
+        debugPrint('File $fileName not found in current file list');
+        throw Exception('File not found in device file list');
+      }
+      
+      // Firmware uses 1-based indexing
+      int firmwareFileNum = fileIndex + 1;
+      
+      // Use the existing storage download mechanism
+      var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+      if (connection == null) {
+        throw Exception('Device connection failed');
+      }
+      
+      debugPrint('Downloading file at index $fileIndex ($firmwareFileNum for firmware): $fileName');
+      
+      // Set up progress tracking
+      StreamSubscription? downloadSubscription;
+      List<int> downloadedData = [];
+      
+      // Listen for storage bytes
+      downloadSubscription = await connection.getBleStorageBytesListener(
+        onStorageBytesReceived: (List<int> bytes) {
+          downloadedData.addAll(bytes);
+          
+          // Update progress (estimate based on received bytes)
+          // For now, we'll use a simple progress indication
+          double progress = downloadedData.length / (1024 * 10); // Assume ~10KB average file
+          if (progress > 1.0) progress = 1.0;
+          
+          _downloadProgress[fileName] = progress;
+          notifyListeners();
+          
+          debugPrint('Downloaded ${downloadedData.length} bytes for $fileName (${(progress * 100).toStringAsFixed(1)}%)');
+        },
+      );
+      
+      if (downloadSubscription == null) {
+        throw Exception('Failed to start download stream');
+      }
+      
+      // Start the download by writing to storage (command 0 = download, 1-based file number)
+      bool writeSuccess = await connection.writeToStorage(firmwareFileNum, 0, 0);
+      if (!writeSuccess) {
+        throw Exception('Failed to initiate file download');
+      }
+      
+      debugPrint('Download command sent for $fileName, waiting for data...');
+      
+      // Wait for download completion (timeout after 30 seconds)
+      int waitTime = 0;
+      const int maxWaitTime = 30000; // 30 seconds
+      const int checkInterval = 500; // 500ms
+      
+      while (downloadedData.isEmpty && waitTime < maxWaitTime) {
+        await Future.delayed(const Duration(milliseconds: checkInterval));
+        waitTime += checkInterval;
+        
+        // Update progress indicator during wait
+        double waitProgress = waitTime / maxWaitTime * 0.3; // First 30% is waiting
+        _downloadProgress[fileName] = waitProgress;
+        notifyListeners();
+      }
+      
+      if (downloadedData.isEmpty) {
+        throw Exception('Download timeout - no data received');
+      }
+      
+      // Continue waiting for complete file (or until timeout)
+      waitTime = 0;
+      int lastDataSize = downloadedData.length;
+      int stableCount = 0;
+      
+      while (waitTime < maxWaitTime && stableCount < 5) { // 5 stable checks (2.5 seconds)
+        await Future.delayed(const Duration(milliseconds: checkInterval));
+        waitTime += checkInterval;
+        
+        if (downloadedData.length == lastDataSize) {
+          stableCount++;
+        } else {
+          stableCount = 0;
+          lastDataSize = downloadedData.length;
+        }
+      }
+      
+      // Cancel the subscription
+      await downloadSubscription.cancel();
+      
+      // Save the downloaded file
+      if (downloadedData.isNotEmpty) {
+        await _saveDownloadedChunkFile(fileName, downloadedData);
+        debugPrint('Successfully downloaded $fileName: ${downloadedData.length} bytes');
+        
+        // Add to downloaded files list
+        if (!_downloadedChunkFiles.contains(fileName)) {
+          _downloadedChunkFiles.add(fileName);
+        }
+        
+        // Delete from device if requested
+        if (deleteAfterDownload) {
+          debugPrint('Deleting $fileName from device after successful download...');
+          bool deleteSuccess = await deleteFileFromDevice(fileName);
+          if (deleteSuccess) {
+            debugPrint('Successfully deleted $fileName from device after download');
+          } else {
+            debugPrint('Failed to delete $fileName from device after download');
+          }
+        }
+
+        // Show success notification with accessible paths
+        if (!PlatformService.isDesktop) {
+          NotificationService.instance.createNotification(
+            notificationId: 9,
+            title: 'File Downloaded',
+            body: deleteAfterDownload 
+                ? 'Downloaded & deleted $fileName (${downloadedData.length} bytes)\nCheck Downloads/omi_chunks/'
+                : 'Downloaded $fileName (${downloadedData.length} bytes)\nCheck Downloads/omi_chunks/ or Android/data/com.friend.ios.dev/files/omi_chunks/',
+          );
+        }
+      } else {
+        throw Exception('No data received for file download');
+      }
+      
+    } catch (e) {
+      debugPrint('Error downloading file $fileName: $e');
+      
+      // Show error notification
+      if (!PlatformService.isDesktop) {
+        NotificationService.instance.createNotification(
+          notificationId: 10,
+          title: 'Download Failed',
+          body: 'Failed to download $fileName: ${e.toString()}',
+        );
+      }
+    } finally {
+      // Clean up download state
+      _downloadingFiles[fileName] = false;
+      _downloadProgress[fileName] = 1.0;
+      notifyListeners();
+      
+      // Clear progress after delay
+      Future.delayed(const Duration(seconds: 2), () {
+        _downloadProgress.remove(fileName);
+        _downloadingFiles.remove(fileName);
+        notifyListeners();
+      });
+    }
+  }
+  
+  Future<void> _saveDownloadedChunkFile(String fileName, List<int> data) async {
+    try {
+      // Save to app's internal directory (for app functionality)
+      final directory = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory('${directory.path}/downloaded_chunks');
+      
+      // Create downloads directory if it doesn't exist
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+      
+      // Save the file
+      final file = File('${downloadsDir.path}/$fileName');
+      await file.writeAsBytes(data);
+      
+      debugPrint('Saved downloaded file to: ${file.path}');
+      
+      // ALSO save to user-accessible external storage for debugging
+      try {
+        // Get external storage directory (publicly accessible)
+        final externalDir = await getExternalStorageDirectory();
+        if (externalDir != null) {
+          // Save to /storage/emulated/0/Android/data/com.friend.ios.dev/files/omi_chunks
+          final publicDir = Directory('${externalDir.path}/omi_chunks');
+          if (!await publicDir.exists()) {
+            await publicDir.create(recursive: true);
+          }
+          final publicFile = File('${publicDir.path}/$fileName');
+          await publicFile.writeAsBytes(data);
+          debugPrint('ALSO saved to external storage: ${publicFile.path}');
+          debugPrint('External path accessible via file manager: Android/data/com.friend.ios.dev/files/omi_chunks/');
+        }
+      } catch (e) {
+        debugPrint('Could not save to external storage: $e');
+      }
+      
+      // TRY to save to public Downloads folder (requires permission)
+      try {
+        final publicDownloads = Directory('/storage/emulated/0/Download/omi_chunks');
+        if (!await publicDownloads.exists()) {
+          await publicDownloads.create(recursive: true);
+        }
+        final publicFile = File('${publicDownloads.path}/$fileName');
+        await publicFile.writeAsBytes(data);
+        debugPrint('ALSO saved to public Downloads: ${publicFile.path}');
+        debugPrint('Public Downloads accessible at: Downloads/omi_chunks/ folder');
+      } catch (e) {
+        debugPrint('Could not save to public Downloads (may need storage permission): $e');
+      }
+      
+    } catch (e) {
+      debugPrint('Error saving downloaded file $fileName: $e');
+      throw Exception('Failed to save downloaded file: $e');
+    }
   }
 
   void _processSystemAudioByteReceived(Uint8List bytes) {

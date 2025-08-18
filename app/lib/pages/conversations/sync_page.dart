@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:omi/pages/settings/widgets/appbar_with_banner.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/widgets/downloaded_files_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/services.dart';
@@ -189,6 +191,15 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void initState() {
     _hideFabAnimation = AnimationController(vsync: this, duration: kThemeAnimationDuration, value: 1.0);
     super.initState();
+    
+    // Load device storage files when page initializes, but only if device is connected
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+      // Only try to update storage list if we have a connected device
+      if (captureProvider.havingRecordingDevice) {
+        captureProvider.updateStorageList();
+      }
+    });
   }
 
   @override
@@ -391,7 +402,11 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 50)),
+                const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                const SliverToBoxAdapter(child: DeviceAudioFilesWidget()),
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                const SliverToBoxAdapter(child: DownloadedFilesWidget()),
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
                 WalsListWidget(wals: conversationProvider.missingWals),
                 const SliverToBoxAdapter(child: SizedBox(height: 50)),
               ],
@@ -399,6 +414,230 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           ),
         );
       }),
+    );
+  }
+}
+
+class DeviceAudioFilesWidget extends StatelessWidget {
+  const DeviceAudioFilesWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<CaptureProvider>(
+      builder: (context, captureProvider, child) {
+        final fileNames = captureProvider.currentStorageFileNames;
+        final isConnected = captureProvider.havingRecordingDevice;
+        
+        // Show connection status if not connected
+        if (!isConnected) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Audio Files on Device',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(16.0),
+                  ),
+                  child: const ListTile(
+                    leading: Icon(Icons.bluetooth_disabled, color: Colors.red),
+                    title: Text(
+                      'Device not connected',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: Text(
+                      'Connect your device to view audio files',
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          );
+        }
+        
+        if (fileNames.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Audio Files on Device',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(16.0),
+                  ),
+                  child: ListTile(
+                    leading: const Icon(Icons.folder_open, color: Colors.grey),
+                    title: const Text(
+                      'No audio files found',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'No chunk files detected on device storage',
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      onPressed: () {
+                        captureProvider.updateStorageList();
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          );
+        }
+
+        // Check if the list was truncated
+        final isTruncated = fileNames.any((name) => name.contains('[TRUNCATED]'));
+        final actualFiles = fileNames.where((name) => !name.contains('[TRUNCATED]')).toList();
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Audio Files on Device',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F1F25),
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.storage, color: Colors.blue),
+                      title: Text(
+                        '${actualFiles.length}${isTruncated ? '+' : ''} chunk files found',
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      subtitle: isTruncated ? const Text(
+                        '⚠️ List truncated - too many files to display all',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ) : null,
+                      trailing: IconButton(
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        onPressed: () {
+                          // Only refresh if device is connected
+                          if (captureProvider.havingRecordingDevice) {
+                            captureProvider.updateStorageList();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Device must be connected to refresh file list'),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    if (actualFiles.isNotEmpty) ...[
+                      const Divider(color: Color(0xFF35343B), height: 1),
+                      SizedBox(
+                        height: 150,
+                        child: ListView.builder(
+                          itemCount: actualFiles.length,
+                          itemBuilder: (context, index) {
+                            final fileName = actualFiles[index];
+                            final isChunkFile = fileName.contains('chunk_') && fileName.endsWith('.b');
+                            final isInfoFile = fileName.endsWith('.info');
+                            
+                            return Consumer<CaptureProvider>(
+                              builder: (context, captureProvider, child) {
+                                final isDownloading = captureProvider.isDownloadingFile(fileName);
+                                
+                                return ListTile(
+                                  leading: Icon(
+                                    isChunkFile ? Icons.audio_file : 
+                                    isInfoFile ? Icons.info_outline :
+                                    Icons.insert_drive_file,
+                                    color: isChunkFile ? Colors.orange : 
+                                           isInfoFile ? Colors.blue :
+                                           Colors.grey,
+                                    size: 20
+                                  ),
+                                  title: Text(
+                                    fileName,
+                                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                                  ),
+                                  subtitle: isDownloading 
+                                    ? const LinearProgressIndicator(
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                                        backgroundColor: Colors.grey,
+                                      )
+                                    : null,
+                                  trailing: isChunkFile 
+                                    ? isDownloading 
+                                      ? SizedBox(
+                                          width: 80,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.hourglass_empty, color: Colors.orange, size: 18),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                '${(captureProvider.getDownloadProgress(fileName) * 100).toStringAsFixed(0)}%',
+                                                style: const TextStyle(color: Colors.orange, fontSize: 12),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      : Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.download, color: Colors.blue, size: 18),
+                                              onPressed: () {
+                                                _showDownloadOptions(context, captureProvider, fileName);
+                                              },
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                              onPressed: () {
+                                                _showDeleteConfirmation(context, captureProvider, fileName);
+                                              },
+                                            ),
+                                          ],
+                                        )
+                                    : Text(
+                                        '#${index + 1}',
+                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                      ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -449,4 +688,129 @@ class WalsListWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showDownloadOptions(BuildContext context, CaptureProvider captureProvider, String fileName) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        title: const Text(
+          'Download Options',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Choose download option for $fileName:',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.download, color: Colors.blue),
+              title: const Text(
+                'Download Only',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Keep file on device after download',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                captureProvider.downloadChunkFile(fileName, deleteAfterDownload: false);
+              },
+            ),
+            const Divider(color: Colors.grey),
+            ListTile(
+              leading: const Icon(Icons.download_done, color: Colors.green),
+              title: const Text(
+                'Download & Delete',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Remove file from device after download',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                captureProvider.downloadChunkFile(fileName, deleteAfterDownload: true);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+void _showDeleteConfirmation(BuildContext context, CaptureProvider captureProvider, String fileName) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        title: const Text(
+          'Delete File',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.warning,
+              color: Colors.orange,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Are you sure you want to delete $fileName from the device?',
+              style: const TextStyle(color: Colors.white70),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This action cannot be undone.',
+              style: TextStyle(color: Colors.red, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              captureProvider.deleteFileFromDevice(fileName);
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      );
+    },
+  );
 }

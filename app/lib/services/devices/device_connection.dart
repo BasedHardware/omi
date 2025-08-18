@@ -236,6 +236,16 @@ abstract class DeviceConnection {
 
   Future<List<int>> performGetStorageList();
 
+  Future<List<String>> getStorageFileNames() async {
+    if (await isConnected()) {
+      return await performGetStorageFileNames();
+    }
+    _showDeviceDisconnectedNotification();
+    return Future.value(<String>[]);
+  }
+
+  Future<List<String>> performGetStorageFileNames();
+
   Future<bool> performWriteToStorage(int numFile, int command, int offset);
 
   Future<bool> writeToStorage(int numFile, int command, int offset) async {

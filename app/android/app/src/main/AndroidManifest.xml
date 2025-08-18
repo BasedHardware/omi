@@ -3,6 +3,8 @@
     package="com.friend.ios">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Tell Google Play Store that your app uses Bluetooth LE

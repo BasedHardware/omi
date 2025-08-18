@@ -96,6 +96,50 @@ int clear_audio_file(uint8_t num);
  */
 int clear_audio_directory();
 
+/**
+ * @brief Get list of audio file names from the audio directory
+ *
+ * Returns a newline-separated list of audio file names from the /SD:/audio directory
+ * 
+ * @param buffer Buffer to store the file names (newline separated)
+ * @param buffer_size Size of the buffer
+ * @return Number of bytes written to buffer, or negative errno code if error
+ */
+int get_audio_file_names(char* buffer, size_t buffer_size);
+
+/**
+ * @brief Update the file cache with real files from SD card (MAIN THREAD ONLY)
+ * 
+ * This function safely uses fs_opendir in the main thread context to scan
+ * the audio directory and populate the cache with real filenames.
+ */
+void update_files_cache(void);
+
+/**
+ * @brief Trigger file cache update on next main loop iteration
+ * 
+ * Call this when files are created/deleted to refresh the cache.
+ */
+void trigger_cache_update(void);
+
+/**
+ * @brief Delete a chunk file from the SD card
+ * 
+ * Deletes the specified audio chunk file and updates the cache.
+ * 
+ * @param filename The name of the file to delete (e.g., "chunk_000001_00001.b")
+ * @return 0 if successful, negative errno code if error
+ */
+int delete_chunk_file(const char* filename);
+
+/**
+ * @brief External access to file cache for other modules
+ * 
+ * These variables are used by storage.c for file operations
+ */
+extern char recent_files_cache[10][64];  // MAX_CACHED_FILES, MAX_FILENAME_LENGTH
+extern int cached_file_count;
+
 int save_offset(uint32_t offset);
 int get_offset();
 

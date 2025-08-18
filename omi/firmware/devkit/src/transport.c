@@ -570,7 +570,7 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-static uint32_t offset = 0;
+static uint32_t offset __attribute__((unused)) = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void)
 // {
@@ -842,7 +842,9 @@ int transport_start()
 
     // Start advertising
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
+    printf("[DEBUG] transport_start: About to register storage service\n");
     bt_gatt_service_register(&storage_service);
+    printf("[DEBUG] transport_start: Storage service registered successfully\n");
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
