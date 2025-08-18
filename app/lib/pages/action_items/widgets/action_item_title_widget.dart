@@ -20,6 +20,7 @@ class ActionItemTileWidget extends StatefulWidget {
   final bool isInGroup;
   final Set<String> exportedToAppleReminders;
   final VoidCallback? onExportedToAppleReminders;
+  final VoidCallback? onActionItemCompleted;
 
   const ActionItemTileWidget({
     super.key,
@@ -31,6 +32,7 @@ class ActionItemTileWidget extends StatefulWidget {
     this.isInGroup = false,
     this.exportedToAppleReminders = const <String>{},
     this.onExportedToAppleReminders,
+    this.onActionItemCompleted,
   });
 
   @override
@@ -424,6 +426,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         actionItemDescription: itemDescription,
         isCompleted: newValue,
       );
+      
+      // Notify parent if an action item was completed
+      if (newValue && widget.onActionItemCompleted != null) {
+        widget.onActionItemCompleted!();
+      }
     } catch (e) {
       // If there's an error, revert pending state
       if (mounted) {
