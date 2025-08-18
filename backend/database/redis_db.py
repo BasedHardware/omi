@@ -423,8 +423,15 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     return url.decode()
 
 
-def get_filter_category_items(uid: str, category: str) -> List[str]:
-    val = r.smembers(f'users:{uid}:filters:{category}')
+def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
+    key = f'users:{uid}:filters:{category}'
+    if limit:
+        # Get random sample if limit specified
+        val = r.srandmember(key, limit)
+    else:
+        # Get all items (existing behavior)
+        val = r.smembers(key)
+
     if not val:
         return []
     return [x.decode() for x in val]
@@ -517,6 +524,9 @@ def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
 def delete_cached_mcp_api_key(hashed_key: str):
     """Deletes a cached MCP API key."""
     r.delete(f'mcp_api_key:{hashed_key}')
+
+
+    
 
 
 # ******************************************************

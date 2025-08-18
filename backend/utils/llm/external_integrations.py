@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 from langchain_core.prompts import ChatPromptTemplate
 import database.users as users_db
@@ -46,6 +46,12 @@ def get_message_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
+    
+    # Set created_at for action items if not already set
+    for action_item in response.action_items or []:
+        if action_item.created_at is None:
+            action_item.created_at = datetime.now(timezone.utc)
+    
     return response
 
 
@@ -62,7 +68,15 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       '''.replace(
         '    ', ''
     ).strip()
-    return llm_mini.with_structured_output(Structured).invoke(prompt)
+    
+    response = llm_mini.with_structured_output(Structured).invoke(prompt)
+    
+    # Set created_at for action items if not already set
+    for action_item in response.action_items or []:
+        if action_item.created_at is None:
+            action_item.created_at = datetime.now(timezone.utc)
+    
+    return response
 
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
