@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/backend/http/api/payment.dart';
+
 import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -33,28 +33,13 @@ class PlansSheet extends StatefulWidget {
 }
 
 class _PlansSheetState extends State<PlansSheet> {
-  bool _isLoadingPlans = false;
-  Map<String, dynamic>? _availablePlans;
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
   bool _isCancelling = false;
   bool _isUpgrading = false;
 
     Future<void> _loadAvailablePlans() async {
-    if (_isLoadingPlans) return;
-    
-    setState(() => _isLoadingPlans = true);
-    try {
-      final response = await getAvailablePlans();
-      if (response != null) {
-        setState(() {
-          _availablePlans = response;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading available plans: $e');
-    } finally {
-      setState(() => _isLoadingPlans = false);
-    }
+    final provider = context.read<UsageProvider>();
+    await provider.loadAvailablePlans();
   }
 
     Future<void> _handleCancelSubscription() async {
@@ -85,11 +70,10 @@ class _PlansSheetState extends State<PlansSheet> {
 
     setState(() => _isCancelling = true);
     try {
-      final success = await cancelSubscription();
+      final provider = context.read<UsageProvider>();
+      final success = await provider.cancelUserSubscription();
       if (success) {
         AppSnackbar.showSnackbar('Your subscription is set to cancel at the end of the period.');
-        context.read<UsageProvider>().fetchSubscription();
-        _loadAvailablePlans();
       } else {
         AppSnackbar.showSnackbarError('Failed to cancel subscription. Please try again.');
       }
@@ -103,15 +87,16 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Map<String, dynamic>? _getCurrentPlanDetails() {
-    if (_availablePlans == null) return null;
-    
     final provider = context.read<UsageProvider>();
+    final availablePlans = provider.availablePlans;
+    if (availablePlans == null) return null;
+    
     final sub = provider.subscription?.subscription;
     if (sub == null || sub.stripeSubscriptionId?.isEmpty != false) return null;
     
     try {
       // Find the current plan in available plans based on is_active flag
-      final plans = _availablePlans!['plans'] as List;
+      final plans = availablePlans['plans'] as List;
       final currentPlan = plans.firstWhere(
         (plan) => plan['is_active'] == true,
         orElse: () => null,
@@ -125,10 +110,12 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   bool _hasScheduledUpgrade() {
-    if (_availablePlans == null) return false;
+    final provider = context.read<UsageProvider>();
+    final availablePlans = provider.availablePlans;
+    if (availablePlans == null) return false;
     
     try {
-      final plans = _availablePlans!['plans'] as List;
+      final plans = availablePlans['plans'] as List;
       final activePlans = plans.where((plan) => plan['is_active'] == true).toList();
       
       // If both monthly and annual plans are active, it means there's a scheduled upgrade
@@ -145,10 +132,12 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Map<String, dynamic>? _getScheduledPlanDetails() {
-    if (_availablePlans == null) return null;
+    final provider = context.read<UsageProvider>();
+    final availablePlans = provider.availablePlans;
+    if (availablePlans == null) return null;
     
     try {
-      final plans = _availablePlans!['plans'] as List;
+      final plans = availablePlans['plans'] as List;
       // Find the annual plan if it's scheduled (both plans are active)
       final annualPlan = plans.firstWhere(
         (plan) => plan['is_active'] == true && plan['interval'] == 'year',
@@ -166,12 +155,14 @@ class _PlansSheetState extends State<PlansSheet> {
     final bool isYearly = selectedPlan == 'yearly';
     
     // Get the price ID from the available plans
-    if (_availablePlans == null) {
+    final usageProvider = context.read<UsageProvider>();
+    final availablePlans = usageProvider.availablePlans;
+    if (availablePlans == null) {
       AppSnackbar.showSnackbarError('Could not load available plans. Please try again.');
       return;
     }
     
-    final plans = _availablePlans!['plans'] as List;
+    final plans = availablePlans['plans'] as List;
     final selectedPlanData = plans.firstWhere(
       (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
       orElse: () => null,
@@ -344,17 +335,16 @@ class _PlansSheetState extends State<PlansSheet> {
       
       // If user already has unlimited monthly plan and it's not canceled
       if (currentSub.plan == PlanType.unlimited && currentSub.status == SubscriptionStatus.active && !currentSub.cancelAtPeriodEnd) {
-        result = await upgradeSubscription(priceId: priceId);
+        result = await provider.upgradeUserSubscription(priceId: priceId);
         if (result != null) {
           final daysRemaining = result['days_remaining'] as int? ?? 0;
           AppSnackbar.showSnackbar('Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.');
-          context.read<UsageProvider>().fetchSubscription();
         } else {
           AppSnackbar.showSnackbarError('Could not schedule plan change. Please try again.');
         }
       } else {
         // New subscription (for basic users or canceled subscriptions)
-        final sessionData = await createCheckoutSession(priceId: priceId);
+        final sessionData = await provider.createUserCheckoutSession(priceId: priceId);
         if (sessionData != null && sessionData['url'] != null && mounted) {
           final checkoutResult = await Navigator.of(context).push(
             MaterialPageRoute(
@@ -366,7 +356,6 @@ class _PlansSheetState extends State<PlansSheet> {
 
           if (checkoutResult == true) {
             AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
-            context.read<UsageProvider>().fetchSubscription();
           } else {
             // Optional: handle cancellation or failure
           }
@@ -858,16 +847,102 @@ class _PlansSheetState extends State<PlansSheet> {
                                     );
                                   } else {
                                     // User is on monthly plan - show upgrade options
+                                    return Consumer<UsageProvider>(
+                                      builder: (context, usageProvider, child) {
+                                        return Column(
+                                          children: [
+                                            if (usageProvider.isLoadingPlans) ...[
+                                              _buildShimmerPlanOption(),
+                                              const SizedBox(height: 18),
+                                              _buildShimmerPlanOption(),
+                                            ] else if (usageProvider.availablePlans != null) ...[
+                                              _buildDynamicPlanOption(
+                                                isSelected: selectedPlan == 'yearly',
+                                                planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
+                                                  (plan) => plan['interval'] == 'year',
+                                                ),
+                                                saveTag: '2 Months Free',
+                                                isPopular: true,
+                                                onTap: () {
+                                                  HapticFeedback.lightImpact();
+                                                  setState(() => selectedPlan = 'yearly');
+                                                },
+                                              ),
+                                              const SizedBox(height: 18),
+
+                                              _buildDynamicPlanOption(
+                                                isSelected: selectedPlan == 'monthly',
+                                                planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
+                                                  (plan) => plan['interval'] == 'month',
+                                                ),
+                                                onTap: () {
+                                                  HapticFeedback.lightImpact();
+                                                  setState(() => selectedPlan = 'monthly');
+                                                },
+                                              ),
+                                            ] else ...[
+                                              Container(
+                                                padding: const EdgeInsets.all(20),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(16),
+                                                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                                ),
+                                                child: Column(
+                                                  children: [
+                                                    const Icon(Icons.error_outline, color: Colors.red, size: 32),
+                                                    const SizedBox(height: 8),
+                                                    Text(
+                                                      'Unable to load plans',
+                                                      style: TextStyle(
+                                                        color: Colors.red.shade300,
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      'Please check your connection and try again',
+                                                      textAlign: TextAlign.center,
+                                                      style: TextStyle(
+                                                        color: Colors.red.shade400,
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    TextButton(
+                                                      onPressed: () {
+                                                        _loadAvailablePlans();
+                                                      },
+                                                      child: const Text(
+                                                        'Retry',
+                                                        style: TextStyle(color: Colors.red),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        );
+                                      },
+                                    );
+                                  }
+                                }),
+                              ] else if (isUnlimited && isCancelled) ...[
+                                // User has canceled subscription - show available plans to resubscribe
+                                Consumer<UsageProvider>(
+                                  builder: (context, usageProvider, child) {
                                     return Column(
                                       children: [
-                                        if (_isLoadingPlans) ...[
+                                        if (usageProvider.isLoadingPlans) ...[
                                           _buildShimmerPlanOption(),
                                           const SizedBox(height: 18),
                                           _buildShimmerPlanOption(),
-                                        ] else if (_availablePlans != null) ...[
+                                        ] else if (usageProvider.availablePlans != null) ...[
                                           _buildDynamicPlanOption(
                                             isSelected: selectedPlan == 'yearly',
-                                            planData: (_availablePlans!['plans'] as List).firstWhere(
+                                            planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
                                               (plan) => plan['interval'] == 'year',
                                             ),
                                             saveTag: '2 Months Free',
@@ -881,7 +956,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
                                           _buildDynamicPlanOption(
                                             isSelected: selectedPlan == 'monthly',
-                                            planData: (_availablePlans!['plans'] as List).firstWhere(
+                                            planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
                                               (plan) => plan['interval'] == 'month',
                                             ),
                                             onTap: () {
@@ -934,156 +1009,90 @@ class _PlansSheetState extends State<PlansSheet> {
                                         ],
                                       ],
                                     );
-                                  }
-                                }),
-                              ] else if (isUnlimited && isCancelled) ...[
-                                // User has canceled subscription - show available plans to resubscribe
-                                if (_isLoadingPlans) ...[
-                                  _buildShimmerPlanOption(),
-                                  const SizedBox(height: 18),
-                                  _buildShimmerPlanOption(),
-                                ] else if (_availablePlans != null) ...[
-                                  _buildDynamicPlanOption(
-                                    isSelected: selectedPlan == 'yearly',
-                                    planData: (_availablePlans!['plans'] as List).firstWhere(
-                                      (plan) => plan['interval'] == 'year',
-                                    ),
-                                    saveTag: '2 Months Free',
-                                    isPopular: true,
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => selectedPlan = 'yearly');
-                                    },
-                                  ),
-                                  const SizedBox(height: 18),
-
-                                  _buildDynamicPlanOption(
-                                    isSelected: selectedPlan == 'monthly',
-                                    planData: (_availablePlans!['plans'] as List).firstWhere(
-                                      (plan) => plan['interval'] == 'month',
-                                    ),
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => selectedPlan = 'monthly');
-                                    },
-                                  ),
-                                ] else ...[
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Unable to load plans',
-                                          style: TextStyle(
-                                            color: Colors.red.shade300,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Please check your connection and try again',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Colors.red.shade400,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        TextButton(
-                                          onPressed: () {
-                                            _loadAvailablePlans();
-                                          },
-                                          child: const Text(
-                                            'Retry',
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                  },
+                                ),
                               ] else if (!isUnlimited) ...[
                                 // User is on basic plan - show upgrade options
-                                if (_isLoadingPlans) ...[
-                                  _buildShimmerPlanOption(),
-                                  const SizedBox(height: 18),
-                                  _buildShimmerPlanOption(),
-                                ] else if (_availablePlans != null) ...[
-                                  _buildDynamicPlanOption(
-                                    isSelected: selectedPlan == 'yearly',
-                                    planData: (_availablePlans!['plans'] as List).firstWhere(
-                                      (plan) => plan['interval'] == 'year',
-                                    ),
-                                    saveTag: '2 Months Free',
-                                    isPopular: true,
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => selectedPlan = 'yearly');
-                                    },
-                                  ),
-                                  const SizedBox(height: 18),
-
-                                  _buildDynamicPlanOption(
-                                    isSelected: selectedPlan == 'monthly',
-                                    planData: (_availablePlans!['plans'] as List).firstWhere(
-                                      (plan) => plan['interval'] == 'month',
-                                    ),
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => selectedPlan = 'monthly');
-                                    },
-                                  ),
-                                ] else ...[
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                    ),
-                                    child: Column(
+                                Consumer<UsageProvider>(
+                                  builder: (context, usageProvider, child) {
+                                    return Column(
                                       children: [
-                                        const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Unable to load plans',
-                                          style: TextStyle(
-                                            color: Colors.red.shade300,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
+                                        if (usageProvider.isLoadingPlans) ...[
+                                          _buildShimmerPlanOption(),
+                                          const SizedBox(height: 18),
+                                          _buildShimmerPlanOption(),
+                                        ] else if (usageProvider.availablePlans != null) ...[
+                                          _buildDynamicPlanOption(
+                                            isSelected: selectedPlan == 'yearly',
+                                            planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
+                                              (plan) => plan['interval'] == 'year',
+                                            ),
+                                            saveTag: '2 Months Free',
+                                            isPopular: true,
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              setState(() => selectedPlan = 'yearly');
+                                            },
                                           ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Please check your connection and try again',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Colors.red.shade400,
-                                            fontSize: 14,
+                                          const SizedBox(height: 18),
+
+                                          _buildDynamicPlanOption(
+                                            isSelected: selectedPlan == 'monthly',
+                                            planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
+                                              (plan) => plan['interval'] == 'month',
+                                            ),
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              setState(() => selectedPlan = 'monthly');
+                                            },
                                           ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        TextButton(
-                                          onPressed: () {
-                                            _loadAvailablePlans();
-                                          },
-                                          child: const Text(
-                                            'Retry',
-                                            style: TextStyle(color: Colors.red),
+                                        ] else ...[
+                                          Container(
+                                            padding: const EdgeInsets.all(20),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                const Icon(Icons.error_outline, color: Colors.red, size: 32),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  'Unable to load plans',
+                                                  style: TextStyle(
+                                                    color: Colors.red.shade300,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'Please check your connection and try again',
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(
+                                                    color: Colors.red.shade400,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                TextButton(
+                                                  onPressed: () {
+                                                    _loadAvailablePlans();
+                                                  },
+                                                  child: const Text(
+                                                    'Retry',
+                                                    style: TextStyle(color: Colors.red),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ],
-                                    ),
-                                  ),
-                                ],
+                                    );
+                                  },
+                                ),
                               ],
                               const SizedBox(height: 24),
 
@@ -1092,7 +1101,8 @@ class _PlansSheetState extends State<PlansSheet> {
                                 final currentPlan = _getCurrentPlanDetails();
                                 final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                                 final hasScheduledUpgrade = _hasScheduledUpgrade();
-                                final shouldShowContinueButton = !isOnAnnualPlan && !hasScheduledUpgrade && !isCancelled && !_isLoadingPlans && _availablePlans != null;
+                                final usageProvider = context.read<UsageProvider>();
+                                final shouldShowContinueButton = !isOnAnnualPlan && !hasScheduledUpgrade && !isCancelled && !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
                                 
                                 if (!shouldShowContinueButton) {
                                   return const SizedBox.shrink();
@@ -1150,7 +1160,8 @@ class _PlansSheetState extends State<PlansSheet> {
                               
                               // Continue button for canceled subscriptions
                               Builder(builder: (context) {
-                                final shouldShowResubscribeButton = isCancelled && !_isLoadingPlans && _availablePlans != null;
+                                final usageProvider = context.read<UsageProvider>();
+                                final shouldShowResubscribeButton = isCancelled && !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
                                 
                                 if (!shouldShowResubscribeButton) {
                                   return const SizedBox.shrink();

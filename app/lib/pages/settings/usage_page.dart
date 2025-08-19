@@ -11,7 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/backend/http/api/payment.dart';
+
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -36,25 +36,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late AnimationController _arrowController;
   late Animation<double> _arrowAnimation;
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
-  Map<String, dynamic>? _availablePlans;
-  bool _isLoadingPlans = false;
 
   Future<void> _loadAvailablePlans() async {
-    if (_isLoadingPlans) return;
-    
-    setState(() => _isLoadingPlans = true);
-    try {
-      final response = await getAvailablePlans();
-      if (response != null) {
-        setState(() {
-          _availablePlans = response;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading available plans: $e');
-    } finally {
-      setState(() => _isLoadingPlans = false);
-    }
+    final provider = context.read<UsageProvider>();
+    await provider.loadAvailablePlans();
   }
 
 
