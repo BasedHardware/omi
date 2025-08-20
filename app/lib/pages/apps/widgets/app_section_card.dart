@@ -89,7 +89,7 @@ class SectionAppItemCard extends StatelessWidget {
         onTap: () async {
           MixpanelManager().pageOpened('App Detail From Popular Apps Section');
           await routeToPage(context, AppDetailPage(app: app));
-          provider.setApps();
+          provider.filterApps();
         },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
