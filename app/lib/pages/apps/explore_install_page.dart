@@ -560,6 +560,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       : Container(
                           margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
                                 child: Column(
@@ -617,15 +618,15 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                     if (state.filterCount > 0) ...[
                                       const SizedBox(height: 8),
                                       SizedBox(
-                                        height: 44,
+                                        height: 32,
                                         child: ListView.separated(
                                           scrollDirection: Axis.horizontal,
                                           itemBuilder: (ctx, idx) {
                                             return Container(
-                                              height: 44,
+                                              height: 32,
                                               decoration: BoxDecoration(
                                                 color: AppStyles.backgroundSecondary,
-                                                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                                borderRadius: BorderRadius.circular(16),
                                               ),
                                               child: TextButton.icon(
                                                 onPressed: () {
@@ -635,18 +636,18 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                                 },
                                                 icon: const Icon(
                                                   Icons.close,
-                                                  size: 14,
+                                                  size: 12,
                                                   color: Colors.white70,
                                                 ),
                                                 label: Text(
                                                   filterValueToString(state.filters.values.elementAt(idx)),
                                                   style: const TextStyle(
-                                                    fontSize: 14,
+                                                    fontSize: 12,
                                                     color: Colors.white,
                                                   ),
                                                 ),
                                                 style: TextButton.styleFrom(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                                                   minimumSize: Size.zero,
                                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                                 ),
