@@ -87,6 +87,32 @@ def get_plan_features(plan: PlanType) -> List[str]:
     ]
 
 
+def get_monthly_usage_for_subscription(uid: str) -> dict:
+    """
+    Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
+    The launch date format is expected to be YYYY-MM-DD.
+    If the launch date is not set, not valid, or in the future, usage is considered zero.
+    """
+    subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
+    if not subscription_launch_date_str:
+        # Subscription not launched, so no usage is counted against limits.
+        return {}
+
+    try:
+        # Use strptime to enforce YYYY-MM-DD format
+        launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d')
+    except ValueError:
+        # Invalid date format, treat as not launched.
+        return {}
+
+    now = datetime.utcnow()
+    if now < launch_date:
+        # Launch date is in the future, so no usage is counted yet.
+        return {}
+
+    return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
+
+
 def has_transcription_credits(uid: str) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.
@@ -95,7 +121,7 @@ def has_transcription_credits(uid: str) -> bool:
     if not subscription:
         return False
 
-    usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
+    usage = get_monthly_usage_for_subscription(uid)
     limits = get_plan_limits(subscription.plan)
 
     # Check transcription seconds (0 means unlimited)
