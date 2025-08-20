@@ -231,6 +231,8 @@ env:
     value: "price_1RrxXL1F8wnoWYvwIddzR902"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
+  - name: SUBSCRIPTION_LAUNCH_DATE
+    value: "2025-08-21"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

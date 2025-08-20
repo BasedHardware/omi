@@ -35,7 +35,7 @@ from datetime import datetime
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
-from utils.subscription import get_plan_limits, get_plan_features
+from utils.subscription import get_plan_limits, get_plan_features, get_monthly_usage_for_subscription
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
@@ -489,7 +489,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     subscription.features = get_plan_features(subscription.plan)
 
     # Get current usage
-    usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
+    usage = get_monthly_usage_for_subscription(uid)
 
     # Calculate usage metrics
     transcription_seconds_used = usage.get('transcription_seconds', 0)

@@ -96,7 +96,7 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     Key Points to Include:
     - They've been actively using transcription (show appreciation)
     - Unlimited plan removes all limits
-    - Can check usage/plans in app or search 'omi unlimited subs' in marketplace
+    - Can check usage/plans in the app under Settings > Plan & Usages
     - Make it feel like you're helping them, not selling to them
     """
 
@@ -109,7 +109,7 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
 
     The message should:
     - Acknowledge their active usage positively
-    - Suggest checking plans in the app or searching 'omi unlimited subs' in marketplace
+    - Suggest checking plans in the app under Settings > Plan & Usages
     - Feel helpful, not sales-y
     - Be warm and personal to {name}
     
@@ -125,5 +125,5 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     # Fallback message
     return (
         "omi",
-        f"Hey {name}! You've been actively using transcription - that's awesome! You've hit your limit, but unlimited plans remove all restrictions. Check your usage in the app or search 'omi unlimited subs' in the marketplace!",
+        f"Hey {name}! You've been actively using transcription - that's awesome! You've hit your limit, but unlimited plans remove all restrictions. You can check your usage and upgrade in the app under Settings > Plan & Usages.",
     )
