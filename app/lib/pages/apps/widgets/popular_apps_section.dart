@@ -1,11 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+
+// Custom notification class to communicate with parent widgets
+class SelectAppNotification extends Notification {
+  final App app;
+  
+  SelectAppNotification(this.app);
+}
 
 class PopularAppsSection extends StatelessWidget {
   final List<App> apps;
@@ -81,10 +86,26 @@ class PopularAppsSection extends StatelessWidget {
           itemBuilder: (context, index) {
             final app = displayedApps[index];
             return GestureDetector(
-              onTap: () async {
+              onTap: () {
+                final appProvider = context.read<AppProvider>();
+
+                appProvider.filterApps();
+                
                 MixpanelManager().pageOpened('App Detail');
-                await routeToPage(context, AppDetailPage(app: app));
-                context.read<AppProvider>().setApps();
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Opening ${app.name}...'),
+                    duration: const Duration(milliseconds: 500),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                
+                // clear any existing search
+                appProvider.searchApps('');
+                
+                final notification = SelectAppNotification(app);
+                notification.dispatch(context);
               },
               child: Container(
                 padding: const EdgeInsets.all(16),
