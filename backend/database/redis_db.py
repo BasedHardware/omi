@@ -526,9 +526,6 @@ def delete_cached_mcp_api_key(hashed_key: str):
     r.delete(f'mcp_api_key:{hashed_key}')
 
 
-    
-
-
 # ******************************************************
 # **************** DATA MIGRATION STATUS ***************
 # ******************************************************
@@ -577,3 +574,13 @@ def set_credit_limit_notification_sent(uid: str, ttl: int = 60 * 60 * 24):
 def has_credit_limit_notification_been_sent(uid: str) -> bool:
     """Check if credit limit notification was already sent to user recently"""
     return r.exists(f'users:{uid}:credit_limit_notification_sent')
+
+
+def set_silent_user_notification_sent(uid: str, ttl: int = 60 * 60 * 24):
+    """Cache that silent user notification was sent to user (24 hours TTL by default)"""
+    r.set(f'users:{uid}:silent_notification_sent', '1', ex=ttl)
+
+
+def has_silent_user_notification_been_sent(uid: str) -> bool:
+    """Check if silent user notification was already sent to user recently"""
+    return r.exists(f'users:{uid}:silent_notification_sent')

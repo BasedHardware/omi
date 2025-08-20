@@ -1,3 +1,4 @@
+import random
 from typing import Tuple, List
 from .clients import llm_medium
 from database.memories import get_memories
@@ -127,3 +128,23 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
         "omi",
         f"Hey {name}! You've been actively using transcription - that's awesome! You've hit your limit, but unlimited plans remove all restrictions. You can check your usage and upgrade in the app under Settings > Plan & Usages.",
     )
+
+
+def generate_silent_user_notification(name: str) -> Tuple[str, str]:
+    """
+    Generate a funny notification for a user who has been silent for a while.
+    """
+    messages = [
+        f"Hey {name}, just checking in! My ears are open if you've got something to say.",
+        f"Is this thing on? Tapping my mic here, {name}. Let me know when you're ready to chat!",
+        f"Quiet on the set! {name}, are we rolling? Just waiting for your cue.",
+        f"The sound of silence... is nice, but I'm here for the words, {name}! What's on your mind?",
+        f"{name}, you've gone quiet! Just a heads up, I'm still here listening and using up your free minutes.",
+        f"Psst, {name}... My virtual ears are getting a little lonely. Anything to share?",
+        f"Enjoying the quiet time, {name}? Just remember, I'm on the clock, ready to transcribe!",
+        f"Hello from the other side... of silence! {name}, ready to talk again?",
+        f"I'm all ears, {name}! Just letting you know the recording is still live.",
+        f"Silence is golden, but words are what I live for, {name}! Let's chat when you're ready.",
+    ]
+    body = random.choice(messages)
+    return "omi", body
