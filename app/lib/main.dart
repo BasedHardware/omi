@@ -83,6 +83,7 @@ Future<bool> _init() async {
   await GrowthbookUtil.init();
   if (!PlatformService.isWindows) {
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+    ble.FlutterBluePlus.setOptions(restoreState: true);
   }
   return isAuth;
 }
