@@ -142,7 +142,7 @@ async def _listen(
         nonlocal last_audio_received_time, last_transcript_time
 
         while websocket_active:
-            await asyncio.sleep(30)
+            await asyncio.sleep(60)
             if not websocket_active:
                 break
 
