@@ -144,7 +144,7 @@ class AppListItem extends StatelessWidget {
                                 () async {
                                   Navigator.pop(context);
                                   await routeToPage(context, AppDetailPage(app: app));
-                                  context.read<AppProvider>().setApps();
+                                  context.read<AppProvider>().filterApps();
                                 },
                                 'Authorize External App',
                                 'Do you allow this app to access your memories, transcripts, and recordings? Your data will be sent to the app\'s server for processing.',

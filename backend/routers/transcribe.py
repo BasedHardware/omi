@@ -18,6 +18,7 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
+from models.users import PlanType
 from models.conversation import (
     Conversation,
     TranscriptSegment,
@@ -61,7 +62,7 @@ from utils.subscription import has_transcription_credits
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
-from utils.notifications import send_credit_limit_notification
+from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 
 router = APIRouter()
 
@@ -134,14 +135,18 @@ async def _listen(
     first_audio_byte_timestamp: Optional[float] = None
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
+    last_transcript_time: Optional[float] = None
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
+        nonlocal last_audio_received_time, last_transcript_time
+
         while websocket_active:
-            await asyncio.sleep(30)
+            await asyncio.sleep(60)
             if not websocket_active:
                 break
 
+            # Record usages
             if last_usage_record_timestamp:
                 current_time = time.time()
                 transcription_seconds = int(current_time - last_usage_record_timestamp)
@@ -153,8 +158,8 @@ async def _listen(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
+            # Send credit limit notification
             if not has_transcription_credits(uid):
-                # Send credit limit notification (with Redis caching to prevent spam)
                 try:
                     await send_credit_limit_notification(uid)
                 except Exception as e:
@@ -164,6 +169,21 @@ async def _listen(
                 websocket_close_code = 4002
                 websocket_active = False
                 break
+
+            # Silence notification logic for basic plan users
+            user_subscription = user_db.get_user_valid_subscription(uid)
+            if not user_subscription or user_subscription.plan == PlanType.basic:
+                time_of_last_words = last_transcript_time or first_audio_byte_timestamp
+                if (
+                    last_audio_received_time
+                    and time_of_last_words
+                    and (last_audio_received_time - time_of_last_words) > 15 * 60
+                ):
+                    print(f"User {uid} has been silent for over 15 minutes. Sending notification.")
+                    try:
+                        await send_silent_user_notification(uid)
+                    except Exception as e:
+                        print(f"Error sending silent user notification: {e}")
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
@@ -747,7 +767,7 @@ async def _listen(
 
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
-        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record
+        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
             await asyncio.sleep(0.6)
@@ -766,6 +786,7 @@ async def _listen(
 
             transcript_segments = []
             if segments_to_process:
+                last_transcript_time = time.time()
                 if seconds_to_trim is None:
                     seconds_to_trim = segments_to_process[0]["start"]
 

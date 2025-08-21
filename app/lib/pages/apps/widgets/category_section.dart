@@ -153,7 +153,7 @@ class SectionAppItemCard extends StatelessWidget {
           onTap: () async {
             MixpanelManager().pageOpened('App Detail');
             await routeToPage(context, AppDetailPage(app: app));
-            context.read<AppProvider>().setApps();
+            context.read<AppProvider>().filterApps();
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
