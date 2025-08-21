@@ -73,7 +73,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       await _appReviewService.markFirstActionItemCompleted();
 
       if (mounted) {
-        await _appReviewService.showReviewPromptIfNeeded(context);
+        await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
       }
     }
   }
