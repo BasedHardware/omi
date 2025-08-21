@@ -1,4 +1,3 @@
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -784,10 +783,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
-              preferredSize: const Size.fromHeight(10),
+              preferredSize: const Size.fromHeight(32),
               child: Container(
                 width: double.infinity,
-                height: 10,
+                height: 32,
                 color: Colors.green,
                 child: const Center(
                   child: Text(
@@ -1139,6 +1138,4 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       margin: const EdgeInsets.symmetric(horizontal: 20),
     );
   }
-
-
-  }
+}
