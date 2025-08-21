@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
@@ -1026,7 +1027,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                                   ),
                                   child: ClipOval(
                                     child: Image.asset(
-                                      'assets/images/omi-without-rope.png',
+                                      Assets.images.omiWithoutRope.path,
                                       fit: BoxFit.cover,
                                     ),
                                   ),
