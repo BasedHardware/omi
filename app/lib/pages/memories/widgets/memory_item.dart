@@ -5,6 +5,7 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/pages/memories/page.dart';
 
 import 'delete_confirmation.dart';
 
@@ -61,8 +62,14 @@ class MemoryItem extends StatelessWidget {
         return shouldDelete;
       },
       onDismissed: (direction) {
+        final memoryContent = memory.content.decodeString;
+
         provider.deleteMemory(memory);
         MixpanelManager().memoriesPageDeletedMemory(memory);
+
+        if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
+          context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
+        }
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
