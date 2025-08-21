@@ -212,7 +212,7 @@ class DeviceService implements IDeviceService {
 
         // connected
         var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
         if (shouldPing) {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
@@ -227,7 +227,7 @@ class DeviceService implements IDeviceService {
       // Force
       if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
         var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
         if (shouldPing) {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
