@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -179,7 +180,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                         decoration: BoxDecoration(
                           image: DecorationImage(
                             image: ResizeImage(
-                              const AssetImage('assets/images/onboarding-bg-5-1.jpg'),
+                              AssetImage(Assets.images.onboardingBg51.path),
                               width:
                                   (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
                               height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
@@ -268,7 +269,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                           decoration: BoxDecoration(
                             image: DecorationImage(
                               image: ResizeImage(
-                                const AssetImage('assets/images/onboarding-bg-5-2.jpg'),
+                                AssetImage(Assets.images.onboardingBg52.path),
                                 width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
                                     .round(),
                                 height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)

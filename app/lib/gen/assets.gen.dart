@@ -234,13 +234,13 @@ class $AssetsImagesGen {
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
 
-  /// File path: assets/images/omi-without-rope-turned-off.png
+  /// File path: assets/images/omi-without-rope-turned-off.webp
   AssetGenImage get omiWithoutRopeTurnedOff =>
-      const AssetGenImage('assets/images/omi-without-rope-turned-off.png');
+      const AssetGenImage('assets/images/omi-without-rope-turned-off.webp');
 
-  /// File path: assets/images/omi-without-rope.png
+  /// File path: assets/images/omi-without-rope.webp
   AssetGenImage get omiWithoutRope =>
-      const AssetGenImage('assets/images/omi-without-rope.png');
+      const AssetGenImage('assets/images/omi-without-rope.webp');
 
   /// File path: assets/images/onboarding-bg-1.jpg
   AssetGenImage get onboardingBg1 =>
@@ -269,26 +269,6 @@ class $AssetsImagesGen {
   /// File path: assets/images/onboarding-bg-6.jpg
   AssetGenImage get onboardingBg6 =>
       const AssetGenImage('assets/images/onboarding-bg-6.jpg');
-
-  /// File path: assets/images/onboarding-language-grey.png
-  AssetGenImage get onboardingLanguageGrey =>
-      const AssetGenImage('assets/images/onboarding-language-grey.png');
-
-  /// File path: assets/images/onboarding-name-grey.png
-  AssetGenImage get onboardingNameGrey =>
-      const AssetGenImage('assets/images/onboarding-name-grey.png');
-
-  /// File path: assets/images/onboarding-name-white.png
-  AssetGenImage get onboardingNameWhite =>
-      const AssetGenImage('assets/images/onboarding-name-white.png');
-
-  /// File path: assets/images/onboarding-name.png
-  AssetGenImage get onboardingName =>
-      const AssetGenImage('assets/images/onboarding-name.png');
-
-  /// File path: assets/images/onboarding-permissions.png
-  AssetGenImage get onboardingPermissions =>
-      const AssetGenImage('assets/images/onboarding-permissions.png');
 
   /// File path: assets/images/onboarding.mp4
   String get onboarding => 'assets/images/onboarding.mp4';
@@ -414,11 +394,6 @@ class $AssetsImagesGen {
         onboardingBg51,
         onboardingBg52,
         onboardingBg6,
-        onboardingLanguageGrey,
-        onboardingNameGrey,
-        onboardingNameWhite,
-        onboardingName,
-        onboardingPermissions,
         onboarding,
         recordingGreenCircleIcon,
         slackLogo,
