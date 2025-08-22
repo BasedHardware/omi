@@ -27,7 +27,6 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
-import '../action_items/widgets/action_item_title_widget.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -83,17 +82,28 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       var conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
 
-      // Ensure the provider has the conversation data from the widget parameter
+      // Always prime cache from widget
       provider.setCachedConversation(widget.conversation);
 
-      // Find the proper date and index for this conversation in the grouped conversations
+      if (widget.isFromOnboarding) {
+        // For onboarding, skip provider lookup; use local date/index
+        final d = DateTime(
+            widget.conversation.createdAt.year, widget.conversation.createdAt.month, widget.conversation.createdAt.day);
+        provider.conversationIdx = 0;
+        provider.selectedDate = d;
+        await provider.initConversation();
+        return;
+      }
+
+      // Normal conversations: find date/index from provider
       var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
       provider.conversationIdx = index >= 0 ? index : 0;
       provider.selectedDate = date;
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
+        await conversationProvider.updateSearchedConvoDetails(
+            provider.conversation.id, provider.selectedDate, provider.conversationIdx);
         provider.updateConversation(provider.conversationIdx, provider.selectedDate);
       }
     });
@@ -212,7 +222,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       child: MessageListener<ConversationDetailProvider>(
         showError: (error) {
           if (error == 'REPROCESS_FAILED') {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
           }
         },
         showInfo: (info) {},
@@ -237,7 +248,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   HapticFeedback.mediumImpact();
                   if (widget.isFromOnboarding) {
                     SchedulerBinding.instance.addPostFrameCallback((_) {
-                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
+                      Navigator.pushAndRemoveUntil(
+                          context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
                     });
                   } else {
                     Navigator.pop(context);
@@ -407,7 +419,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               ? null
                               : () {
                                   HapticFeedback.mediumImpact();
-                                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                                  final connectivityProvider =
+                                      Provider.of<ConnectivityProvider>(context, listen: false);
                                   if (connectivityProvider.isConnected) {
                                     showDialog(
                                       context: context,
@@ -415,7 +428,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         context,
                                         () => Navigator.pop(context),
                                         () {
-                                          context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
+                                          context
+                                              .read<ConversationProvider>()
+                                              .deleteConversation(provider.conversation, provider.conversationIdx);
                                           Navigator.pop(context); // Close dialog
                                           Navigator.pop(context, {'deleted': true}); // Close detail page
                                         },
@@ -427,7 +442,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   } else {
                                     showDialog(
                                       context: context,
-                                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
+                                      builder: (c) => getDialog(
+                                          context,
+                                          () => Navigator.pop(context),
+                                          () => Navigator.pop(context),
+                                          'Unable to Delete Conversation',
+                                          'Please check your internet connection and try again.',
+                                          singleButton: true,
+                                          okButtonText: 'OK'),
                                     );
                                   }
                                 },
@@ -475,7 +497,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
-                      hasSegments: conversation.transcriptSegments.isNotEmpty || conversation.photos.isNotEmpty || conversation.externalIntegration != null,
+                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                          conversation.photos.isNotEmpty ||
+                          conversation.externalIntegration != null,
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {
@@ -622,7 +646,8 @@ class SummaryTab extends StatelessWidget {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-        selector: (context, provider) => Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
+        selector: (context, provider) =>
+            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
         builder: (context, data, child) {
           return Stack(
             children: [
@@ -769,10 +794,13 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         // Find the current action item by description to get the latest state
-        final actionItem = provider.conversation.structured.actionItems.firstWhere((item) => item.description == widget.actionItem.description, orElse: () => widget.actionItem);
+        final actionItem = provider.conversation.structured.actionItems
+            .firstWhere((item) => item.description == widget.actionItem.description, orElse: () => widget.actionItem);
 
         // Check if this specific item has a pending state change
-        final isCompleted = _pendingStates.containsKey(widget.actionItem.description) ? _pendingStates[widget.actionItem.description]! : actionItem.completed;
+        final isCompleted = _pendingStates.containsKey(widget.actionItem.description)
+            ? _pendingStates[widget.actionItem.description]!
+            : actionItem.completed;
 
         return AnimatedOpacity(
           opacity: 1.0,
@@ -885,7 +913,8 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       });
 
       // Track analytics - find the current index for analytics
-      final currentIndex = provider.conversation.structured.actionItems.indexWhere((item) => item.description == itemDescription);
+      final currentIndex =
+          provider.conversation.structured.actionItems.indexWhere((item) => item.description == itemDescription);
       if (currentIndex != -1) {
         if (newValue) {
           MixpanelManager().checkedActionItem(provider.conversation, currentIndex);
