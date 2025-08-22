@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -459,23 +460,38 @@ class MessageProvider extends ChangeNotifier {
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
     clearUploadedFiles();
+    String textBuffer = '';
+    Timer? timer;
+
+    void flushBuffer() {
+      if (textBuffer.isNotEmpty) {
+        message.text += textBuffer;
+        textBuffer = '';
+        HapticFeedback.lightImpact();
+        notifyListeners();
+      }
+    }
+
     try {
       await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
+          flushBuffer();
           message.thinkings.add(chunk.text);
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.data) {
-          message.text += chunk.text;
-          // Add haptic feedback for each character chunk received during streaming
-          if (chunk.text.isNotEmpty) {
-            HapticFeedback.lightImpact();
-          }
-          notifyListeners();
+          textBuffer += chunk.text;
+          timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+            flushBuffer();
+          });
           continue;
         }
+
+        timer?.cancel();
+        timer = null;
+        flushBuffer();
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
@@ -493,9 +509,11 @@ class MessageProvider extends ChangeNotifier {
     } catch (e) {
       message.text = ServerMessageChunk.failedMessage().text;
       notifyListeners();
+    } finally {
+      timer?.cancel();
+      flushBuffer();
+      setShowTypingIndicator(false);
     }
-
-    setShowTypingIndicator(false);
   }
 
   Future sendInitialAppMessage(App? app) async {

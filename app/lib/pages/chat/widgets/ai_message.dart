@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -73,109 +74,6 @@ class _AIMessageState extends State<AIMessage> {
           widget.updateConversation,
           widget.setMessageNps,
         ),
-        // Add copy, share, and NPS buttons below message
-        if (!widget.showTypingIndicator && widget.message.text.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8, left: 0),
-            child: Row(
-              children: [
-                // Copy button
-                GestureDetector(
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: widget.message.text.decodeString));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Message copied to clipboard',
-                            style: TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const FaIcon(
-                      FontAwesomeIcons.clone,
-                      size: 16,
-                      color: Colors.white60,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Share button
-                GestureDetector(
-                  onTap: () {
-                    Share.share(
-                      '${widget.message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
-                      subject: 'Chat with Omi',
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const FaIcon(
-                      FontAwesomeIcons.arrowUpFromBracket,
-                      size: 16,
-                      color: Colors.white60,
-                    ),
-                  ),
-                ),
-                // Add NPS buttons if message asks for NPS
-                if (widget.message.askForNps) ...[
-                  const SizedBox(width: 8),
-                  // Thumbs down button
-                  GestureDetector(
-                    onTap: () {
-                      widget.setMessageNps(0);
-                      AppSnackbar.showSnackbar('Thank you for your feedback!');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const FaIcon(
-                        FontAwesomeIcons.thumbsDown,
-                        size: 16,
-                        color: Colors.white60,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Thumbs up button
-                  GestureDetector(
-                    onTap: () {
-                      widget.setMessageNps(1);
-                      AppSnackbar.showSnackbar('Thank you for your feedback!');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const FaIcon(
-                        FontAwesomeIcons.thumbsUp,
-                        size: 16,
-                        color: Colors.white60,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
       ],
     );
   }
@@ -200,7 +98,8 @@ Widget buildMessageWidget(
         setMessageNps: sendMessageNps,
         date: message.createdAt);
   } else if (message.type == MessageType.daySummary) {
-    return DaySummaryWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
+    return DaySummaryWidget(
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
       showTypingIndicator: showTypingIndicator,
@@ -219,41 +118,13 @@ Widget buildMessageWidget(
   }
 }
 
-Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
-  if (!message.askForNps) return const SizedBox();
-
-  return Padding(
-    padding: const EdgeInsetsDirectional.only(top: 8),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
-        IconButton(
-          onPressed: () {
-            setMessageNps(0);
-            AppSnackbar.showSnackbar('Thank you for your feedback!');
-          },
-          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.grey),
-        ),
-        IconButton(
-          onPressed: () {
-            setMessageNps(1);
-            AppSnackbar.showSnackbar('Thank you for your feedback!');
-          },
-          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.grey),
-        ),
-      ],
-    ),
-  );
-}
-
 class InitialMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
   final Function(String) sendMessage;
 
-  const InitialMessageWidget({super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
+  const InitialMessageWidget(
+      {super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -333,7 +204,10 @@ class DaySummaryWidget extends StatelessWidget {
     } else {
       // Split by period followed by space
       List<String> listOfMessages = message.split('. ');
-      return listOfMessages.map((msg) => msg.endsWith('.') ? msg.substring(0, msg.length - 1) : msg).where((msg) => msg.trim().isNotEmpty).toList();
+      return listOfMessages
+          .map((msg) => msg.endsWith('.') ? msg.substring(0, msg.length - 1) : msg)
+          .where((msg) => msg.trim().isNotEmpty)
+          .toList();
     }
   }
 
@@ -396,17 +270,34 @@ class NormalMessageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var previousThinkingText = message.thinkings.length > 1 ? message.thinkings.sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0).first.decodeString : null;
+    var previousThinkingText = message.thinkings.length > 1
+        ? message.thinkings
+            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
+            .first
+            .decodeString
+        : null;
     var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        FilesHandlerWidget(message: message),
         showTypingIndicator && messageText.isEmpty
             ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1f1f25),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4.0),
+                    topRight: Radius.circular(16.0),
+                    bottomRight: Radius.circular(16.0),
+                    bottomLeft: Radius.circular(16.0),
+                  ),
+                ),
                 margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     thinkingText != null
                         ? Expanded(
@@ -437,10 +328,7 @@ class NormalMessageWidget extends StatelessWidget {
                               ],
                             ),
                           )
-                        : const SizedBox(
-                            height: 16,
-                            child: TypingIndicator(),
-                          ),
+                        : const TypingIndicator(),
                   ],
                 ))
             : const SizedBox.shrink(),
@@ -456,7 +344,21 @@ class NormalMessageWidget extends StatelessWidget {
         //         ),
         //       )
         //     : const SizedBox.shrink(),
-        messageText.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, messageText),
+        messageText.isEmpty
+            ? const SizedBox.shrink()
+            : Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1f1f25),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4.0),
+                    topRight: Radius.circular(16.0),
+                    bottomRight: Radius.circular(16.0),
+                    bottomLeft: Radius.circular(16.0),
+                  ),
+                ),
+                child: getMarkdownWidget(context, messageText),
+              ),
       ],
     );
   }
