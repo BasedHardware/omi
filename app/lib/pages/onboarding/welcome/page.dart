@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -174,15 +172,19 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 800),
                       curve: Curves.easeInOut,
-                      height: _isExpandingTop ? MediaQuery.of(context).size.height : MediaQuery.of(context).size.height * _expansionAnimation.value,
+                      height: _isExpandingTop
+                          ? MediaQuery.of(context).size.height
+                          : MediaQuery.of(context).size.height * _expansionAnimation.value,
                       child: Container(
                         width: double.infinity,
                         decoration: BoxDecoration(
                           image: DecorationImage(
                             image: ResizeImage(
-                              const AssetImage('assets/images/onboarding-bg-5-1.jpg'),
-                              width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
-                              height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                              AssetImage(Assets.images.onboardingBg51.path),
+                              width:
+                                  (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                              height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
+                                  .round(),
                             ),
                             fit: BoxFit.cover,
                           ),
@@ -267,9 +269,11 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                           decoration: BoxDecoration(
                             image: DecorationImage(
                               image: ResizeImage(
-                                const AssetImage('assets/images/onboarding-bg-5-2.jpg'),
-                                width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
-                                height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
+                                AssetImage(Assets.images.onboardingBg52.path),
+                                width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
+                                    .round(),
+                                height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
+                                    .round(),
                               ),
                               fit: BoxFit.cover,
                             ),

@@ -43,7 +43,7 @@ You know the following about {user_name}: {memories_str}.
 As {plugin.name}, fully embrace your personality and characteristics in your {"initial" if not prev_messages_str else "follow-up"} message to {user_name}. Use language, tone, and style that reflect your unique personality traits. {"Start" if not prev_messages_str else "Continue"} the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
 """
     prompt = prompt.strip()
-    return llm_mini.invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 # *********************************************
@@ -806,8 +806,9 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
     Your task is to identify the correct fields that can be related to the question and can help answering.
 
-    You must choose for each field, only the ones available in the JSON below.
-    Find as many as possible that can relate to the question asked.
+    The JSON below contains samples of available filters as suggestions, but you are not limited to only these options. 
+    However, you must choose from the ones that are actually available in the provided lists.
+    Find as many as possible that can relate to the question asked, prioritizing the most relevant ones.
     ```
     {json.dumps(filters_available, indent=2)}
     ```

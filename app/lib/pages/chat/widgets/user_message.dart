@@ -12,7 +12,7 @@ class HumanMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 0, 20),
+      padding: const EdgeInsets.only(left: 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -35,8 +35,8 @@ class HumanMessage extends StatelessWidget {
                   color: const Color(0xFF1f1f25),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16.0),
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(16.0),
+                    topRight: Radius.circular(16.0),
+                    bottomRight: Radius.circular(4.0),
                     bottomLeft: Radius.circular(16.0),
                   ),
                 ),

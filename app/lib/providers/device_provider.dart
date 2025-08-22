@@ -13,8 +13,8 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -29,7 +29,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
   DateTime? _reconnectAt;
-  final int _connectionCheckSeconds = 7;
+  final int _connectionCheckSeconds = 10;
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
@@ -141,12 +141,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future periodicConnect(String printer) async {
     _reconnectionTimer?.cancel();
-    _reconnectionTimer = Timer.periodic(Duration(seconds: _connectionCheckSeconds), (t) async {
+    scan(t) async {
       debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");
-      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-        t.cancel();
-        return;
-      }
       if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
         return;
       }
@@ -159,27 +155,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       } else {
         t.cancel();
       }
-    });
+    }
+
+    _reconnectionTimer = Timer.periodic(Duration(seconds: _connectionCheckSeconds), scan);
+    scan(_reconnectionTimer);
   }
 
-  Future<BtDevice?> _scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
+  Future<BtDevice?> _scanConnectDevice() async {
     var device = await _getConnectedDevice();
     if (device != null) {
       return device;
     }
 
-    int timeoutCounter = 0;
-    while (true) {
-      if (timeout && timeoutCounter >= 10) return null;
-      await ServiceManager.instance().device.discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
-      if (connectedDevice != null) {
-        return connectedDevice;
-      }
+    await ServiceManager.instance().device.discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
 
-      // If the device is not found, wait for a bit before retrying.
-      await Future.delayed(const Duration(seconds: 2));
-      timeoutCounter += 2;
+    // Waiting for the device connected (if any)
+    await Future.delayed(const Duration(seconds: 2));
+    if (connectedDevice != null) {
+      return connectedDevice;
     }
+    return null;
   }
 
   Future scanAndConnectToDevice() async {
@@ -198,7 +193,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     // else
-    var device = await _scanAndConnectDevice();
+    var device = await _scanConnectDevice();
     Logger.debug('inside scanAndConnectToDevice $device in device_provider');
     if (device != null) {
       var cDevice = await _getConnectedDevice();

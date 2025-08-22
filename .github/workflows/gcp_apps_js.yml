@@ -61,7 +61,7 @@ jobs:
             --build-arg DECK_APP_ID=${{ secrets.DECK_APP_ID }} \
             --build-arg DECK_APP_SECRET=${{ secrets.DECK_APP_SECRET }} \
             --build-arg SLIDESGPT_API_KEY=${{ secrets.SLIDESGPT_API_KEY }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/apps-js/Dockerfile.datadog .
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/apps-js/Dockerfile .
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
       - name: Deploy to Cloud Run

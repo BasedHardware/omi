@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 Widget getMarkdownWidget(BuildContext context, String content) {
   var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
   return MarkdownBody(
+    selectable: false,
     shrinkWrap: true,
     styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
       a: style,

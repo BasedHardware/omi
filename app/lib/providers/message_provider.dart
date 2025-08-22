@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -297,7 +298,7 @@ class MessageProvider extends ChangeNotifier {
     }
     setLoadingMessages(true);
     var mes = await getMessagesServer(
-      pluginId: appProvider?.selectedChatAppId,
+      appId: appProvider?.selectedChatAppId,
       dropdownSelected: dropdownSelected,
     );
     if (!hasCachedMessages) {
@@ -318,7 +319,7 @@ class MessageProvider extends ChangeNotifier {
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer(pluginId: appProvider?.selectedChatAppId);
+    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
     messages = mes;
     setClearingChat(false);
     notifyListeners();
@@ -357,7 +358,8 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes, {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
+  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
+      {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -458,23 +460,38 @@ class MessageProvider extends ChangeNotifier {
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
     clearUploadedFiles();
+    String textBuffer = '';
+    Timer? timer;
+
+    void flushBuffer() {
+      if (textBuffer.isNotEmpty) {
+        message.text += textBuffer;
+        textBuffer = '';
+        HapticFeedback.lightImpact();
+        notifyListeners();
+      }
+    }
+
     try {
       await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
+          flushBuffer();
           message.thinkings.add(chunk.text);
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.data) {
-          message.text += chunk.text;
-          // Add haptic feedback for each character chunk received during streaming
-          if (chunk.text.isNotEmpty) {
-            HapticFeedback.lightImpact();
-          }
-          notifyListeners();
+          textBuffer += chunk.text;
+          timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+            flushBuffer();
+          });
           continue;
         }
+
+        timer?.cancel();
+        timer = null;
+        flushBuffer();
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
@@ -492,9 +509,11 @@ class MessageProvider extends ChangeNotifier {
     } catch (e) {
       message.text = ServerMessageChunk.failedMessage().text;
       notifyListeners();
+    } finally {
+      timer?.cancel();
+      flushBuffer();
+      setShowTypingIndicator(false);
     }
-
-    setShowTypingIndicator(false);
   }
 
   Future sendInitialAppMessage(App? app) async {

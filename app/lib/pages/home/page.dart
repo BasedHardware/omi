@@ -64,7 +64,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       }
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
-         NotificationService.instance.saveNotificationToken();
+        NotificationService.instance.saveNotificationToken();
       }
       if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
         SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
@@ -749,6 +749,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
+                        MixpanelManager().bottomNavigationTabClicked('Chat');
                         // Navigate to chat page
                         Navigator.push(
                           context,

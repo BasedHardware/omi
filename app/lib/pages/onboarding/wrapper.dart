@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
@@ -51,7 +52,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
   late Animation<double> _backgroundFadeAnimation;
-  String _currentBackgroundImage = 'assets/images/onboarding-bg-2.jpg';
+  String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
@@ -122,22 +123,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
     switch (pageIndex) {
       case kAuthPage:
-        newImage = 'assets/images/onboarding-bg-2.jpg';
+        newImage = Assets.images.onboardingBg2.path;
         break;
       case kNamePage:
-        newImage = 'assets/images/onboarding-bg-1.jpg';
+        newImage = Assets.images.onboardingBg1.path;
         break;
       case kPrimaryLanguagePage:
-        newImage = 'assets/images/onboarding-bg-4.jpg';
+        newImage = Assets.images.onboardingBg4.path;
         break;
       case kPermissionsPage:
-        newImage = 'assets/images/onboarding-bg-3.jpg';
+        newImage = Assets.images.onboardingBg3.path;
         break;
       case kUserReviewPage:
-        newImage = 'assets/images/onboarding-bg-6.jpg';
+        newImage = Assets.images.onboardingBg6.path;
         break;
       default:
-        newImage = 'assets/images/onboarding-bg-1.jpg';
+        newImage = Assets.images.onboardingBg1.path;
         break;
     }
 
@@ -169,15 +170,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   String? _getBackgroundImageForIndex(int pageIndex) {
     switch (pageIndex) {
       case kAuthPage:
-        return 'assets/images/onboarding-bg-2.jpg';
+        return Assets.images.onboardingBg2.path;
       case kNamePage:
-        return 'assets/images/onboarding-bg-1.jpg';
+        return Assets.images.onboardingBg1.path;
       case kPrimaryLanguagePage:
-        return 'assets/images/onboarding-bg-4.jpg';
+        return Assets.images.onboardingBg4.path;
       case kPermissionsPage:
-        return 'assets/images/onboarding-bg-3.jpg';
+        return Assets.images.onboardingBg3.path;
       case kUserReviewPage:
-        return 'assets/images/onboarding-bg-6.jpg';
+        return Assets.images.onboardingBg6.path;
       default:
         return null;
     }

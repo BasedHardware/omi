@@ -3,12 +3,12 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 
@@ -45,6 +45,9 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
   late AnimationController _animationController;
   Timer? _waveformTimer;
 
+  // Platform channel for desktop permissions
+  static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
+
   @override
   void initState() {
     super.initState();
@@ -72,71 +75,120 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
 
     // Make sure to stop recording when widget is disposed
     if (_state == RecordingState.recording) {
-      ServiceManager.instance().mic.stop();
+      ServiceManager.instance().systemAudio.stop();
     }
 
     super.dispose();
   }
 
-  Future<void> _startRecording() async {
-    await Permission.microphone.request();
+  Future<bool> _checkAndRequestMicrophonePermission() async {
+    try {
+      // Check microphone permission first
+      String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
 
-    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
-      if (_state == RecordingState.recording && mounted) {
-        if (mounted) {
-          setState(() {
-            _audioChunks.add(bytes.toList());
-
-            if (bytes.isNotEmpty) {
-              double rms = 0;
-
-              for (int i = 0; i < bytes.length - 1; i += 2) {
-                int sample = bytes[i] | (bytes[i + 1] << 8);
-
-                if (sample > 32767) {
-                  sample = sample - 65536;
-                }
-
-                rms += sample * sample;
-              }
-
-              int sampleCount = bytes.length ~/ 2;
-              if (sampleCount > 0) {
-                rms = math.sqrt(rms / sampleCount) / 32768.0;
-              } else {
-                rms = 0;
-              }
-
-              final level = math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
-
-              for (int i = 0; i < _audioLevels.length - 1; i++) {
-                _audioLevels[i] = _audioLevels[i + 1];
-              }
-
-              _audioLevels[_audioLevels.length - 1] = level;
-            }
-          });
+      if (micStatus != 'granted') {
+        if (micStatus == 'undetermined' || micStatus == 'unavailable') {
+          bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
+          if (!micGranted) {
+            AppSnackbar.showSnackbarError('Microphone permission is required for voice recording.');
+            return false;
+          }
+        } else if (micStatus == 'denied') {
+          AppSnackbar.showSnackbarError(
+              'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+          return false;
         }
       }
-    }, onRecording: () {
-      debugPrint('Recording started');
+      return true;
+    } catch (e) {
+      AppSnackbar.showSnackbarError('Failed to check Microphone permission: $e');
+      return false;
+    }
+  }
+
+  Future<void> _startRecording() async {
+    // Check and request microphone permission using desktop platform channel
+    if (!await _checkAndRequestMicrophonePermission()) {
       setState(() {
-        _state = RecordingState.recording;
-        _audioChunks = [];
-        for (int i = 0; i < _audioLevels.length; i++) {
-          _audioLevels[i] = 0.1;
-        }
+        _state = RecordingState.transcribeFailed;
       });
-    }, onStop: () {
-      debugPrint('Recording stopped');
-    }, onInitializing: () {
-      debugPrint('Initializing');
-    });
+      return;
+    }
+
+    await ServiceManager.instance().systemAudio.start(
+      onByteReceived: (bytes) {
+        if (_state == RecordingState.recording && mounted) {
+          if (mounted) {
+            setState(() {
+              _audioChunks.add(bytes.toList());
+
+              if (bytes.isNotEmpty) {
+                double rms = 0;
+
+                for (int i = 0; i < bytes.length - 1; i += 2) {
+                  int sample = bytes[i] | (bytes[i + 1] << 8);
+
+                  if (sample > 32767) {
+                    sample = sample - 65536;
+                  }
+
+                  rms += sample * sample;
+                }
+
+                int sampleCount = bytes.length ~/ 2;
+                if (sampleCount > 0) {
+                  rms = math.sqrt(rms / sampleCount) / 32768.0;
+                } else {
+                  rms = 0;
+                }
+
+                final level = math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
+
+                for (int i = 0; i < _audioLevels.length - 1; i++) {
+                  _audioLevels[i] = _audioLevels[i + 1];
+                }
+
+                _audioLevels[_audioLevels.length - 1] = level;
+              }
+            });
+          }
+        }
+      },
+      onFormatReceived: (format) {
+        debugPrint('Audio format received: $format');
+      },
+      onRecording: () {
+        debugPrint('Recording started');
+        setState(() {
+          _state = RecordingState.recording;
+          _audioChunks = [];
+          for (int i = 0; i < _audioLevels.length; i++) {
+            _audioLevels[i] = 0.1;
+          }
+        });
+      },
+      onStop: () {
+        debugPrint('Recording stopped');
+      },
+      onError: (error) {
+        debugPrint('Recording error: $error');
+        setState(() {
+          _state = RecordingState.transcribeFailed;
+        });
+      },
+    );
   }
 
   Future<void> _stopRecording() async {
     _waveformTimer?.cancel();
-    ServiceManager.instance().mic.stop();
+    ServiceManager.instance().systemAudio.stop();
+  }
+
+  void _cancelRecording() {
+    // Stop recording and close widget without processing
+    _waveformTimer?.cancel();
+    ServiceManager.instance().systemAudio.stop();
+    widget.onClose();
   }
 
   Future<void> _processRecording() async {
@@ -220,7 +272,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
                   size: 32,
                   iconSize: 14,
                   borderRadius: 8,
-                  onPressed: widget.onClose,
+                  onPressed: _cancelRecording,
                 ),
               ),
               Expanded(
@@ -346,12 +398,16 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Error',
-                style: TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              const Flexible(
+                child: Text(
+                  'Transcription failed',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
               ),
               const SizedBox(width: 16),

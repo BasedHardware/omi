@@ -42,7 +42,6 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
 
   @override
   dispose() {
-    _provider?.stopScanDevices();
     _provider = null;
 
     super.dispose();

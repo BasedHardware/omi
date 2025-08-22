@@ -51,8 +51,8 @@ Let's trace the journey of a typical interaction with Omi, focusing on how audio
         - `action_items`: Any tasks or to-dos mentioned.
         - `events`: Events that might need to be added to a calendar.
     - **Embedding Generation:** The LLM is also used to create a vector embedding of the memory, capturing its semantic meaning for later retrieval.
-    - **Plugin Execution:** If the user has enabled any plugins, relevant plugins are run to enrich the memory with additional insights, external actions, or other context-specific information.
-    - **Storage in Firestore:** The fully processed memory, including the transcript, structured data, plugin results, and other metadata, is stored in Firebase Firestore (a NoSQL database) for
+    - **App Execution:** If the user has enabled any apps, relevant apps are run to enrich the memory with additional insights, external actions, or other context-specific information.
+    - **Storage in Firestore:** The fully processed memory, including the transcript, structured data, app results, and other metadata, is stored in Firebase Firestore (a NoSQL database) for
       persistence.
     - **Embedding Storage in Pinecone:** The memory embedding is sent to Pinecone, a vector database, to enable fast and efficient similarity searches later.
 
@@ -98,7 +98,7 @@ class Memory(BaseModel):
     geolocation: Optional[Geolocation]
     photos: List[MemoryPhoto]
 
-    plugins_results: List[PluginResult]
+    apps_results: List[AppResult]
     external_data: Optional[Dict]
     postprocessing: Optional[MemoryPostProcessing]
 
@@ -134,7 +134,7 @@ This module is where the power of OpenAI's LLMs is harnessed for a wide range of
 - **Memory Processing:**
     - Determines if a conversation should be discarded.
     - Extracts structured information from transcripts (title, overview, categories, etc.).
-    - Runs plugins on memory data.
+    - Runs apps on memory data.
     - Handles post-processing of transcripts to improve accuracy.
 - **OpenGlass and External Integration Processing:**
     - Creates structured summaries from photos and descriptions (OpenGlass).
@@ -159,7 +159,7 @@ This module is where the power of OpenAI's LLMs is harnessed for a wide range of
 - **The Brain of Omi:** This module enables Omi's core AI capabilities, including natural language understanding, content generation, and context-aware interactions.
 - **Memory Enhancement:** It enriches raw data by extracting meaning and creating structured information.
 - **Personalized Responses:** It helps Omi provide responses that are tailored to individual users, incorporating their unique facts, memories, and even emotional states.
-- **Extensibility:** The plugin system and integration with external services make Omi highly versatile.
+- **Extensibility:** The app system and integration with external services make Omi highly versatile.
 
 ### 4. `utils/other/storage.py`: The Cloud Storage Manager ☁️
 
@@ -191,12 +191,12 @@ settings, and storing user speech profiles.
 - **User Speech Profiles:**
     - **Storage:** When a user uploads a speech profile, the raw audio data, along with its duration, is stored in Redis.
     - **Retrieval:** During real-time transcription or post-processing, the user's speech profile is retrieved from Redis to aid in speaker identification.
-- **Enabled Plugins:**
-    - **Storage:** A set of plugin IDs is stored for each user, representing the plugins they have enabled.
-    - **Retrieval:** When processing a memory or handling a chat request, the backend checks Redis to see which plugins are enabled for the user.
-- **Plugin Reviews:**
-    - **Storage:** Reviews for each plugin (score, review text, date) are stored in Redis, organized by plugin ID and user ID.
-    - **Retrieval:** When displaying plugin information, the backend retrieves reviews from Redis.
+- **Enabled Apps:**
+    - **Storage:** A set of app IDs is stored for each user, representing the apps they have enabled.
+    - **Retrieval:** When processing a memory or handling a chat request, the backend checks Redis to see which apps are enabled for the user.
+- **App Reviews:**
+    - **Storage:** Reviews for each app (score, review text, date) are stored in Redis, organized by app ID and user ID.
+    - **Retrieval:** When displaying app information, the backend retrieves reviews from Redis.
 - **Cached User Names:**
     - **Storage:** User names are cached in Redis to avoid repeated lookups from Firebase.
     - **Retrieval:** The backend first checks Redis for a user's name before querying Firestore, improving performance.
@@ -205,14 +205,14 @@ settings, and storing user speech profiles.
 
 - `store_user_speech_profile`, `get_user_speech_profile`: For storing and retrieving speech profiles.
 - `store_user_speech_profile_duration`, `get_user_speech_profile_duration`: For managing speech profile durations.
-- `enable_plugin`, `disable_plugin`, `get_enabled_plugins`: For handling plugin enable/disable states.
-- `get_plugin_reviews`: Retrieves reviews for a plugin.
+- `enable_app`, `disable_app`, `get_enabled_apps`: For handling app enable/disable states.
+- `get_app_reviews`: Retrieves reviews for a app.
 - `cache_user_name`, `get_cached_user_name`: For caching user names.
   **Why Redis is Important:**
 
 - **Performance:** Caching data in Redis significantly improves the backend's speed, as frequently accessed data can be retrieved from memory very quickly.
-- **User Data Management:** Redis provides a flexible and efficient way to manage user-specific data, such as plugin preferences and speech profiles.
-- **Real-time Features:** The low-latency nature of Redis makes it ideal for supporting real-time features like live transcription and instant plugin interactions.
+- **User Data Management:** Redis provides a flexible and efficient way to manage user-specific data, such as app preferences and speech profiles.
+- **Real-time Features:** The low-latency nature of Redis makes it ideal for supporting real-time features like live transcription and instant app interactions.
 - **Scalability:** As the number of users grows, Redis helps maintain performance by reducing the load on primary databases.
 
 ### 6. `routers/transcribe.py`: The Real-Time Transcription Engine 🎙️

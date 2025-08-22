@@ -244,9 +244,9 @@ def context_dependent_conversation(state: GraphState):
 def retrieve_topics_filters(state: GraphState):
     print("retrieve_topics_filters")
     filters = {
-        "people": get_filter_category_items(state.get("uid"), "people"),
-        "topics": get_filter_category_items(state.get("uid"), "topics"),
-        "entities": get_filter_category_items(state.get("uid"), "entities"),
+        "people": get_filter_category_items(state.get("uid"), "people", limit=1000),
+        "topics": get_filter_category_items(state.get("uid"), "topics", limit=1000),
+        "entities": get_filter_category_items(state.get("uid"), "entities", limit=1000),
         # 'dates': get_filter_category_items(state.get('uid'), 'dates'),
     }
     result = select_structured_filters(state.get("parsed_question", ""), filters)

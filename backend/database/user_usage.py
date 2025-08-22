@@ -100,6 +100,21 @@ def get_monthly_usage_stats(uid: str, date: datetime) -> dict:
     return _aggregate_stats(query)
 
 
+def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> dict:
+    """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
+    user_ref = db.collection('users').document(uid)
+    hourly_usage_collection = user_ref.collection('hourly_usage')
+
+    start_doc_id = f'{start_date.year}-{start_date.month:02d}-{start_date.day:02d}-00'
+
+    query = (
+        hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
+        .where(filter=FieldFilter('month', '==', date.month))
+        .where(filter=FieldFilter('id', '>=', start_doc_id))
+    )
+    return _aggregate_stats(query)
+
+
 def get_yearly_usage_stats(uid: str, date: datetime) -> dict:
     """Aggregates hourly usage stats for a given year from Firestore."""
     user_ref = db.collection('users').document(uid)

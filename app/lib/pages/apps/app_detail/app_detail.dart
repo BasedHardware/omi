@@ -138,7 +138,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           MixpanelManager().appPurchaseCompleted(appId);
           prefs.enableApp(appId);
           MixpanelManager().appEnabled(appId);
-          context.read<AppProvider>().setApps();
+          context.read<AppProvider>().filterApps();
           setState(() {
             app.isUserPaid = true;
             app.enabled = true;
@@ -998,7 +998,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       print(res);
       MixpanelManager().appDisabled(appId);
     }
-    context.read<AppProvider>().setApps();
+    if (mounted) {
+      context.read<AppProvider>().filterApps();
+    }
     setState(() => app.enabled = isEnabled);
     setState(() => appLoading = false);
   }

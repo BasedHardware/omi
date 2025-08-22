@@ -1,10 +1,22 @@
 import os
 from datetime import datetime
 from typing import List
+import os
 
 import database.users as users_db
 import database.user_usage as user_usage_db
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
+
+
+def get_plan_type_from_price_id(price_id: str) -> PlanType:
+    """Determines the plan type based on the Stripe price ID."""
+    unlimited_monthly_price = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID')
+    unlimited_annual_price = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID')
+
+    if price_id in (unlimited_monthly_price, unlimited_annual_price):
+        return PlanType.unlimited
+    return PlanType.basic
+
 
 BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', '0'))
 BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
@@ -75,20 +87,46 @@ def get_plan_features(plan: PlanType) -> List[str]:
     ]
 
 
-def has_transcription_credits(uid: str) -> bool:
-    """Checks if a user has transcribing credits."""
-    subscription = users_db.get_user_subscription(uid)
+def get_monthly_usage_for_subscription(uid: str) -> dict:
+    """
+    Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
+    The launch date format is expected to be YYYY-MM-DD.
+    If the launch date is not set, not valid, or in the future, usage is considered zero.
+    """
+    subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
+    if not subscription_launch_date_str:
+        # Subscription not launched, so no usage is counted against limits.
+        return {}
 
-    if subscription.status != SubscriptionStatus.active:
+    try:
+        # Use strptime to enforce YYYY-MM-DD format
+        launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d')
+    except ValueError:
+        # Invalid date format, treat as not launched.
+        return {}
+
+    now = datetime.utcnow()
+    if now < launch_date:
+        # Launch date is in the future, so no usage is counted yet.
+        return {}
+
+    return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
+
+
+def has_transcription_credits(uid: str) -> bool:
+    """
+    Checks if a user has transcribing credits by verifying their valid subscription and usage.
+    """
+    subscription = users_db.get_user_valid_subscription(uid)
+    if not subscription:
         return False
 
+    usage = get_monthly_usage_for_subscription(uid)
     limits = get_plan_limits(subscription.plan)
 
-    # For unlimited plans, the limit will be None
-    if limits.transcription_seconds is None:
-        return True
+    # Check transcription seconds (0 means unlimited)
+    if limits.transcription_seconds and limits.transcription_seconds > 0:
+        if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
+            return False
 
-    # For plans with a limit, check usage
-    usage = user_usage_db.get_monthly_usage_stats(uid, datetime.utcnow())
-    transcription_seconds_used = usage.get('transcription_seconds', 0)
-    return transcription_seconds_used < limits.transcription_seconds
+    return True

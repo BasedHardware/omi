@@ -175,7 +175,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
+              SelectableText(
                 isInitializing
                     ? 'Preparing system audio capture'
                     : 'Click the button above to begin capturing audio and create live transcripts',
@@ -627,7 +627,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Original text
-                          Text(
+                          SelectableText(
                             _tryDecodingText(segment.text.trim()),
                             style: const TextStyle(
                               fontSize: 14,
@@ -640,7 +640,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                             const SizedBox(height: 6),
                             ...segment.translations.map((translation) => Padding(
                                   padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
+                                  child: SelectableText(
                                     _tryDecodingText(translation.text),
                                     style: const TextStyle(
                                       fontSize: 14,
@@ -687,7 +687,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
             color: ResponsiveHelper.textTertiary,
           ),
           SizedBox(width: 4),
-          Text(
+          SelectableText(
             'translated by omi',
             style: TextStyle(
               fontSize: 10,

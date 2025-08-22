@@ -14,14 +14,14 @@ class BatteryInfoWidget extends StatelessWidget {
 
   String _getDeviceImagePath(String? deviceName) {
     if (deviceName != null && deviceName.contains('Glass')) {
-      return 'assets/images/omi-glass.png';
+      return Assets.images.omiGlass.path;
     }
 
     if (deviceName != null && deviceName.contains('Omi DevKit')) {
-      return 'assets/images/omi-devkit-without-rope.png';
+      return Assets.images.omiDevkitWithoutRope.path;
     }
 
-    return 'assets/images/omi-without-rope.png';
+    return Assets.images.omiWithoutRope.path;
   }
 
   @override

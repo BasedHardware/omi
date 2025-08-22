@@ -25,6 +25,7 @@ from routers import (
     memories,
     mcp,
     oauth,
+    action_items,
 )  # Added oauth
 
 from utils.other.timeout import TimeoutMiddleware
@@ -40,6 +41,7 @@ app = FastAPI()
 
 app.include_router(transcribe.router)
 app.include_router(conversations.router)
+app.include_router(action_items.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(plugins.router)

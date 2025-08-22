@@ -32,7 +32,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   String? connectingToDeviceId;
   List<BtDevice> deviceList = [];
   late Timer _didNotMakeItTimer;
-  Timer? _findDevicesTimer;
   bool enableInstructions = false;
   Map<String, BtDevice> foundDevicesMap = {};
 
@@ -403,20 +402,19 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     VoidCallback? goNext,
   }) async {
     try {
-      if (isClicked) return; // if any item is clicked, don't do anything
-      isClicked = true; // Prevent further clicks
-      connectingToDeviceId = device.id; // Mark this device as being connected to
+      if (isClicked) return;
+      isClicked = true;
+
+      connectingToDeviceId = device.id;
       notifyListeners();
-      var c = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       debugPrint('Connected to device: ${device.name}');
       deviceId = device.id;
-      //  device = await device.getDeviceInfo(c);
       await SharedPreferencesUtil().btDeviceSet(device);
       deviceName = device.name;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         deviceProvider!.setConnectedDevice(cDevice);
-        // SharedPreferencesUtil().btDevice = cDevice;
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
@@ -424,10 +422,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       var connectedDevice = deviceProvider!.connectedDevice;
       batteryPercentage = deviceProvider!.batteryLevel;
       isConnected = true;
-      isClicked = false; // Allow clicks again after finishing the operation
+      isClicked = false;
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
-      stopScanDevices();
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice.name;
@@ -459,8 +456,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
-  void stopScanDevices() {
-    _findDevicesTimer?.cancel();
+  // TODO: thinh, use connection directly
+  Future<BtDevice?> _getConnectedDevice(String deviceId) async {
+    if (deviceId.isEmpty) {
+      return null;
+    }
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    return connection?.device;
   }
 
   Future<void> scanDevices({
@@ -470,6 +472,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       // it means the device has been unpaired
       deviceAlreadyUnpaired();
     }
+
     // check if bluetooth is enabled on both platforms
     if (!hasBluetoothPermission) {
       await askForBluetoothPermissions();
@@ -484,30 +487,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     });
 
     ServiceManager.instance().device.subscribe(this, this);
-
-    _findDevicesTimer?.cancel();
-    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (t) async {
-      if (deviceProvider?.isConnected ?? false) {
-        t.cancel();
-        return;
-      }
-
-      ServiceManager.instance().device.discover();
-    });
-  }
-
-  // TODO: thinh, use connection directly
-  Future<BtDevice?> _getConnectedDevice(String deviceId) async {
-    if (deviceId.isEmpty) {
-      return null;
-    }
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.device;
+    await deviceProvider?.periodicConnect("Come from Onboarding");
   }
 
   @override
   void dispose() {
-    _findDevicesTimer?.cancel();
     _didNotMakeItTimer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
@@ -528,11 +512,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       // If it's a new device, add it to the map. If it already exists, this will just update the entry.
       updatedDevicesMap[device.id] = device;
     }
+
     // Remove devices that are no longer found
     foundDevicesMap.keys.where((id) => !updatedDevicesMap.containsKey(id)).toList().forEach(foundDevicesMap.remove);
 
     // Merge the new devices into the current map to maintain order
     foundDevicesMap.addAll(updatedDevicesMap);
+
     // Convert the values of the map back to a list
     List<BtDevice> orderedDevices = foundDevicesMap.values.toList();
     if (orderedDevices.isNotEmpty) {

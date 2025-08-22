@@ -50,25 +50,29 @@ def filter_messages(messages, app_id):
     return collected
 
 
-def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
+def acquire_chat_session(uid: str, app_id: Optional[str] = None):
+    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
     if chat_session is None:
-        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=plugin_id)
+        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
         chat_session = chat_db.add_chat_session(uid, cs.dict())
     return chat_session
 
 
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
-    data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    data: SendMessageRequest,
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
-    print('send_message', data.text, plugin_id, uid)
+    compat_app_id = app_id or plugin_id
+    print('send_message', data.text, compat_app_id, uid)
 
-    if plugin_id in ['null', '']:
-        plugin_id = None
+    if compat_app_id in ['null', '']:
+        compat_app_id = None
 
     # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
@@ -77,7 +81,7 @@ def send_message(
         created_at=datetime.now(timezone.utc),
         sender='human',
         type='text',
-        app_id=plugin_id,
+        app_id=compat_app_id,
     )
     if data.file_ids is not None:
         new_file_ids = fc.retrieve_new_file(data.file_ids)
@@ -99,12 +103,12 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
 
-    app = get_available_app_by_id(plugin_id, uid)
+    app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
 
-    app_id = app.id if app else None
+    app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=plugin_id)]))
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -132,7 +136,7 @@ def send_message(
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
-            app_id=app_id,
+            app_id=app_id_from_app,
             type='text',
             memories_id=memories_id,
         )
@@ -182,15 +186,18 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 
 @router.delete('/v2/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    if app_id in ['null', '']:
-        app_id = None
+def clear_chat_messages(
+    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    compat_app_id = app_id or plugin_id
+    if compat_app_id in ['null', '']:
+        compat_app_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    err = chat_db.clear_chat(uid, app_id=app_id, chat_session_id=chat_session_id)
+    err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
@@ -202,14 +209,14 @@ def clear_chat_messages(app_id: Optional[str] = None, uid: str = Depends(auth.ge
     if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, app_id)
+    return initial_message_util(uid, compat_app_id)
 
 
 def initial_message_util(uid: str, app_id: Optional[str] = None):
     print('initial_message_util', app_id)
 
     # init chat session
-    chat_session = acquire_chat_session(uid, plugin_id=app_id)
+    chat_session = acquire_chat_session(uid, app_id=app_id)
 
     prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
     print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
@@ -246,24 +253,30 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(app_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
-    return initial_message_util(uid, app_id)
+def create_initial_message(
+    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    compat_app_id = app_id or plugin_id
+    return initial_message_util(uid, compat_app_id)
 
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
-def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    if plugin_id in ['null', '']:
-        plugin_id = None
+def get_messages(
+    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    compat_app_id = app_id or plugin_id
+    if compat_app_id in ['null', '']:
+        compat_app_id = None
 
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
-        uid, limit=100, include_conversations=True, app_id=plugin_id, chat_session_id=chat_session_id
+        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
-    print('get_messages', len(messages), plugin_id)
+    print('get_messages', len(messages), compat_app_id)
     if not messages:
-        return [initial_message_util(uid, plugin_id)]
+        return [initial_message_util(uid, compat_app_id)]
     return messages
 
 
@@ -453,15 +466,18 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    if plugin_id in ['null', '']:
-        plugin_id = None
+def clear_chat_messages(
+    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    compat_app_id = app_id or plugin_id
+    if compat_app_id in ['null', '']:
+        compat_app_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    err = chat_db.clear_chat(uid, app_id=plugin_id, chat_session_id=chat_session_id)
+    err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
@@ -473,7 +489,7 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
     if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, plugin_id)
+    return initial_message_util(uid, compat_app_id)
 
 
 @router.post("/v1/voice-message/transcribe")
@@ -525,5 +541,8 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
 
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
-    return initial_message_util(uid, plugin_id)
+def create_initial_message(
+    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    compat_app_id = app_id or plugin_id
+    return initial_message_util(uid, compat_app_id)

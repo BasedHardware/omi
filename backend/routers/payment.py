@@ -2,9 +2,10 @@ from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 from pydantic import BaseModel
 
-from database import users as users_db
+from database import users as users_db, notifications as notifications_db
+from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import Subscription, PlanType, SubscriptionStatus, PlanLimits
-from utils.subscription import get_basic_plan_limits
+from utils.subscription import get_basic_plan_limits, get_plan_type_from_price_id, get_plan_limits
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -27,17 +28,18 @@ class CreateCheckoutRequest(BaseModel):
     price_id: str
 
 
-def _build_subscription_from_stripe_object(stripe_sub: stripe.Subscription) -> Subscription:
+def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription:
     """Builds a Subscription object from a Stripe Subscription object."""
-    stripe_status = stripe_sub.status
+    stripe_status = stripe_sub['status']
+
+    # Get price ID from subscription items
+    price_id = stripe_sub['items']['data'][0]['price']['id'] if stripe_sub['items']['data'] else None
 
     if stripe_status in ('active', 'trialing'):
-        plan = PlanType.unlimited
+        plan = get_plan_type_from_price_id(price_id)
         status = SubscriptionStatus.active
-        limits = PlanLimits(
-            transcription_seconds=None, words_transcribed=None, insights_gained=None, memories_created=None
-        )
-        cancel_at_period_end = stripe_sub.cancel_at_period_end
+        limits = get_plan_limits(plan)
+        cancel_at_period_end = stripe_sub.get('cancel_at_period_end', False)
     else:  # including 'canceled', 'unpaid', etc.
         plan = PlanType.basic
         status = SubscriptionStatus.inactive
@@ -47,8 +49,8 @@ def _build_subscription_from_stripe_object(stripe_sub: stripe.Subscription) -> S
     return Subscription(
         plan=plan,
         status=status,
-        current_period_end=stripe_sub.current_period_end,
-        stripe_subscription_id=stripe_sub.id,
+        current_period_end=stripe_sub.get('current_period_end'),
+        stripe_subscription_id=stripe_sub['id'],
         cancel_at_period_end=cancel_at_period_end,
         limits=limits,
     )
@@ -63,9 +65,10 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
 
     if subscription_id:
         stripe_sub = stripe.Subscription.retrieve(subscription_id)
-        new_subscription = _build_subscription_from_stripe_object(stripe_sub)
-        users_db.update_user_subscription(uid, new_subscription.dict())
-        print(f"Subscription for user {uid} updated from session {session.id}.")
+        if stripe_sub:
+            new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
+            users_db.update_user_subscription(uid, new_subscription.dict())
+            print(f"Subscription for user {uid} updated from session {session.id}.")
 
 
 @router.post('/v1/payments/checkout-session')
@@ -122,6 +125,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 subscription_id = session["subscription"]
                 stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
             paid_app(app_id, uid)
+
         # Regular user subscription
         elif client_reference_id:
             _update_subscription_from_session(client_reference_id, session)
@@ -131,6 +135,17 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     stripe.Subscription.modify(subscription_id, metadata={"uid": client_reference_id})
                 except Exception as e:
                     print(f"Error updating subscription metadata: {e}")
+
+                # Get subscription details
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                if stripe_sub:
+                    subscription_obj = stripe_sub.to_dict()
+                    if subscription_obj and subscription_obj['items']['data']:
+                        price_id = subscription_obj['items']['data'][0]['price']['id']
+                        plan_type = get_plan_type_from_price_id(price_id)
+                        # Only send notification for unlimited plan subscriptions
+                        if plan_type == PlanType.unlimited:
+                            await send_subscription_paid_personalized_notification(client_reference_id)
 
     if event['type'] in [
         'customer.subscription.updated',
