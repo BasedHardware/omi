@@ -50,6 +50,7 @@ def create_subscription_checkout_session(uid: str, price_id: str):
             mode='subscription',
             success_url=success_url,
             cancel_url=cancel_url,
+            allow_promotion_codes=True,
         )
         return checkout_session
     except Exception as e:
