@@ -104,7 +104,8 @@ def delete_user_data(uid: str):
             docs = list(docs_query.stream())
 
             if not docs:
-                print(f"No more documents to delete in {collection_ref.path}")
+                collection_path = f"{collection_ref.parent.path}/{collection_ref.id}"
+                print(f"No more documents to delete in {collection_path}")
                 break
 
             batch = db.batch()
