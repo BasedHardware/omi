@@ -159,7 +159,7 @@ def get_transcript_structure(
     ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_gpt5 | parser  # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
     response = chain.invoke(
         {
@@ -264,7 +264,7 @@ def get_reprocess_transcript_structure(
     ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_gpt5 | parser  # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
     response = chain.invoke(
         {
