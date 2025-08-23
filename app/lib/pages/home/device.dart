@@ -372,6 +372,11 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                                 hasArrow: false,
                               ),
                               _buildSectionRow(
+                                'Firmware Version',
+                                provider.pairedDevice?.firmwareRevision ?? 'Unknown',
+                                hasArrow: false,
+                              ),
+                              _buildSectionRow(
                                 'Device ID',
                                 provider.pairedDevice?.id ?? 'Unknown',
                                 hasArrow: false,
@@ -380,12 +385,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                                 'Serial Number',
                                 provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ?? 'Unknown',
                                 hasArrow: false,
-                              ),
-                              _buildSectionRow(
-                                'Hardware Revision',
-                                provider.pairedDevice?.hardwareRevision ?? 'Unknown',
-                                hasArrow: false,
-                                isLast: !provider.isDeviceV2Connected,
                               ),
                               if (provider.isDeviceV2Connected)
                                 _buildSectionRow(
