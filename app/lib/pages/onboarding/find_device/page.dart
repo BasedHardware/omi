@@ -100,7 +100,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   ),
                 ),
               ),
-            if (widget.includeSkip && provider.deviceList.isEmpty)
+            if (widget.includeSkip)
               ElevatedButton(
                 onPressed: () {
                   if (widget.isFromOnboarding) {
