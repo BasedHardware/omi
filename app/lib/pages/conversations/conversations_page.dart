@@ -26,6 +26,7 @@ class ConversationsPage extends StatefulWidget {
 class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   final AppReviewService _appReviewService = AppReviewService();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
@@ -44,6 +45,22 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       }
     });
     super.initState();
+  }
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Widget _buildConversationShimmer() {
@@ -127,6 +144,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           return;
         },
         child: CustomScrollView(
+          controller: _scrollController,
           slivers: [
             // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),

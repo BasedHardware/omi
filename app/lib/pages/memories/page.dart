@@ -707,6 +707,16 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     );
   }
 
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
   void _showMemoryManagementSheet(BuildContext context, MemoriesProvider provider) {
     MixpanelManager().memoriesManagementSheetOpened();
     showModalBottomSheet(
