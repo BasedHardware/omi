@@ -52,9 +52,76 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   ConversationTab selectedTab = ConversationTab.summary;
   bool _isSharing = false;
 
+  // Search functionality
+  bool _isSearching = false;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  int _currentSearchIndex = 0;
+  int _totalSearchResults = 0;
+  List<int> _searchResultPositions = []; // Track positions of search results
+
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
   // late Animation<double> _opacityAnimation;
+
+  void _updateSearchResults() {
+    if (_searchQuery.isEmpty) {
+      _totalSearchResults = 0;
+      _currentSearchIndex = 0;
+      _searchResultPositions.clear();
+      return;
+    }
+
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    int count = 0;
+    _searchResultPositions.clear();
+
+    // Count matches in transcript
+    if (selectedTab == ConversationTab.transcript) {
+      for (var segment in provider.conversation.transcriptSegments) {
+        final text = segment.text.toLowerCase();
+        final query = _searchQuery.toLowerCase();
+        int index = 0;
+        while ((index = text.indexOf(query, index)) != -1) {
+          _searchResultPositions.add(count);
+          count++;
+          index += query.length;
+        }
+      }
+    }
+    // Count matches in summary
+    else if (selectedTab == ConversationTab.summary) {
+      final summary = provider.conversation.structured.overview;
+      final text = summary.toLowerCase();
+      final query = _searchQuery.toLowerCase();
+      int index = 0;
+      while ((index = text.indexOf(query, index)) != -1) {
+        _searchResultPositions.add(count);
+        count++;
+        index += query.length;
+      }
+    }
+
+    _totalSearchResults = count;
+    _currentSearchIndex = count > 0 ? 1 : 0;
+  }
+
+  void _navigateSearch(bool next) {
+    if (_totalSearchResults == 0) return;
+
+    setState(() {
+      if (next) {
+        _currentSearchIndex = _currentSearchIndex >= _totalSearchResults ? 1 : _currentSearchIndex + 1;
+      } else {
+        _currentSearchIndex = _currentSearchIndex <= 1 ? _totalSearchResults : _currentSearchIndex - 1;
+      }
+    });
+  }
+
+  int getCurrentResultIndexForHighlighting() {
+    return _currentSearchIndex - 1;
+  }
 
   @override
   void initState() {
@@ -72,6 +139,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             break;
           case 2:
             selectedTab = ConversationTab.actionItems;
+            if (_isSearching) {
+              _isSearching = false;
+              _searchQuery = '';
+              _searchController.clear();
+              _searchFocusNode.unfocus();
+            }
             break;
           default:
             debugPrint('Invalid tab index: ${_controller!.index}');
@@ -94,13 +167,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
+        await conversationProvider.updateSearchedConvoDetails(
+            provider.conversation.id, provider.selectedDate, provider.conversationIdx);
         provider.updateConversation(provider.conversationIdx, provider.selectedDate);
       }
-      
+
       // Check if this is the first conversation and show app review prompt
       if (await _appReviewService.isFirstConversation()) {
-        await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
+        if (mounted) {
+          await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
+        }
       }
     });
     // _animationController = AnimationController(
@@ -118,6 +194,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -129,8 +207,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         return 'Conversation';
       case ConversationTab.actionItems:
         return 'Action Items';
-      default:
-        return 'Conversation';
     }
   }
 
@@ -218,7 +294,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       child: MessageListener<ConversationDetailProvider>(
         showError: (error) {
           if (error == 'REPROCESS_FAILED') {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
           }
         },
         showInfo: (info) {},
@@ -243,7 +320,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   HapticFeedback.mediumImpact();
                   if (widget.isFromOnboarding) {
                     SchedulerBinding.instance.addPostFrameCallback((_) {
-                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
+                      Navigator.pushAndRemoveUntil(
+                          context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
                     });
                   } else {
                     Navigator.pop(context);
@@ -330,7 +408,35 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                         ),
                       ),
-                      // Developer Tools button (second) - iOS style pull-down menu
+                      // Search button (second) - only show on transcript and summary tabs
+                      if (_controller?.index != 2)
+                        Container(
+                          width: 36,
+                          height: 36,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: () {
+                              setState(() {
+                                _isSearching = !_isSearching;
+                                if (!_isSearching) {
+                                  _searchQuery = '';
+                                  _searchController.clear();
+                                  _searchFocusNode.unfocus();
+                                } else {
+                                  _searchFocusNode.requestFocus();
+                                }
+                              });
+                              HapticFeedback.mediumImpact();
+                            },
+                            icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                          ),
+                        ),
+                      // Developer Tools button (third) - iOS style pull-down menu
                       Container(
                         width: 36,
                         height: 36,
@@ -413,7 +519,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               ? null
                               : () {
                                   HapticFeedback.mediumImpact();
-                                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                                  final connectivityProvider =
+                                      Provider.of<ConnectivityProvider>(context, listen: false);
                                   if (connectivityProvider.isConnected) {
                                     showDialog(
                                       context: context,
@@ -421,7 +528,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         context,
                                         () => Navigator.pop(context),
                                         () {
-                                          context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
+                                          context
+                                              .read<ConversationProvider>()
+                                              .deleteConversation(provider.conversation, provider.conversationIdx);
                                           Navigator.pop(context); // Close dialog
                                           Navigator.pop(context, {'deleted': true}); // Close detail page
                                         },
@@ -433,7 +542,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   } else {
                                     showDialog(
                                       context: context,
-                                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
+                                      builder: (c) => getDialog(
+                                          context,
+                                          () => Navigator.pop(context),
+                                          () => Navigator.pop(context),
+                                          'Unable to Delete Conversation',
+                                          'Please check your internet connection and try again.',
+                                          singleButton: true,
+                                          okButtonText: 'OK'),
                                     );
                                   }
                                 },
@@ -458,10 +574,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         return TabBarView(
                           controller: _controller,
                           physics: const NeverScrollableScrollPhysics(),
-                          children: const [
-                            TranscriptWidgets(),
-                            SummaryTab(),
-                            ActionItemsTab(),
+                          children: [
+                            TranscriptWidgets(
+                                searchQuery: _searchQuery, currentResultIndex: getCurrentResultIndexForHighlighting()),
+                            SummaryTab(
+                                searchQuery: _searchQuery, currentResultIndex: getCurrentResultIndexForHighlighting()),
+                            ActionItemsTab(
+                                searchQuery: _searchQuery, currentResultIndex: getCurrentResultIndexForHighlighting()),
                           ],
                         );
                       }),
@@ -481,7 +600,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
-                      hasSegments: conversation.transcriptSegments.isNotEmpty || conversation.photos.isNotEmpty || conversation.externalIntegration != null,
+                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                          conversation.photos.isNotEmpty ||
+                          conversation.externalIntegration != null,
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {
@@ -612,6 +733,124 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               //    },
               //  ),
               //),
+              // Search overlay
+              if (_isSearching)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    child: SafeArea(
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Search transcript or summary...',
+                          hintStyle: TextStyle(color: Colors.grey[400]),
+                          prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? Container(
+                                  width: _searchQuery.isNotEmpty ? 150 : 40,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      if (_searchQuery.isNotEmpty) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.withOpacity(0.3),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '$_currentSearchIndex/$_totalSearchResults',
+                                            style: const TextStyle(
+                                                color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(16),
+                                            onTap: _totalSearchResults > 0 ? () => _navigateSearch(false) : null,
+                                            child: Container(
+                                              width: 28,
+                                              height: 28,
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(18),
+                                              ),
+                                              child: Icon(Icons.keyboard_arrow_up,
+                                                  color: _totalSearchResults > 0 ? Colors.white70 : Colors.white30,
+                                                  size: 22),
+                                            ),
+                                          ),
+                                        ),
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(16),
+                                            onTap: _totalSearchResults > 0 ? () => _navigateSearch(true) : null,
+                                            child: Container(
+                                              width: 28,
+                                              height: 28,
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(18),
+                                              ),
+                                              child: Icon(Icons.keyboard_arrow_down,
+                                                  color: _totalSearchResults > 0 ? Colors.white70 : Colors.white30,
+                                                  size: 22),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(16),
+                                          onTap: () {
+                                            setState(() {
+                                              _searchQuery = '';
+                                              _searchController.clear();
+                                              _totalSearchResults = 0;
+                                              _currentSearchIndex = 0;
+                                            });
+                                          },
+                                          child: Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                            child: const Icon(Icons.clear, color: Colors.white70, size: 22),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: const Color(0xFF1C1C1E).withOpacity(0.95),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _searchQuery = value;
+                            _updateSearchResults();
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -621,14 +860,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 }
 
 class SummaryTab extends StatelessWidget {
-  const SummaryTab({super.key});
+  final String searchQuery;
+  final int currentResultIndex;
+  const SummaryTab({super.key, this.searchQuery = '', this.currentResultIndex = -1});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-        selector: (context, provider) => Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
+        selector: (context, provider) =>
+            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
         builder: (context, data, child) {
           return Stack(
             children: [
@@ -636,7 +878,9 @@ class SummaryTab extends StatelessWidget {
                 shrinkWrap: true,
                 children: [
                   const GetSummaryWidgets(),
-                  data.item1 ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
+                  data.item1
+                      ? const ReprocessDiscardedWidget()
+                      : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
                   //const GetGeolocationWidgets(),
                   const SizedBox(height: 150)
                 ],
@@ -650,7 +894,9 @@ class SummaryTab extends StatelessWidget {
 }
 
 class TranscriptWidgets extends StatelessWidget {
-  const TranscriptWidgets({super.key});
+  final String searchQuery;
+  final int currentResultIndex;
+  const TranscriptWidgets({super.key, this.searchQuery = '', this.currentResultIndex = -1});
 
   @override
   Widget build(BuildContext context) {
@@ -686,6 +932,8 @@ class TranscriptWidgets extends StatelessWidget {
           canDisplaySeconds: provider.canDisplaySeconds,
           isConversationDetail: true,
           bottomMargin: 150,
+          searchQuery: searchQuery,
+          currentResultIndex: currentResultIndex,
           editSegment: (segmentId, speakerId) {
             final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
             if (!connectivityProvider.isConnected) {
@@ -749,11 +997,15 @@ class TranscriptWidgets extends StatelessWidget {
 class ActionItemDetailWidget extends StatefulWidget {
   final ActionItem actionItem;
   final String conversationId;
+  final String searchQuery;
+  final int currentResultIndex;
 
   const ActionItemDetailWidget({
     super.key,
     required this.actionItem,
     required this.conversationId,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
   });
 
   @override
@@ -776,10 +1028,13 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         // Find the current action item by description to get the latest state
-        final actionItem = provider.conversation.structured.actionItems.firstWhere((item) => item.description == widget.actionItem.description, orElse: () => widget.actionItem);
+        final actionItem = provider.conversation.structured.actionItems
+            .firstWhere((item) => item.description == widget.actionItem.description, orElse: () => widget.actionItem);
 
         // Check if this specific item has a pending state change
-        final isCompleted = _pendingStates.containsKey(widget.actionItem.description) ? _pendingStates[widget.actionItem.description]! : actionItem.completed;
+        final isCompleted = _pendingStates.containsKey(widget.actionItem.description)
+            ? _pendingStates[widget.actionItem.description]!
+            : actionItem.completed;
 
         return AnimatedOpacity(
           opacity: 1.0,
@@ -840,17 +1095,35 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
                       ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: Text(
-                          actionItem.description,
-                          style: TextStyle(
-                            color: isCompleted ? Colors.grey : Colors.white,
-                            decoration: isCompleted ? TextDecoration.lineThrough : null,
-                            decorationColor: Colors.grey,
-                            fontSize: 15,
-                            height: 1.4,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        child: widget.searchQuery.isNotEmpty
+                            ? RichText(
+                                text: TextSpan(
+                                  style: TextStyle(
+                                    color: isCompleted ? Colors.grey : Colors.white,
+                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                    decorationColor: Colors.grey,
+                                    fontSize: 15,
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  children: highlightSearchMatches(
+                                    actionItem.description,
+                                    widget.searchQuery,
+                                    currentResultIndex: widget.currentResultIndex,
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                actionItem.description,
+                                style: TextStyle(
+                                  color: isCompleted ? Colors.grey : Colors.white,
+                                  decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                  decorationColor: Colors.grey,
+                                  fontSize: 15,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                       ),
                     ],
                   ),
@@ -892,15 +1165,16 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       });
 
       // Track analytics - find the current index for analytics
-      final currentIndex = provider.conversation.structured.actionItems.indexWhere((item) => item.description == itemDescription);
+      final currentIndex =
+          provider.conversation.structured.actionItems.indexWhere((item) => item.description == itemDescription);
       if (currentIndex != -1) {
         if (newValue) {
           MixpanelManager().checkedActionItem(provider.conversation, currentIndex);
-          
+
           if (!await _appReviewService.hasCompletedFirstActionItem()) {
             await _appReviewService.markFirstActionItemCompleted();
             _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
-            }
+          }
         } else {
           MixpanelManager().uncheckedActionItem(provider.conversation, currentIndex);
         }
@@ -918,7 +1192,9 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
 }
 
 class ActionItemsTab extends StatelessWidget {
-  const ActionItemsTab({super.key});
+  final String searchQuery;
+  final int currentResultIndex;
+  const ActionItemsTab({super.key, this.searchQuery = '', this.currentResultIndex = -1});
 
   @override
   Widget build(BuildContext context) {
@@ -989,6 +1265,8 @@ class ActionItemsTab extends StatelessWidget {
                         child: ActionItemDetailWidget(
                           actionItem: item,
                           conversationId: provider.conversation.id,
+                          searchQuery: searchQuery,
+                          currentResultIndex: currentResultIndex,
                         ),
                       );
                     },
@@ -1074,6 +1352,7 @@ class ActionItemsTab extends StatelessWidget {
                         child: ActionItemDetailWidget(
                           actionItem: item,
                           conversationId: provider.conversation.id,
+                          searchQuery: searchQuery,
                         ),
                       );
                     },
