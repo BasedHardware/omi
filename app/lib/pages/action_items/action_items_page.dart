@@ -205,10 +205,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ],
                             ),
                             // Create icon
-                            const Icon(
-                              Icons.add,
-                              color: Colors.white,
-                              size: 18,
+                            IconButton(
+                              onPressed: _showCreateActionItemSheet,
+                              icon: const Icon(
+                                Icons.add,
+                                color: Colors.white,
+                                size: 18,
+                              ),
                             ),
                           ],
                         ),
