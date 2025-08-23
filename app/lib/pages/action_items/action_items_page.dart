@@ -204,22 +204,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 
                               ],
                             ),
-                            // Create button
-                            SizedBox(
-                              width: 44,
-                              height: 44,
-                              child: ElevatedButton(
-                                onPressed: _showCreateActionItemSheet,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppStyles.backgroundSecondary,
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.zero,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: const Icon(Icons.add, size: 18),
-                              ),
+                            // Create icon
+                            const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 18,
                             ),
                           ],
                         ),
