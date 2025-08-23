@@ -172,3 +172,19 @@ def send_app_review_reply_notification(
     body = reply_body
     data = {'app_id': app_id, 'type': 'app_review_reply', 'navigate_to': f'/apps/{app_id}'}
     send_notification(token, title, body, data)
+
+
+def send_new_app_review_notification(
+    app_owner_uid: str, reviewer_uid: str, app_id: str, app_name: str, review_body: str
+):
+    """Sends a notification to the app owner when a new review is submitted."""
+    token = notification_db.get_token_only(app_owner_uid)
+    if not token:
+        return
+
+    reviewer = get_user_from_uid(reviewer_uid)
+    reviewer_name = reviewer.get('display_name', 'A user') if reviewer else 'A user'
+    title = f'{reviewer_name} reviewed {app_name}'
+    body = review_body
+    data = {'app_id': app_id, 'type': 'new_app_review', 'navigate_to': f'/apps/{app_id}'}
+    send_notification(token, title, body, data)
