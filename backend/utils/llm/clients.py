@@ -17,9 +17,6 @@ llm_high_stream = ChatOpenAI(model='o4-mini', streaming=True, temperature=1)
 llm_medium = ChatOpenAI(model='gpt-4o')
 llm_medium_experiment = ChatOpenAI(model='gpt-4.1')
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
-llm_gpt5 = ChatOpenAI(model='gpt-5-2025-08-07')
-llm_gpt5_stream = ChatOpenAI(model='gpt-5-2025-08-07', streaming=True)
-
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
     model="google/gemini-flash-1.5-8b",
