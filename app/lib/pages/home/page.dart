@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
@@ -212,6 +213,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Navigate
       switch (pageAlias) {
+        case "apps":
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            var app = await context.read<AppProvider>().getAppFromId(detailPageId);
+            if (app != null && mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AppDetailPage(app: app),
+                ),
+              );
+            }
+          }
+          break;
         case "chat":
           print('inside chat alias $detailPageId');
           if (detailPageId != null && detailPageId.isNotEmpty) {

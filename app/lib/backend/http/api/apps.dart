@@ -143,13 +143,13 @@ Future<bool> updateAppReview(String appId, AppReview review) async {
   }
 }
 
-Future<bool> replyToAppReview(String appId, String reply) async {
+Future<bool> replyToAppReview(String appId, String reply, String reviewerUid) async {
   try {
     var response = await makeApiCall(
       url: '${Env.apiBaseUrl}v1/apps/$appId/review/reply',
       headers: {'Content-Type': 'application/json'},
       method: 'PATCH',
-      body: jsonEncode({'response': reply}),
+      body: jsonEncode({'response': reply, 'reviewer_uid': reviewerUid}),
     );
     debugPrint('replyToAppReview: ${response?.body}');
     return response?.statusCode == 200;
