@@ -30,13 +30,14 @@ String filterValueToString(dynamic value) {
 }
 
 class ExploreInstallPage extends StatefulWidget {
-  const ExploreInstallPage({super.key});
+  final ScrollController? scrollController;
+  const ExploreInstallPage({super.key, this.scrollController});
 
   @override
-  State<ExploreInstallPage> createState() => _ExploreInstallPageState();
+  State<ExploreInstallPage> createState() => ExploreInstallPageState();
 }
 
-class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKeepAliveClientMixin {
+class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKeepAliveClientMixin {
   // ValueNotifier to hold the selected app
   final ValueNotifier<App?> _selectedAppNotifier = ValueNotifier<App?>(null);
   late TextEditingController searchController;
@@ -62,6 +63,16 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
     routeToPage(context, AppDetailPage(app: notification.app));
 
     return true;
+  }
+
+  void scrollToTop() {
+    if (widget.scrollController != null && widget.scrollController!.hasClients) {
+      widget.scrollController!.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   @override
@@ -325,6 +336,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
       selector: (context, provider) => provider.filteredApps,
       builder: (context, filteredApps, child) {
         return CustomScrollView(
+          controller: widget.scrollController,
           slivers: [
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
             if (filteredApps.isEmpty)
@@ -394,6 +406,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
         final mostDownloadedApps = allApps.take(20).toList(); // Get top 20 most downloaded
 
         return CustomScrollView(
+          controller: widget.scrollController,
           slivers: [
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
@@ -482,6 +495,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
           ),
           builder: (context, state, child) {
             return CustomScrollView(
+              controller: widget.scrollController,
               slivers: [
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 SliverToBoxAdapter(
