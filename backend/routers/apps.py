@@ -66,7 +66,7 @@ from utils.apps import (
 from database.memories import migrate_memories
 
 from utils.llm.persona import generate_persona_intro_message, generate_description
-from utils.notifications import send_notification
+from utils.notifications import send_notification, send_app_review_reply_notification
 from utils.other import endpoints as auth
 from models.app import App, ActionType, AppCreate, AppUpdate
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
@@ -535,13 +535,27 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
 
-    review = get_specific_user_review(app_id, uid)
+    reviewer_uid = data.get('reviewer_uid')
+    if not reviewer_uid:
+        raise HTTPException(status_code=422, detail='Reviewer UID is required')
+
+    review = get_specific_user_review(app_id, reviewer_uid)
     if not review:
         raise HTTPException(status_code=404, detail='Review not found')
 
     review['response'] = data['response']
     review['responded_at'] = datetime.now(timezone.utc).isoformat()
-    set_app_review(app_id, uid, review)
+    set_app_review(app_id, reviewer_uid, review)
+
+    # Send notification to reviewer
+    send_app_review_reply_notification(
+        reviewer_uid,
+        app.uid,
+        data['response'],
+        app_id,
+        app.name,
+    )
+
     return {'status': 'ok'}
 
 

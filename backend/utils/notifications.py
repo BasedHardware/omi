@@ -8,6 +8,7 @@ from database.redis_db import (
     set_silent_user_notification_sent,
     has_silent_user_notification_been_sent,
 )
+from database.auth import get_user_from_uid
 from .llm.notifications import (
     generate_notification_message,
     generate_credit_limit_notification,
@@ -155,3 +156,19 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
 
     except Exception as e:
         print("Error sending message:", e)
+
+
+def send_app_review_reply_notification(
+    reviewer_uid: str, app_owner_uid: str, reply_body: str, app_id: str, app_name: str
+):
+    """Sends a notification to a user when their app review receives a reply."""
+    token = notification_db.get_token_only(reviewer_uid)
+    if not token:
+        return
+
+    app_owner = get_user_from_uid(app_owner_uid)
+    owner_name = app_owner.get('display_name', 'The developer') if app_owner else 'The developer'
+    title = f'{owner_name} ({app_name})'
+    body = reply_body
+    data = {'app_id': app_id, 'type': 'app_review_reply', 'navigate_to': f'/apps/{app_id}'}
+    send_notification(token, title, body, data)
