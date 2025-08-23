@@ -1,4 +1,4 @@
-from .clients import llm_mini, llm_mini_stream, llm_medium_stream, llm_medium
+from .clients import llm_mini, llm_mini_stream, llm_medium_stream, llm_medium, llm_gpt5, llm_gpt5_stream
 import json
 import re
 import os
@@ -373,7 +373,7 @@ def qa_rag(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return llm_medium.invoke(prompt).content
+    return llm_gpt5.invoke(prompt).content
 
 
 def qa_rag_stream(
@@ -388,7 +388,7 @@ def qa_rag_stream(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return llm_gpt5_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
 # **************************************************
