@@ -34,6 +34,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
 
+  // Track firmware update state to prevent showing dialog during updates
+  bool _isFirmwareUpdateInProgress = false;
+  bool get isFirmwareUpdateInProgress => _isFirmwareUpdateInProgress;
+
   // Current and latest firmware versions for UI display
   String get currentFirmwareVersion => pairedDevice?.firmwareRevision ?? 'Unknown';
   String _latestFirmwareVersion = '';
@@ -311,6 +315,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _checkFirmwareUpdates() async {
+    if (_isFirmwareUpdateInProgress) {
+      return;
+    }
+
     await checkFirmwareUpdates();
 
     // Show firmware update dialog if needed
@@ -355,7 +363,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void showFirmwareUpdateDialog(BuildContext context) {
-    if (!_havingNewFirmware || !SharedPreferencesUtil().showFirmwareUpdateDialog) {
+    if (!_havingNewFirmware || !SharedPreferencesUtil().showFirmwareUpdateDialog || _isFirmwareUpdateInProgress) {
       return;
     }
 
@@ -364,11 +372,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       builder: (context) => ConfirmationDialog(
         title: 'Firmware Update Available',
         description:
-            'A new firmware update (${_latestFirmwareVersion}) is available for your Omi device. Would you like to update now?',
+            'A new firmware update ($_latestFirmwareVersion) is available for your Omi device. Would you like to update now?',
         confirmText: 'Update',
         cancelText: 'Later',
         onConfirm: () {
           Navigator.of(context).pop();
+          setFirmwareUpdateInProgress(true);
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => FirmwareUpdate(device: pairedDevice),
@@ -424,5 +433,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleDisconnectDevice(connectedDevice!);
     _reconnectAt = DateTime.now().add(Duration(seconds: 30));
+  }
+
+  // Reset firmware update state when update completes or fails
+  void resetFirmwareUpdateState() {
+    _isFirmwareUpdateInProgress = false;
+    notifyListeners();
+  }
+
+  // Set firmware update state when starting an update
+  void setFirmwareUpdateInProgress(bool inProgress) {
+    _isFirmwareUpdateInProgress = inProgress;
+    notifyListeners();
   }
 }
