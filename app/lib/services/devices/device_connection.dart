@@ -122,7 +122,7 @@ abstract class DeviceConnection {
 
   Future<bool> ping() async {
     try {
-      int rssi = await bleDevice.readRssi();
+      int rssi = await bleDevice.readRssi(timeout: 10);
       device.rssi = rssi;
       _pongAt = DateTime.now();
       return true;

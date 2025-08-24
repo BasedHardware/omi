@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/services/app_review_service.dart';
 
 class ConversationProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   List<ServerConversation> conversations = [];
@@ -32,6 +33,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   List<ServerConversation> processingConversations = [];
 
   IWalService get _wal => ServiceManager.instance().wal;
+  final AppReviewService _appReviewService = AppReviewService();
 
   List<Wal> _missingWals = [];
 
@@ -222,7 +224,15 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     // completed convos
     upsertConvos = newConversations.where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
     if (upsertConvos.isNotEmpty) {
+      // Check if this is the first conversation
+      bool wasEmpty = conversations.isEmpty;
+      
       conversations.insertAll(0, upsertConvos);
+      
+      // Mark first conversation for app review
+      if (wasEmpty && await _appReviewService.isFirstConversation()) {
+        await _appReviewService.markFirstConversation();
+      }
     }
 
     _groupConversationsByDateWithoutNotify();
@@ -382,9 +392,18 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  void addConversation(ServerConversation conversation) {
+  Future<void> addConversation(ServerConversation conversation) async {
+    // Check if this is the first conversation
+    bool wasEmpty = conversations.isEmpty;
+    
     conversations.insert(0, conversation);
     _groupConversationsByDateWithoutNotify();
+    
+    // Mark first conversation for app review
+    if (wasEmpty && await _appReviewService.isFirstConversation()) {
+      await _appReviewService.markFirstConversation();
+    }
+    
     notifyListeners();
   }
 

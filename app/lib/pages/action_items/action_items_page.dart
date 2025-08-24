@@ -73,7 +73,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       await _appReviewService.markFirstActionItemCompleted();
 
       if (mounted) {
-        await _appReviewService.showReviewPromptIfNeeded(context);
+        await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
       }
     }
   }
@@ -84,6 +84,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!provider.isFetching && provider.hasMore) {
         provider.loadMoreActionItems();
       }
+    }
+  }
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+      );
     }
   }
 
@@ -204,21 +214,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 
                               ],
                             ),
-                            // Create button
-                            SizedBox(
-                              width: 44,
-                              height: 44,
-                              child: ElevatedButton(
-                                onPressed: _showCreateActionItemSheet,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppStyles.backgroundSecondary,
-                                  foregroundColor: Colors.white,
-                                  padding: EdgeInsets.zero,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: const Icon(Icons.add, size: 18),
+                            // Create icon
+                            IconButton(
+                              onPressed: _showCreateActionItemSheet,
+                              icon: const Icon(
+                                Icons.add,
+                                color: Colors.white,
+                                size: 18,
                               ),
                             ),
                           ],

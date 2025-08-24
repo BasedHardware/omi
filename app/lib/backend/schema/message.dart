@@ -121,7 +121,7 @@ class ServerMessage {
   List filesId;
 
   List<MessageConversation> memories;
-  bool askForNps = false;
+  bool askForNps;
 
   List<String> thinkings = [];
 
@@ -136,7 +136,7 @@ class ServerMessage {
     this.files,
     this.filesId,
     this.memories, {
-    this.askForNps = false,
+    this.askForNps = true,
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -151,7 +151,7 @@ class ServerMessage {
       ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
       (json['files_id'] ?? []).map((m) => m.toString()).toList(),
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
-      askForNps: json['ask_for_nps'] ?? false,
+      askForNps: json['ask_for_nps'] ?? true,
     );
   }
 
@@ -165,8 +165,8 @@ class ServerMessage {
       'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
-      'ask_for_nps': askForNps,
       'files': files.map((m) => m.toJson()).toList(),
+      'ask_for_nps': askForNps,
     };
   }
 

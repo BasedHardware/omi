@@ -10,6 +10,7 @@ from oauth import memory_created as oauth_memory_created_router
 from zapier import memory_created as zapier_memory_created_router
 from chatgpt import main as chatgpt_router
 from subscription import main as subscription_router
+from notifications import hey_omi
 # from ahda import client as ahda_realtime_transcription_router
 # from advanced import openglass as advanced_openglass_router
 
@@ -71,3 +72,6 @@ app.include_router(chatgpt_router.router)
 
 # Subscription
 app.include_router(subscription_router.router)
+
+# Notifications
+app.include_router(hey_omi.router)

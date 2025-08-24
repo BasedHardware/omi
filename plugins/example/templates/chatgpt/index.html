@@ -7,12 +7,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --chatgpt-bg: #343541;
-            --chatgpt-text: #ECECF1;
-            --chatgpt-secondary-text: #C5C5D2;
-            --chatgpt-accent: #19C37D;
-            --chatgpt-accent-hover: #0DA26B;
-            --chatgpt-border: #565869;
+            --omi-bg: #000000;
+            --omi-text: #FFFFFF;
+            --omi-secondary-text: #BDBDBD;
+            --omi-accent: #673AB7;
+            --omi-accent-hover: #512DA8;
+            --omi-border: #424242;
+            --omi-surface: #1F1F25;
         }
         
         * {
@@ -23,8 +24,9 @@
         
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-color: var(--chatgpt-bg);
-            color: var(--chatgpt-text);
+            background: var(--omi-bg);
+            background: radial-gradient(ellipse at top, #1F1F25, var(--omi-bg));
+            color: var(--omi-text);
             display: flex;
             flex-direction: column;
             min-height: 100vh;
@@ -61,7 +63,7 @@
         }
         
         .logo-icon svg path {
-            fill: var(--chatgpt-text);
+            fill: var(--omi-text);
         }
         
         .logo-text {
@@ -72,28 +74,85 @@
         .connect-card {
             width: 100%;
             text-align: center;
-            padding: 2rem;
-            background-color: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+            padding: 2.5rem;
+            background-color: var(--omi-surface);
+            border-radius: 16px;
+            border: 1px solid var(--omi-border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 12px rgba(103, 58, 183, 0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .connect-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25), 0 0 24px rgba(103, 58, 183, 0.15);
+        }
+
+        .integrations-section {
+            width: 100%;
+            margin-top: 3rem;
+            text-align: center;
+        }
+
+        .integrations-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .integrations-subtitle {
+            color: var(--omi-secondary-text);
+            margin-bottom: 1.5rem;
+            max-width: 380px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .integration-link {
+            text-decoration: none;
+        }
+
+        .integrations-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            justify-content: center;
+        }
+
+        .integration-item {
+            background-color: var(--omi-surface);
+            border: 1px solid var(--omi-border);
+            border-radius: 20px;
+            padding: 0.5rem 1.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            color: var(--omi-secondary-text);
+        }
+
+        .integration-item:hover {
+            background-color: var(--omi-surface);
+            border-color: var(--omi-accent);
+            color: var(--omi-text);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
         
         .connect-button {
-            background-color: var(--chatgpt-accent);
+            background: linear-gradient(to right, #7E57C2, #673AB7);
             color: white;
             border: none;
             border-radius: 8px;
             padding: 0.875rem 1.5rem;
             font-size: 1rem;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
             width: 100%;
-            margin-top: 1.5rem;
+            margin-top: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 2px 8px rgba(25, 195, 125, 0.3);
+            box-shadow: 0 4px 12px rgba(103, 58, 183, 0.3);
         }
         
         .connect-button svg {
@@ -116,18 +175,18 @@
         }
         
         .connect-button:hover {
-            background-color: var(--chatgpt-accent-hover);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(25, 195, 125, 0.4);
+            background: linear-gradient(to right, #8769c9, #7043b8);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(103, 58, 183, 0.4);
         }
         
         .connect-button:active {
             transform: translateY(1px);
-            box-shadow: 0 2px 4px rgba(25, 195, 125, 0.3);
+            box-shadow: 0 2px 4px rgba(103, 58, 183, 0.3);
         }
         
         .connect-button.copied {
-            background-color: #0DA26B;
+            background: var(--omi-accent-hover);
         }
         
         .connect-button:disabled {
@@ -135,14 +194,20 @@
             cursor: not-allowed;
         }
         
+        .title-text {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
         .info-text {
-            color: var(--chatgpt-secondary-text);
-            margin-bottom: 0.5rem;
-            font-size: 1.05rem;
+            color: var(--omi-secondary-text);
+            font-size: 1rem;
+            line-height: 1.6;
         }
         
         .info-container {
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
         }
         
         .notification {
@@ -151,7 +216,7 @@
             left: 50%;
             transform: translateX(-50%) translateY(10px);
             padding: 0.75rem 1.5rem;
-            background-color: var(--chatgpt-accent);
+            background-color: var(--omi-accent);
             color: white;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -180,12 +245,12 @@
         .footer {
             text-align: center;
             padding: 1.5rem;
-            color: var(--chatgpt-secondary-text);
+            color: var(--omi-secondary-text);
             font-size: 0.875rem;
         }
         
         a {
-            color: var(--chatgpt-accent);
+            color: var(--omi-accent);
             text-decoration: none;
         }
         
@@ -214,8 +279,8 @@
         
         <div class="connect-card" id="uid-display" data-uid="{{ uid }}">
             <div class="info-container">
-                <p class="info-text">Connect your Omi device with ChatGPT</p>
-                <p class="info-text">Your ID will be copied automatically</p>
+                <h1 class="title-text">Connect to ChatGPT</h1>
+                <p class="info-text">Connect Omi to let ChatGPT access your memories and 100+ other tools. Your User ID will be copied automatically.</p>
             </div>
             <button class="connect-button" onclick="copyAndLaunch()">
                 <svg width="20" height="20" viewBox="0 0 33 33" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -230,6 +295,22 @@
                 </svg>
                 Connect with ChatGPT
             </button>
+        </div>
+
+        <div class="integrations-section">
+            <h2 class="integrations-title">Connect to 100+ external tools</h2>
+            <p class="integrations-subtitle">Give ChatGPT more context about you by connecting it to your favorite tools.</p>
+            <div class="integrations-grid">
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">X</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">Google Calendar</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">Notion</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">LinkedIn</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">Google Drive</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">Gmail</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">GitHub</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">Google Sheets</div></a>
+                <a href="https://personas.omi.me/" target="_blank" class="integration-link"><div class="integration-item">...and more</div></a>
+            </div>
         </div>
         
         <div class="footer">
@@ -352,7 +433,7 @@
                 notification.style.backgroundColor = '#E34747';
                 iconSvg.innerHTML = '<path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/>';
             } else {
-                notification.style.backgroundColor = '#19C37D';
+                notification.style.backgroundColor = 'var(--omi-accent)';
                 iconSvg.innerHTML = '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/>';
             }
             
@@ -375,8 +456,10 @@
                     </svg>
                     No ID Available
                 `;
-                document.querySelectorAll('.info-text')[0].textContent = 'Please log in first';
-                document.querySelectorAll('.info-text')[1].textContent = 'to connect with ChatGPT';
+                document.querySelector('.connect-card .info-container').innerHTML = `
+                    <h1 class="title-text">Log in to connect</h1>
+                    <p class="info-text">Please log in to the Omi app to connect your account to ChatGPT.</p>
+                `;
             }
         });
     </script>

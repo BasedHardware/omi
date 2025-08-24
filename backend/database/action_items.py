@@ -231,6 +231,12 @@ def get_action_items(
         
         action_items.append(action_item)
     
+    action_items.sort(key=lambda x: (
+        x.get('due_at') is None,
+        x.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
+        -(x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp())
+    ))
+    
     return action_items
 
 

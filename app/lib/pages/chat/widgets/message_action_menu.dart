@@ -7,6 +7,8 @@ class MessageActionMenu extends StatelessWidget {
   final Function()? onSelectText;
   final Function()? onShare;
   final Function()? onReport;
+  final Function()? onThumbsUp;
+  final Function()? onThumbsDown;
   final String message;
 
   const MessageActionMenu({
@@ -15,6 +17,8 @@ class MessageActionMenu extends StatelessWidget {
     this.onSelectText,
     this.onShare,
     this.onReport,
+    this.onThumbsUp,
+    this.onThumbsDown,
     required this.message,
   });
 
@@ -58,6 +62,13 @@ class MessageActionMenu extends StatelessWidget {
               icon: Icons.share,
               onTap: onShare,
             ),
+            if (onThumbsDown != null) ...[
+              _buildActionButton(
+                title: 'Not Helpful',
+                icon: Icons.thumb_down_alt_outlined,
+                onTap: onThumbsDown,
+              ),
+            ],
             _buildActionButton(
               title: 'Report',
               icon: Icons.report_gmailerrorred,
