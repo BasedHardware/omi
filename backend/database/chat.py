@@ -263,9 +263,10 @@ def batch_delete_messages(
 
         batch = db.batch()
         for doc in docs_list:
-            print('Deleting message:', doc.id)
             batch.delete(doc.reference)
         batch.commit()
+
+        print(f'Deleted {len(docs_list)} messages')
 
         if len(docs_list) < batch_size:
             print("Processed all messages")

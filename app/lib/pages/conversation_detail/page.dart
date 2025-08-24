@@ -48,6 +48,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
   TabController? _controller;
+  final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
   bool _isSharing = false;
 
@@ -95,6 +96,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       if (provider.conversation.appResults.isEmpty) {
         await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
         provider.updateConversation(provider.conversationIdx, provider.selectedDate);
+      }
+      
+      // Check if this is the first conversation and show app review prompt
+      if (await _appReviewService.isFirstConversation()) {
+        await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
       }
     });
     // _animationController = AnimationController(
@@ -893,7 +899,7 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
           
           if (!await _appReviewService.hasCompletedFirstActionItem()) {
             await _appReviewService.markFirstActionItemCompleted();
-            _appReviewService.showReviewPromptIfNeeded(context);
+            _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
             }
         } else {
           MixpanelManager().uncheckedActionItem(provider.conversation, currentIndex);

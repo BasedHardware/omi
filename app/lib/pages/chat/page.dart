@@ -1,4 +1,3 @@
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +21,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -66,6 +66,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
+    textController.addListener(() {
+      setState(() {});
+    });
 
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
@@ -185,7 +188,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   itemBuilder: (context, chatIndex) {
                                     final message = provider.messages[chatIndex];
                                     double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                    if (chatIndex != 0) message.askForNps = false;
 
                                     double bottomPadding = chatIndex == 0 ? 16 : 0;
                                     return GestureDetector(
@@ -233,6 +235,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               );
                                               Navigator.pop(context);
                                             },
+                                            onThumbsUp: message.sender == MessageSender.ai && message.askForNps
+                                                ? () {
+                                                    provider.setMessageNps(message, 1);
+                                                    Navigator.pop(context);
+                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
+                                                  }
+                                                : null,
+                                            onThumbsDown: message.sender == MessageSender.ai && message.askForNps
+                                                ? () {
+                                                    provider.setMessageNps(message, 0);
+                                                    Navigator.pop(context);
+                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
+                                                  }
+                                                : null,
                                             onReport: () {
                                               if (message.sender == MessageSender.human) {
                                                 Navigator.pop(context);
@@ -432,14 +448,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             bottom: widget.isPivotBottom ? 20 : (textFieldFocusNode.hasFocus ? 20 : 40),
                           ),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Expanded(
                                 child: Container(
-                                  height: 44,
                                   padding: const EdgeInsets.only(left: 16, right: 8),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       if (shouldShowMenuButton())
                                         GestureDetector(
@@ -458,9 +473,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             _showIOSStyleActionSheet(context);
                                           },
                                           child: Container(
-                                            margin: const EdgeInsets.only(right: 8),
+                                            margin: const EdgeInsets.only(right: 4),
                                             height: 44,
-                                            width: 32,
+                                            width: 44,
                                             alignment: Alignment.center,
                                             child: FaIcon(
                                               FontAwesomeIcons.plus,
@@ -486,7 +501,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 },
                                               )
                                             : Container(
-                                                height: 44,
                                                 alignment: Alignment.centerLeft,
                                                 child: TextField(
                                                   enabled: true,
@@ -500,37 +514,54 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     hintStyle: TextStyle(fontSize: 16.0, color: Colors.white54),
                                                     focusedBorder: InputBorder.none,
                                                     enabledBorder: InputBorder.none,
-                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                                                     isDense: true,
                                                   ),
-                                                  maxLines: 1,
-                                                  keyboardType: TextInputType.text,
+                                                  minLines: 1,
+                                                  maxLines: 10,
+                                                  keyboardType: TextInputType.multiline,
                                                   textCapitalization: TextCapitalization.sentences,
                                                   style:
-                                                      const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.0),
+                                                      const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
                                                 ),
                                               ),
                                       ),
                                       if (shouldShowVoiceRecorderButton())
-                                        GestureDetector(
-                                          child: Container(
-                                            height: 44,
-                                            width: 32,
-                                            alignment: Alignment.center,
-                                            child: const FaIcon(
-                                              FontAwesomeIcons.microphone,
-                                              color: Colors.white,
-                                              size: 20,
-                                            ),
-                                          ),
-                                          onTap: () {
-                                            // Hide keyboard when mic is clicked
-                                            FocusScope.of(context).unfocus();
-                                            setState(() {
-                                              _showVoiceRecorder = true;
-                                            });
-                                          },
-                                        ),
+                                        textController.text.isNotEmpty
+                                            ? GestureDetector(
+                                                onTap: () {
+                                                  textController.clear();
+                                                },
+                                                child: Container(
+                                                  height: 44,
+                                                  width: 44,
+                                                  alignment: Alignment.center,
+                                                  child: const FaIcon(
+                                                    FontAwesomeIcons.xmark,
+                                                    color: Colors.white,
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                              )
+                                            : GestureDetector(
+                                                child: Container(
+                                                  height: 44,
+                                                  width: 44,
+                                                  alignment: Alignment.center,
+                                                  child: const FaIcon(
+                                                    FontAwesomeIcons.microphone,
+                                                    color: Colors.white,
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                                onTap: () {
+                                                  // Hide keyboard when mic is clicked
+                                                  FocusScope.of(context).unfocus();
+                                                  setState(() {
+                                                    _showVoiceRecorder = true;
+                                                  });
+                                                },
+                                              ),
                                     ],
                                   ),
                                 ),
@@ -558,8 +589,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               }
                                             },
                                       child: Container(
-                                        height: 32,
-                                        width: 32,
+                                        height: 44,
+                                        width: 44,
                                         decoration: BoxDecoration(
                                           color: Colors.white,
                                           borderRadius: BorderRadius.circular(22),
@@ -574,7 +605,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         child: const Icon(
                                           FontAwesomeIcons.arrowUp,
                                           color: Color(0xFF35343B),
-                                          size: 18,
+                                          size: 20,
                                         ),
                                       ),
                                     ),
@@ -600,11 +631,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
+    textController.clear();
 
     // Scroll to align user's message to top of screen
-    _scrollToAlignUserMessageToTop();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      scrollToBottom();
+    });
 
-    textController.clear();
     provider.sendMessageStreamToServer(text);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
@@ -619,42 +652,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     }
     scrollToBottom();
     context.read<MessageProvider>().setSendingMessage(false);
-  }
-
-  void _scrollToAlignUserMessageToTop() {
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (scrollController.hasClients) {
-        // Calculate scroll position to show only user's message with empty space below
-        double viewportHeight = scrollController.position.viewportDimension;
-
-        // Estimate heights:
-        // - User message height (including padding): ~80px
-        // - AI typing indicator/generation UI: ~60px
-        // - Send message area: ~100px (approximate)
-        // - Extra buffer: ~50px
-        double userMessageHeight = 80;
-        double aiGenerationHeight = 60;
-        double sendAreaHeight = 100;
-        double buffer = 50;
-
-        // Total content we want to show
-        double visibleContentHeight = userMessageHeight + aiGenerationHeight + sendAreaHeight + buffer;
-
-        // Calculate target scroll position to leave empty space at bottom
-        // We want to scroll past older messages so only the new content is visible
-        double targetOffset = viewportHeight - visibleContentHeight;
-
-        // Ensure we don't scroll beyond bounds
-        double maxOffset = scrollController.position.maxScrollExtent;
-        double finalOffset = targetOffset.clamp(0.0, maxOffset);
-
-        scrollController.animateTo(
-          finalOffset,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    });
   }
 
   void _moveListToBottom() {
@@ -784,10 +781,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
-              preferredSize: const Size.fromHeight(10),
+              preferredSize: const Size.fromHeight(32),
               child: Container(
                 width: double.infinity,
-                height: 10,
+                height: 32,
                 color: Colors.green,
                 child: const Center(
                   child: Text(
@@ -1139,6 +1136,4 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       margin: const EdgeInsets.symmetric(horizontal: 20),
     );
   }
-
-
-  }
+}
