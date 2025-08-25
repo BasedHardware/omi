@@ -1,0 +1,4 @@
+flask
+python-dotenv
+requests
+email-parser==0.1.5  # lightweight email parsing helper
