@@ -125,17 +125,6 @@ def get_transcript_structure(
       - For "urgent" or "ASAP": use 2 hours from {started_at}
       - For "high priority": use end of today
       - For "when convenient" or no specific time: leave due_at as null
-    • Use consistent timing format in parentheses:
-      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
-      - Relative timing: (today), (tomorrow), (this week), (next week)
-      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
-
-        Example format:  
-        - 🗓️ Submit Q2 budget (due 05/31)  
-        - 💻 Update project repo (tomorrow)
-        - 📞 Call dentist office (today)
-        - ⚠️ Fix server issue (urgent)
-        - 📝 Review quarterly report (when convenient)  
 
     For the category, classify the content into one of the available categories.
 
@@ -242,17 +231,6 @@ def get_reprocess_transcript_structure(
       - For "urgent" or "ASAP": use 2 hours from {started_at}
       - For "high priority": use end of today
       - For "when convenient" or no specific time: leave due_at as null
-    • Use consistent timing format in parentheses:
-      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
-      - Relative timing: (today), (tomorrow), (this week), (next week)
-      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
-
-        Example format:  
-        - 🗓️ Submit Q2 budget (due 05/31)  
-        - 💻 Update project repo (tomorrow)
-        - 📞 Call dentist office (today)
-        - ⚠️ Fix server issue (urgent)
-        - 📝 Review quarterly report (when convenient)  
 
     For the category, classify the content into one of the available categories.
 
