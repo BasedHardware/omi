@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:omi/utils/mutex.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/device_connection.dart';
@@ -194,16 +195,12 @@ class DeviceService implements IDeviceService {
   }
 
   // Warn: Should use a better solution to prevent race conditions
-  bool mutex = false;
+  final Mutex _mutex = Mutex();
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
-    while (mutex) {
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-    mutex = true;
-
-    debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+    await _mutex.acquire();
     try {
+      debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
       // Not force
       if (!force && _connection != null) {
         if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
@@ -212,7 +209,7 @@ class DeviceService implements IDeviceService {
 
         // connected
         var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 30))));
         if (shouldPing) {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
@@ -227,7 +224,7 @@ class DeviceService implements IDeviceService {
       // Force
       if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
         var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 30))));
         if (shouldPing) {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
@@ -250,7 +247,7 @@ class DeviceService implements IDeviceService {
       _firstConnectedAt ??= DateTime.now();
       return _connection;
     } finally {
-      mutex = false;
+      _mutex.release();
     }
   }
 
