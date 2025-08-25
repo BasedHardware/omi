@@ -1,0 +1,20 @@
+Return-Path: <test@example.com>
+Delivered-To: you@example.com
+Subject: Meeting follow-up and TODOs
+From: Test Sender <test@example.com>
+To: you@example.com
+Date: Thu, 25 Aug 2025 10:00:00 -0400
+Content-Type: text/plain; charset="UTF-8"
+
+Hi there,
+
+Thanks for meeting today. Here are the action items:
+
+1. Review the project proposal and provide feedback.
+2. TODO: Finalize the budget by Friday.
+3. Prepare slides for the client presentation.
+
+Please let me know if you have any questions.
+
+Best regards,
+Test Sender
