@@ -31,11 +31,59 @@ import 'package:tuple/tuple.dart';
 import 'maps_util.dart';
 import 'share.dart';
 
+// Highlight search matches with current result highlighting
+List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int currentResultIndex = -1}) {
+  if (searchQuery.isEmpty) {
+    return [TextSpan(text: text)];
+  }
+
+  final List<TextSpan> spans = [];
+  final String lowerText = text.toLowerCase();
+  final String lowerQuery = searchQuery.toLowerCase();
+
+  int start = 0;
+  int index = lowerText.indexOf(lowerQuery, start);
+  int matchCount = 0;
+
+  while (index != -1) {
+    if (index > start) {
+      spans.add(TextSpan(text: text.substring(start, index)));
+    }
+
+    bool isCurrentResult = currentResultIndex >= 0 && matchCount == currentResultIndex;
+
+    spans.add(TextSpan(
+      text: text.substring(index, index + searchQuery.length),
+      style: TextStyle(
+        backgroundColor: isCurrentResult
+            ? Colors.orange.withValues(alpha: 0.9)
+            : Colors.deepPurple.withValues(alpha: 0.6),
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+    ));
+
+    matchCount++;
+    start = index + searchQuery.length;
+    index = lowerText.indexOf(lowerQuery, start);
+  }
+
+  // Add remaining text
+  if (start < text.length) {
+    spans.add(TextSpan(text: text.substring(start)));
+  }
+
+  return spans;
+}
+
 class GetSummaryWidgets extends StatelessWidget {
-  const GetSummaryWidgets({super.key});
+  final String searchQuery;
+  const GetSummaryWidgets({super.key, this.searchQuery = ''});
 
   String setTime(DateTime? startedAt, DateTime createdAt, DateTime? finishedAt) {
-    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
+    return startedAt == null
+        ? dateTimeFormat('h:mm a', createdAt)
+        : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
@@ -63,7 +111,9 @@ class GetSummaryWidgets extends StatelessWidget {
         ),
         // Time chip
         _buildChip(
-          label: conversation.source == ConversationSource.sdcard ? setTimeSDCard(conversation.startedAt, conversation.createdAt) : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
+          label: conversation.source == ConversationSource.sdcard
+              ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+              : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
           icon: Icons.access_time,
         ),
         // Duration chip (only if segments exist)
@@ -80,7 +130,7 @@ class GetSummaryWidgets extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.2),
+        color: Colors.grey.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -140,7 +190,9 @@ class GetSummaryWidgets extends StatelessWidget {
 }
 
 class ActionItemsListWidget extends StatelessWidget {
-  const ActionItemsListWidget({super.key});
+  final String searchQuery;
+  final int currentResultIndex;
+  const ActionItemsListWidget({super.key, this.searchQuery = '', this.currentResultIndex = -1});
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +211,8 @@ class ActionItemsListWidget extends StatelessWidget {
                     IconButton(
                       onPressed: () {
                         Clipboard.setData(ClipboardData(
-                          text: '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
+                          text:
+                              '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
                         ));
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                           content: Text('Action items copied to clipboard'),
@@ -245,10 +298,21 @@ class ActionItemsListWidget extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: SelectionArea(
-                          child: Text(
-                            item.description.decodeString,
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                          ),
+                          child: searchQuery.isNotEmpty
+                              ? RichText(
+                                  text: TextSpan(
+                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                                    children: highlightSearchMatches(
+                                      item.description.decodeString,
+                                      searchQuery,
+                                      currentResultIndex: currentResultIndex,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  item.description.decodeString,
+                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                                ),
                         ),
                       ),
                     ],
@@ -345,7 +409,12 @@ class ReprocessDiscardedWidget extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   border: const GradientBoxBorder(
-                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                    gradient: LinearGradient(colors: [
+                      Color.fromARGB(127, 208, 208, 208),
+                      Color.fromARGB(127, 188, 99, 121),
+                      Color.fromARGB(127, 86, 101, 182),
+                      Color.fromARGB(127, 126, 190, 236)
+                    ]),
                     width: 2,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -355,7 +424,9 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                     await provider.reprocessConversation();
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0), child: Text('Summarize', style: TextStyle(color: Colors.white, fontSize: 16))),
+                  child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                      child: Text('Summarize', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -371,12 +442,16 @@ class AppResultDetailWidget extends StatelessWidget {
   final AppResponse appResponse;
   final App? app;
   final ServerConversation conversation;
+  final String searchQuery;
+  final int currentResultIndex;
 
   const AppResultDetailWidget({
     super.key,
     required this.appResponse,
     required this.app,
     required this.conversation,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
   });
 
   @override
@@ -406,14 +481,24 @@ class AppResultDetailWidget extends StatelessWidget {
                             );
                           },
                           child: RichText(
-                            text: const TextSpan(style: TextStyle(color: Colors.grey), text: "No summary available for this app. Try another app for better results."),
+                            text: const TextSpan(
+                                style: TextStyle(color: Colors.grey),
+                                text: "No summary available for this app. Try another app for better results."),
                           ),
                         ),
                       ),
                     ],
                   )
                 : SelectionArea(
-                    child: getMarkdownWidget(context, content),
+                    child: searchQuery.isNotEmpty
+                        ? RichText(
+                            text: TextSpan(
+                              style: TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
+                              children:
+                                  highlightSearchMatches(content, searchQuery, currentResultIndex: currentResultIndex),
+                            ),
+                          )
+                        : getMarkdownWidget(context, content),
                   ),
           ),
 
@@ -527,7 +612,9 @@ class AppResultDetailWidget extends StatelessWidget {
 }
 
 class GetAppsWidgets extends StatelessWidget {
-  const GetAppsWidgets({super.key});
+  final String searchQuery;
+  final int currentResultIndex;
+  const GetAppsWidgets({super.key, this.searchQuery = '', this.currentResultIndex = -1});
 
   @override
   Widget build(BuildContext context) {
@@ -569,6 +656,8 @@ class GetAppsWidgets extends StatelessWidget {
                       appResponse: summarizedApp,
                       app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
                       conversation: provider.conversation,
+                      searchQuery: searchQuery,
+                      currentResultIndex: currentResultIndex,
                     ),
                   ],
                   const SizedBox(height: 8)
@@ -592,7 +681,12 @@ class GetAppsWidgets extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   border: const GradientBoxBorder(
-                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                    gradient: LinearGradient(colors: [
+                      Color.fromARGB(127, 208, 208, 208),
+                      Color.fromARGB(127, 188, 99, 121),
+                      Color.fromARGB(127, 86, 101, 182),
+                      Color.fromARGB(127, 126, 190, 236)
+                    ]),
                     width: 2,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -607,7 +701,9 @@ class GetAppsWidgets extends StatelessWidget {
                     );
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0), child: Text('Generate Summary', style: TextStyle(color: Colors.white, fontSize: 16))),
+                  child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                      child: Text('Generate Summary', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],

@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/pages/conversation_detail/widgets.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -22,6 +23,8 @@ class TranscriptWidget extends StatefulWidget {
   final Map<String, SpeakerLabelSuggestionEvent> suggestions;
   final List<String> taggingSegmentIds;
   final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
+  final String searchQuery;
+  final int currentResultIndex;
 
   const TranscriptWidget({
     super.key,
@@ -36,6 +39,8 @@ class TranscriptWidget extends StatefulWidget {
     this.suggestions = const {},
     this.taggingSegmentIds = const [],
     this.onAcceptSuggestion,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
   });
 
   @override
@@ -255,7 +260,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                           Text(
                             suggestion != null && person == null
                                 ? '${suggestion.personName}?'
-                                : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
+                                : (person != null ? person.name : 'Speaker ${data.speakerId}'),
                             style: TextStyle(
                               color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
                               fontSize: 13,
@@ -331,15 +336,39 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  _getDecodedText(data.text),
-                                  style: TextStyle(
-                                    letterSpacing: 0.0,
-                                    color: isUser ? Colors.white : Colors.grey.shade100,
-                                    fontSize: 15,
-                                    height: 1.4,
-                                  ),
+                                RichText(
                                   textAlign: TextAlign.left,
+                                  text: TextSpan(
+                                    children: widget.searchQuery.isNotEmpty
+                                        ? highlightSearchMatches(
+                                            _getDecodedText(data.text),
+                                            widget.searchQuery,
+                                            currentResultIndex: widget.currentResultIndex,
+                                          ).map((span) {
+                                            // Preserve highlight styles, apply default styles only to non-highlighted text
+                                            if (span.style?.backgroundColor != null) {
+                                              return span; // Keep highlight style as is
+                                            }
+                                            return TextSpan(
+                                              text: span.text,
+                                              style: TextStyle(
+                                                letterSpacing: 0.0,
+                                                color: isUser ? Colors.white : Colors.grey.shade100,
+                                                fontSize: 15,
+                                                height: 1.4,
+                                              ),
+                                            );
+                                          }).toList()
+                                        : [TextSpan(
+                                            text: _getDecodedText(data.text),
+                                            style: TextStyle(
+                                              letterSpacing: 0.0,
+                                              color: isUser ? Colors.white : Colors.grey.shade100,
+                                              fontSize: 15,
+                                              height: 1.4,
+                                            ),
+                                          )],
+                                  ),
                                 ),
                                 if (data.translations.isNotEmpty) ...[
                                   const SizedBox(height: 8),
