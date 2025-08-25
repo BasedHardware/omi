@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Importer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 700px;
+            margin: 0 auto;
+            color: #333;
+        }
+        h1 {
+            font-size: 1.8rem;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        input[type="text"], input[type="password"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .message-list {
+            margin-top: 20px;
+        }
+        .message-item {
+            border-left: 4px solid #4CAF50;
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .error {
+            color: #a94442;
+            margin-top: 10px;
+        }
+        .success {
+            color: #3c763d;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Email Importer</h1>
+    <p>Fetch recent emails from your IMAP inbox and import actionable memories into OMI.</p>
+
+    <div id="uid-warning" style="display: none; background-color: #fff3cd; color: #856404; padding: 10px; border-left: 4px solid #ffeeba; margin-bottom: 10px;">
+        <strong>No User ID detected!</strong> Add <code>?uid=YOUR_USER_ID</code> to the URL.
+    </div>
+
+    <form id="fetch-form">
+        <label for="host">IMAP Host</label>
+        <input type="text" id="host" placeholder="imap.example.com" autocomplete="username">
+
+        <label for="port">Port</label>
+        <input type="number" id="port" value="993">
+
+        <label for="username">Email Address</label>
+        <input type="text" id="username" placeholder="you@example.com">
+
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Password">
+
+        <label for="count">Number of messages</label>
+        <input type="number" id="count" value="5" min="1" max="20">
+
+        <button type="button" id="fetch-btn">Fetch Emails</button>
+    </form>
+
+    <div id="fetch-error" class="error"></div>
+
+    <div id="messages" class="message-list"></div>
+
+    <button type="button" id="submit-btn" style="display: none;">Extract & Submit</button>
+    <div id="submit-status" class="success"></div>
+
+    <script>
+        // Utility: get uid from URL parameters
+        function getUid() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('uid');
+        }
+        const uid = getUid();
+        const uidWarning = document.getElementById('uid-warning');
+        if (!uid) {
+            uidWarning.style.display = 'block';
+        }
+
+        const fetchBtn = document.getElementById('fetch-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const fetchError = document.getElementById('fetch-error');
+        const submitStatus = document.getElementById('submit-status');
+        const messagesDiv = document.getElementById('messages');
+
+        let fetchedMessages = [];
+
+        fetchBtn.addEventListener('click', async () => {
+            fetchError.textContent = '';
+            submitStatus.textContent = '';
+            messagesDiv.innerHTML = '';
+            submitBtn.style.display = 'none';
+            fetchedMessages = [];
+
+            // Collect form data
+            const host = document.getElementById('host').value.trim();
+            const port = parseInt(document.getElementById('port').value) || 993;
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const count = parseInt(document.getElementById('count').value) || 5;
+
+            try {
+                const response = await fetch('/fetch-emails', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, port, username, password, count })
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    fetchError.textContent = result.error || 'Unknown error';
+                    return;
+                }
+                fetchedMessages = result.messages || [];
+                if (fetchedMessages.length === 0) {
+                    fetchError.textContent = 'No messages found.';
+                    return;
+                }
+                // Render messages with checkboxes
+                fetchedMessages.forEach((msg, index) => {
+                    const container = document.createElement('div');
+                    container.className = 'message-item';
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.id = 'msg_' + index;
+                    cb.dataset.index = index;
+                    cb.checked = true;
+                    const label = document.createElement('label');
+                    label.htmlFor = 'msg_' + index;
+                    label.style.fontWeight = 'bold';
+                    label.textContent = msg.subject;
+                    const body = document.createElement('pre');
+                    body.textContent = msg.body.substring(0, 500) + (msg.body.length > 500 ? '…' : '');
+                    container.appendChild(cb);
+                    container.appendChild(label);
+                    container.appendChild(body);
+                    messagesDiv.appendChild(container);
+                });
+                submitBtn.style.display = 'inline-block';
+            } catch (err) {
+                fetchError.textContent = err.message;
+            }
+        });
+
+        submitBtn.addEventListener('click', async () => {
+            if (!uid) {
+                alert('User ID missing. Add ?uid=YOUR_USER_ID to the URL.');
+                return;
+            }
+            submitStatus.textContent = '';
+            const selected = [];
+            const checkboxes = messagesDiv.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    const idx = parseInt(cb.dataset.index);
+                    if (fetchedMessages[idx]) {
+                        selected.push(fetchedMessages[idx].body);
+                    }
+                }
+            });
+            if (selected.length === 0) {
+                submitStatus.textContent = 'No messages selected.';
+                return;
+            }
+            submitStatus.textContent = 'Submitting…';
+            try {
+                const response = await fetch('/submit-memories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uid, messages: selected })
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    submitStatus.textContent = 'Error: ' + (result.error || 'Unknown error');
+                    return;
+                }
+                if (result.success) {
+                    submitStatus.textContent = `Successfully processed ${result.total_memories} memories.`;
+                } else {
+                    submitStatus.textContent = `Processed ${result.total_memories} memories with ${result.error_count} errors.`;
+                }
+            } catch (err) {
+                submitStatus.textContent = err.message;
+            }
+        });
+    </script>
+</body>
+</html>
