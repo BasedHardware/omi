@@ -90,22 +90,24 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
       }
     }
-    // Count matches in summary
     else if (selectedTab == ConversationTab.summary) {
-      final summary = provider.conversation.structured.overview;
-      final text = summary.toLowerCase();
-      final query = _searchQuery.toLowerCase();
-      int index = 0;
-      while ((index = text.indexOf(query, index)) != -1) {
-        _searchResultPositions.add(count);
-        count++;
-        index += query.length;
+      // Count matches in app summaries
+      final summarizedApp = provider.getSummarizedApp();
+      if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) {
+        final appContent = summarizedApp.content.trim().decodeString.toLowerCase();
+        final query = _searchQuery.toLowerCase();
+        int index = 0;
+        while ((index = appContent.indexOf(query, index)) != -1) {
+          _searchResultPositions.add(count);
+          count++;
+          index += query.length;
+        }
       }
-    }
+     }
 
-    _totalSearchResults = count;
-    _currentSearchIndex = count > 0 ? 1 : 0;
-  }
+     _totalSearchResults = count;
+     _currentSearchIndex = count > 0 ? 1 : 0;
+   }
 
   void _navigateSearch(bool next) {
     if (_totalSearchResults == 0) return;
@@ -139,16 +141,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             break;
           case 2:
             selectedTab = ConversationTab.actionItems;
-            if (_isSearching) {
-              _isSearching = false;
-              _searchQuery = '';
-              _searchController.clear();
-              _searchFocusNode.unfocus();
-            }
             break;
           default:
             debugPrint('Invalid tab index: ${_controller!.index}');
             selectedTab = ConversationTab.summary;
+        }
+        if (_searchQuery.isNotEmpty) {
+          _updateSearchResults();
         }
       });
     });
@@ -579,8 +578,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 searchQuery: _searchQuery, currentResultIndex: getCurrentResultIndexForHighlighting()),
                             SummaryTab(
                                 searchQuery: _searchQuery, currentResultIndex: getCurrentResultIndexForHighlighting()),
-                            ActionItemsTab(
-                                searchQuery: _searchQuery, currentResultIndex: getCurrentResultIndexForHighlighting()),
+                            const ActionItemsTab(),
                           ],
                         );
                       }),
@@ -615,9 +613,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           case ConversationTab.actionItems:
                             index = 2;
                             break;
-                          default:
-                            debugPrint('Invalid tab selected: $tab');
-                            index = 1; // Default to summary tab
                         }
                         _controller!.animateTo(index);
                       },
@@ -997,15 +992,11 @@ class TranscriptWidgets extends StatelessWidget {
 class ActionItemDetailWidget extends StatefulWidget {
   final ActionItem actionItem;
   final String conversationId;
-  final String searchQuery;
-  final int currentResultIndex;
 
   const ActionItemDetailWidget({
     super.key,
     required this.actionItem,
     required this.conversationId,
-    this.searchQuery = '',
-    this.currentResultIndex = -1,
   });
 
   @override
@@ -1095,35 +1086,17 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
                       ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: widget.searchQuery.isNotEmpty
-                            ? RichText(
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    color: isCompleted ? Colors.grey : Colors.white,
-                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                    decorationColor: Colors.grey,
-                                    fontSize: 15,
-                                    height: 1.4,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  children: highlightSearchMatches(
-                                    actionItem.description,
-                                    widget.searchQuery,
-                                    currentResultIndex: widget.currentResultIndex,
-                                  ),
-                                ),
-                              )
-                            : Text(
-                                actionItem.description,
-                                style: TextStyle(
-                                  color: isCompleted ? Colors.grey : Colors.white,
-                                  decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                  decorationColor: Colors.grey,
-                                  fontSize: 15,
-                                  height: 1.4,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                        child: Text(
+                          actionItem.description,
+                          style: TextStyle(
+                            color: isCompleted ? Colors.grey : Colors.white,
+                            decoration: isCompleted ? TextDecoration.lineThrough : null,
+                            decorationColor: Colors.grey,
+                            fontSize: 15,
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1192,9 +1165,7 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
 }
 
 class ActionItemsTab extends StatelessWidget {
-  final String searchQuery;
-  final int currentResultIndex;
-  const ActionItemsTab({super.key, this.searchQuery = '', this.currentResultIndex = -1});
+  const ActionItemsTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1265,8 +1236,6 @@ class ActionItemsTab extends StatelessWidget {
                         child: ActionItemDetailWidget(
                           actionItem: item,
                           conversationId: provider.conversation.id,
-                          searchQuery: searchQuery,
-                          currentResultIndex: currentResultIndex,
                         ),
                       );
                     },
@@ -1352,7 +1321,6 @@ class ActionItemsTab extends StatelessWidget {
                         child: ActionItemDetailWidget(
                           actionItem: item,
                           conversationId: provider.conversation.id,
-                          searchQuery: searchQuery,
                         ),
                       );
                     },
