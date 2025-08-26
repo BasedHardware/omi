@@ -26,6 +26,9 @@ class TranscriptWidget extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
+  final double? highlightStart;
+  final double? highlightEnd;
+  final List<String>? highlightSegmentIds;
 
   const TranscriptWidget({
     super.key,
@@ -43,6 +46,9 @@ class TranscriptWidget extends StatefulWidget {
     this.searchQuery = '',
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
+    this.highlightStart,
+    this.highlightEnd,
+    this.highlightSegmentIds,
   });
 
   @override
@@ -66,6 +72,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // Search result tracking
   List<GlobalKey> _segmentKeys = [];
   int _previousSearchResultIndex = -1;
+
+  // Keys per item to support ensureVisible for highlight
+  final List<GlobalKey> _itemKeys = [];
+
+  // Highlight scroll state
+  int _highlightIndex = -1;
+  int _highlightTries = 0;
+  bool _highlightScheduled = false;
 
   // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
@@ -101,6 +115,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     super.initState();
     _previousSegmentCount = widget.segments.length;
     _initializeSegmentKeys();
+    _highlightIndex = _findFirstHighlightIndex();
 
     // Add scroll listener to detect manual scrolling
     _scrollController.addListener(_onScroll);
@@ -110,7 +125,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     // Auto-scroll to bottom after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
+      if (_highlightIndex >= 0) {
+        _scheduleScrollToHighlight();
+      } else {
+        _scrollToBottom();
+      }
     });
   }
   
@@ -131,7 +150,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
       _previousSegmentCount = widget.segments.length;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottom();
+        if (_highlightIndex >= 0) {
+          _scheduleScrollToHighlight();
+        } else {
+          _scrollToBottom();
+        }
       });
     } else {
       _previousSegmentCount = widget.segments.length;
@@ -284,6 +307,70 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
+  bool _isHighlighted(TranscriptSegment s) {
+    if (widget.highlightSegmentIds != null && widget.highlightSegmentIds!.contains(s.id)) return true;
+    if (widget.highlightStart != null && widget.highlightEnd != null) {
+      final start = widget.highlightStart!;
+      final end = widget.highlightEnd!;
+      if (s.end >= start && s.start <= end) return true;
+    }
+    return false;
+  }
+
+  int _findFirstHighlightIndex() {
+    for (int i = 0; i < widget.segments.length; i++) {
+      if (_isHighlighted(widget.segments[i])) return i;
+    }
+    return -1;
+  }
+
+  double _estimateOffsetForIndex(int idx) {
+    if (!_scrollController.hasClients) return 0.0;
+    // Prefer time-based estimate if available
+    final totalDuration = widget.segments.isNotEmpty ? widget.segments.last.end : 0.0;
+    if (totalDuration > 0 && widget.highlightStart != null) {
+      final ratio = (widget.highlightStart!).clamp(0.0, totalDuration) / totalDuration;
+      return (_scrollController.position.maxScrollExtent * ratio)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+    }
+    return 0.0;
+  }
+
+  void _scheduleScrollToHighlight() {
+    if (_highlightScheduled) return;
+    _highlightScheduled = true;
+    _attemptScrollToHighlight();
+  }
+
+  void _attemptScrollToHighlight() {
+    if (!mounted || _highlightIndex < 0) return;
+
+    // If item is built, ensure it's visible precisely
+    if (_itemKeys.length > _highlightIndex && _itemKeys[_highlightIndex].currentContext != null) {
+      _isAutoScrolling = true;
+      Scrollable.ensureVisible(
+        _itemKeys[_highlightIndex].currentContext!,
+        duration: const Duration(milliseconds: 150),
+        alignment: 0.3,
+        curve: Curves.easeOut,
+      ).whenComplete(() {
+        _isAutoScrolling = false;
+      });
+      _highlightScheduled = false;
+      return;
+    }
+
+    // Otherwise, do a coarse jump towards the estimated offset (no animation), then retry next frame
+    final target = _estimateOffsetForIndex(_highlightIndex);
+    _scrollController.jumpTo(target);
+    _highlightTries += 1;
+    if (_highlightTries <= 6) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _attemptScrollToHighlight());
+    } else {
+      _highlightScheduled = false;
+    }
+  }
+
   String _getDecodedText(String text) {
     if (!_decodedTextCache.containsKey(text)) {
       _decodedTextCache[text] = tryDecodingText(text);
@@ -329,10 +416,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
+    if (_itemKeys.length <= segmentIdx) {
+      _itemKeys.add(GlobalKey());
+    }
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
     final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
+    final bool isHighlighted = _isHighlighted(data);
 
     return Container(
       key: segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
@@ -343,11 +434,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       },
       child: Padding(
         padding: EdgeInsetsDirectional.fromSTEB(
-          widget.horizontalMargin ? 16 : 0, 
-          4.0, 
-          widget.horizontalMargin ? 16 : 0, 
-          4.0
-        ),
+            widget.horizontalMargin ? 16 : 0, 4.0, widget.horizontalMargin ? 16 : 0, 4.0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -371,7 +458,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               ),
               const SizedBox(width: 8),
             ],
-            
+
             // Message bubble
             Expanded(
               child: Column(
@@ -387,7 +474,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                           Text(
                             suggestion != null && person == null
                                 ? '${suggestion.personName}?'
-                                : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
+                                : (person != null ? person.name : 'Speaker ${data.speakerId}'),
                             style: TextStyle(
                               color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
                               fontSize: 13,
@@ -431,32 +518,39 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ),
                     ),
                   ],
-                  
+
                   // Chat bubble
                   Row(
                     mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
                     children: [
                       Flexible(
                         child: Container(
+                          key: _itemKeys[segmentIdx],
                           constraints: BoxConstraints(
                             maxWidth: MediaQuery.of(context).size.width * 0.75,
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: _getSpeakerBubbleColor(isUser, data.speakerId),
+                            color:
+                                _getSpeakerBubbleColor(isUser, data.speakerId).withOpacity(isHighlighted ? 0.95 : 0.8),
                             borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(isUser ? 18 : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser) ? 6 : 18),
+                              topLeft: Radius.circular(isUser
+                                  ? 18
+                                  : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
+                                      ? 6
+                                      : 18),
                               topRight: Radius.circular(isUser ? 18 : 18),
                               bottomLeft: Radius.circular(18),
                               bottomRight: Radius.circular(isUser ? 6 : 18),
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.15),
+                                color: isHighlighted ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.15),
                                 blurRadius: 4,
                                 offset: const Offset(0, 1),
                               ),
                             ],
+                            border: isHighlighted ? Border.all(color: Colors.white.withOpacity(0.7), width: 1.5) : null,
                           ),
                           child: SelectionArea(
                             child: Column(
@@ -505,7 +599,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                           _getDecodedText(translation.text),
                                           style: TextStyle(
                                             letterSpacing: 0.0,
-                                            color: isUser ? Colors.white.withOpacity(0.8) : Colors.grey.shade300.withOpacity(0.8),
+                                            color: isUser
+                                                ? Colors.white.withOpacity(0.8)
+                                                : Colors.grey.shade300.withOpacity(0.8),
                                             fontSize: 14,
                                             fontStyle: FontStyle.italic,
                                             height: 1.3,
@@ -542,10 +638,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 ],
               ),
             ),
-            
+
             if (isUser) ...[
               const SizedBox(width: 8),
-              // Avatar for user (right side)  
+              // Avatar for user (right side)
               Column(
                 children: [
                   CircleAvatar(
@@ -650,8 +746,11 @@ class LiteTranscriptWidget extends StatelessWidget {
   }
 }
 
-String getLastTranscript(List<TranscriptSegment> transcriptSegments, {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
-  var transcript = TranscriptSegment.segmentsAsString(transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0), includeTimestamps: includeTimestamps);
+String getLastTranscript(List<TranscriptSegment> transcriptSegments,
+    {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
+  var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0),
+      includeTimestamps: includeTimestamps);
   if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0));
   return tryDecodingText(transcript);
 }

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-Widget getMarkdownWidget(BuildContext context, String content) {
+Widget getMarkdownWidget(BuildContext context, String content, {void Function(String href)? onTapLink}) {
   var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
   return MarkdownBody(
     selectable: false,
     shrinkWrap: true,
     styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      a: style,
+      a: style.copyWith(
+        decoration: TextDecoration.none,
+        color: const Color(0xFF8B5CF6),
+        fontWeight: FontWeight.w600,
+      ),
       p: style.copyWith(
         height: 1.5,
       ),
@@ -28,5 +32,10 @@ Widget getMarkdownWidget(BuildContext context, String content) {
       ),
     ),
     data: content,
+    onTapLink: (text, href, title) {
+      if (href != null && onTapLink != null) {
+        onTapLink(href);
+      }
+    },
   );
 }
