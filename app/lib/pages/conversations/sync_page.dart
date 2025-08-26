@@ -1,28 +1,27 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/settings/widgets/appbar_with_banner.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_sound/flutter_sound.dart';
-import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:opus_dart/opus_dart.dart';
-import 'dart:io';
-import 'dart:typed_data';
-import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'synced_conversations_page.dart';
 
-class WalListItem extends StatefulWidget {
+class WalListItem extends StatelessWidget {
   final DateTime date;
   final int walIdx;
   final Wal wal;
@@ -33,28 +32,6 @@ class WalListItem extends StatefulWidget {
     required this.date,
     required this.walIdx,
   });
-
-  @override
-  State<WalListItem> createState() => _WalListItemState();
-}
-
-class _WalListItemState extends State<WalListItem> {
-  bool _isPlaying = false;
-  FlutterSoundPlayer? _audioPlayer;
-  bool _isProcessing = false;
-  bool _isSharing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _audioPlayer = FlutterSoundPlayer();
-  }
-
-  @override
-  void dispose() {
-    _audioPlayer?.closePlayer();
-    super.dispose();
-  }
 
   double calculateProgress(DateTime? startedAt, int eta) {
     if (startedAt == null) {
@@ -68,330 +45,201 @@ class _WalListItemState extends State<WalListItem> {
     return progress.clamp(0.0, 1.0);
   }
 
-  Future<void> _togglePlayback() async {
-    if (widget.wal.filePath == null || widget.wal.filePath!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Audio file not available for playback'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SyncProvider>(
+      builder: (context, syncProvider, child) {
+        final isPlaying = syncProvider.isWalPlaying(wal.id);
+        final isProcessing = syncProvider.isProcessingAudio && syncProvider.currentPlayingWalId == wal.id;
+        final isSharing = syncProvider.isSharingAudio;
+        final canPlayOrShare = syncProvider.canPlayOrShareWal(wal);
 
-    if (_isProcessing) return;
-
-    if (_isPlaying) {
-      // Stop playback
-      await _audioPlayer?.stopPlayer();
-      setState(() {
-        _isPlaying = false;
-      });
-      return;
-    }
-
-    // Start playback
-    setState(() {
-      _isProcessing = true;
-    });
-
-    try {
-      String? wavFilePath;
-
-      // Check if it's an opus file that needs decoding
-      if (widget.wal.codec.isOpusSupported()) {
-        wavFilePath = await _decodeOpusToWav(widget.wal.filePath!);
-      } else {
-        // For PCM files, we can try to play directly or convert to WAV
-        wavFilePath = await _convertPcmToWav(widget.wal.filePath!);
-      }
-
-      if (wavFilePath != null && mounted) {
-        await _audioPlayer?.openPlayer();
-
-        setState(() {
-          _isPlaying = true;
-          _isProcessing = false;
-        });
-
-        await _audioPlayer?.startPlayer(
-          fromURI: wavFilePath,
-          whenFinished: () {
-            if (mounted) {
-              setState(() {
-                _isPlaying = false;
-              });
-            }
+        return GestureDetector(
+          onTap: () async {
+            // TODO
           },
-        );
-      }
-    } catch (e) {
-      debugPrint('Error playing audio: $e');
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _isPlaying = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error playing audio: $e'),
-            backgroundColor: Colors.red,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+            child: Container(
+              width: double.maxFinite,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F1F25),
+                borderRadius: BorderRadius.circular(16.0),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16.0),
+                child: Dismissible(
+                  key: Key(wal.id),
+                  direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20.0),
+                    color: Colors.red,
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  onDismissed: (direction) {
+                    ServiceManager.instance().wal.getSyncs().deleteWal(wal);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.all(0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.max,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          leading: Padding(
+                            padding: const EdgeInsets.only(top: 6.0),
+                            child: Text(wal.device == "phone" ? "📱" : "💾",
+                                style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  secondsToHumanReadable(wal.seconds),
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                                ),
+                              ),
+                              if (canPlayOrShare) ...[
+                                IconButton(
+                                  onPressed: isProcessing
+                                      ? null
+                                      : () async {
+                                          try {
+                                            await syncProvider.toggleWalPlayback(wal);
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('Error playing audio: $e'),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                  icon: isProcessing
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white70,
+                                          ),
+                                        )
+                                      : Icon(
+                                          isPlaying ? Icons.pause_circle : Icons.play_circle,
+                                          color: Colors.white70,
+                                          size: 24,
+                                        ),
+                                  tooltip: isProcessing ? 'Processing...' : (isPlaying ? 'Pause' : 'Play'),
+                                ),
+                                IconButton(
+                                  onPressed: isSharing
+                                      ? null
+                                      : () async {
+                                          try {
+                                            await syncProvider.shareWalAsWav(wal);
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('Error sharing audio: $e'),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                  icon: isSharing
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white70,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.share,
+                                          color: Colors.white70,
+                                          size: 20,
+                                        ),
+                                  tooltip: isSharing ? 'Sharing...' : 'Share as WAV',
+                                ),
+                              ],
+                            ],
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
+                                style: const TextStyle(color: Colors.grey, fontSize: 14),
+                              ),
+                              Text(
+                                '${wal.codec.toString().split('.').last.toUpperCase()} • ${wal.sampleRate}Hz',
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                              if (wal.status == WalStatus.synced)
+                                const Text(
+                                  'Synced ✅',
+                                  style: TextStyle(color: Colors.green, fontSize: 12),
+                                ),
+                            ],
+                          ),
+                          trailing: wal.status == WalStatus.synced
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      'Synced',
+                                      style: TextStyle(color: Colors.green, fontSize: 14),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      onPressed: () => WalListItem.showResyncDialog(context, wal, syncProvider),
+                                      icon: const Icon(
+                                        Icons.refresh,
+                                        color: Colors.white70,
+                                        size: 20,
+                                      ),
+                                      tooltip: 'Resync',
+                                    ),
+                                  ],
+                                )
+                              : wal.isSyncing && wal.status != WalStatus.synced
+                                  ? Text(
+                                      "${wal.syncEtaSeconds != null ? "${wal.syncEtaSeconds}s" : "Calculating"} ETA",
+                                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                                    )
+                                  : TextButton(
+                                      onPressed: () {
+                                        syncProvider.setSyncCompleted(false);
+                                        syncProvider.syncWal(wal);
+                                      },
+                                      child: const Text('Sync', style: TextStyle(color: Colors.white))),
+                        ),
+                        if (wal.isSyncing && wal.status != WalStatus.synced)
+                          LinearProgressIndicator(
+                            value: calculateProgress(wal.syncStartedAt ?? DateTime.now(), wal.syncEtaSeconds ?? 0),
+                            backgroundColor: Colors.grey[800],
+                            color: Colors.white,
+                            minHeight: 4,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         );
-      }
-    }
+      },
+    );
   }
 
-  Future<String?> _decodeOpusToWav(String opusFilePath, {bool forSharing = false}) async {
-    try {
-      final file = File(opusFilePath);
-      if (!file.existsSync()) {
-        throw Exception('Opus file not found');
-      }
-
-      // Read the opus file data
-      final opusData = await file.readAsBytes();
-
-      // Parse the custom format: <length>|<data> for each frame
-      List<Uint8List> opusFrames = [];
-      int offset = 0;
-
-      while (offset < opusData.length - 4) {
-        // Read frame length (4 bytes)
-        final lengthBytes = opusData.sublist(offset, offset + 4);
-        final length = ByteData.sublistView(Uint8List.fromList(lengthBytes)).getUint32(0, Endian.little);
-        offset += 4;
-
-        if (offset + length > opusData.length) break;
-
-        // Read frame data
-        final frameData = opusData.sublist(offset, offset + length);
-        opusFrames.add(Uint8List.fromList(frameData));
-        offset += length;
-      }
-
-      if (opusFrames.isEmpty) {
-        throw Exception('No opus frames found in file');
-      }
-
-      // Initialize opus decoder
-      final decoder = SimpleOpusDecoder(
-        sampleRate: widget.wal.sampleRate,
-        channels: widget.wal.channel,
-      );
-
-      // Decode all frames
-      List<Uint8List> pcmFrames = [];
-      for (final opusFrame in opusFrames) {
-        try {
-          final pcmFrame = decoder.decode(input: opusFrame);
-          if (pcmFrame != null) {
-            // Convert Int16List to Uint8List
-            final uint8Frame = Uint8List.fromList(pcmFrame.buffer.asUint8List());
-            pcmFrames.add(uint8Frame);
-          }
-        } catch (e) {
-          debugPrint('Error decoding opus frame: $e');
-          // Continue with other frames
-        }
-      }
-
-      if (pcmFrames.isEmpty) {
-        throw Exception('No PCM data decoded');
-      }
-
-      // Combine all PCM frames
-      final totalLength = pcmFrames.fold<int>(0, (sum, frame) => sum + frame.length);
-      final combinedPcm = Uint8List(totalLength);
-      int writeOffset = 0;
-      for (final frame in pcmFrames) {
-        combinedPcm.setRange(writeOffset, writeOffset + frame.length, frame);
-        writeOffset += frame.length;
-      }
-
-      // Create WAV file
-      final tempDir = await getTemporaryDirectory();
-      final fileName = forSharing
-          ? widget.wal.getFileName().replaceAll('.bin', '.wav')
-          : 'decoded_${DateTime.now().millisecondsSinceEpoch}.wav';
-      final wavFilePath = '${tempDir.path}/$fileName';
-
-      final wavData = _createWavFile(
-        pcmData: combinedPcm,
-        sampleRate: widget.wal.sampleRate,
-        channels: widget.wal.channel,
-        bitsPerSample: 16,
-      );
-
-      await File(wavFilePath).writeAsBytes(wavData);
-      return wavFilePath;
-    } catch (e) {
-      debugPrint('Error decoding opus to wav: $e');
-      return null;
-    }
-  }
-
-  Future<String?> _convertPcmToWav(String pcmFilePath, {bool forSharing = false}) async {
-    try {
-      final file = File(pcmFilePath);
-      if (!file.existsSync()) {
-        throw Exception('PCM file not found');
-      }
-
-      // Read the PCM file data (same custom format as opus)
-      final pcmFileData = await file.readAsBytes();
-
-      // Parse the custom format: <length>|<data> for each frame
-      List<Uint8List> pcmFrames = [];
-      int offset = 0;
-
-      while (offset < pcmFileData.length - 4) {
-        // Read frame length (4 bytes)
-        final lengthBytes = pcmFileData.sublist(offset, offset + 4);
-        final length = ByteData.sublistView(Uint8List.fromList(lengthBytes)).getUint32(0, Endian.little);
-        offset += 4;
-
-        if (offset + length > pcmFileData.length) break;
-
-        // Read frame data
-        final frameData = pcmFileData.sublist(offset, offset + length);
-        pcmFrames.add(Uint8List.fromList(frameData));
-        offset += length;
-      }
-
-      if (pcmFrames.isEmpty) {
-        throw Exception('No PCM frames found in file');
-      }
-
-      // Combine all PCM frames
-      final totalLength = pcmFrames.fold<int>(0, (sum, frame) => sum + frame.length);
-      final combinedPcm = Uint8List(totalLength);
-      int writeOffset = 0;
-      for (final frame in pcmFrames) {
-        combinedPcm.setRange(writeOffset, writeOffset + frame.length, frame);
-        writeOffset += frame.length;
-      }
-
-      // Create WAV file
-      final tempDir = await getTemporaryDirectory();
-      final fileName = forSharing
-          ? widget.wal.getFileName().replaceAll('.bin', '.wav')
-          : 'converted_${DateTime.now().millisecondsSinceEpoch}.wav';
-      final wavFilePath = '${tempDir.path}/$fileName';
-
-      final bitsPerSample = widget.wal.codec == BleAudioCodec.pcm16 ? 16 : 8;
-      final wavData = _createWavFile(
-        pcmData: combinedPcm,
-        sampleRate: widget.wal.sampleRate,
-        channels: widget.wal.channel,
-        bitsPerSample: bitsPerSample,
-      );
-
-      await File(wavFilePath).writeAsBytes(wavData);
-      return wavFilePath;
-    } catch (e) {
-      debugPrint('Error converting PCM to wav: $e');
-      return null;
-    }
-  }
-
-  Future<void> _shareWalAsWav() async {
-    if (widget.wal.filePath == null || widget.wal.filePath!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Audio file not available for sharing'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_isSharing) return;
-
-    setState(() {
-      _isSharing = true;
-    });
-
-    try {
-      String? wavFilePath;
-
-      // Check if it's an opus file that needs decoding
-      if (widget.wal.codec.isOpusSupported()) {
-        wavFilePath = await _decodeOpusToWav(widget.wal.filePath!, forSharing: true);
-      } else {
-        // For PCM files, convert to WAV
-        wavFilePath = await _convertPcmToWav(widget.wal.filePath!, forSharing: true);
-      }
-
-      if (wavFilePath != null && mounted) {
-        final result = await Share.shareXFiles(
-          [XFile(wavFilePath)],
-          text:
-              'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000).toString().split('.')[0]}',
-        );
-
-        if (result.status == ShareResultStatus.success) {
-          debugPrint('Audio file shared successfully');
-        }
-      }
-    } catch (e) {
-      debugPrint('Error sharing audio: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sharing audio: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSharing = false;
-        });
-      }
-    }
-  }
-
-  Uint8List _createWavFile({
-    required Uint8List pcmData,
-    required int sampleRate,
-    required int channels,
-    required int bitsPerSample,
-  }) {
-    const int wavHeaderSize = 44;
-    final int frameSize = ((bitsPerSample + 7) ~/ 8) * channels;
-    final int fileSize = wavHeaderSize + pcmData.length;
-
-    final ByteData header = ByteData(wavHeaderSize);
-    const Endian endian = Endian.little;
-
-    // WAV header
-    header.setUint32(4, fileSize - 8, endian); // File size - 8
-    header.setUint32(16, 16, endian); // PCM format chunk size
-    header.setUint16(20, 1, endian); // Audio format (PCM)
-    header.setUint16(22, channels, endian); // Number of channels
-    header.setUint32(24, sampleRate, endian); // Sample rate
-    header.setUint32(28, sampleRate * frameSize, endian); // Byte rate
-    header.setUint16(32, frameSize, endian); // Block align
-    header.setUint16(34, bitsPerSample, endian); // Bits per sample
-    header.setUint32(40, pcmData.length, endian); // Data chunk size
-
-    final Uint8List headerBytes = header.buffer.asUint8List();
-    headerBytes.setAll(0, ascii.encode('RIFF'));
-    headerBytes.setAll(8, ascii.encode('WAVE'));
-    headerBytes.setAll(12, ascii.encode('fmt '));
-    headerBytes.setAll(36, ascii.encode('data'));
-
-    // Combine header and PCM data
-    final Uint8List wavFile = Uint8List(fileSize);
-    wavFile.setAll(0, headerBytes);
-    wavFile.setAll(wavHeaderSize, pcmData);
-
-    return wavFile;
-  }
-
-  void _showResyncDialog(BuildContext context) {
+  static void showResyncDialog(BuildContext context, Wal wal, SyncProvider syncProvider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -407,11 +255,11 @@ class _WalListItemState extends State<WalListItem> {
             ),
             const SizedBox(height: 12),
             Text(
-              'File: ${secondsToHumanReadable(widget.wal.seconds)}',
+              'File: ${secondsToHumanReadable(wal.seconds)}',
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
             Text(
-              'Recorded: ${dateTimeFormat('MMM dd, h:mm a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000))}',
+              'Recorded: ${dateTimeFormat('MMM dd, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000))}',
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ],
@@ -424,179 +272,17 @@ class _WalListItemState extends State<WalListItem> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _resyncWal(context);
+              syncProvider.resyncWal(wal);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Resyncing audio file...'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
             },
             child: const Text('Resync', style: TextStyle(color: Colors.orange)),
           ),
         ],
-      ),
-    );
-  }
-
-  void _resyncWal(BuildContext context) {
-    context.read<ConversationProvider>().resyncWal(widget.wal);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Resyncing audio file...'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        // TODO
-      },
-      child: Padding(
-        padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-        child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(16.0),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16.0),
-            child: Dismissible(
-              key: Key(widget.wal.id),
-              direction: widget.wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20.0),
-                color: Colors.red,
-                child: const Icon(Icons.delete, color: Colors.white),
-              ),
-              onDismissed: (direction) {
-                var wal = widget.wal;
-                ServiceManager.instance().wal.getSyncs().deleteWal(wal);
-              },
-              child: Padding(
-                padding: const EdgeInsetsDirectional.all(0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.max,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ListTile(
-                      leading: Padding(
-                        padding: const EdgeInsets.only(top: 6.0),
-                        child: Text(widget.wal.device == "phone" ? "📱" : "💾",
-                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
-                      ),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              secondsToHumanReadable(widget.wal.seconds),
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                          ),
-                          if (widget.wal.filePath != null && widget.wal.filePath!.isNotEmpty) ...[
-                            IconButton(
-                              onPressed: _isProcessing ? null : _togglePlayback,
-                              icon: _isProcessing
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white70,
-                                      ),
-                                    )
-                                  : Icon(
-                                      _isPlaying ? Icons.pause_circle : Icons.play_circle,
-                                      color: Colors.white70,
-                                      size: 24,
-                                    ),
-                              tooltip: _isProcessing ? 'Processing...' : (_isPlaying ? 'Pause' : 'Play'),
-                            ),
-                            IconButton(
-                              onPressed: _isSharing ? null : _shareWalAsWav,
-                              icon: _isSharing
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white70,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.share,
-                                      color: Colors.white70,
-                                      size: 20,
-                                    ),
-                              tooltip: _isSharing ? 'Sharing...' : 'Share as WAV',
-                            ),
-                          ],
-                        ],
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
-                            style: const TextStyle(color: Colors.grey, fontSize: 14),
-                          ),
-                          Text(
-                            '${widget.wal.codec.toString().split('.').last.toUpperCase()} • ${widget.wal.sampleRate}Hz',
-                            style: const TextStyle(color: Colors.grey, fontSize: 12),
-                          ),
-                          if (widget.wal.status == WalStatus.synced)
-                            const Text(
-                              'Synced ✅',
-                              style: TextStyle(color: Colors.green, fontSize: 12),
-                            ),
-                        ],
-                      ),
-                      trailing: widget.wal.status == WalStatus.synced
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text(
-                                  'Synced',
-                                  style: TextStyle(color: Colors.green, fontSize: 14),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  onPressed: () => _showResyncDialog(context),
-                                  icon: const Icon(
-                                    Icons.refresh,
-                                    color: Colors.white70,
-                                    size: 20,
-                                  ),
-                                  tooltip: 'Resync',
-                                ),
-                              ],
-                            )
-                          : widget.wal.isSyncing && widget.wal.status != WalStatus.synced
-                              ? Text(
-                                  "${widget.wal.syncEtaSeconds != null ? "${widget.wal.syncEtaSeconds}s" : "Calculating"} ETA",
-                                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                                )
-                              : TextButton(
-                                  onPressed: () {
-                                    context.read<ConversationProvider>().setSyncCompleted(false);
-                                    context.read<ConversationProvider>().syncWal(widget.wal);
-                                  },
-                                  child: const Text('Sync', style: TextStyle(color: Colors.white))),
-                    ),
-                    if (widget.wal.isSyncing && widget.wal.status != WalStatus.synced)
-                      LinearProgressIndicator(
-                        value: calculateProgress(
-                            widget.wal.syncStartedAt ?? DateTime.now(), widget.wal.syncEtaSeconds ?? 0),
-                        backgroundColor: Colors.grey[800],
-                        color: Colors.white,
-                        minHeight: 4,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -677,7 +363,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   Future<int> _getTotalWalSeconds() async {
     if (SharedPreferencesUtil().unlimitedLocalStorageEnabled) {
       // Include both missing and synced retained WALs
-      final allWals = await context.read<ConversationProvider>().getAllWals();
+      final allWals = await context.read<SyncProvider>().getAllWals();
       int totalSeconds = 0;
       for (var wal in allWals) {
         totalSeconds += wal.seconds;
@@ -685,7 +371,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       return totalSeconds;
     } else {
       // Only missing WALs
-      return context.read<ConversationProvider>().missingWalsInSeconds;
+      return context.read<SyncProvider>().missingWalsInSeconds;
     }
   }
 
@@ -706,7 +392,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
-  void _showDeleteSyncedDialog(BuildContext context, ConversationProvider provider) {
+  void _showDeleteSyncedDialog(BuildContext context, SyncProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -775,24 +461,24 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
-        var provider = Provider.of<ConversationProvider>(context, listen: false);
+        var provider = Provider.of<SyncProvider>(context, listen: false);
         provider.clearSyncResult();
       },
-      child: Consumer<ConversationProvider>(builder: (context, conversationProvider, child) {
+      child: Consumer<SyncProvider>(builder: (context, syncProvider, child) {
         return Scaffold(
           appBar: AppBarWithBanner(
             appBar: AppBar(
               title: const Text('Sync Conversations'),
               backgroundColor: Theme.of(context).colorScheme.primary,
             ),
-            showAppBar: conversationProvider.isSyncing || conversationProvider.syncCompleted,
+            showAppBar: syncProvider.isSyncing || syncProvider.syncCompleted,
             child: Container(
               color: Colors.green,
               child: Center(
                 child: Text(
-                  conversationProvider.isSyncing
+                  syncProvider.isSyncing
                       ? 'Syncing Conversations'
-                      : conversationProvider.syncCompleted
+                      : syncProvider.syncCompleted
                           ? 'Conversations Synced Successfully 🎉'
                           : '',
                   style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -802,7 +488,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
           floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-          floatingActionButton: conversationProvider.isSyncing || conversationProvider.syncCompleted
+          floatingActionButton: syncProvider.isSyncing || syncProvider.syncCompleted
               ? const SizedBox()
               : ScaleTransition(
                   scale: _hideFabAnimation,
@@ -826,7 +512,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       onPressed: () async {
                         if (context.read<ConnectivityProvider>().isConnected) {
                           // _toggleAnimation();
-                          await conversationProvider.syncWals();
+                          await syncProvider.syncWals();
                           // _toggleAnimation();
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -851,7 +537,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      conversationProvider.isSyncing
+                      syncProvider.isSyncing
                           ? Container(
                               padding: const EdgeInsets.all(12.0),
                               margin: const EdgeInsets.only(left: 16.0, right: 16.0, top: 12),
@@ -872,7 +558,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       FutureBuilder<int>(
                         future: _getTotalWalSeconds(),
                         builder: (context, snapshot) {
-                          int totalSeconds = snapshot.data ?? conversationProvider.missingWalsInSeconds;
+                          int totalSeconds = snapshot.data ?? syncProvider.missingWalsInSeconds;
                           return Text(
                             secondsToHumanReadable(totalSeconds),
                             style: const TextStyle(color: Colors.white, fontSize: 30),
@@ -889,7 +575,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       const SizedBox(height: 20),
                       // WAL Stats Widget
                       FutureBuilder<WalStats>(
-                        future: conversationProvider.getWalStats(),
+                        future: syncProvider.getWalStats(),
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) {
                             return const SizedBox.shrink();
@@ -938,7 +624,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                   SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton.icon(
-                                      onPressed: () => _showDeleteSyncedDialog(context, conversationProvider),
+                                      onPressed: () => _showDeleteSyncedDialog(context, syncProvider),
                                       icon: const Icon(Icons.delete_sweep, size: 18),
                                       label: const Text('Delete All Synced Files'),
                                       style: ElevatedButton.styleFrom(
@@ -954,8 +640,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                         },
                       ),
                       const SizedBox(height: 20),
-                      conversationProvider.isSyncing
-                          ? conversationProvider.isFetchingConversations
+                      syncProvider.isSyncing
+                          ? syncProvider.isFetchingConversations
                               ? const Padding(
                                   padding: EdgeInsets.all(8.0),
                                   child: Row(
@@ -985,8 +671,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                     textAlign: TextAlign.center,
                                   ),
                                 )
-                          : conversationProvider.syncCompleted &&
-                                  conversationProvider.syncedConversationsPointers.isNotEmpty
+                          : syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty
                               ? Column(
                                   children: [
                                     const Text(
@@ -996,7 +681,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                     const SizedBox(
                                       height: 18,
                                     ),
-                                    (conversationProvider.syncedConversationsPointers.isNotEmpty)
+                                    (syncProvider.syncedConversationsPointers.isNotEmpty)
                                         ? Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                             decoration: BoxDecoration(
@@ -1029,10 +714,10 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 50)),
-                Consumer<ConversationProvider>(
-                  builder: (context, conversationProvider, child) {
+                Consumer<SyncProvider>(
+                  builder: (context, syncProvider, child) {
                     return FutureBuilder<List<Wal>>(
-                      future: conversationProvider.getAllWals(),
+                      future: syncProvider.getAllWals(),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const SliverToBoxAdapter(
