@@ -53,6 +53,55 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     }
   }
 
+  Future<WalStats> getWalStats() async {
+    try {
+      return await _wal.getSyncs().getWalStats();
+    } catch (e) {
+      debugPrint('Error in ConversationProvider.getWalStats(): $e');
+      return WalStats(
+        totalFiles: 0,
+        phoneFiles: 0,
+        sdcardFiles: 0,
+        phoneSize: 0,
+        sdcardSize: 0,
+        syncedFiles: 0,
+        missedFiles: 0,
+      );
+    }
+  }
+
+  Future<void> deleteAllSyncedWals() async {
+    try {
+      await _wal.getSyncs().deleteAllSyncedWals();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error deleting all synced WALs: $e');
+    }
+  }
+
+  Future<void> resyncWal(Wal wal) async {
+    try {
+      debugPrint("provider > resyncWal ${wal.id}");
+      clearSyncResult(); // Clear previous sync results
+      setIsSyncing(true);
+      _walsSyncedProgress = 0.0;
+      var res = await _wal.getSyncs().resyncWal(wal);
+      if (res != null) {
+        if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
+          print('Resynced memories: ${res.newConversationIds} ${res.updatedConversationIds}');
+          await getSyncedConversationsData(res);
+        }
+      }
+      setSyncCompleted(true);
+      setIsSyncing(false);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error resyncing WAL: $e');
+      setIsSyncing(false);
+      notifyListeners();
+    }
+  }
+
   double _walsSyncedProgress = 0.0;
 
   double get walsSyncedProgress => _walsSyncedProgress;
@@ -575,7 +624,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   }
 
   @override
-  void onMissingWalUpdated() async {
+  void onWalUpdated() async {
     _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
