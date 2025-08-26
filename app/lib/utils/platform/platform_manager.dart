@@ -25,6 +25,6 @@ class PlatformManager {
   }
 
   bool get isAnalyticsSupported => PlatformService.isAnalyticsSupported;
-  bool get isDebuggingSupported => PlatformService.isInstabugSupported;
+  bool get isDebuggingSupported => PlatformService.isCrashlyticsSupported;
   bool get isMacOS => PlatformService.isMacOS;
 }
