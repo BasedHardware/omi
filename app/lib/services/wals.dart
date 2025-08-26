@@ -11,8 +11,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/services.dart';
 import 'package:path_provider/path_provider.dart';
 
-const chunkSizeInSeconds = 60;
-const flushIntervalInSeconds = 90;
+const chunkSizeInSeconds = 10;
+const flushIntervalInSeconds = 15;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(double percentage); // 0..1
@@ -407,7 +407,8 @@ class SDCardWalSync implements IWalSync {
           resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
               .where((id) => !resp.updatedConversationIds.contains(id) && !resp.updatedConversationIds.contains(id)));
         } catch (e) {
-          debugPrint(e.toString());
+          debugPrint('SDCard sync batch failed: $e');
+          throw Exception('SDCard sync batch failed: $e');
         }
 
         // Write offset
@@ -430,7 +431,8 @@ class SDCardWalSync implements IWalSync {
         resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
             .where((id) => !resp.updatedConversationIds.contains(id) && !resp.updatedConversationIds.contains(id)));
       } catch (e) {
-        debugPrint(e.toString());
+        debugPrint('SDCard sync remaining files failed: $e');
+        throw Exception('SDCard sync remaining files failed: $e');
       }
 
       // Write offset
@@ -481,6 +483,8 @@ class SDCardWalSync implements IWalSync {
 
       wal.status = WalStatus.synced;
       wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
       listener.onMissingWalUpdated();
     }
     return resp;
@@ -494,21 +498,34 @@ class SDCardWalSync implements IWalSync {
     walToSync.syncStartedAt = DateTime.now();
     listener.onMissingWalUpdated();
 
-    final storageOffsetStarts = wal.storageOffset;
+    try {
+      final storageOffsetStarts = wal.storageOffset;
 
-    var partialRes = await _syncWal(wal, (offset) {
-      walToSync.storageOffset = offset;
-      walToSync.syncEtaSeconds = DateTime.now().difference(walToSync.syncStartedAt!).inSeconds *
-          (walToSync.storageTotalBytes - wal.storageOffset) ~/
-          (walToSync.storageOffset - storageOffsetStarts);
-      listener.onMissingWalUpdated();
-    });
-    resp.newConversationIds.addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-    resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-        .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      var partialRes = await _syncWal(wal, (offset) {
+        walToSync.storageOffset = offset;
+        walToSync.syncEtaSeconds = DateTime.now().difference(walToSync.syncStartedAt!).inSeconds *
+            (walToSync.storageTotalBytes - wal.storageOffset) ~/
+            (walToSync.storageOffset - storageOffsetStarts);
+        listener.onMissingWalUpdated();
+      });
+      resp.newConversationIds
+          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
 
-    wal.status = WalStatus.synced;
-    wal.isSyncing = false;
+      wal.status = WalStatus.synced;
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+    } catch (e) {
+      debugPrint('SDCard sync failed: $e');
+      // Reset syncing state for failed WAL
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      // Keep status as miss so it can be retried
+    }
+
     listener.onMissingWalUpdated();
     return resp;
   }
@@ -681,12 +698,15 @@ class LocalWalSync implements IWalSync {
       }
     }
 
-    // Clean synced wal
-    for (var i = _wals.length - 1; i >= 0; i--) {
-      if (_wals[i].status == WalStatus.synced) {
-        await _deleteWal(_wals[i]);
+    // Clean synced wal (only if unlimited storage is disabled)
+    if (!SharedPreferencesUtil().unlimitedLocalStorageEnabled) {
+      for (var i = _wals.length - 1; i >= 0; i--) {
+        if (_wals[i].status == WalStatus.synced) {
+          await _deleteWal(_wals[i]);
+        }
       }
     }
+    // When unlimited storage is enabled, synced WALs are kept as-is with synced status
 
     SharedPreferencesUtil().wals = _wals;
   }
@@ -717,6 +737,10 @@ class LocalWalSync implements IWalSync {
   @override
   Future<List<Wal>> getMissingWals() async {
     return _wals.where((w) => w.status == WalStatus.miss).toList();
+  }
+
+  Future<List<Wal>> getAllWals() async {
+    return List.from(_wals);
   }
 
   void onByteStream(List<int> value) async {
@@ -795,18 +819,33 @@ class LocalWalSync implements IWalSync {
             .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
         resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
             .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+        // Success? update status to synced
+        for (var j = left; j <= right; j++) {
+          if (j < wals.length) {
+            var wal = wals[j];
+            wals[j].status = WalStatus.synced; // ref to _wals[]
+            wals[j].isSyncing = false;
+            wals[j].syncStartedAt = null;
+            wals[j].syncEtaSeconds = null;
+
+            // Send
+            listener.onWalSynced(wal);
+          }
+        }
       } catch (e) {
-        debugPrint(e.toString());
-        continue;
-      }
-
-      // Success? update status to synced
-      for (var j = left; j < right; j++) {
-        var wal = wals[j];
-        wals[j].status = WalStatus.synced; // ref to _wals[]
-
-        // Send
-        listener.onWalSynced(wal);
+        debugPrint('Local WAL sync failed: $e');
+        // Reset syncing state for failed WALs
+        for (var j = left; j <= right; j++) {
+          if (j < wals.length) {
+            wals[j].isSyncing = false;
+            wals[j].syncStartedAt = null;
+            wals[j].syncEtaSeconds = null;
+            // Keep status as miss so it can be retried
+          }
+        }
+        // Throw error to stop progress immediately for audio files
+        throw Exception('Local WAL sync failed: $e');
       }
 
       SharedPreferencesUtil().wals = _wals;
@@ -856,14 +895,25 @@ class LocalWalSync implements IWalSync {
           .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
       resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
           .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+      // Success - update status to synced
+      walToSync.status = WalStatus.synced; // ref to _wals[]
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+
+      // Send
+      listener.onWalSynced(wal);
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint('Single WAL sync failed: $e');
+      // Reset syncing state for failed WAL
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      // Keep status as miss so it can be retried
+      // Throw error to stop progress immediately for audio files
+      throw Exception('Single WAL sync failed: $e');
     }
-
-    walToSync.status = WalStatus.synced; // ref to _wals[]
-
-    // Send
-    listener.onWalSynced(wal);
 
     SharedPreferencesUtil().wals = _wals;
     listener.onMissingWalUpdated();
@@ -898,6 +948,13 @@ class WalSyncs implements IWalSync {
     List<Wal> wals = [];
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getMissingWals());
+    return wals;
+  }
+
+  Future<List<Wal>> getAllWals() async {
+    List<Wal> wals = [];
+    wals.addAll(await _sdcardSync.getMissingWals());
+    wals.addAll(await _phoneSync.getAllWals());
     return wals;
   }
 

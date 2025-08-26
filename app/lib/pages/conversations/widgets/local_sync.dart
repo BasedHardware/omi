@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/sdcard/sdcard_transfer_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -66,7 +67,8 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
       }
 
       // timer
-      if ((_status == LocalSyncStatus.inProgress || _status == LocalSyncStatus.flush) && (!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady)) {
+      if ((_status == LocalSyncStatus.inProgress || _status == LocalSyncStatus.flush) &&
+          (!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady)) {
         _missSecondsInEstTimerEnabled = true;
       } else {
         _missSecondsInEstTimerEnabled = false;
@@ -92,38 +94,30 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
       // ready to sync
       if (_status == LocalSyncStatus.flush) {
         return const SizedBox.shrink();
-        // return GestureDetector(
-        //   onTap: () {
-        //     routeToPage(context, const SyncPage());
-        //   },
-        //   child: Container(
-        //     decoration: BoxDecoration(
-        //       color: const Color(0xFF1F1F25),
-        //       borderRadius: const BorderRadius.all(Radius.circular(12)),
-        //     ),
-        //     padding: const EdgeInsets.all(16),
-        //     margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        //     child: Row(
-        //       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        //       crossAxisAlignment: CrossAxisAlignment.center,
-        //       children: [
-        //         const Row(
-        //           children: [
-        //             Text(
-        //               'Stay in Sync',
-        //               style: TextStyle(color: Colors.white, fontSize: 16),
-        //               textAlign: TextAlign.center,
-        //             ),
-        //           ],
-        //         ),
-        //         Text(
-        //           '${secondsToHumanReadable(_missSeconds.toString())} available',
-        //           style: Theme.of(context).textTheme.bodyMedium!.copyWith(decoration: TextDecoration.underline),
-        //         ),
-        //       ],
-        //     ),
-        //   ),
-        // );
+      }
+
+      // Always show sync icon when unlimited local storage is enabled
+      if (SharedPreferencesUtil().unlimitedLocalStorageEnabled && captureProvider.isWalSupported) {
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: const BorderRadius.all(Radius.circular(12)),
+          ),
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.storage, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Local Storage Active',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        );
       }
 
       return const SizedBox.shrink();

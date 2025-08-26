@@ -378,12 +378,11 @@ class CaptureProvider extends ChangeNotifier
         _commandBytes.add(snapshot.sublist(3));
       }
 
-      // Support: opus codec, 1m from the first device connects
-      var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
+      // Local sync
+      // Support: opus codec
       var checkWalSupported = codec.isOpusSupported() &&
-          (deviceFirstConnectedAt != null &&
-              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
-          SharedPreferencesUtil().localSyncEnabled;
+          SharedPreferencesUtil().localSyncEnabled &&
+          (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
@@ -391,16 +390,14 @@ class CaptureProvider extends ChangeNotifier
         _wal.getSyncs().phone.onByteStream(snapshot);
       }
 
-      // send ws
+      // Send WS
       if (_socket?.state == SocketServiceState.connected) {
         final trimmedValue = value.sublist(3);
         _socket?.send(trimmedValue);
 
-        // Process audio bytes for waveform visualization
-        _processAudioBytesForVisualization(trimmedValue);
-
-        // synced
-        if (_isWalSupported) {
+        // Mark as synced
+        // Dont need to mark as synced if the option unlimitedLocalStorageEnabled is on
+        if (_isWalSupported && !SharedPreferencesUtil().unlimitedLocalStorageEnabled) {
           _wal.getSyncs().phone.onBytesSync(value);
         }
       }
@@ -611,8 +608,6 @@ class CaptureProvider extends ChangeNotifier
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(bytes);
       }
-      // Process audio bytes for waveform visualization
-      _processAudioBytesForVisualization(bytes);
     }, onRecording: () {
       updateRecordingState(RecordingState.record);
     }, onStop: () {

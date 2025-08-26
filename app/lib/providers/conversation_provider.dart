@@ -39,7 +39,19 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   List<Wal> get missingWals => _missingWals;
 
-  int get missingWalsInSeconds => _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
+  int get missingWalsInSeconds =>
+      _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
+
+  Future<List<Wal>> getAllWals() async {
+    try {
+      final wals = await _wal.getSyncs().getAllWals();
+      debugPrint('ConversationProvider.getAllWals() returned ${wals.length} WALs');
+      return wals;
+    } catch (e) {
+      debugPrint('Error in ConversationProvider.getAllWals(): $e');
+      return [];
+    }
+  }
 
   double _walsSyncedProgress = 0.0;
 
@@ -47,7 +59,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   bool isSyncing = false;
   bool syncCompleted = false;
-  List<bool> multipleSyncs = [];
   bool isFetchingConversations = false;
   List<SyncedConversationPointer> syncedConversationsPointers = [];
 
@@ -187,7 +198,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     // Debounce mechanism: only refresh if enough time has passed since last refresh
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      debugPrint('Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
+      debugPrint(
+          'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
       return;
     }
 
@@ -216,19 +228,25 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     List<ServerConversation> upsertConvos = [];
 
     // processing convos
-    upsertConvos = newConversations.where((c) => c.status == ConversationStatus.processing && processingConversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
+    upsertConvos = newConversations
+        .where((c) =>
+            c.status == ConversationStatus.processing &&
+            processingConversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .toList();
     if (upsertConvos.isNotEmpty) {
       processingConversations.insertAll(0, upsertConvos);
     }
 
     // completed convos
-    upsertConvos = newConversations.where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
+    upsertConvos = newConversations
+        .where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .toList();
     if (upsertConvos.isNotEmpty) {
       // Check if this is the first conversation
       bool wasEmpty = conversations.isEmpty;
-      
+
       conversations.insertAll(0, upsertConvos);
-      
+
       // Mark first conversation for app review
       if (wasEmpty && await _appReviewService.isFirstConversation()) {
         await _appReviewService.markFirstConversation();
@@ -376,7 +394,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
     conversations.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
-    groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
+    groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed =
+        state;
     notifyListeners();
   }
 
@@ -384,7 +403,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations = await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
+    var newConversations =
+        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     _groupConversationsByDateWithoutNotify();
@@ -395,15 +415,15 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   Future<void> addConversation(ServerConversation conversation) async {
     // Check if this is the first conversation
     bool wasEmpty = conversations.isEmpty;
-    
+
     conversations.insert(0, conversation);
     _groupConversationsByDateWithoutNotify();
-    
+
     // Mark first conversation for app review
     if (wasEmpty && await _appReviewService.isFirstConversation()) {
       await _appReviewService.markFirstConversation();
     }
-    
+
     notifyListeners();
   }
 
@@ -442,7 +462,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       }
     } else {
       groupedConversations[memDate] = [conversation];
-      groupedConversations = Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
+      groupedConversations =
+          Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
       idx = 0;
     }
     return (idx, memDate);
@@ -491,7 +512,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   Map<String, DateTime> deleteTimestamps = {};
 
   void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
-    if (lastDeletedConversationId != null && memoriesToDelete.containsKey(lastDeletedConversationId) && DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
+    if (lastDeletedConversationId != null &&
+        memoriesToDelete.containsKey(lastDeletedConversationId) &&
+        DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
       deleteConversationOnServer(lastDeletedConversationId!);
     }
 
@@ -573,7 +596,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   Future syncWals() async {
     debugPrint("provider > syncWals");
-    setSyncCompleted(false);
+    clearSyncResult(); // Clear previous sync results
     _walsSyncedProgress = 0.0;
     setIsSyncing(true);
     var res = await _wal.getSyncs().syncAll(progress: this);
@@ -590,7 +613,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   Future syncWal(Wal wal) async {
     debugPrint("provider > syncWal ${wal.id}");
-    appendMultipleSyncs(true);
+    clearSyncResult(); // Clear previous sync results
+    setIsSyncing(true);
     _walsSyncedProgress = 0.0;
     var res = await _wal.getSyncs().syncWal(wal: wal, progress: this);
     if (res != null) {
@@ -599,7 +623,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
         await getSyncedConversationsData(res);
       }
     }
-    removeMultipleSyncs();
+    setSyncCompleted(true);
+    setIsSyncing(false);
     notifyListeners();
     return;
   }
@@ -613,9 +638,11 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     List<dynamic> newConversations = syncResult.newConversationIds;
     List<dynamic> updatedConversations = syncResult.updatedConversationIds;
     setIsFetchingConversations(true);
-    List<Future<ServerConversation?>> newConversationsFutures = newConversations.map((item) => getConversationDetails(item)).toList();
+    List<Future<ServerConversation?>> newConversationsFutures =
+        newConversations.map((item) => getConversationDetails(item)).toList();
 
-    List<Future<ServerConversation?>> updatedConversationsFutures = updatedConversations.map((item) => getConversationDetails(item)).toList();
+    List<Future<ServerConversation?>> updatedConversationsFutures =
+        updatedConversations.map((item) => getConversationDetails(item)).toList();
     var syncedConversations = {'new_memories': [], 'updated_memories': []};
     try {
       final newConversationsResponses = await Future.wait(newConversationsFutures);
@@ -649,14 +676,16 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     for (var conversation in syncedConversations['new_memories']!) {
       if (conversation != null && conversation.status == ConversationStatus.completed) {
         var res = getConversationDateAndIndex(conversation);
-        syncedConversationsPointers.add(SyncedConversationPointer(type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
+        syncedConversationsPointers.add(SyncedConversationPointer(
+            type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
       }
     }
     if (syncedConversations['updated_memories'] != []) {
       for (var conversation in syncedConversations['updated_memories']!) {
         if (conversation != null && conversation.status == ConversationStatus.completed) {
           var res = getConversationDateAndIndex(conversation);
-          syncedConversationsPointers.add(SyncedConversationPointer(type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
+          syncedConversationsPointers.add(SyncedConversationPointer(
+              type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
         }
       }
     }
@@ -702,27 +731,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  void appendMultipleSyncs(bool value) {
-    setIsSyncing(true);
-    multipleSyncs.add(value);
-    notifyListeners();
-  }
-
-  void removeMultipleSyncs() {
-    if (multipleSyncs.isNotEmpty) {
-      multipleSyncs.removeLast();
-    } else {
-      setIsSyncing(false);
-      setSyncCompleted(true);
-    }
-    notifyListeners();
-  }
-
-  void clearMultipleSyncs() {
-    multipleSyncs.clear();
-    notifyListeners();
-  }
-
   void setIsFetchingConversations(bool value) {
     isFetchingConversations = value;
     notifyListeners();
@@ -744,13 +752,17 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     return result;
   }
 
-  Future<void> updateGlobalActionItemState(ServerConversation conversation, String actionItemDescription, bool newState) async {
+  Future<void> updateGlobalActionItemState(
+      ServerConversation conversation, String actionItemDescription, bool newState) async {
     final convoId = conversation.id;
     bool conversationFoundAndUpdated = false;
 
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
-      final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+      final itemIndex = conversations[originalConvoIndex]
+          .structured
+          .actionItems
+          .indexWhere((item) => item.description == actionItemDescription);
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -761,7 +773,10 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (groupedConversations.containsKey(dateKey)) {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
-        final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+        final itemIndex = groupedConversations[dateKey]![groupIndex]
+            .structured
+            .actionItems
+            .indexWhere((item) => item.description == actionItemDescription);
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
@@ -770,7 +785,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
     if (conversationFoundAndUpdated) {
       // Find the item index for the server call
-      final itemIndex = conversation.structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
+      final itemIndex =
+          conversation.structured.actionItems.indexWhere((item) => item.description == actionItemDescription);
       if (itemIndex != -1) {
         await setConversationActionItemState(convoId, [itemIndex], [newState]);
       }

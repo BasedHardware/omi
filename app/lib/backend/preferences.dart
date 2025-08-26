@@ -189,6 +189,10 @@ class SharedPreferencesUtil {
 
   set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
 
+  bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled') ?? false;
+
+  set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
+
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);

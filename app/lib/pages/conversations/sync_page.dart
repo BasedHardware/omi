@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/widgets/appbar_with_banner.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -79,31 +80,48 @@ class _WalListItemState extends State<WalListItem> {
                     ListTile(
                       leading: Padding(
                         padding: const EdgeInsets.only(top: 6.0),
-                        child: Text(widget.wal.device == "phone" ? "📱" : "💾", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
+                        child: Text(widget.wal.device == "phone" ? "📱" : "💾",
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
                       ),
                       title: Text(
                         secondsToHumanReadable(widget.wal.seconds),
                         style: const TextStyle(color: Colors.white, fontSize: 16),
                       ),
-                      subtitle: Text(
-                        dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
-                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                          if (widget.wal.status == WalStatus.synced)
+                            const Text(
+                              'Synced ✅',
+                              style: TextStyle(color: Colors.green, fontSize: 12),
+                            ),
+                        ],
                       ),
-                      trailing: widget.wal.isSyncing
-                          ? Text(
-                              "${widget.wal.syncEtaSeconds != null ? "${widget.wal.syncEtaSeconds}s" : "Calculating"} ETA",
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                      trailing: widget.wal.status == WalStatus.synced
+                          ? const Text(
+                              'Synced',
+                              style: TextStyle(color: Colors.green, fontSize: 14),
                             )
-                          : TextButton(
-                              onPressed: () {
-                                context.read<ConversationProvider>().setSyncCompleted(false);
-                                context.read<ConversationProvider>().syncWal(widget.wal);
-                              },
-                              child: const Text('Sync', style: TextStyle(color: Colors.white))),
+                          : widget.wal.isSyncing && widget.wal.status != WalStatus.synced
+                              ? Text(
+                                  "${widget.wal.syncEtaSeconds != null ? "${widget.wal.syncEtaSeconds}s" : "Calculating"} ETA",
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                                )
+                              : TextButton(
+                                  onPressed: () {
+                                    context.read<ConversationProvider>().setSyncCompleted(false);
+                                    context.read<ConversationProvider>().syncWal(widget.wal);
+                                  },
+                                  child: const Text('Sync', style: TextStyle(color: Colors.white))),
                     ),
-                    if (widget.wal.isSyncing)
+                    if (widget.wal.isSyncing && widget.wal.status != WalStatus.synced)
                       LinearProgressIndicator(
-                        value: calculateProgress(widget.wal.syncStartedAt ?? DateTime.now(), widget.wal.syncEtaSeconds ?? 0),
+                        value: calculateProgress(
+                            widget.wal.syncStartedAt ?? DateTime.now(), widget.wal.syncEtaSeconds ?? 0),
                         backgroundColor: Colors.grey[800],
                         color: Colors.white,
                         minHeight: 4,
@@ -191,6 +209,21 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     super.initState();
   }
 
+  Future<int> _getTotalWalSeconds() async {
+    if (SharedPreferencesUtil().unlimitedLocalStorageEnabled) {
+      // Include both missing and synced retained WALs
+      final allWals = await context.read<ConversationProvider>().getAllWals();
+      int totalSeconds = 0;
+      for (var wal in allWals) {
+        totalSeconds += wal.seconds;
+      }
+      return totalSeconds;
+    } else {
+      // Only missing WALs
+      return context.read<ConversationProvider>().missingWalsInSeconds;
+    }
+  }
+
   @override
   void dispose() {
     _hideFabAnimation.dispose();
@@ -226,9 +259,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       canPop: true,
       onPopInvoked: (didPop) {
         var provider = Provider.of<ConversationProvider>(context, listen: false);
-        if (!provider.isSyncing) {
-          provider.clearSyncResult();
-        }
+        provider.clearSyncResult();
       },
       child: Consumer<ConversationProvider>(builder: (context, conversationProvider, child) {
         return Scaffold(
@@ -263,7 +294,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                     decoration: BoxDecoration(
                       border: const GradientBoxBorder(
-                        gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                        gradient: LinearGradient(colors: [
+                          Color.fromARGB(127, 208, 208, 208),
+                          Color.fromARGB(127, 188, 99, 121),
+                          Color.fromARGB(127, 86, 101, 182),
+                          Color.fromARGB(127, 126, 190, 236)
+                        ]),
                         width: 2,
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -316,12 +352,23 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                             )
                           : const SizedBox.shrink(),
                       const SizedBox(height: 30),
-                      Text(
-                        secondsToHumanReadable(conversationProvider.missingWalsInSeconds),
-                        style: const TextStyle(color: Colors.white, fontSize: 30),
+                      FutureBuilder<int>(
+                        future: _getTotalWalSeconds(),
+                        builder: (context, snapshot) {
+                          int totalSeconds = snapshot.data ?? conversationProvider.missingWalsInSeconds;
+                          return Text(
+                            secondsToHumanReadable(totalSeconds),
+                            style: const TextStyle(color: Colors.white, fontSize: 30),
+                          );
+                        },
                       ),
                       const SizedBox(height: 12),
-                      const Text('of conversations', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      Text(
+                        SharedPreferencesUtil().unlimitedLocalStorageEnabled
+                            ? 'to sync + stored locally'
+                            : 'of conversations',
+                        style: const TextStyle(color: Colors.white, fontSize: 18),
+                      ),
                       const SizedBox(height: 20),
                       conversationProvider.isSyncing
                           ? conversationProvider.isFetchingConversations
@@ -339,7 +386,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                       ),
                                       SizedBox(width: 12),
                                       Text(
-                                        'Finalizing synced memories',
+                                        'Finalizing synced conversations',
                                         style: TextStyle(color: Colors.white, fontSize: 16),
                                         textAlign: TextAlign.center,
                                       ),
@@ -354,7 +401,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                     textAlign: TextAlign.center,
                                   ),
                                 )
-                          : conversationProvider.syncCompleted && conversationProvider.syncedConversationsPointers.isNotEmpty
+                          : conversationProvider.syncCompleted &&
+                                  conversationProvider.syncedConversationsPointers.isNotEmpty
                               ? Column(
                                   children: [
                                     const Text(
@@ -369,7 +417,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                             decoration: BoxDecoration(
                                               border: const GradientBoxBorder(
-                                                gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                                                gradient: LinearGradient(colors: [
+                                                  Color.fromARGB(127, 208, 208, 208),
+                                                  Color.fromARGB(127, 188, 99, 121),
+                                                  Color.fromARGB(127, 86, 101, 182),
+                                                  Color.fromARGB(127, 126, 190, 236)
+                                                ]),
                                                 width: 2,
                                               ),
                                               borderRadius: BorderRadius.circular(12),
@@ -392,7 +445,50 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 50)),
-                WalsListWidget(wals: conversationProvider.missingWals),
+                Consumer<ConversationProvider>(
+                  builder: (context, conversationProvider, child) {
+                    return FutureBuilder<List<Wal>>(
+                      future: conversationProvider.getAllWals(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const SliverToBoxAdapter(
+                            child: Center(
+                              child: CircularProgressIndicator(color: Colors.white),
+                            ),
+                          );
+                        }
+
+                        if (snapshot.hasError) {
+                          return SliverToBoxAdapter(
+                            child: Center(
+                              child: Text(
+                                'Error loading WAL files: ${snapshot.error}',
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          );
+                        }
+
+                        final allWals = snapshot.data ?? [];
+                        if (allWals.isEmpty) {
+                          return const SliverToBoxAdapter(
+                            child: Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(32.0),
+                                child: Text(
+                                  'No audio files found',
+                                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        return WalsListWidget(wals: allWals);
+                      },
+                    );
+                  },
+                ),
                 const SliverToBoxAdapter(child: SizedBox(height: 50)),
               ],
             ),

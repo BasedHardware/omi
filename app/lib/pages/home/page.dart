@@ -721,8 +721,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const BatteryInfoWidget(),
           Consumer<HomeProvider>(builder: (context, provider, child) {
             if (provider.selectedIndex == 0) {
-              return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-                if (convoProvider.missingWalsInSeconds >= 120) {
+              return Consumer2<ConversationProvider, CaptureProvider>(
+                  builder: (context, convoProvider, captureProvider, child) {
+                // Show sync icon when unlimited local storage is enabled
+                if (SharedPreferencesUtil().unlimitedLocalStorageEnabled) {
                   return GestureDetector(
                     onTap: () {
                       routeToPage(context, const SyncPage());
