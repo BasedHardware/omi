@@ -61,7 +61,8 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
     Return only the notification body text - make it personal, warm and engaging."""
 
     try:
-        body = await llm_medium.apredict(system_prompt + "\n" + user_prompt)
+        response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
+        body = response.content
         # Return placeholder title and generated body
         return "omi", body.strip()
 
@@ -117,7 +118,8 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     Return only the notification body text."""
 
     try:
-        body = await llm_medium.apredict(system_prompt + "\n" + user_prompt)
+        response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
+        body = response.content
         return "omi", body.strip()
 
     except Exception as e:
