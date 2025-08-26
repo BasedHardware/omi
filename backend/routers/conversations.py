@@ -12,6 +12,7 @@ from models.conversation import SearchRequest
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.conversations.citations import render_overview_citations_markdown, compute_overview_citations
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -64,11 +65,22 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
-    processed_conversation = process_conversation(
+    conversation = process_conversation(
         uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id
     )
 
-    return processed_conversation
+    # Enrich response with citations and markdown so UI shows footnotes immediately
+    try:
+        citations = compute_overview_citations(conversation)
+        conversations_db.update_conversation_overview_citations(uid, conversation.id, citations)
+        conversation.structured.overview_citations = citations
+        conversation.structured.overview_citations_markdown = render_overview_citations_markdown(
+            conversation.structured.overview, citations
+        )
+    except Exception as e:
+        print('[REPROCESS CITATIONS ENRICH] error:', e)
+
+    return conversation
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
@@ -90,6 +102,18 @@ def get_conversations(
         include_discarded=include_discarded,
         statuses=statuses.split(",") if len(statuses) > 0 else [],
     )
+    for conv in conversations:
+        try:
+            structured = conv.get('structured') or {}
+            overview = structured.get('overview') or ''
+            citations = structured.get('overview_citations') or []
+            if overview and citations:
+                conv.setdefault('structured', {})['overview_citations_markdown'] = render_overview_citations_markdown(
+                    overview, citations
+                )
+        except Exception:
+            pass
+    return conversations
 
     for conv in conversations:
         if conv.get('is_locked', False):
@@ -106,7 +130,18 @@ def get_conversations(
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     print('get_conversation_by_id', uid, conversation_id)
-    return _get_valid_conversation_by_id(uid, conversation_id)
+    conv = _get_valid_conversation_by_id(uid, conversation_id)
+    try:
+        structured = conv.get('structured') or {}
+        overview = structured.get('overview') or ''
+        citations = structured.get('overview_citations') or []
+        if overview and citations:
+            conv.setdefault('structured', {})['overview_citations_markdown'] = render_overview_citations_markdown(
+                overview, citations
+            )
+    except Exception:
+        pass
+    return conv
 
 
 @router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])

@@ -197,7 +197,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
     if (!conversation.discarded) {
-      getHasConversationSummaryRating(conversation.id).then((value) {
+      await getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
         notifyListeners();
         if (!hasConversationSummaryRatingSet) {
@@ -208,6 +208,13 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           });
         }
       });
+
+      final refreshed = await getConversationById(conversation.id);
+      if (refreshed != null) {
+        conversationProvider?.updateConversation(refreshed);
+        _cachedConversation = refreshed;
+        notifyListeners();
+      }
     }
 
     // updateLoadingState(false);

@@ -57,6 +57,7 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
+from utils.conversations.citations import compute_overview_citations, render_overview_citations_markdown
 
 
 def _get_structured(
@@ -436,6 +437,15 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+
+        def _compute_and_store_overview_citations():
+            try:
+                cites = compute_overview_citations(conversation)
+                conversations_db.update_conversation_overview_citations(uid, conversation.id, cites)
+            except Exception as e:
+                print('[CITATIONS] failed to compute/store:', e)
+
+        threading.Thread(target=_compute_and_store_overview_citations).start()
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
