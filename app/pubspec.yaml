@@ -79,7 +79,6 @@ dependencies:
   envied: 1.1.1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
-  # instabug_flutter removed in favor of Firebase Crashlytics
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
