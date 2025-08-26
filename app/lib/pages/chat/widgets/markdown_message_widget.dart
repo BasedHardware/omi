@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-Widget getMarkdownWidget(BuildContext context, String content, {String searchQuery = ''}) {
-  if (searchQuery.isNotEmpty) {
-    content = _highlightSearchInMarkdown(content, searchQuery);
-  }
+Widget getMarkdownWidget(BuildContext context, String content) {
   var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
   return MarkdownBody(
     selectable: false,
@@ -32,14 +29,4 @@ Widget getMarkdownWidget(BuildContext context, String content, {String searchQue
     ),
     data: content,
   );
-}
-
-String _highlightSearchInMarkdown(String content, String searchQuery) {
-  if (searchQuery.isEmpty) return content;
-
-  final regex = RegExp(RegExp.escape(searchQuery), caseSensitive: false);
-
-  return content.replaceAllMapped(regex, (match) {
-    return '**${match.group(0)}**';
-  });
 }

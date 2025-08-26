@@ -25,6 +25,7 @@ class TranscriptWidget extends StatefulWidget {
   final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
   final String searchQuery;
   final int currentResultIndex;
+  final Function(ScrollController)? onScrollControllerReady;
 
   const TranscriptWidget({
     super.key,
@@ -41,6 +42,7 @@ class TranscriptWidget extends StatefulWidget {
     this.onAcceptSuggestion,
     this.searchQuery = '',
     this.currentResultIndex = -1,
+    this.onScrollControllerReady,
   });
 
   @override
@@ -60,6 +62,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   bool _userHasScrolled = false;
   bool _isAutoScrolling = false;
   int _previousSegmentCount = 0;
+  
+  // Search result tracking
+  List<GlobalKey> _segmentKeys = [];
+  int _previousSearchResultIndex = -1;
 
   // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
@@ -94,19 +100,32 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void initState() {
     super.initState();
     _previousSegmentCount = widget.segments.length;
+    _initializeSegmentKeys();
 
     // Add scroll listener to detect manual scrolling
     _scrollController.addListener(_onScroll);
+    
+    // Notify parent about scroll controller
+    widget.onScrollControllerReady?.call(_scrollController);
 
     // Auto-scroll to bottom after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom();
     });
   }
+  
+  void _initializeSegmentKeys() {
+    _segmentKeys = List.generate(widget.segments.length, (index) => GlobalKey());
+  }
 
   @override
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Reinitialize keys if segment count changed
+    if (widget.segments.length != oldWidget.segments.length) {
+      _initializeSegmentKeys();
+    }
 
     // Check if new segments were added
     if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
@@ -116,6 +135,23 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       });
     } else {
       _previousSegmentCount = widget.segments.length;
+    }
+    
+    // Handle search result navigation
+    if (widget.currentResultIndex != _previousSearchResultIndex && 
+        widget.currentResultIndex >= 0 && 
+        widget.searchQuery.isNotEmpty) {
+      _previousSearchResultIndex = widget.currentResultIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Temporarily allow auto-scrolling for search results
+        final wasUserScrolled = _userHasScrolled;
+        _userHasScrolled = false;
+        _scrollToSearchResult();
+        // Restore the user scroll state after a delay
+        Future.delayed(const Duration(milliseconds: 600), () {
+          _userHasScrolled = wasUserScrolled;
+        });
+      });
     }
   }
 
@@ -157,6 +193,95 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         .then((_) {
       _isAutoScrolling = false;
     });
+  }
+  
+  // Calculate the local search index for a specific segment
+  int _getLocalSearchIndex(int segmentIndex) {
+    if (widget.searchQuery.isEmpty || widget.currentResultIndex < 0) return -1;
+    
+    int currentMatchCount = 0;
+    final searchQuery = widget.searchQuery.toLowerCase();
+    
+    // Count matches in segments before the current one
+    for (int i = 0; i < segmentIndex; i++) {
+      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
+      int startIndex = 0;
+      while (true) {
+        int index = segmentText.indexOf(searchQuery, startIndex);
+        if (index == -1) break;
+        currentMatchCount++;
+        startIndex = index + 1;
+      }
+    }
+    
+    // Count matches in the current segment to see if our target falls within it
+    final currentSegmentText = _getDecodedText(widget.segments[segmentIndex].text).toLowerCase();
+    int segmentMatches = 0;
+    int startIndex = 0;
+    while (true) {
+      int index = currentSegmentText.indexOf(searchQuery, startIndex);
+      if (index == -1) break;
+      segmentMatches++;
+      startIndex = index + 1;
+    }
+    
+    // Check if the current result index falls within this segment
+    if (widget.currentResultIndex >= currentMatchCount && 
+        widget.currentResultIndex < currentMatchCount + segmentMatches) {
+      return widget.currentResultIndex - currentMatchCount;
+    }
+    
+    return -1; // Current result is not in this segment
+  }
+
+  void _scrollToSearchResult() {
+    if (!_scrollController.hasClients || widget.searchQuery.isEmpty) return;
+    
+    // Find which segment contains the current search result
+    int currentMatchCount = 0;
+    int targetSegmentIndex = -1;
+    
+    for (int i = 0; i < widget.segments.length; i++) {
+      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
+      final searchQuery = widget.searchQuery.toLowerCase();
+      
+      // Count matches in this segment
+      int segmentMatches = 0;
+      int startIndex = 0;
+      while (true) {
+        int index = segmentText.indexOf(searchQuery, startIndex);
+        if (index == -1) break;
+        segmentMatches++;
+        startIndex = index + 1;
+      }
+      
+      // Check if current result index falls within this segment
+      if (widget.currentResultIndex < currentMatchCount + segmentMatches) {
+        targetSegmentIndex = i;
+        break;
+      }
+      
+      currentMatchCount += segmentMatches;
+    }
+    
+    if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
+      final targetKey = _segmentKeys[targetSegmentIndex];
+      final context = targetKey.currentContext;
+      
+      if (context != null) {
+        _isAutoScrolling = true;
+        
+        // Use Scrollable.ensureVisible for smoother, more reliable scrolling
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          alignment: 0.05, // Position the target 5% from the top of the viewport for smaller scroll
+        ).then((_) {
+          _isAutoScrolling = false;
+        });
+      }
+    }
   }
 
   String _getDecodedText(String text) {
@@ -209,7 +334,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
 
-    return GestureDetector(
+    return Container(
+      key: segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
+      child: GestureDetector(
       onTap: () {
         widget.editSegment?.call(data.id, data.speakerId);
         MixpanelManager().tagSheetOpened();
@@ -260,7 +387,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                           Text(
                             suggestion != null && person == null
                                 ? '${suggestion.personName}?'
-                                : (person != null ? person.name : 'Speaker ${data.speakerId}'),
+                                : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
                             style: TextStyle(
                               color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
                               fontSize: 13,
@@ -343,7 +470,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                         ? highlightSearchMatches(
                                             _getDecodedText(data.text),
                                             widget.searchQuery,
-                                            currentResultIndex: widget.currentResultIndex,
+                                            currentResultIndex: _getLocalSearchIndex(segmentIdx),
                                           ).map((span) {
                                             // Preserve highlight styles, apply default styles only to non-highlighted text
                                             if (span.style?.backgroundColor != null) {
@@ -437,7 +564,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildTranslationNotice() {

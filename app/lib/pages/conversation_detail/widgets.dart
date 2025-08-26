@@ -12,9 +12,9 @@ import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
-import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -190,9 +190,7 @@ class GetSummaryWidgets extends StatelessWidget {
 }
 
 class ActionItemsListWidget extends StatelessWidget {
-  final String searchQuery;
-  final int currentResultIndex;
-  const ActionItemsListWidget({super.key, this.searchQuery = '', this.currentResultIndex = -1});
+  const ActionItemsListWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -298,21 +296,10 @@ class ActionItemsListWidget extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: SelectionArea(
-                          child: searchQuery.isNotEmpty
-                              ? RichText(
-                                  text: TextSpan(
-                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                                    children: highlightSearchMatches(
-                                      item.description.decodeString,
-                                      searchQuery,
-                                      currentResultIndex: currentResultIndex,
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  item.description.decodeString,
-                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                                ),
+                          child: Text(
+                            item.description.decodeString,
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                          ),
                         ),
                       ),
                     ],
@@ -489,16 +476,10 @@ class AppResultDetailWidget extends StatelessWidget {
                       ),
                     ],
                   )
-                : SelectionArea(
-                    child: searchQuery.isNotEmpty
-                        ? RichText(
-                            text: TextSpan(
-                              style: TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
-                              children:
-                                  highlightSearchMatches(content, searchQuery, currentResultIndex: currentResultIndex),
-                            ),
-                          )
-                        : getMarkdownWidget(context, content),
+                : ConversationMarkdownWidget(
+                    content: content,
+                    searchQuery: searchQuery,
+                    currentResultIndex: currentResultIndex,
                   ),
           ),
 
