@@ -6,14 +6,17 @@ import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+
+import 'package:omi/pages/conversations/welcome_conversation.dart';
+
 import 'package:omi/services/app_review_service.dart';
+
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/custom_refresh_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
 
 class ConversationsPage extends StatefulWidget {
@@ -156,13 +159,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
-              const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(),
-                  ),
-                ),
+              SliverToBoxAdapter(
+                child: Builder(builder: (context) {
+                  final welcome = buildWelcomeConversation();
+                  final dateKey = DateTime(welcome.createdAt.year, welcome.createdAt.month, welcome.createdAt.day);
+                  return Column(
+                    children: [
+                      const SizedBox(height: 32),
+                      ConversationsGroupWidget(
+                        isFirst: true,
+                        conversations: [welcome],
+                        date: dateKey,
+                      ),
+                    ],
+                  );
+                }),
               )
             else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
               _buildLoadingShimmer()
