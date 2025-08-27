@@ -12,7 +12,7 @@ class SyncedConversationsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Synced Conversations'),
+        title: const Text('Processed Conversations'),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,

@@ -603,8 +603,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   CheckboxListTile(
                     contentPadding: const EdgeInsets.all(0),
                     title: const Text(
-                      'Local Sync',
+                      'Local Audio Storage',
                       style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'Enable local storage of audio files on device',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                     value: provider.localSyncEnabled,
                     onChanged: provider.onLocalSyncEnabledChanged,

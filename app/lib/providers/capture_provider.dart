@@ -507,6 +507,13 @@ class CaptureProvider extends ChangeNotifier
     final deviceId = _recordingDevice!.id;
     BleAudioCodec codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+
+    // Set device info for WAL creation
+    var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+    var pd = await _recordingDevice!.getDeviceInfo(connection);
+    String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    _wal.getSyncs().phone.setDeviceInfo(_recordingDevice!.id, deviceModel);
+
     await streamButton(deviceId);
     await streamAudioToWs(deviceId, codec);
 
@@ -602,6 +609,9 @@ class CaptureProvider extends ChangeNotifier
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+
+    // Set device info for phone recording
+    _wal.getSyncs().phone.setDeviceInfo("phone", "Phone Microphone");
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {

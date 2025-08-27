@@ -731,7 +731,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     },
                     child: Container(
                       padding: const EdgeInsets.only(left: 12),
-                      child: const Icon(Icons.download, color: Colors.white, size: 28),
+                      child: const Icon(Icons.cloud_download, color: Colors.white, size: 28),
                     ),
                   );
                 } else {

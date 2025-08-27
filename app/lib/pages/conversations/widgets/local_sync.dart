@@ -83,10 +83,17 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
           ),
           margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           padding: const EdgeInsets.all(16),
-          child: Text(
-            '${secondsToHumanReadable(_missSeconds.toString())} On-Device Conversations',
-            style: Theme.of(context).textTheme.bodyMedium!.copyWith(fontSize: 16),
-            textAlign: TextAlign.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.storage, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '${secondsToHumanReadable(_missSeconds.toString())} Being Stored Locally',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         );
       }

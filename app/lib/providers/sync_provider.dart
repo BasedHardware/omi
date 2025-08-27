@@ -18,6 +18,11 @@ import 'package:share_plus/share_plus.dart';
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // WAL management
+  List<Wal> _allWals = [];
+  List<Wal> get allWals => _allWals;
+  bool _isLoadingWals = false;
+  bool get isLoadingWals => _isLoadingWals;
+
   List<Wal> _missingWals = [];
   List<Wal> get missingWals => _missingWals;
   int get missingWalsInSeconds =>
@@ -31,22 +36,27 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   double get walsSyncedProgress => _walsSyncedProgress;
   List<SyncedConversationPointer> syncedConversationsPointers = [];
 
+  // Error handling
+  String? syncError;
+  Wal? failedWal;
+
   // Audio playback
   FlutterSoundPlayer? _audioPlayer;
   String? _currentPlayingWalId;
   bool _isProcessingAudio = false;
-  bool _isSharingAudio = false;
+  String? _currentSharingWalId;
 
   String? get currentPlayingWalId => _currentPlayingWalId;
   bool get isProcessingAudio => _isProcessingAudio;
-  bool get isSharingAudio => _isSharingAudio;
+  bool get isSharingAudio => _currentSharingWalId != null;
+  bool isWalSharing(String walId) => _currentSharingWalId == walId;
 
   IWalService get _wal => ServiceManager.instance().wal;
 
   SyncProvider() {
     _wal.subscribe(this, this);
     _initializeAudioPlayer();
-    _preload();
+    refreshWals();
   }
 
   void _initializeAudioPlayer() async {
@@ -54,19 +64,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _audioPlayer?.openPlayer();
   }
 
-  _preload() async {
-    _missingWals = await _wal.getSyncs().getMissingWals();
+  Future<void> refreshWals() async {
+    _isLoadingWals = true;
     notifyListeners();
-  }
-
-  Future<List<Wal>> getAllWals() async {
     try {
-      final wals = await _wal.getSyncs().getAllWals();
-      debugPrint('SyncProvider.getAllWals() returned ${wals.length} WALs');
-      return wals;
+      _allWals = await _wal.getSyncs().getAllWals();
+      _missingWals = _allWals.where((w) => w.status == WalStatus.miss).toList();
+      debugPrint('SyncProvider.refreshWals() loaded ${_allWals.length} WALs');
     } catch (e) {
-      debugPrint('Error in SyncProvider.getAllWals(): $e');
-      return [];
+      debugPrint('Error in SyncProvider.refreshWals(): $e');
+      _allWals = [];
+    } finally {
+      _isLoadingWals = false;
+      notifyListeners();
     }
   }
 
@@ -113,45 +123,70 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       setIsSyncing(false);
       notifyListeners();
     } catch (e) {
-      debugPrint('Error resyncing WAL: $e');
+      final walInfo = '${secondsToHumanReadable(wal.seconds)} (${wal.codec.toFormattedString()})';
+      final source = wal.storage == WalStorage.sdcard ? 'SD card' : 'phone';
+      debugPrint('Error resyncing WAL ${wal.id}: $e');
       setIsSyncing(false);
+      setSyncCompleted(false);
+      syncError = 'Failed to reprocess $source audio file $walInfo: ${e.toString().replaceAll('Exception: ', '')}';
+      failedWal = wal;
       notifyListeners();
     }
   }
 
   Future syncWals() async {
-    debugPrint("SyncProvider > syncWals");
-    clearSyncResult();
-    _walsSyncedProgress = 0.0;
-    setIsSyncing(true);
-    var res = await _wal.getSyncs().syncAll(progress: this);
-    if (res != null) {
-      if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
-        await getSyncedConversationsData(res);
+    try {
+      debugPrint("SyncProvider > syncWals");
+      clearSyncResult();
+      _walsSyncedProgress = 0.0;
+      setIsSyncing(true);
+      var res = await _wal.getSyncs().syncAll(progress: this);
+      if (res != null) {
+        if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
+          await getSyncedConversationsData(res);
+        }
       }
+      setSyncCompleted(true);
+      setIsSyncing(false);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error syncing all WALs: $e');
+      setIsSyncing(false);
+      setSyncCompleted(false);
+      _walsSyncedProgress = 0.0;
+      syncError = 'Error processing audio files: ${e.toString().replaceAll('Exception: ', '')}';
+      failedWal = null;
+      notifyListeners();
     }
-    setSyncCompleted(true);
-    setIsSyncing(false);
-    notifyListeners();
-    return;
   }
 
   Future syncWal(Wal wal) async {
-    debugPrint("SyncProvider > syncWal ${wal.id}");
-    clearSyncResult();
-    setIsSyncing(true);
-    _walsSyncedProgress = 0.0;
-    var res = await _wal.getSyncs().syncWal(wal: wal, progress: this);
-    if (res != null) {
-      if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
-        print('Synced memories: ${res.newConversationIds} ${res.updatedConversationIds}');
-        await getSyncedConversationsData(res);
+    try {
+      debugPrint("SyncProvider > syncWal ${wal.id}");
+      clearSyncResult();
+      setIsSyncing(true);
+      _walsSyncedProgress = 0.0;
+      var res = await _wal.getSyncs().syncWal(wal: wal, progress: this);
+      if (res != null) {
+        if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
+          print('Synced memories: ${res.newConversationIds} ${res.updatedConversationIds}');
+          await getSyncedConversationsData(res);
+        }
       }
+      setSyncCompleted(true);
+      setIsSyncing(false);
+      notifyListeners();
+    } catch (e) {
+      final walInfo = '${secondsToHumanReadable(wal.seconds)} (${wal.codec.toFormattedString()})';
+      final source = wal.storage == WalStorage.sdcard ? 'SD card' : 'phone';
+      debugPrint('Error syncing WAL ${wal.id}: $e');
+      setIsSyncing(false);
+      setSyncCompleted(false);
+      _walsSyncedProgress = 0.0;
+      syncError = 'Failed to process $source audio file $walInfo: ${e.toString().replaceAll('Exception: ', '')}';
+      failedWal = wal;
+      notifyListeners();
     }
-    setSyncCompleted(true);
-    setIsSyncing(false);
-    notifyListeners();
-    return;
   }
 
   void setSyncCompleted(bool value) {
@@ -169,9 +204,21 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     notifyListeners();
   }
 
+  Future<void> retrySync() async {
+    final walToRetry = failedWal;
+    clearSyncResult(); // Clear error and previous state
+    if (walToRetry != null) {
+      await syncWal(walToRetry);
+    } else {
+      await syncWals();
+    }
+  }
+
   void clearSyncResult() {
     syncCompleted = false;
     syncedConversationsPointers = [];
+    syncError = null;
+    failedWal = null;
     notifyListeners();
   }
 
@@ -302,9 +349,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       throw Exception('Audio file not available for sharing');
     }
 
-    if (_isSharingAudio) return;
+    if (isSharingAudio) return;
 
-    _isSharingAudio = true;
+    _currentSharingWalId = wal.id;
     notifyListeners();
 
     try {
@@ -339,7 +386,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       debugPrint('Error sharing audio: $e');
       rethrow;
     } finally {
-      _isSharingAudio = false;
+      _currentSharingWalId = null;
       notifyListeners();
     }
   }
@@ -586,14 +633,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   @override
   void onWalUpdated() async {
-    _missingWals = await _wal.getSyncs().getMissingWals();
-    notifyListeners();
+    await refreshWals();
   }
 
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) async {
-    _missingWals = await _wal.getSyncs().getMissingWals();
-    notifyListeners();
+    await refreshWals();
   }
 
   @override
