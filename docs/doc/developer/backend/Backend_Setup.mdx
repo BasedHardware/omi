@@ -180,11 +180,11 @@ Before you start, make sure you have the following:
 4. **Set up Typesense: 🔎 [Optional]**
     - You don't need to setup Typesense if you do not intend to use the search functionality
     - Create an account on [Typesense](https://typesense.org/)
-    - Create a new collection in Typesense with the name `memories` and use the schema provided in the `typesense/memories.schema` file
+    - Create a new collection in Typesense with the name `conversations` and use the schema provided in the `typesense/conversations.schema` file
     - Install the Firebase Typesense extension from [here](https://console.firebase.google.com/project/_/extensions/install?ref=typesense/firestore-typesense-search@2.0.0-rc.1)
       - While setting up the extension, use the following values for the configuration:
-        - Firestore Collection Path: `users/{userId}/memories`
-        - Firestore Collection Fields: `structured,transcript_segments,created_at,deleted,discarded,started_at,id,finished_at,geolocation,userId`
+        - Firestore Collection Path: `users/{userId}/conversations`
+        - Firestore Collection Fields: `structured,created_at,discarded,started_at,id,finished_at,geolocation,userId`
       - Create `typesense_sync` collection and add a document named `backfill` with data `{'trigger' : true}` (required only if you already have memories in Firestore and want to sync them to Typesense)
     - Set the `TYPESENSE_HOST`, `TYPESENSE_HOST_PORT` and `TYPESENSE_API_KEY` environment variables in the `.env` file to the host URL and API key provided by Typesense
 
@@ -349,7 +349,7 @@ our [Contribution Guide](https://docs.omi.me/developer/Contribution/) for more i
 If you're stuck, have questions, or just want to chat about Omi:
 
 - **GitHub Issues: 🐛** For bug reports and feature requests
-- **Community Forum: 💬** Join our [community forum](https://discord.gg/omi) for discussions and questions
+- **Community Forum: 💬** Join our [community forum](http://discord.omi.me) for discussions and questions
 - **Documentation: 📚** Check out our [full documentation](https://docs.omi.me/) for in-depth guides
 
 Happy coding! 💻 If you have any questions or need further assistance, don't hesitate to reach out to our community.

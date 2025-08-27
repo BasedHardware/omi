@@ -18,6 +18,7 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
+from models.users import PlanType
 from models.conversation import (
     Conversation,
     TranscriptSegment,
@@ -56,9 +57,12 @@ from utils.pusher import connect_to_trigger_pusher
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.speaker_identification import detect_speaker_from_text
+from utils.analytics import record_usage
+from utils.subscription import has_transcription_credits
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
+from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 
 router = APIRouter()
 
@@ -76,8 +80,24 @@ async def _listen(
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(e, uid)
+        return
+
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
+        return
+
+    if not has_transcription_credits(uid):
+        # Send credit limit notification (with Redis caching to prevent spam)
+        try:
+            await send_credit_limit_notification(uid)
+        except Exception as e:
+            print(f"Error sending credit limit notification: {e}")
+
+        await websocket.close(code=4002, reason="Usage limit exceeded")
         return
 
     # Frame size, codec
@@ -95,12 +115,15 @@ async def _listen(
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e, uid)
-        await websocket.close(code=1011, reason="Dirty state")
-        return
+    # Translation language
+    translation_language = None
+    if stt_language == 'multi':
+        if language == "multi":
+            user_language_preference = user_db.get_user_language_preference(uid)
+            if user_language_preference:
+                translation_language = user_language_preference
+        else:
+            translation_language = language
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
@@ -109,6 +132,58 @@ async def _listen(
     speech_profile_processed = False
     current_session_segments: Dict[str, TranscriptSegment] = {}
     suggested_segments: Set[str] = set()
+    first_audio_byte_timestamp: Optional[float] = None
+    last_usage_record_timestamp: Optional[float] = None
+    words_transcribed_since_last_record: int = 0
+    last_transcript_time: Optional[float] = None
+
+    async def _record_usage_periodically():
+        nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
+        nonlocal last_audio_received_time, last_transcript_time
+
+        while websocket_active:
+            await asyncio.sleep(60)
+            if not websocket_active:
+                break
+
+            # Record usages
+            if last_usage_record_timestamp:
+                current_time = time.time()
+                transcription_seconds = int(current_time - last_usage_record_timestamp)
+
+                words_to_record = words_transcribed_since_last_record
+                words_transcribed_since_last_record = 0  # reset
+
+                if transcription_seconds > 0 or words_to_record > 0:
+                    record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
+                last_usage_record_timestamp = current_time
+
+            # Send credit limit notification
+            if not has_transcription_credits(uid):
+                try:
+                    await send_credit_limit_notification(uid)
+                except Exception as e:
+                    print(f"Error sending credit limit notification: {e}")
+
+                nonlocal websocket_close_code
+                websocket_close_code = 4002
+                websocket_active = False
+                break
+
+            # Silence notification logic for basic plan users
+            user_subscription = user_db.get_user_valid_subscription(uid)
+            if not user_subscription or user_subscription.plan == PlanType.basic:
+                time_of_last_words = last_transcript_time or first_audio_byte_timestamp
+                if (
+                    last_audio_received_time
+                    and time_of_last_words
+                    and (last_audio_received_time - time_of_last_words) > 15 * 60
+                ):
+                    print(f"User {uid} has been silent for over 15 minutes. Sending notification.")
+                    try:
+                        await send_silent_user_notification(uid)
+                    except Exception as e:
+                        print(f"Error sending silent user notification: {e}")
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
@@ -368,7 +443,6 @@ async def _listen(
             status=ConversationStatus.in_progress,
             source=ConversationSource.openglass if photos else ConversationSource.omi,
         )
-        print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
         return conversation, (0, len(segments))
@@ -629,7 +703,7 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = including_combined_segments and stt_language == 'multi' and language not in ["multi", "auto"]
+    translation_enabled = including_combined_segments and translation_language is not None
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
@@ -642,11 +716,11 @@ async def _listen(
                     continue
 
                 # Language Detection
-                if language_cache.is_in_target_language(segment.id, segment_text, language):
+                if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
                     continue
 
                 # Translation
-                translated_text = translation_service.translate_text_by_sentence(language, segment_text)
+                translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
 
                 if translated_text == segment_text:
                     # If translation is same as original, it's likely in the target language.
@@ -655,7 +729,7 @@ async def _listen(
                     continue
 
                 # Create/Update Translation object
-                translation = Translation(lang=language, text=translated_text)
+                translation = Translation(lang=translation_language, text=translated_text)
                 existing_translation_index = next(
                     (i for i, t in enumerate(segment.translations) if t.lang == language), None
                 )
@@ -693,10 +767,10 @@ async def _listen(
 
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
-        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments
+        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.6)
 
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
@@ -712,6 +786,7 @@ async def _listen(
 
             transcript_segments = []
             if segments_to_process:
+                last_transcript_time = time.time()
                 if seconds_to_trim is None:
                     seconds_to_trim = segments_to_process[0]["start"]
 
@@ -730,6 +805,10 @@ async def _listen(
                     TranscriptSegment(**s, speech_profile_processed=speech_profile_processed)
                     for s in segments_to_process
                 ]
+                words_transcribed = len(" ".join([seg.text for seg in newly_processed_segments]).split())
+                if words_transcribed > 0:
+                    words_transcribed_since_last_record += words_transcribed
+
                 for seg in newly_processed_segments:
                     current_session_segments[seg.id] = seg
                 transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
@@ -837,7 +916,7 @@ async def _listen(
 
     async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
-        nonlocal realtime_photo_buffers, speech_profile_processed, speaker_to_person_map
+        nonlocal realtime_photo_buffers, speech_profile_processed, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
 
         timer_start = time.time()
         last_audio_received_time = timer_start
@@ -847,6 +926,9 @@ async def _listen(
                 last_audio_received_time = time.time()
 
                 if message.get("bytes") is not None:
+                    if first_audio_byte_timestamp is None:
+                        first_audio_byte_timestamp = last_audio_received_time
+                        last_usage_record_timestamp = first_audio_byte_timestamp
                     data = message.get("bytes")
                     if codec == 'opus' and sample_rate == 16000:
                         data = decoder.decode(bytes(data), frame_size=frame_size)
@@ -942,6 +1024,7 @@ async def _listen(
             receive_data(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
+        record_usage_task = asyncio.create_task(_record_usage_periodically())
 
         # Pusher tasks
         pusher_tasks = [asyncio.create_task(pusher_connect())]
@@ -952,12 +1035,17 @@ async def _listen(
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
-        tasks = [data_process_task, stream_transcript_task, heartbeat_task] + pusher_tasks
+        tasks = [data_process_task, stream_transcript_task, heartbeat_task, record_usage_task] + pusher_tasks
         await asyncio.gather(*tasks)
 
     except Exception as e:
         print(f"Error during WebSocket operation: {e}", uid)
     finally:
+        if last_usage_record_timestamp:
+            transcription_seconds = int(time.time() - last_usage_record_timestamp)
+            words_to_record = words_transcribed_since_last_record
+            if transcription_seconds > 0 or words_to_record > 0:
+                record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
         websocket_active = False
 
         # STT sockets

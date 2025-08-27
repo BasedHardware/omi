@@ -254,6 +254,20 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ENCRYPTION_SECRET
+  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+    value: "1200"
+  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+    value: "0"
+  - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
+    value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
+  - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
+    value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
+  - name: SUBSCRIPTION_LAUNCH_DATE
+    value: "2025-08-21"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -265,7 +279,7 @@ resources:
     memory: 2Gi
   limits:
     cpu: 1
-    memory: 4Gi
+    memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
@@ -289,10 +303,29 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 10
-  maxReplicas: 50
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 70
+  minReplicas: 32
+  maxReplicas: 60
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 1
+      - type: Pods
+        value: 10
+        periodSeconds: 1
+      selectPolicy: Max
+  # targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 70
+  requestsPerPod: 8
+  failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []

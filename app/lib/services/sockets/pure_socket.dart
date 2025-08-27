@@ -15,7 +15,7 @@ enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 abstract class IPureSocketListener {
   void onConnected();
   void onMessage(dynamic message);
-  void onClosed();
+  void onClosed([int? closeCode]);
   void onError(Object err, StackTrace trace);
 
   void onInternetConnectionFailed() {}
@@ -164,8 +164,8 @@ class PureSocket implements IPureSocket {
         that.onError(err, trace);
       },
       onDone: () {
-        debugPrint("onDone");
-        that.onClosed();
+        debugPrint("onDone with close code: ${_channel?.closeCode}");
+        that.onClosed(_channel?.closeCode);
       },
       cancelOnError: true,
     );
@@ -181,7 +181,7 @@ class PureSocket implements IPureSocket {
     }
     _status = PureSocketStatus.disconnected;
     debugPrint("disconnect");
-    onClosed();
+    onClosed(_channel?.closeCode);
   }
 
   Future _cleanUp() async {
@@ -195,10 +195,10 @@ class PureSocket implements IPureSocket {
   }
 
   @override
-  void onClosed() {
+  void onClosed([int? closeCode]) {
     _status = PureSocketStatus.disconnected;
-    debugPrint("Socket closed");
-    _listener?.onClosed();
+    debugPrint("Socket closed with code: $closeCode");
+    _listener?.onClosed(closeCode);
   }
 
   @override

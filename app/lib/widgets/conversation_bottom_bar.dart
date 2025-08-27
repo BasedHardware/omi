@@ -133,7 +133,9 @@ class ConversationBottomBar extends StatelessWidget {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, _) {
         final summarizedApp = provider.getSummarizedApp();
-        final app = summarizedApp != null ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId) : null;
+        final app = summarizedApp != null
+            ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId)
+            : null;
 
         return _buildSummaryTabContent(context, provider, app);
       },
@@ -146,6 +148,19 @@ class ConversationBottomBar extends StatelessWidget {
         final isReprocessing = detailProvider.loadingReprocessConversation;
         final reprocessingApp = detailProvider.selectedAppForReprocessing;
 
+        void handleTap() {
+          if (selectedTab == ConversationTab.summary) {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => const SummarizedAppsBottomSheet(),
+            );
+          } else {
+            onTabSelected(ConversationTab.summary);
+          }
+        }
+
         return TabButton(
           icon: null,
           customIcon: app == null && reprocessingApp == null
@@ -155,20 +170,15 @@ class ConversationBottomBar extends StatelessWidget {
                 )
               : null,
           isSelected: selectedTab == ConversationTab.summary,
-          onTap: () => onTabSelected(ConversationTab.summary),
+          onTap: handleTap,
           label: null, // Remove the label to show only icon + dropdown
-          appImage: isReprocessing ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path) : (app != null ? app.getImageUrl() : null),
+          appImage: isReprocessing
+              ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path)
+              : (app != null ? app.getImageUrl() : null),
           isLocalAsset: isReprocessing && reprocessingApp == null,
           showDropdownArrow: true, // Always show dropdown arrow
           isLoading: isReprocessing,
-          onDropdownPressed: () {
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) => const SummarizedAppsBottomSheet(),
-            );
-          },
+          onDropdownPressed: handleTap,
         );
       },
     );

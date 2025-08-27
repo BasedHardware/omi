@@ -6,7 +6,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -153,12 +152,6 @@ class SharedPreferencesUtil {
 
   set showInstallAppConfirmation(bool value) => saveBool('showInstallAppConfirmation', value);
 
-  //-------------------------------- Sidebar ----------------------------------//
-
-  bool get sidebarCollapsed => getBool('sidebarCollapsed') ?? false;
-
-  set sidebarCollapsed(bool value) => saveBool('sidebarCollapsed', value);
-
   bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog') ?? true;
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
@@ -186,6 +179,11 @@ class SharedPreferencesUtil {
   bool get devModeEnabled => getBool('devModeEnabled') ?? false;
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
+
+  // Developer Diagnostics
+  bool get devLogsToFileEnabled => getBool('devLogsToFileEnabled') ?? false;
+
+  set devLogsToFileEnabled(bool value) => saveBool('devLogsToFileEnabled', value);
 
   bool get permissionStoreRecordingsEnabled => getBool('permissionStoreRecordingsEnabled') ?? false;
 
@@ -285,44 +283,6 @@ class SharedPreferencesUtil {
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
-  }
-
-  List<ChatSession> get cachedSessions {
-    final List<String> sessions = getStringList('cachedSessions') ?? [];
-    return sessions.map((e) => ChatSession.fromJson(jsonDecode(e))).toList();
-  }
-
-  set cachedSessions(List<ChatSession> value) {
-    final List<String> sessions = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('cachedSessions', sessions);
-  }
-
-  // Cache sessions by app ID for better performance
-  List<ChatSession> getCachedSessionsForApp(String? appId) {
-    final key = 'cachedSessions_${appId ?? 'default'}';
-    final List<String> sessions = getStringList(key) ?? [];
-    return sessions.map((e) => ChatSession.fromJson(jsonDecode(e))).toList();
-  }
-
-  void setCachedSessionsForApp(String? appId, List<ChatSession> sessions) {
-    final key = 'cachedSessions_${appId ?? 'default'}';
-    final List<String> sessionStrings = sessions.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList(key, sessionStrings);
-  }
-
-  void clearCachedSessionsForApp(String? appId) {
-    final key = 'cachedSessions_${appId ?? 'default'}';
-    _preferences?.remove(key);
-  }
-
-  Future<void> clearAllCachedSessions() async {
-    // Get all keys to find session cache keys
-    final allKeys = _preferences?.getKeys() ?? <String>{};
-    for (final key in allKeys) {
-      if (key.startsWith('cachedSessions_')) {
-        await _preferences?.remove(key);
-      }
-    }
   }
 
   List<Person> get cachedPeople {
@@ -497,11 +457,7 @@ class SharedPreferencesUtil {
     await remove('cachedConversations');
     await remove('cachedMessages');
     await remove('cachedPeople');
-    await remove('cachedSessions');
     await remove('modifiedConversationDetails');
-    
-    // Clear app-specific cached sessions
-    await clearAllCachedSessions();
 
     // Remove app related data
     await remove('selectedChatAppId2');

@@ -1,6 +1,7 @@
 import os
 import datetime
 import random
+import re
 import threading
 import uuid
 from datetime import timezone
@@ -15,6 +16,7 @@ import database.notifications as notification_db
 import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
+import database.action_items as action_items_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.redis_db import get_user_preferred_app
 from database.vector_db import upsert_vector2, update_vector_metadata
@@ -39,6 +41,7 @@ from utils.llm.conversation_processing import (
     select_best_app_for_conversation,
     get_reprocess_transcript_structure,
 )
+from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
@@ -264,6 +267,9 @@ def _extract_memories(uid: str, conversation: Conversation):
     print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
+    if len(parsed_memories) > 0:
+        record_usage(uid, memories_created=len(parsed_memories))
+
 
 def send_new_memories_notification(token: str, memories: [MemoryDB]):
     memories_str = ", ".join([memory.content for memory in memories])
@@ -283,6 +289,37 @@ def _extract_trends(uid: str, conversation: Conversation):
     extracted_items = trends_extractor(uid, conversation)
     parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
     trends_db.save_trends(conversation, parsed)
+
+
+def _save_action_items(uid: str, conversation: Conversation):
+    """
+    Save action items from a conversation to the dedicated action_items collection.
+    This runs in addition to storing them in the conversation for backward compatibility.
+    """
+    if not conversation.structured or not conversation.structured.action_items:
+        return
+    
+    action_items_data = []
+    now = datetime.now(timezone.utc)
+    
+    for action_item in conversation.structured.action_items:
+        action_item_data = {
+            'description': action_item.description,
+            'completed': action_item.completed,
+            'created_at': action_item.created_at or now,
+            'updated_at': action_item.updated_at or now,
+            'due_at': action_item.due_at,
+            'completed_at': action_item.completed_at,
+            'conversation_id': conversation.id
+        }
+        action_items_data.append(action_item_data)
+    
+    if action_items_data:
+        # Delete existing action items for this conversation first (in case of reprocessing)
+        action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+        # Save new action items
+        action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+        print(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -351,6 +388,32 @@ def process_conversation(
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     if not discarded:
+        # Analytics tracking
+        insights_gained = 0
+        if conversation.structured:
+            # Count sentences with more than 5 words from title and overview
+            for text in [conversation.structured.title, conversation.structured.overview]:
+                if text:
+                    sentences = re.split(r'[.!?]+', text)
+                    for sentence in sentences:
+                        if len(sentence.split()) > 5:
+                            insights_gained += 1
+
+            # Count number of action items and events
+            insights_gained += len(conversation.structured.action_items)
+            insights_gained += len(conversation.structured.events)
+
+        # Count sentences with more than 5 words from app results
+        for app_result in conversation.apps_results:
+            if app_result.content:
+                sentences = re.split(r'[.!?]+', app_result.content)
+                for sentence in sentences:
+                    if len(sentence.split()) > 5:
+                        insights_gained += 1
+
+        if insights_gained > 0:
+            record_usage(uid, insights_gained=insights_gained)
+
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
         )
@@ -367,6 +430,7 @@ def process_conversation(
         )
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
+        threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())

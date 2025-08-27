@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -15,19 +14,14 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_dev.dart' as dev;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/onboarding/device_selection.dart';
-import 'package:omi/pages/onboarding/wrapper.dart';
-import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -40,6 +34,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
@@ -47,6 +42,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -178,6 +174,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
+    if (SharedPreferencesUtil().devLogsToFileEnabled) {
+      DebugLogManager.setEnabled(true);
+    }
     super.initState();
   }
 
@@ -203,16 +202,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => ConversationProvider()),
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
+          ChangeNotifierProvider(create: (context) => UsageProvider()),
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider3<ConversationProvider, MessageProvider, PeopleProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+              CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, people, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message, people)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
@@ -246,7 +247,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
           ChangeNotifierProvider(create: (context) => UserProvider()),
-          ChangeNotifierProvider(create: (context) => ChatSessionProvider()),
+          ChangeNotifierProvider(create: (context) => UsageProvider()),
+          ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -295,6 +297,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 FlutterError.onError = (FlutterErrorDetails details) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     Logger.instance.talker.handle(details.exception, details.stack);
+                    DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
                   });
                 };
                 ErrorWidget.builder = (errorDetails) {
@@ -322,100 +325,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
-class DeciderWidget extends StatefulWidget {
-  const DeciderWidget({super.key});
 
-  @override
-  State<DeciderWidget> createState() => _DeciderWidgetState();
-}
-
-class _DeciderWidgetState extends State<DeciderWidget> {
-  late AppLinks _appLinks;
-  StreamSubscription<Uri>? _linkSubscription;
-
-  Future<void> initDeepLinks() async {
-    _appLinks = AppLinks();
-
-    // Handle links
-    _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
-      debugPrint('onAppLink: $uri');
-      openAppLink(uri);
-    });
-  }
-
-  void openAppLink(Uri uri) async {
-    if (uri.pathSegments.first == 'apps') {
-      if (mounted) {
-        var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
-        if (app != null) {
-          PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
-          if (mounted) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
-          }
-        } else {
-          debugPrint('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
-        }
-      }
-    } else {
-      debugPrint('Unknown link: $uri');
-    }
-  }
-
-  @override
-  void initState() {
-    initDeepLinks();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<ConnectivityProvider>().isConnected) {
-        NotificationService.instance.saveNotificationToken();
-      }
-
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        context.read<HomeProvider>().setupUserPrimaryLanguage();
-        context.read<UserProvider>().initialize();
-        context.read<PeopleProvider>().initialize();
-        try {
-          await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
-        } catch (e) {
-          debugPrint('Failed to login to Intercom: $e');
-        }
-
-        context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setAppsFromCache();
-        context.read<MessageProvider>().refreshMessages();
-      } else {
-        if (!PlatformManager.instance.isAnalyticsSupported) {
-          await PlatformManager.instance.intercom.loginUnidentifiedUser();
-        }
-      }
-      PlatformManager.instance.intercom.setUserAttributes();
-    });
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<AuthenticationProvider>(
-      builder: (context, authProvider, child) {
-        if (authProvider.isSignedIn()) {
-          if (SharedPreferencesUtil().onboardingCompleted) {
-            return const HomePageWrapper();
-          } else {
-            return const OnboardingWrapper();
-          }
-        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
-            SharedPreferencesUtil().hasPersonaCreated &&
-            SharedPreferencesUtil().verifiedPersonaId != null) {
-          return const PersonaProfilePage();
-        } else {
-          return const DeviceSelectionPage();
-        }
-      },
-    );
-  }
-}
 
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;

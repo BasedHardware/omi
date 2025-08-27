@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/widgets.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -67,6 +68,18 @@ class _SettingsPageState extends State<SettingsPage> {
           'Profile',
           () => routeToPage(context, const ProfilePage()),
           icon: const Icon(Icons.person, color: Colors.white, size: 22),
+        ),
+        const SizedBox(height: 12),
+        getItemAddOn2(
+          'Usage',
+          () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const UsagePage(),
+              ),
+            );
+          },
+          icon: const Icon(Icons.bar_chart_sharp, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 12),
 
@@ -153,7 +166,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                   await AuthService.instance.signOut();
                   Navigator.of(context).pop();
-                  routeToPage(context, const DeciderWidget(), replace: true);
+                  routeToPage(context, const AppShell(), replace: true);
                 }, "Sign Out?", "Are you sure you want to sign out?");
               },
             );
@@ -206,7 +219,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                 await AuthService.instance.signOut();
                 Navigator.of(context).pop();
-                routeToPage(context, const DeciderWidget(), replace: true);
+                routeToPage(context, const AppShell(), replace: true);
               }, "Sign Out?", "Are you sure you want to sign out?");
             },
           );

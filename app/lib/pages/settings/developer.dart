@@ -5,13 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -78,6 +79,90 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
+                  const SizedBox(height: 24),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Debug logs'),
+                    subtitle: const Text('Helps diagnose issues. Auto-deletes after 3 days.'),
+                    value: SharedPreferencesUtil().devLogsToFileEnabled,
+                    onChanged: (v) async {
+                      await DebugLogManager.setEnabled(v);
+                      setState(() {});
+                    },
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.upload_file, size: 16),
+                          label: const Text('Share Logs'),
+                          onPressed: () async {
+                            final files = await DebugLogManager.listLogFiles();
+                            if (files.isEmpty) {
+                              AppSnackbar.showSnackbarError('No log files found.');
+                              return;
+                            }
+                            if (files.length == 1) {
+                              final result = await Share.shareXFiles([XFile(files.first.path)], text: 'Omi debug log');
+                              if (result.status == ShareResultStatus.success) {
+                                debugPrint('Log shared');
+                              }
+                              return;
+                            }
+
+                            if (!mounted) return;
+                            final selected = await showModalBottomSheet<File>(
+                              context: context,
+                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                              ),
+                              builder: (ctx) {
+                                return SafeArea(
+                                  child: ListView.separated(
+                                    shrinkWrap: true,
+                                    itemCount: files.length,
+                                    separatorBuilder: (_, __) => Divider(color: Colors.grey.shade800, height: 1),
+                                    itemBuilder: (ctx, i) {
+                                      final f = files[i];
+                                      final name = f.uri.pathSegments.last;
+                                      return ListTile(
+                                        title: Text(name, style: const TextStyle(color: Colors.white)),
+                                        trailing: const Icon(Icons.chevron_right, color: Colors.white70),
+                                        onTap: () => Navigator.of(ctx).pop(f),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            );
+
+                            if (selected != null) {
+                              final result = await Share.shareXFiles([XFile(selected.path)], text: 'Omi debug log');
+                              if (result.status == ShareResultStatus.success) {
+                                debugPrint('Log shared');
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.grey.shade700,
+                            minimumSize: const Size(double.infinity, 40),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        tooltip: 'Clear log',
+                        onPressed: () async {
+                          await DebugLogManager.clear();
+                          AppSnackbar.showSnackbar('Debug log cleared');
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   //TODO: Model selection commented out because Soniox model is no longer being used
                   // const SizedBox(height: 32),
                   // const Padding(
@@ -357,7 +442,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         'Webhooks',
                         style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                       ),
-                      Spacer(),
+                      const Spacer(),
                       GestureDetector(
                         onTap: () {
                           launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Introduction'));

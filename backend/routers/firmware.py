@@ -61,7 +61,8 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
         }
         response = await client.get(url, headers=headers)
         if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="Failed to fetch latest release")
+            print(f"Error fetching GitHub releases: {response.status_code} {response.text}")
+            raise HTTPException(status_code=500, detail="Failed to fetch release information")
         releases = response.json()
         # Cache successful response for 30 minutes
         set_generic_cache(cache_key, releases, ttl=1800)

@@ -10,6 +10,8 @@ stripe.api_key = os.getenv('STRIPE_API_KEY')
 endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 connect_secret = os.getenv('STRIPE_CONNECT_WEBHOOK_SECRET')
 base_url = os.getenv('BASE_API_URL')
+if base_url and not base_url.startswith(('http://', 'https://')):
+    base_url = 'https://' + base_url
 
 
 def create_product(name: str, description: str, image: str):
@@ -29,6 +31,43 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
         unit_amount=amount_in_cents, currency=currency, product=product_id, recurring={'interval': 'month'}
     )
     return price
+
+
+def create_subscription_checkout_session(uid: str, price_id: str):
+    """Create a Stripe Checkout session for a subscription."""
+    try:
+        success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
+        cancel_url = urljoin(base_url, 'v1/payments/cancel')
+        checkout_session = stripe.checkout.Session.create(
+            client_reference_id=uid,
+            payment_method_types=['card'],
+            line_items=[
+                {
+                    'price': price_id,
+                    'quantity': 1,
+                },
+            ],
+            mode='subscription',
+            success_url=success_url,
+            cancel_url=cancel_url,
+            allow_promotion_codes=True,
+        )
+        return checkout_session
+    except Exception as e:
+        print(f"Error creating checkout session: {e}")
+        return None
+
+
+def cancel_subscription(subscription_id: str):
+    """Cancel a Stripe subscription at the end of the current period."""
+    try:
+        return stripe.Subscription.modify(
+            subscription_id,
+            cancel_at_period_end=True,
+        )
+    except Exception as e:
+        print(f"Error canceling subscription: {e}")
+        return None
 
 
 def create_app_payment_link(price_id: str, app_id: str, stripe_acc_id: str):

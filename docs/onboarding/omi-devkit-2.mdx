@@ -1,0 +1,134 @@
+---
+title: "Omi DevKit 2 Setup"
+description: "Get started with your Omi DevKit 2 for development"
+sidebarTitle: "DevKit 2 Setup"
+---
+
+# Get Started with Omi DevKit 2
+
+<img src="/omi-devkit-without-rope.png" alt="Omi DevKit 2" width="300" />
+
+The Omi DevKit 2 is designed for developers who want to build, test, and customize their omi experience.
+
+## Step 1: Power On Your DevKit
+
+The DevKit 2 has multiple power options:
+
+- **Switch method**: Use the physical switch if available on your version
+- **Button method**: Press and hold the center button for 3 seconds
+- **USB-C**: Can be powered directly via USB-C connection
+
+Look for the LED indicator to confirm the device is powered on.
+
+## Step 2: Development Environment Setup
+
+Before using your DevKit, set up your development environment:
+
+### For App Development
+- Download the Omi app: [iOS App Store](https://apps.apple.com/fi/app/omi-ai-smart-meeting-notes/id6502156163) | [Google Play](https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US&pli=1)
+- Follow our [App Development Guide](https://docs.omi.me/doc/developer/apps/Introduction)
+
+### For Firmware Development
+- Install the [firmware compilation tools](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
+- Set up the [development environment](https://docs.omi.me/doc/developer/AppSetup)
+
+<img src="/images/omi-setup-guide-1.avif" alt="DevKit Setup" width="400" />
+
+## Step 3: Flash Firmware (If Needed)
+
+DevKits may not come with firmware pre-installed:
+
+1. Check if your device shows any LED activity when powered
+2. If no activity, [flash the firmware here](https://docs.omi.me/get_started/Flash_device/)
+3. Follow the [DevKit 2 testing guide](https://docs.omi.me/doc/developer/DevKit2Testing)
+
+## Step 4: Pair with App
+
+1. Open the Omi app
+2. Follow pairing instructions
+3. The DevKit should appear as a discoverable device
+4. Test transcription by speaking near the device
+
+## Button Controls
+
+### Single Press
+- **Turn On/Off**: Single press to power the device on or off
+
+### Long Press (Voice Questions)
+- **Press and hold** the button until you feel a vibration
+- **Keep pressed down** and ask your question
+- **Release the button** when you're done speaking
+- **Get your answer** in the Omi chat or as a notification on your phone
+
+## Light Indicators
+
+Understanding your DevKit's status through LED colors:
+
+- 🔴 **Red**: Device is turned on but disconnected from your phone
+- 🔵 **Blue**: Device is turned on and connected to your phone  
+- 🟠 **Orange**: Device is charging and disconnected from your phone
+- 🟢 **Teal**: Device is charging and connected to your phone
+
+## Developer Features
+
+- 🔧 **Firmware Customization**
+- 📊 **Development Testing Tools**
+- 🎙️ **Audio Streaming API**
+- 💾 **Local Storage Access**
+- 🔌 **GPIO Access** (advanced users)
+- 📡 **Protocol Testing**
+
+## Development Resources
+
+<AccordionGroup>
+  <Accordion title="Building Custom Apps">
+    Learn how to build your own omi apps with our [comprehensive guide](https://docs.omi.me/doc/developer/apps/Introduction). You can create apps in just 2 minutes!
+  </Accordion>
+  <Accordion title="Backend Integration">
+    Understand how to integrate with the omi backend: [Backend Setup Guide](https://docs.omi.me/doc/developer/backend/Backend_Setup)
+  </Accordion>
+  <Accordion title="Audio Streaming">
+    Access real-time audio data: [Audio Streaming Documentation](https://docs.omi.me/doc/developer/AudioStreaming)
+  </Accordion>
+  <Accordion title="Firmware Development">
+    Customize the device firmware: [Firmware Compilation Guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
+  </Accordion>
+</AccordionGroup>
+
+## Testing Your DevKit
+
+1. **LED Test**: Device should show LED activity when powered
+2. **Bluetooth Test**: Should appear in Bluetooth discoverable devices
+3. **Audio Test**: Speak near the device and check for transcription
+4. **App Connection**: Should maintain stable connection with the app
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No LED activity">
+    - Check power connection (USB-C or battery)
+    - Try different power methods (switch vs button)
+    - Flash firmware if device is completely unresponsive
+  </Accordion>
+  <Accordion title="Firmware flashing issues">
+    - Ensure device is in DFU mode
+    - Check USB-C cable and connection
+    - Follow the [detailed flashing guide](https://docs.omi.me/get_started/Flash_device/)
+  </Accordion>
+  <Accordion title="Development environment issues">
+    - Review [development setup guide](https://docs.omi.me/doc/developer/AppSetup)
+    - Check [contribution guidelines](https://docs.omi.me/doc/developer/Contribution)
+    - Ask for help in our [Discord](http://discord.omi.me)
+  </Accordion>
+</AccordionGroup>
+
+## Community & Support
+
+1. **Developer Discord**: Join [discord.omi.me](http://discord.omi.me) for development discussions
+2. **GitHub**: Contribute to [BasedHardware/omi](https://github.com/BasedHardware/omi/issues)
+3. **Documentation**: Full docs at [docs.omi.me](https://docs.omi.me)
+4. **Email Support**: [help@omi.me](mailto:help@omi.me)
+
+---
+
+[← Back to device selection](/getstartedwithomi) 

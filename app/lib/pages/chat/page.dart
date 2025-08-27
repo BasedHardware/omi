@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -12,7 +10,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -23,13 +20,12 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -70,6 +66,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
+    textController.addListener(() {
+      setState(() {});
+    });
 
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
@@ -96,14 +95,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
-      var sessionProvider = context.read<ChatSessionProvider>();
-      
-      // Initialize sessions
-      await sessionProvider.loadSessions();
-      
-      // Refresh messages for the current session
       if (provider.messages.isEmpty) {
-        provider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
+        provider.refreshMessages();
       }
       scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
@@ -126,19 +119,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
-
-
-    @override
+  @override
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer3<MessageProvider, ConnectivityProvider, ChatSessionProvider>(
-      builder: (context, provider, connectivityProvider, sessionProvider, child) {
+    return Consumer2<MessageProvider, ConnectivityProvider>(
+      builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          endDrawer: _buildSessionsDrawer(context),
+          // endDrawer: _buildSessionsDrawer(context),
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -180,7 +171,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               ? Center(
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: 32.0),
-                                    child: Text(connectivityProvider.isConnected ? 'No messages yet!\nWhy don\'t you start a conversation?' : 'Please check your internet connection and try again', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                                    child: Text(
+                                        connectivityProvider.isConnected
+                                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
+                                            : 'Please check your internet connection and try again',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.white)),
                                   ),
                                 )
                               : ListView.builder(
@@ -192,7 +188,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   itemBuilder: (context, chatIndex) {
                                     final message = provider.messages[chatIndex];
                                     double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                    if (chatIndex != 0) message.askForNps = false;
 
                                     double bottomPadding = chatIndex == 0 ? 16 : 0;
                                     return GestureDetector(
@@ -207,7 +202,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           builder: (context) => MessageActionMenu(
                                             message: message.text.decodeString,
                                             onCopy: () async {
-                                              MixpanelManager().track('Chat Message Copied', properties: {'message': message.text});
+                                              MixpanelManager()
+                                                  .track('Chat Message Copied', properties: {'message': message.text});
                                               await Clipboard.setData(ClipboardData(text: message.text.decodeString));
                                               if (context.mounted) {
                                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -226,17 +222,33 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               }
                                             },
                                             onSelectText: () {
-                                              MixpanelManager().track('Chat Message Text Selected', properties: {'message': message.text});
+                                              MixpanelManager().track('Chat Message Text Selected',
+                                                  properties: {'message': message.text});
                                               routeToPage(context, SelectTextScreen(message: message));
                                             },
                                             onShare: () {
-                                              MixpanelManager().track('Chat Message Shared', properties: {'message': message.text});
+                                              MixpanelManager()
+                                                  .track('Chat Message Shared', properties: {'message': message.text});
                                               Share.share(
                                                 '${message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
                                                 subject: 'Chat with Omi',
                                               );
                                               Navigator.pop(context);
                                             },
+                                            onThumbsUp: message.sender == MessageSender.ai && message.askForNps
+                                                ? () {
+                                                    provider.setMessageNps(message, 1);
+                                                    Navigator.pop(context);
+                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
+                                                  }
+                                                : null,
+                                            onThumbsDown: message.sender == MessageSender.ai && message.askForNps
+                                                ? () {
+                                                    provider.setMessageNps(message, 0);
+                                                    Navigator.pop(context);
+                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
+                                                  }
+                                                : null,
                                             onReport: () {
                                               if (message.sender == MessageSender.human) {
                                                 Navigator.pop(context);
@@ -263,7 +275,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                       Navigator.of(context).pop();
                                                     },
                                                     () {
-                                                      MixpanelManager().track('Chat Message Reported', properties: {'message': message.text});
+                                                      MixpanelManager().track('Chat Message Reported',
+                                                          properties: {'message': message.text});
                                                       Navigator.of(context).pop();
                                                       Navigator.of(context).pop();
                                                       context.read<MessageProvider>().removeLocalMessage(message.id);
@@ -298,7 +311,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
                                                 message: message,
                                                 sendMessage: _sendMessageUtil,
-                                                displayOptions: provider.messages.length <= 1 && provider.messageSenderApp(message.appId)?.isNotPersona() == true,
+                                                displayOptions: provider.messages.length <= 1 &&
+                                                    provider.messageSenderApp(message.appId)?.isNotPersona() == true,
                                                 appSender: provider.messageSenderApp(message.appId),
                                                 updateConversation: (ServerConversation conversation) {
                                                   context.read<ConversationProvider>().updateConversation(conversation);
@@ -434,14 +448,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             bottom: widget.isPivotBottom ? 20 : (textFieldFocusNode.hasFocus ? 20 : 40),
                           ),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Expanded(
                                 child: Container(
-                                  height: 44,
                                   padding: const EdgeInsets.only(left: 16, right: 8),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       if (shouldShowMenuButton())
                                         GestureDetector(
@@ -460,9 +473,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             _showIOSStyleActionSheet(context);
                                           },
                                           child: Container(
-                                            margin: const EdgeInsets.only(right: 8),
+                                            margin: const EdgeInsets.only(right: 4),
                                             height: 44,
-                                            width: 32,
+                                            width: 44,
                                             alignment: Alignment.center,
                                             child: FaIcon(
                                               FontAwesomeIcons.plus,
@@ -488,7 +501,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 },
                                               )
                                             : Container(
-                                                height: 44,
                                                 alignment: Alignment.centerLeft,
                                                 child: TextField(
                                                   enabled: true,
@@ -502,36 +514,54 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     hintStyle: TextStyle(fontSize: 16.0, color: Colors.white54),
                                                     focusedBorder: InputBorder.none,
                                                     enabledBorder: InputBorder.none,
-                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                                                     isDense: true,
                                                   ),
-                                                  maxLines: 1,
-                                                  keyboardType: TextInputType.text,
+                                                  minLines: 1,
+                                                  maxLines: 10,
+                                                  keyboardType: TextInputType.multiline,
                                                   textCapitalization: TextCapitalization.sentences,
-                                                  style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.0),
+                                                  style:
+                                                      const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
                                                 ),
                                               ),
                                       ),
                                       if (shouldShowVoiceRecorderButton())
-                                        GestureDetector(
-                                          child: Container(
-                                            height: 44,
-                                            width: 32,
-                                            alignment: Alignment.center,
-                                            child: const FaIcon(
-                                              FontAwesomeIcons.microphone,
-                                              color: Colors.white,
-                                              size: 20,
-                                            ),
-                                          ),
-                                          onTap: () {
-                                            // Hide keyboard when mic is clicked
-                                            FocusScope.of(context).unfocus();
-                                            setState(() {
-                                              _showVoiceRecorder = true;
-                                            });
-                                          },
-                                        ),
+                                        textController.text.isNotEmpty
+                                            ? GestureDetector(
+                                                onTap: () {
+                                                  textController.clear();
+                                                },
+                                                child: Container(
+                                                  height: 44,
+                                                  width: 44,
+                                                  alignment: Alignment.center,
+                                                  child: const FaIcon(
+                                                    FontAwesomeIcons.xmark,
+                                                    color: Colors.white,
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                              )
+                                            : GestureDetector(
+                                                child: Container(
+                                                  height: 44,
+                                                  width: 44,
+                                                  alignment: Alignment.center,
+                                                  child: const FaIcon(
+                                                    FontAwesomeIcons.microphone,
+                                                    color: Colors.white,
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                                onTap: () {
+                                                  // Hide keyboard when mic is clicked
+                                                  FocusScope.of(context).unfocus();
+                                                  setState(() {
+                                                    _showVoiceRecorder = true;
+                                                  });
+                                                },
+                                              ),
                                     ],
                                   ),
                                 ),
@@ -551,15 +581,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               } else {
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   const SnackBar(
-                                                    content: Text('Please check your internet connection and try again'),
+                                                    content:
+                                                        Text('Please check your internet connection and try again'),
                                                     duration: Duration(seconds: 2),
                                                   ),
                                                 );
                                               }
                                             },
                                       child: Container(
-                                        height: 32,
-                                        width: 32,
+                                        height: 44,
+                                        width: 44,
                                         decoration: BoxDecoration(
                                           color: Colors.white,
                                           borderRadius: BorderRadius.circular(22),
@@ -574,7 +605,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         child: const Icon(
                                           FontAwesomeIcons.arrowUp,
                                           color: Color(0xFF35343B),
-                                          size: 18,
+                                          size: 20,
                                         ),
                                       ),
                                     ),
@@ -598,15 +629,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textFieldFocusNode.unfocus();
 
     var provider = context.read<MessageProvider>();
-    var sessionProvider = context.read<ChatSessionProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
+    textController.clear();
 
     // Scroll to align user's message to top of screen
-    _scrollToAlignUserMessageToTop();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      scrollToBottom();
+    });
 
-    textController.clear();
-    provider.sendMessageStreamToServer(text, chatSessionId: sessionProvider.currentSessionId, context: context);
+    provider.sendMessageStreamToServer(text);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }
@@ -620,42 +652,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     }
     scrollToBottom();
     context.read<MessageProvider>().setSendingMessage(false);
-  }
-
-  void _scrollToAlignUserMessageToTop() {
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (scrollController.hasClients) {
-        // Calculate scroll position to show only user's message with empty space below
-        double viewportHeight = scrollController.position.viewportDimension;
-
-        // Estimate heights:
-        // - User message height (including padding): ~80px
-        // - AI typing indicator/generation UI: ~60px
-        // - Send message area: ~100px (approximate)
-        // - Extra buffer: ~50px
-        double userMessageHeight = 80;
-        double aiGenerationHeight = 60;
-        double sendAreaHeight = 100;
-        double buffer = 50;
-
-        // Total content we want to show
-        double visibleContentHeight = userMessageHeight + aiGenerationHeight + sendAreaHeight + buffer;
-
-        // Calculate target scroll position to leave empty space at bottom
-        // We want to scroll past older messages so only the new content is visible
-        double targetOffset = viewportHeight - visibleContentHeight;
-
-        // Ensure we don't scroll beyond bounds
-        double maxOffset = scrollController.position.maxScrollExtent;
-        double finalOffset = targetOffset.clamp(0.0, maxOffset);
-
-        scrollController.animateTo(
-          finalOffset,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    });
   }
 
   void _moveListToBottom() {
@@ -772,23 +768,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         },
       ),
       centerTitle: true,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.history, color: Colors.white),
-          onPressed: () {
-            HapticFeedback.mediumImpact();
-            // Dismiss keyboard before opening drawer
-            FocusScope.of(context).unfocus();
-            scaffoldKey.currentState?.openEndDrawer();
-          },
-        ),
+      actions: const [
+        // IconButton(
+        //   icon: const Icon(Icons.history, color: Colors.white),
+        //   onPressed: () {
+        //     HapticFeedback.mediumImpact();
+        //     // Dismiss keyboard before opening drawer
+        //     FocusScope.of(context).unfocus();
+        //     scaffoldKey.currentState?.openEndDrawer();
+        //   },
+        // ),
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
-              preferredSize: const Size.fromHeight(10),
+              preferredSize: const Size.fromHeight(32),
               child: Container(
                 width: double.infinity,
-                height: 10,
+                height: 32,
                 color: Colors.green,
                 child: const Center(
                   child: Text(
@@ -1138,351 +1134,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       height: 0.5,
       color: Colors.grey.shade700,
       margin: const EdgeInsets.symmetric(horizontal: 20),
-        );
-  }
-
-  Widget _buildSessionsDrawer(BuildContext context) {
-    return Consumer<ChatSessionProvider>(
-      builder: (context, sessionProvider, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            canvasColor: Colors.white.withOpacity(0.1),
-          ),
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.85,
-            child: Drawer(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              child: Column(
-                children: [
-                  // Search bar and header
-                  Container(
-                    padding: EdgeInsets.only(
-                      top: MediaQuery.of(context).padding.top + 16,
-                      left: 12,
-                      right: 12,
-                      bottom: 6,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: TextField(
-                              enabled: false,
-                              readOnly: true,
-                              focusNode: FocusNode()..canRequestFocus = false,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                hintText: 'Search chats...',
-                                hintStyle: TextStyle(
-                                  color: Colors.white.withOpacity(0.6),
-                                  fontSize: 16,
-                                ),
-                                prefixIcon: Icon(
-                                  Icons.search,
-                                  color: Colors.white.withOpacity(0.6),
-                                  size: 20,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        GestureDetector(
-                          onTap: () => _handleCreateNewSession(),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF151415),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Center(
-                              child: FaIcon(
-                                FontAwesomeIcons.plus,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Content
-                  Expanded(
-                    child: sessionProvider.isLoadingSessions
-                        ? const Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : sessionProvider.sessions.isEmpty
-                            ? _buildDrawerEmptyState()
-                            : _buildDrawerSessionsList(sessionProvider),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
-
-  Widget _buildDrawerEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            FontAwesomeIcons.comments,
-            size: 64,
-            color: Colors.grey.shade600,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No chat sessions yet',
-            style: TextStyle(
-              color: Colors.grey.shade300,
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start a new conversation to create your first session',
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 14,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          GestureDetector(
-            onTap: () => _handleCreateNewSession(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FaIcon(FontAwesomeIcons.plus, size: 16, color: Colors.black),
-                  SizedBox(width: 8),
-                  Text(
-                    'Start New Chat',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerSessionsList(ChatSessionProvider sessionProvider) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: sessionProvider.sessions.length,
-      itemBuilder: (context, index) {
-        final session = sessionProvider.sessions[index];
-        final isSelected = session.id == sessionProvider.currentSessionId;
-        final sessionColor = _getSessionColor(index);
-        
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _handleSessionTap(session),
-              onLongPress: sessionProvider.sessions.length > 1 
-                  ? () => _handleDeleteSession(session)
-                  : null,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF2A282A) : const Color(0xFF151415),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: sessionColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              session.displayTitle.isNotEmpty 
-                                  ? session.displayTitle[0].toUpperCase()
-                                  : 'C',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            session.displayTitle.isNotEmpty 
-                                ? session.displayTitle 
-                                : 'Chat Session',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (isSelected)
-                          const SizedBox(
-                            width: 24,
-                            child: Icon(Icons.check, color: Colors.white60, size: 16),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 32),
-                      child: Text(
-                        _formatSessionTime(session.createdAt),
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _handleSessionTap(ChatSession session) async {
-    final sessionProvider = context.read<ChatSessionProvider>();
-    final messageProvider = context.read<MessageProvider>();
-    
-    // Switch to the selected session
-    sessionProvider.switchToSession(session);
-    
-    // Refresh messages for the selected session
-    messageProvider.refreshMessages(chatSessionId: session.id);
-    
-    // Close the drawer
-    if (mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  void _handleDeleteSession(ChatSession session) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return getDialog(
-          context,
-          () => Navigator.of(context).pop(false),
-          () => Navigator.of(context).pop(true),
-          'Delete Session?',
-          'Are you sure you want to delete the chat session "${session.displayTitle}"? This action cannot be undone.',
-        );
-      },
-    );
-
-    if (result == true && mounted) {
-      final sessionProvider = context.read<ChatSessionProvider>();
-      await sessionProvider.deleteSession(session);
-      
-      // Refresh messages for the new current session
-      final messageProvider = context.read<MessageProvider>();
-      await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Chat session "${session.displayTitle}" deleted'),
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  void _handleCreateNewSession() async {
-    final sessionProvider = context.read<ChatSessionProvider>();
-    final messageProvider = context.read<MessageProvider>();
-
-    // Close the drawer first
-    Navigator.of(context).pop();
-    
-    await sessionProvider.createNewSession();
-    
-    // Refresh messages for the new session
-    await messageProvider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
-  }
-
-  String _formatSessionTime(DateTime createdAt) {
-    final now = DateTime.now();
-    final difference = now.difference(createdAt);
-    
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${createdAt.day}/${createdAt.month}/${createdAt.year}';
-    }
-  }
-
-  Color _getSessionColor(int index) {
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.red,
-      Colors.teal,
-      Colors.indigo,
-      Colors.pink,
-    ];
-    return colors[index % colors.length];
-  }
-
 }

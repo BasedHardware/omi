@@ -39,15 +39,6 @@ class CategoryAppsPage extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                if (apps.isNotEmpty)
-                  Text(
-                    'in ${category.title}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade400,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
               ],
             ),
           ),

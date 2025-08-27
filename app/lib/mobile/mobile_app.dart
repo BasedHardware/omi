@@ -7,13 +7,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 
-/// Mobile app tree - wraps existing mobile app functionality
 class MobileApp extends StatelessWidget {
   const MobileApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Return the mobile app with existing logic
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.isSignedIn()) {

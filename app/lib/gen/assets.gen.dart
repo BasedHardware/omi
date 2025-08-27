@@ -67,6 +67,21 @@ class $AssetsFontsGen {
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
+  /// File path: assets/images/1.mov
+  String get a1 => 'assets/images/1.mov';
+
+  /// File path: assets/images/2.mov
+  String get a2 => 'assets/images/2.mov';
+
+  /// File path: assets/images/3.mov
+  String get a3 => 'assets/images/3.mov';
+
+  /// File path: assets/images/4.mov
+  String get a4 => 'assets/images/4.mov';
+
+  /// File path: assets/images/5.mov
+  String get a5 => 'assets/images/5.mov';
+
   /// File path: assets/images/Logo Text White.png
   AssetGenImage get logoTextWhite =>
       const AssetGenImage('assets/images/Logo Text White.png');
@@ -85,6 +100,10 @@ class $AssetsImagesGen {
   /// File path: assets/images/app_launcher_icon_v2.png
   AssetGenImage get appLauncherIconV2 =>
       const AssetGenImage('assets/images/app_launcher_icon_v2.png');
+
+  /// File path: assets/images/apple-reminders-logo.png
+  AssetGenImage get appleRemindersLogo =>
+      const AssetGenImage('assets/images/apple-reminders-logo.png');
 
   /// File path: assets/images/apple_logo.png
   AssetGenImage get appleLogo =>
@@ -215,13 +234,13 @@ class $AssetsImagesGen {
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
 
-  /// File path: assets/images/omi-without-rope-turned-off.png
+  /// File path: assets/images/omi-without-rope-turned-off.webp
   AssetGenImage get omiWithoutRopeTurnedOff =>
-      const AssetGenImage('assets/images/omi-without-rope-turned-off.png');
+      const AssetGenImage('assets/images/omi-without-rope-turned-off.webp');
 
-  /// File path: assets/images/omi-without-rope.png
+  /// File path: assets/images/omi-without-rope.webp
   AssetGenImage get omiWithoutRope =>
-      const AssetGenImage('assets/images/omi-without-rope.png');
+      const AssetGenImage('assets/images/omi-without-rope.webp');
 
   /// File path: assets/images/onboarding-bg-1.jpg
   AssetGenImage get onboardingBg1 =>
@@ -250,26 +269,6 @@ class $AssetsImagesGen {
   /// File path: assets/images/onboarding-bg-6.jpg
   AssetGenImage get onboardingBg6 =>
       const AssetGenImage('assets/images/onboarding-bg-6.jpg');
-
-  /// File path: assets/images/onboarding-language-grey.png
-  AssetGenImage get onboardingLanguageGrey =>
-      const AssetGenImage('assets/images/onboarding-language-grey.png');
-
-  /// File path: assets/images/onboarding-name-grey.png
-  AssetGenImage get onboardingNameGrey =>
-      const AssetGenImage('assets/images/onboarding-name-grey.png');
-
-  /// File path: assets/images/onboarding-name-white.png
-  AssetGenImage get onboardingNameWhite =>
-      const AssetGenImage('assets/images/onboarding-name-white.png');
-
-  /// File path: assets/images/onboarding-name.png
-  AssetGenImage get onboardingName =>
-      const AssetGenImage('assets/images/onboarding-name.png');
-
-  /// File path: assets/images/onboarding-permissions.png
-  AssetGenImage get onboardingPermissions =>
-      const AssetGenImage('assets/images/onboarding-permissions.png');
 
   /// File path: assets/images/onboarding.mp4
   String get onboarding => 'assets/images/onboarding.mp4';
@@ -340,11 +339,17 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
         logoTextWhite,
         aiMagic,
         appLauncherIcon,
         appLauncherIconV1,
         appLauncherIconV2,
+        appleRemindersLogo,
         appleLogo,
         background,
         blob,
@@ -389,11 +394,6 @@ class $AssetsImagesGen {
         onboardingBg51,
         onboardingBg52,
         onboardingBg6,
-        onboardingLanguageGrey,
-        onboardingNameGrey,
-        onboardingNameWhite,
-        onboardingName,
-        onboardingPermissions,
         onboarding,
         recordingGreenCircleIcon,
         slackLogo,

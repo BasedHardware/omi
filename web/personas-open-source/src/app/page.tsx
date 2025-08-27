@@ -22,19 +22,26 @@ import {
   doc,
   setDoc,
   or,
+  getDoc,
 } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
 import { ulid } from 'ulid';
-import { auth } from '@/lib/firebase';
+import { auth, googleProvider } from '@/lib/firebase';
 import { Header } from '@/components/Header';
 import { InputArea } from '@/components/InputArea';
 import { ChatbotList } from '@/components/ChatbotList';
 import { Footer } from '@/components/Footer';
 import { Chatbot, TwitterProfile, LinkedinProfile } from '@/types/profiles';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
-import { signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { Button } from '@/components/ui/button';
+import {
+  signInAnonymously,
+  onAuthStateChanged,
+  User,
+  signInWithPopup,
+} from 'firebase/auth';
 
 // Helper function to detect mobile devices (basic check)
 const isMobileDevice = (): boolean => {
@@ -170,8 +177,12 @@ export default function HomePage() {
   const [availablePlatforms] = useState({ twitter: true, linkedin: true });
   const [platformSelectionMode] = useState<'create' | 'add'>('create');
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState<boolean>(true);
   const [authInitialized, setAuthInitialized] = useState<boolean>(false);
   const [isIntegrating, setIsIntegrating] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [pendingIntegration, setPendingIntegration] = useState<string | null>(null);
+  const [loginUidMismatch, setLoginUidMismatch] = useState<string | null>(null);
 
   // ----------------------------------------------------------------------------------
   // Helper: open ChatGPT workspace - NOW WITH MOBILE HANDLING
@@ -227,11 +238,18 @@ export default function HomePage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
-        console.log('[Auth State] User found:', user.uid);
+        console.log(
+          '[Auth State] User found:',
+          user.uid,
+          'isAnonymous:',
+          user.isAnonymous,
+        );
         setCurrentUserUid(user.uid);
+        setIsAnonymous(user.isAnonymous);
       } else {
         console.log('[Auth State] No user found.');
         setCurrentUserUid(null);
+        setIsAnonymous(true);
       }
       setAuthInitialized(true); // Mark auth as initialized
     });
@@ -898,11 +916,41 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     openChatGPTWithUid(uid);
   };
 
+  const handleShowAllIntegrationsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    Mixpanel.track('Show All Integrations Clicked', {
+      timestamp: new Date().toISOString(),
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const uidParam = params.get('uid');
+    if (uidParam && uidParam !== currentUserUid) {
+      e.preventDefault();
+      setLoginUidMismatch(uidParam);
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    if (isAnonymous) {
+      e.preventDefault();
+      setPendingIntegration('show_all_integrations');
+      setShowLoginPrompt(true);
+    }
+  };
+
   const handleIntegrationClick = async (provider: string) => {
     if (isIntegrating) return;
     setIsIntegrating(true);
 
     console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
+
+    const params = new URLSearchParams(window.location.search);
+    const uidParam = params.get('uid');
+    if (uidParam && uidParam !== currentUserUid) {
+      setLoginUidMismatch(uidParam);
+      setShowLoginPrompt(true);
+      setIsIntegrating(false);
+      return;
+    }
 
     // Track the click event in Mixpanel
     Mixpanel.track('Integration Clicked', {
@@ -929,6 +977,16 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         setIsIntegrating(false); // Reset state on failure
         return;
       }
+
+      // Check if the user is anonymous
+      if (isAnonymous) {
+        if (loadingToastId) toast.dismiss(loadingToastId);
+        setPendingIntegration(provider);
+        setShowLoginPrompt(true);
+        setIsIntegrating(false);
+        return;
+      }
+
       console.log(`[handleIntegrationClick] Obtained UID: ${uid}`);
 
       // 2. Trigger API Call (Fire-and-Forget - before clipboard/redirect logic)
@@ -1025,10 +1083,102 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     }
   };
 
+  useEffect(() => {
+    const triggerPendingIntegration = async () => {
+      // Only proceed if there's a pending integration and the user is fully authenticated
+      if (pendingIntegration && !isAnonymous && currentUserUid) {
+        // Important: copy the value and clear the state *before* the async operation
+        // to prevent re-triggering if the component re-renders.
+        const integrationToRun = pendingIntegration;
+        setPendingIntegration(null);
+
+        if (integrationToRun === 'show_all_integrations') {
+          const url = `https://veyrax.com/omi/auth?omi_user_id=${encodeURIComponent(
+            currentUserUid,
+          )}`;
+          window.open(url, '_blank', 'noopener,noreferrer');
+        } else {
+          // Now we can safely call handleIntegrationClick, as the state is up-to-date
+          await handleIntegrationClick(integrationToRun);
+        }
+      }
+    };
+    triggerPendingIntegration();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingIntegration, isAnonymous, currentUserUid]);
+
   // URL for the Veyrax page to add more tools - Updated path
   const addToolsUrl = currentUserUid
     ? `https://veyrax.com/omi/auth?omi_user_id=${encodeURIComponent(currentUserUid)}`
     : '#';
+
+  const LoginPrompt = () => {
+    const handleGoogleSignIn = async () => {
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        const user = result.user;
+        setCurrentUserUid(user.uid); // Set UID after login
+        setIsAnonymous(false); // A Google-signed-in user is never anonymous
+
+        // Save user data if first time
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+          const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          await setDoc(userRef, {
+            time_zone: timeZone,
+            created_at: new Date(),
+          });
+        }
+
+        setShowLoginPrompt(false);
+        setLoginUidMismatch(null);
+      } catch (error) {
+        console.error('Error signing in or saving user data:', error);
+        toast.error('Error signing in. Please try again.');
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+        <div className="w-full max-w-lg">
+          <div className="flex min-h-[400px] flex-col items-center justify-center px-4">
+            <div className="mb-12 text-center">
+              <h1 className="mb-8 font-serif text-6xl text-white">omi</h1>
+              {loginUidMismatch ? (
+                <>
+                  <p className="mb-4 text-gray-400">
+                    Please sign in to the correct account.
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    This action requires the account with ID starting with:{' '}
+                    <span className="font-mono">
+                      {loginUidMismatch.substring(0, 8)}...
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mb-4 text-gray-400">Sign in to start integration</p>
+                  <p className="text-sm text-gray-500">
+                    Create a free account to unlock all integrations
+                  </p>
+                </>
+              )}
+            </div>
+
+            <Button
+              className="flex w-full max-w-sm items-center justify-center gap-2 rounded-full bg-white text-black hover:bg-gray-200"
+              onClick={handleGoogleSignIn}
+            >
+              Continue with Google
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-black text-white">
@@ -1044,24 +1194,18 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           isIntegrating={isIntegrating}
         />
 
-        {/* Add more tools link (conditionally rendered) */}
-        {currentUserUid && (
-          <div className="mt-4 text-center">
-            <a
-              href={addToolsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-base text-white hover:text-zinc-300 hover:underline"
-              onClick={() =>
-                Mixpanel.track('Show All Integrations Clicked', {
-                  timestamp: new Date().toISOString(),
-                })
-              }
-            >
-              Show all 100+ integrations →
-            </a>
-          </div>
-        )}
+        {/* Add more tools link */}
+        <div className="mt-4 text-center">
+          <a
+            href={addToolsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-base text-white hover:text-zinc-300 hover:underline"
+            onClick={handleShowAllIntegrationsClick}
+          >
+            Show all 100+ integrations →
+          </a>
+        </div>
 
         {/* Before/After Comparison */}
         <div className="mt-12 w-full max-w-5xl px-4 md:mt-16">
@@ -1126,6 +1270,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         onSelect={handlePlatformSelect}
         mode={platformSelectionMode}
       />
+      {showLoginPrompt && <LoginPrompt />}
     </div>
   );
 }

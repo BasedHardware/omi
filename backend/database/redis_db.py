@@ -423,8 +423,15 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     return url.decode()
 
 
-def get_filter_category_items(uid: str, category: str) -> List[str]:
-    val = r.smembers(f'users:{uid}:filters:{category}')
+def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
+    key = f'users:{uid}:filters:{category}'
+    if limit:
+        # Get random sample if limit specified
+        val = r.srandmember(key, limit)
+    else:
+        # Get all items (existing behavior)
+        val = r.smembers(key)
+
     if not val:
         return []
     return [x.decode() for x in val]
@@ -589,3 +596,28 @@ def get_auth_code(auth_code: str) -> str:
 def delete_auth_code(auth_code: str):
     """Delete used auth code"""
     r.delete(f'auth_code:{auth_code}')
+
+
+# ******************************************************
+# ************** CREDIT LIMIT NOTIFICATIONS ************
+# ******************************************************
+
+
+def set_credit_limit_notification_sent(uid: str, ttl: int = 60 * 60 * 24):
+    """Cache that credit limit notification was sent to user (24 hours TTL by default)"""
+    r.set(f'users:{uid}:credit_limit_notification_sent', '1', ex=ttl)
+
+
+def has_credit_limit_notification_been_sent(uid: str) -> bool:
+    """Check if credit limit notification was already sent to user recently"""
+    return r.exists(f'users:{uid}:credit_limit_notification_sent')
+
+
+def set_silent_user_notification_sent(uid: str, ttl: int = 60 * 60 * 24):
+    """Cache that silent user notification was sent to user (24 hours TTL by default)"""
+    r.set(f'users:{uid}:silent_notification_sent', '1', ex=ttl)
+
+
+def has_silent_user_notification_been_sent(uid: str) -> bool:
+    """Check if silent user notification was already sent to user recently"""
+    return r.exists(f'users:{uid}:silent_notification_sent')

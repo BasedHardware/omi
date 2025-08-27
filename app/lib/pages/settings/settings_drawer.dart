@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -116,187 +118,207 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   Widget _buildOmiModeContent(BuildContext context) {
-    return Column(
-      children: [
-        // Profile & Notifications Section
-        _buildSectionContainer(
-          children: [
-            _buildSettingsItem(
-              title: 'Profile',
-              icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
-              onTap: () {
-                Navigator.pop(context);
-                routeToPage(context, const ProfilePage());
-              },
-            ),
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildSettingsItem(
-              title: 'Device Settings',
-              icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const DeviceSettings(),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
-
-        // Share & Get Section
-        _buildSectionContainer(
-          children: [
-            _buildSettingsItem(
-              title: 'Share Omi for iPhone',
-              icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Colors.white, size: 20),
-              onTap: () async {
-                Navigator.pop(context);
-                await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-              },
-            ),
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildSettingsItem(
-              title: 'Share Omi for Mac',
-              icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-              onTap: () async {
-                Navigator.pop(context);
-                await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
-
-        // Support Section
-        if (PlatformService.isIntercomSupported)
+    return Consumer<UsageProvider>(builder: (context, usageProvider, child) {
+      final bool showSubscription = usageProvider.subscription?.showSubscriptionUi ?? false;
+      return Column(
+        children: [
+          // Profile & Notifications Section
           _buildSectionContainer(
             children: [
               _buildSettingsItem(
-                title: 'Send Feedback',
-                icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
+                title: 'Profile',
+                icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
                   Navigator.pop(context);
-                  final Uri url = Uri.parse('https://feedback.omi.me/');
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                  }
+                  routeToPage(context, const ProfilePage());
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Report a bug',
-                icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
+                title: showSubscription ? 'Plan & Usage' : 'Usage Insights',
+                icon: const FaIcon(FontAwesomeIcons.chartBar, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
                   Navigator.pop(context);
-                  final Uri url = Uri.parse('https://feedback.omi.me/');
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const UsagePage(),
+                    ),
+                  );
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Help Center',
-                icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
+                title: 'Device Settings',
+                icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
                   Navigator.pop(context);
-                  final Uri url = Uri.parse('https://help.omi.me/en/');
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const DeviceSettings(),
+                    ),
+                  );
                 },
               ),
             ],
           ),
-        if (PlatformService.isIntercomSupported) const SizedBox(height: 32),
+          const SizedBox(height: 32),
 
-        // Privacy & Settings Section
-        _buildSectionContainer(
-          children: [
-            _buildSettingsItem(
-              title: 'Data & Privacy',
-              icon: const FaIcon(FontAwesomeIcons.shield, color: Color(0xFF8E8E93), size: 20),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const DataPrivacyPage(),
-                  ),
-                );
-              },
-            ),
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildSettingsItem(
-              title: 'Developer Mode',
-              icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
-              onTap: () async {
-                Navigator.pop(context);
-                await routeToPage(context, const DeveloperSettingsPage());
-              },
-            ),
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildSettingsItem(
-              title: 'About Omi',
-              icon: const FaIcon(FontAwesomeIcons.infoCircle, color: Color(0xFF8E8E93), size: 20),
-              onTap: () {
-                Navigator.pop(context);
-                routeToPage(context, const AboutOmiPage());
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
-
-        // Sign Out Section
-        _buildSectionContainer(
-          children: [
-            _buildSettingsItem(
-              title: 'Sign Out',
-              icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
-              onTap: () async {
-                // Capture the provider reference before any navigation
-                final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                final navigator = Navigator.of(context);
-
-                navigator.pop(); // Close the settings drawer
-
-                await showDialog(
-                  context: context,
-                  builder: (ctx) {
-                    return getDialog(context, () {
-                      Navigator.of(ctx).pop();
-                    }, () async {
-                      Navigator.of(ctx).pop(); // Close dialog first
-                      await SharedPreferencesUtil().clearUserPreferences();
-                      personaProvider.setRouting(PersonaProfileRouting.no_device);
-                      await signOut();
-                      if (context.mounted) {
-                        routeToPage(context, const DeciderWidget(), replace: true);
-                      }
-                    }, "Sign Out?", "Are you sure you want to sign out?");
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 32),
-
-        // Version Info
-        Text(
-          '${version ?? ""}${buildVersion != null ? " ($buildVersion)" : ""}',
-          style: const TextStyle(
-            color: Color(0xFF8E8E93),
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
+          // Share & Get Section
+          _buildSectionContainer(
+            children: [
+              _buildSettingsItem(
+                title: 'Share Omi for iPhone',
+                icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Colors.white, size: 20),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Share Omi for Mac',
+                icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+                },
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 24),
-      ],
-    );
+          const SizedBox(height: 32),
+
+          // Support Section
+          if (PlatformService.isIntercomSupported)
+            _buildSectionContainer(
+              children: [
+                _buildSettingsItem(
+                  title: 'Send Feedback',
+                  icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final Uri url = Uri.parse('https://feedback.omi.me/');
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                    }
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: 'Report a bug',
+                  icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final Uri url = Uri.parse('https://feedback.omi.me/');
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                    }
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: 'Help Center',
+                  icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final Uri url = Uri.parse('https://help.omi.me/en/');
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                    }
+                  },
+                ),
+              ],
+            ),
+          if (PlatformService.isIntercomSupported) const SizedBox(height: 32),
+
+          // Privacy & Settings Section
+          _buildSectionContainer(
+            children: [
+              _buildSettingsItem(
+                title: 'Data & Privacy',
+                icon: const FaIcon(FontAwesomeIcons.shield, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const DataPrivacyPage(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Developer Mode',
+                icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await routeToPage(context, const DeveloperSettingsPage());
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'About Omi',
+                icon: const FaIcon(FontAwesomeIcons.infoCircle, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  Navigator.pop(context);
+                  routeToPage(context, const AboutOmiPage());
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // Sign Out Section
+          _buildSectionContainer(
+            children: [
+              _buildSettingsItem(
+                title: 'Sign Out',
+                icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+                onTap: () async {
+                  // Capture the provider reference before any navigation
+                  final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
+                  final navigator = Navigator.of(context);
+
+                  navigator.pop(); // Close the settings drawer
+
+                  await showDialog(
+                    context: context,
+                    builder: (ctx) {
+                      return getDialog(
+                        ctx,
+                        () => Navigator.of(ctx).pop(),
+                        () async {
+                          Navigator.of(ctx).pop(); // Close dialog first
+                          await SharedPreferencesUtil().clearUserPreferences();
+                          personaProvider.setRouting(PersonaProfileRouting.no_device);
+                          await signOut();
+                         if (context.mounted){
+                            routeToPage(context, const AppShell(), replace: true);
+                         }
+                        },
+                        "Sign Out?",
+                        "Are you sure you want to sign out?",
+                      );
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // Version Info
+          Text(
+            '${version ?? ""}${buildVersion != null ? " ($buildVersion)" : ""}',
+            style: const TextStyle(
+              color: Color(0xFF8E8E93),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      );
+    });
   }
 
   Widget _buildNoDeviceModeContent(BuildContext context) {
@@ -333,18 +355,22 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 await showDialog(
                   context: context,
                   builder: (ctx) {
-                    return getDialog(context, () {
-                      Navigator.of(ctx).pop();
-                    }, () async {
-                      Navigator.of(ctx).pop(); // Close dialog first
-                      SharedPreferencesUtil().hasOmiDevice = null;
-                      SharedPreferencesUtil().verifiedPersonaId = null;
-                      personaProvider.setRouting(PersonaProfileRouting.no_device);
-                      await signOut();
-                      if (context.mounted) {
-                        routeToPage(context, const DeciderWidget(), replace: true);
-                      }
-                    }, "Sign Out?", "Are you sure you want to sign out?");
+                    return getDialog(
+                      ctx,
+                      () => Navigator.of(ctx).pop(),
+                      () async {
+                        Navigator.of(ctx).pop(); // Close dialog first
+                        SharedPreferencesUtil().hasOmiDevice = null;
+                        SharedPreferencesUtil().verifiedPersonaId = null;
+                        personaProvider.setRouting(PersonaProfileRouting.no_device);
+                        await signOut();
+                        if (context.mounted) {
+                          routeToPage(context, const AppShell(), replace: true);
+                        }
+                      },
+                      "Sign Out?",
+                      "Are you sure you want to sign out?",
+                    );
                   },
                 );
               },
@@ -429,7 +455,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
+              child:
+                  widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
             ),
           ),
         ],

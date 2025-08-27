@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -33,6 +34,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
@@ -40,6 +42,7 @@ class CaptureProvider extends ChangeNotifier
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
+  UsageProvider? usageProvider;
 
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
@@ -66,6 +69,9 @@ class CaptureProvider extends ChangeNotifier
 
   bool _isAutoReconnecting = false;
   bool get isAutoReconnecting => _isAutoReconnecting;
+
+  DateTime? _lastUsageLimitDialogShown;
+  bool get outOfCredits => usageProvider?.isOutOfCredits ?? false;
 
   Timer? _reconnectTimer;
   int _reconnectCountdown = 5;
@@ -112,6 +118,7 @@ class CaptureProvider extends ChangeNotifier
         } else if (!nativeRecording && recordingState == RecordingState.systemAudioRecord) {
           updateRecordingState(RecordingState.stop);
           await _socket?.stop(reason: 'native recording stopped during sleep');
+          await DebugLogManager.logEvent('transcription_socket_stop_due_to_sleep', {});
         }
       } catch (e) {
         debugPrint('Could not check state during app resume: $e');
@@ -119,10 +126,12 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
     conversationProvider = cp;
     messageProvider = mp;
     peopleProvider = pp;
+    usageProvider = up;
+
     notifyListeners();
   }
 
@@ -201,7 +210,10 @@ class CaptureProvider extends ChangeNotifier
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
   // having a connected device or using the phone's mic for recording
-  bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record || recordingState == RecordingState.systemAudioRecord;
+  bool get recordingDeviceServiceReady =>
+      _recordingDevice != null ||
+      recordingState == RecordingState.record ||
+      recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
 
@@ -268,7 +280,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Connect to the transcript socket
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
 
     _socket = await ServiceManager.instance()
         .socket
@@ -367,7 +380,10 @@ class CaptureProvider extends ChangeNotifier
 
       // Support: opus codec, 1m from the first device connects
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
-      var checkWalSupported = codec.isOpusSupported() && (deviceFirstConnectedAt != null && deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) && SharedPreferencesUtil().localSyncEnabled;
+      var checkWalSupported = codec.isOpusSupported() &&
+          (deviceFirstConnectedAt != null &&
+              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
+          SharedPreferencesUtil().localSyncEnabled;
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
@@ -480,7 +496,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
@@ -496,6 +513,8 @@ class CaptureProvider extends ChangeNotifier
     await streamButton(deviceId);
     await streamAudioToWs(deviceId, codec);
 
+    // Set recording state to deviceRecord when device streaming starts
+    updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
 
@@ -818,10 +837,15 @@ class CaptureProvider extends ChangeNotifier
   }
 
   @override
-  void onClosed() {
+  void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
-    debugPrint('[Provider] Socket is closed');
+    debugPrint('[Provider] Socket is closed with code: $closeCode');
+
+    if (closeCode == 4002) {
+      // Refresh subscription to get latest usage data which will reflect the out of credits status.
+      usageProvider?.markAsOutOfCreditsAndRefresh();
+    }
 
     notifyListeners();
     _startKeepAliveServices();
@@ -908,7 +932,7 @@ class CaptureProvider extends ChangeNotifier
     if (event is ConversationEvent) {
       event.memory.isNew = true;
       conversationProvider!.removeProcessingConversation(event.memory.id);
-      _processConversationCreated(event.memory, event.messages as List<ServerMessage>);
+      _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       return;
     }
 
@@ -962,7 +986,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
-      ServerConversation(id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
+      ServerConversation(
+          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
     processInProgressConversation().then((result) {
       if (result == null || result.conversation == null) {
@@ -984,7 +1009,8 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {
-    bool conversationExists = conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
+    bool conversationExists =
+        conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
     if (conversationExists) {
       return;
     }
@@ -1253,5 +1279,24 @@ class CaptureProvider extends ChangeNotifier
     if (!_systemAudioCaching) {
       _flushSystemAudioBuffer();
     }
+  }
+
+  Future<void> pauseDeviceRecording() async {
+    if (_recordingDevice == null) return;
+    // Pause the BLE stream but keep the device connection
+    await _bleBytesStream?.cancel();
+    await _bleButtonStream?.cancel();
+    _isPaused = true;
+    updateRecordingState(RecordingState.pause);
+    notifyListeners();
+  }
+
+  Future<void> resumeDeviceRecording() async {
+    if (_recordingDevice == null) return;
+    _isPaused = false;
+    // Resume streaming from the device
+    await _initiateDeviceAudioStreaming();
+    updateRecordingState(RecordingState.deviceRecord);
+    notifyListeners();
   }
 }

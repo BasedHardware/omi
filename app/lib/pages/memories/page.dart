@@ -59,6 +59,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   MemoryCategory? _selectedCategory;
   final ScrollController _scrollController = ScrollController();
 
+  OverlayEntry? _deleteNotificationOverlay;
   // Filter options for the dropdown
   // Default will be set in initState based on current date
   late FilterOption _currentFilter;
@@ -67,7 +68,89 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
+    _removeDeleteNotification();
     super.dispose();
+  }
+
+  // Remove the delete notification overlay if it exists
+  void _removeDeleteNotification() {
+    _deleteNotificationOverlay?.remove();
+    _deleteNotificationOverlay = null;
+  }
+
+  void showDeleteNotification(String memoryContent, Memory? memory) {
+    _removeDeleteNotification();
+
+    final provider = Provider.of<MemoriesProvider>(this.context, listen: false);
+
+    _deleteNotificationOverlay = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 20,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(this.context).size.width * 0.9,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Memory Deleted.',
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final success = await provider.restoreLastDeletedMemory();
+                      if (success) {
+                        _removeDeleteNotification();
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size(0, 36),
+                    ),
+                    child: Text(
+                      'Undo',
+                      style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      _removeDeleteNotification();
+                    },
+                    icon: Icon(Icons.close, color: Colors.white70, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(),
+                    splashRadius: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(this.context).insert(_deleteNotificationOverlay!);
+
+    Future.delayed(const Duration(seconds: 10), () {
+      _removeDeleteNotification();
+    });
   }
 
   @override
@@ -622,6 +705,16 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         ],
       ),
     );
+  }
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _showMemoryManagementSheet(BuildContext context, MemoriesProvider provider) {

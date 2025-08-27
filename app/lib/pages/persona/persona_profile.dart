@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/main.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -560,7 +560,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                 await AuthService.instance.signOut();
                 Navigator.of(context).pop();
-                routeToPage(context, const DeciderWidget(), replace: true);
+                routeToPage(context, const AppShell(), replace: true);
               },
               child: const Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
             ),

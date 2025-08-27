@@ -8,6 +8,7 @@ import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 abstract class IDeviceService {
   void start();
@@ -176,7 +177,11 @@ class DeviceService implements IDeviceService {
   }
 
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
-    debugPrint("device connection state changed...${deviceId}...${state}");
+    debugPrint("device connection state changed...$deviceId...$state");
+    DebugLogManager.logEvent('device_connection_state', {
+      'device_id': deviceId,
+      'state': state.name,
+    });
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -197,7 +202,7 @@ class DeviceService implements IDeviceService {
     }
     mutex = true;
 
-    debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} ${force}");
+    debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
     try {
       // Not force
       if (!force && _connection != null) {
@@ -207,7 +212,7 @@ class DeviceService implements IDeviceService {
 
         // connected
         var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
         if (shouldPing) {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
@@ -222,7 +227,7 @@ class DeviceService implements IDeviceService {
       // Force
       if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
         var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
         if (shouldPing) {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
