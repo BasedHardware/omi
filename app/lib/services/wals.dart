@@ -681,7 +681,6 @@ class LocalWalSync implements IWalSync {
 
     _frames = [];
     _syncFrameSeq.clear();
-    _wals = [];
   }
 
   Future onAudioCodecChanged(BleAudioCodec codec) async {
@@ -694,7 +693,6 @@ class LocalWalSync implements IWalSync {
     await _flush();
     _frames = [];
     _syncFrameSeq.clear();
-    _wals = [];
 
     // update fps
     _framesPerSecond = codec.getFramesPerSecond();
@@ -821,8 +819,8 @@ class LocalWalSync implements IWalSync {
         }
       }
     }
-    // When unlimited storage is enabled, synced WALs are kept as-is with synced status
 
+    // When unlimited storage is enabled, synced WALs are kept as-is with synced status
     SharedPreferencesUtil().wals = _wals;
   }
 
