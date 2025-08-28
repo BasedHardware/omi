@@ -28,9 +28,19 @@ class MemoryItem extends StatelessWidget {
     final Widget memoryWidget = GestureDetector(
       onTap: () => onTap(context, memory, provider),
       child: Container(
-        margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
+        margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingL),
-        decoration: AppStyles.cardDecoration,
+        decoration: BoxDecoration(
+          color: AppStyles.backgroundSecondary,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -72,10 +82,10 @@ class MemoryItem extends StatelessWidget {
         }
       },
       background: Container(
-        margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
+        margin: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
           color: AppStyles.error,
-          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+          borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
