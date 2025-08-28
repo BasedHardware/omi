@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -80,6 +81,18 @@ class WalInfoSection extends StatelessWidget {
     );
   }
 
+  String _getDeviceImagePath(String? deviceModel) {
+    if (deviceModel == null) return Assets.images.omiWithoutRope.path;
+
+    if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
+      return Assets.images.omiGlass.path;
+    }
+    if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
+      return Assets.images.omiDevkitWithoutRope.path;
+    }
+    return Assets.images.omiWithoutRope.path;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Expanded(
@@ -118,10 +131,46 @@ class WalInfoSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Main title with date
-        Text(
-          dateTimeFormat('MMM dd, yyyy h:mm a', recordingDate),
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                dateTimeFormat('MMM dd, yyyy h:mm a', recordingDate),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ),
+
+            SizedBox(width: 8),
+
+            // Status badges
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                if (playbackState.isSynced)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 12),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Processed',
+                          style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ),
+
         const SizedBox(height: 12),
 
         // Duration and codec row
@@ -179,59 +228,43 @@ class WalInfoSection extends StatelessWidget {
         // Device info row
         Row(
           children: [
-            Icon(Icons.device_hub, color: Colors.grey.shade400, size: 14),
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(2.0),
+                child: Image.asset(
+                  _getDeviceImagePath(wal.deviceModel),
+                  width: 12,
+                  height: 12,
+                ),
+              ),
+            ),
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                wal.deviceModel ?? "Omi",
+                wal.deviceModel ?? "Omi Device",
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             if (wal.device != "phone" && wal.device.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.fingerprint, color: Colors.grey.shade400, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Device ID: ${wal.device}',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+              const SizedBox(width: 8),
+              Icon(Icons.fingerprint, color: Colors.grey.shade400, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                'ID: ${wal.device}',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ],
         ),
         const SizedBox(height: 8),
-
-        // Status badges
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            if (playbackState.isSynced)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 12),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'Processed',
-                      style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
       ],
     );
   }

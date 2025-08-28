@@ -1,23 +1,12 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/pages/settings/widgets/appbar_with_banner.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:opus_dart/opus_dart.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
@@ -44,6 +33,18 @@ class WalListItem extends StatelessWidget {
     final elapsed = DateTime.now().difference(startedAt).inSeconds;
     final progress = elapsed / eta;
     return progress.clamp(0.0, 1.0);
+  }
+
+  String _getDeviceImagePath(String? deviceModel) {
+    if (deviceModel == null) return Assets.images.omiWithoutRope.path;
+
+    if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
+      return Assets.images.omiGlass.path;
+    }
+    if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
+      return Assets.images.omiDevkitWithoutRope.path;
+    }
+    return Assets.images.omiWithoutRope.path;
   }
 
   @override
@@ -119,20 +120,21 @@ class WalListItem extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            // Device icon
+                            // Device image
                             Container(
                               width: 32,
                               height: 32,
                               decoration: BoxDecoration(
-                                color: wal.storage == WalStorage.sdcard
-                                    ? Colors.purple.withOpacity(0.2)
-                                    : Colors.blue.withOpacity(0.2),
+                                color: Colors.white.withOpacity(0.7),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: Icon(
-                                wal.storage == WalStorage.sdcard ? Icons.sd_card : Icons.phone_android,
-                                color: wal.storage == WalStorage.sdcard ? Colors.purple.shade300 : Colors.blue.shade300,
-                                size: 16,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Image.asset(
+                                  _getDeviceImagePath(wal.deviceModel),
+                                  width: 24,
+                                  height: 24,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -152,7 +154,7 @@ class WalListItem extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  // Duration and codec
+                                  // Duration and status
                                   Row(
                                     children: [
                                       Text(
@@ -162,50 +164,38 @@ class WalListItem extends StatelessWidget {
                                           fontSize: 14,
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          wal.codec.toFormattedString(),
-                                          style: TextStyle(
-                                            color: Colors.grey.shade300,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
                                       if (isSynced) ...[
                                         const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green.withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Text(
-                                            'Processed ✅',
-                                            style: TextStyle(
-                                              color: Colors.green,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
+                                        const Icon(
+                                          Icons.check_circle,
+                                          color: Colors.green,
+                                          size: 14,
                                         ),
                                       ],
                                     ],
                                   ),
                                   const SizedBox(height: 2),
-                                  // Device model
-                                  Text(
-                                    wal.deviceModel ?? "Phone Microphone",
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 12,
-                                    ),
+                                  // Device model and storage location
+                                  Row(
+                                    children: [
+                                      Text(
+                                        wal.deviceModel ?? "Omi Device",
+                                        style: TextStyle(
+                                          color: Colors.grey.shade500,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      if (wal.storage == WalStorage.sdcard) ...[
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          "• SD Card",
+                                          style: TextStyle(
+                                            color: Colors.purple.shade300,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ],
                               ),
@@ -257,22 +247,6 @@ class WalListItem extends StatelessWidget {
                                   ),
                                 ),
                               )
-                            else if (!isSynced)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.deepPurple.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Text(
-                                  'Ready',
-                                  style: TextStyle(
-                                    color: Colors.deepPurple,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                         // Progress bar for syncing
@@ -701,7 +675,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       child: Consumer<SyncProvider>(builder: (context, syncProvider, child) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Local Audio Storage'),
+            title: const Text('Storage'),
             backgroundColor: Theme.of(context).colorScheme.primary,
             actions: [
               FutureBuilder<WalStats>(
