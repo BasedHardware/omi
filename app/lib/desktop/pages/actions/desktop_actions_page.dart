@@ -6,7 +6,9 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/ui/organisms/action_item.dart';
+import 'package:omi/ui/organisms/desktop/action_item_desktop.dart';
+import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 
 class DesktopActionsPage extends StatefulWidget {
   const DesktopActionsPage({super.key});
@@ -31,6 +33,9 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   late Animation<double> _pulseAnimation;
 
   bool _animationsInitialized = false;
+
+  String? _errorMessage;
+  bool _hasNetworkError = false;
 
   @override
   void dispose() {
@@ -85,6 +90,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         provider.fetchActionItems(showShimmer: true);
       }
 
+
       _fadeController.forward();
       _slideController.forward();
     }).withPostFrameCallback();
@@ -98,8 +104,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       }
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -232,9 +236,42 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ],
             ),
           ),
+          // Create button
+          OmiButton(
+            label: 'Create',
+            onPressed: _showCreateActionItemDialog,
+            icon: FontAwesomeIcons.plus,
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _showCreateActionItemDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => const DesktopActionItemFormDialog(),
+    );
+
+    if (result == true) {
+      // Refresh the action items list
+      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      provider.forceRefreshActionItems();
+    }
+  }
+
+
+
+
+
+  void _retryLoadingActionItems() {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    setState(() {
+      _hasNetworkError = false;
+      _errorMessage = null;
+    });
+    provider.fetchActionItems(showShimmer: true);
+
   }
 
   Widget _buildActionsContent(
@@ -243,6 +280,10 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     List<ActionItemWithMetadata> incompleteItems,
     List<ActionItemWithMetadata> completedItems,
   ) {
+    if (_hasNetworkError && allItems.isEmpty) {
+      return _buildErrorState();
+    }
+
     if (provider.isLoading && allItems.isEmpty) {
       return _buildModernLoadingState();
     }
@@ -255,8 +296,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       controller: _scrollController,
       slivers: [
         // Pending tasks section
-        if (incompleteItems.isNotEmpty)
-          _buildFlatView(incompleteItems, false),
+        if (incompleteItems.isNotEmpty) _buildFlatView(incompleteItems, false),
 
         // Completed tasks section
         if (completedItems.isNotEmpty) ...[
@@ -333,6 +373,53 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                 child: CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
                 ),
+              ),
+            ),
+          ),
+
+        if (_hasNetworkError && allItems.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    FontAwesomeIcons.triangleExclamation,
+                    color: Colors.orange[300],
+                    size: 16,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _errorMessage ?? 'Some features may not work properly',
+                      style: TextStyle(
+                        color: Colors.orange[300],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _retryLoadingActionItems,
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        color: Colors.orange[300],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -445,8 +532,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-
-
   Widget _buildFirstTimeEmptyState() {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -507,9 +592,82 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-
-
-
+  Widget _buildErrorState() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(40),
+        margin: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.red.withOpacity(0.2),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 30,
+              offset: const Offset(0, 15),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                FontAwesomeIcons.triangleExclamation,
+                size: 48,
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Unable to Load Action Items',
+              style: TextStyle(
+                color: ResponsiveHelper.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? 'Please check your internet connection and try again.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: ResponsiveHelper.textSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _retryLoadingActionItems,
+              icon: const Icon(
+                FontAwesomeIcons.arrowRotateRight,
+                size: 16,
+              ),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ResponsiveHelper.purplePrimary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildFlatView(List<ActionItemWithMetadata> items, bool showCompleted) {
     final filteredItems = items.where((item) => item.completed == showCompleted).toList();
