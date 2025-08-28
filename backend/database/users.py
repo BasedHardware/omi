@@ -102,11 +102,10 @@ def delete_user_data(uid: str):
         while True:
             docs_query = collection_ref.limit(batch_size)
             docs = list(docs_query.stream())
-            collection_path = f"{collection_ref.parent.path}/{collection_ref.id}"
 
             if not docs:
-                collection_path = f"{collection_ref.parent.path}/{collection_ref.id}"
-                print(f"No more documents to delete in {collection_path}")
+                # docs might not exists, try using {parent path / id}
+                print(f"No more documents to delete in {collection_ref.parent.path}/{collection_ref.id}")
                 break
 
             batch = db.batch()
@@ -116,7 +115,7 @@ def delete_user_data(uid: str):
             batch.commit()
 
             if len(docs) < batch_size:
-                print(f"Processed all documents in {collection_path}")
+                print(f"Processed all documents in {collection_ref.path}")
                 break
 
     # delete the user document itself
