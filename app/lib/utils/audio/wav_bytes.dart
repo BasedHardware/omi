@@ -294,7 +294,7 @@ class WavBytesUtil {
 
       wavBytes = getUInt8ListBytes(decodedSamples, 16000);
     } else {
-      PlatformManager.instance.instabug.reportCrash(UnimplementedError('unknown codec'), StackTrace.current);
+      PlatformManager.instance.crashReporter.reportCrash(UnimplementedError('unknown codec'), StackTrace.current);
       throw UnimplementedError('unknown codec');
     }
     return createWav(wavBytes, filename: filename);

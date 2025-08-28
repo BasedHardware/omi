@@ -94,7 +94,7 @@ class AuthenticationProvider extends BaseProvider {
       return token;
     } catch (e, stackTrace) {
       AppSnackbar.showSnackbarError('Failed to retrieve firebase token, please try again.');
-      PlatformManager.instance.instabug.reportCrash(e, stackTrace);
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
 
       return null;
     }
@@ -110,7 +110,7 @@ class AuthenticationProvider extends BaseProvider {
       } catch (e, stackTrace) {
         AppSnackbar.showSnackbarError('Unexpected error signing in, Firebase error, please try again.');
 
-        PlatformManager.instance.instabug.reportCrash(e, stackTrace);
+        PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
         return;
       }
       String newUid = user.uid;

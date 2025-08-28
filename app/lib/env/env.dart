@@ -9,8 +9,6 @@ abstract class Env {
 
   static String? get openAIAPIKey => _instance.openAIAPIKey;
 
-  static String? get instabugApiKey => _instance.instabugApiKey;
-
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
   static String? get apiBaseUrl => _instance.apiBaseUrl;
@@ -34,8 +32,6 @@ abstract class Env {
 
 abstract class EnvFields {
   String? get openAIAPIKey;
-
-  String? get instabugApiKey;
 
   String? get mixpanelProjectToken;
 

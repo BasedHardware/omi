@@ -38,8 +38,8 @@ Future<http.Response?> makeApiCall({
 }) async {
   try {
     if (url.contains(Env.apiBaseUrl!)) {
-      headers['Authorization'] = await getAuthHeader();
-      // headers['Authorization'] = ''; // set admin key + uid here for testing
+     headers['Authorization'] = await getAuthHeader();
+    // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
     final client = http.Client();
@@ -72,7 +72,7 @@ Future<http.Response?> makeApiCall({
     return response;
   } catch (e, stackTrace) {
     debugPrint('HTTP request failed: $e, $stackTrace');
-    PlatformManager.instance.instabug.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     return null;
   } finally {}
 }
@@ -126,8 +126,8 @@ dynamic extractContentFromResponse(
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
     // TODO: handle error, better specially for script migration
-    PlatformManager.instance.instabug
-        .reportCrash(Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
+    PlatformManager.instance.crashReporter.reportCrash(
+        Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
       'response_null': (response == null).toString(),
       'response_status_code': response?.statusCode.toString() ?? '',
       'is_embedding': isEmbedding.toString(),
