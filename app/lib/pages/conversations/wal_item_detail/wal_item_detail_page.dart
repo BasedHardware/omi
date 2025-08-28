@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
@@ -88,12 +89,18 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: WalDetailAppBar(
-        wal: widget.wal,
-        onDelete: () {
-          Navigator.of(context).pop();
-          context.read<SyncProvider>().deleteWal(widget.wal);
-        },
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        elevation: 0,
+        automaticallyImplyLeading: true,
+        title: Text('Audio Details', style: Theme.of(context).textTheme.titleLarge),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.more_horiz, color: Colors.white),
+            onPressed: () => _showOptionsMenu(context),
+          ),
+        ],
       ),
       body: Consumer<SyncProvider>(
         builder: (context, syncProvider, child) {
@@ -101,26 +108,426 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
           return Column(
             children: [
-              WalWaveformSection(
-                wal: widget.wal,
-                waveformData: _waveformData,
-                isProcessingWaveform: _isProcessingWaveform,
-                playbackState: playbackState,
+              // Title section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: Column(
+                  children: [
+                    Text(
+                      'Recording ${widget.wal.id.substring(0, 1)}',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      dateTimeFormat(
+                          'dd MMM yyyy  H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                            color: Colors.grey.shade400,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                          ),
+                    ),
+                  ],
+                ),
               ),
-              WalControlsSection(
-                wal: widget.wal,
-                playbackState: playbackState,
-                onShowSnackBar: _showSnackBar,
+
+              // Waveform section - dominant space
+              Expanded(
+                flex: 6,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: WalWaveformSection(
+                    wal: widget.wal,
+                    waveformData: _waveformData,
+                    isProcessingWaveform: _isProcessingWaveform,
+                    playbackState: playbackState,
+                  ),
+                ),
               ),
-              WalInfoSection(
-                wal: widget.wal,
-                playbackState: playbackState,
-                onShowSnackBar: _showSnackBar,
+
+              // Timer display
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Consumer<SyncProvider>(
+                  builder: (context, syncProvider, child) {
+                    final currentPos = playbackState.isPlaying ? playbackState.currentPosition : Duration.zero;
+                    return Text(
+                      _formatDuration(currentPos),
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(
+                            fontSize: 56,
+                            fontWeight: FontWeight.w300,
+                            letterSpacing: 3,
+                          ),
+                    );
+                  },
+                ),
               ),
+
+              // Controls section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildControlButton(
+                      icon: Icons.replay_10,
+                      onPressed: playbackState.canPlayOrShare && playbackState.isPlaying
+                          ? () => _handleSkipBackward(context.read<SyncProvider>())
+                          : null,
+                      size: 60,
+                    ),
+                    _buildControlButton(
+                      icon: playbackState.isProcessing
+                          ? Icons.hourglass_empty
+                          : (playbackState.isPlaying ? Icons.pause : Icons.play_arrow),
+                      size: 80,
+                      backgroundColor: Colors.white,
+                      iconColor: Colors.black,
+                      onPressed: playbackState.canPlayOrShare && !playbackState.isProcessing
+                          ? () => _handlePlayPause(context.read<SyncProvider>())
+                          : null,
+                    ),
+                    _buildControlButton(
+                      icon: Icons.forward_10,
+                      onPressed: playbackState.canPlayOrShare && playbackState.isPlaying
+                          ? () => _handleSkipForward(context.read<SyncProvider>())
+                          : null,
+                      size: 60,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Main action button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: syncProvider.isSyncing ? null : () => _handleMainAction(context, syncProvider),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _getMainActionColor(playbackState),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      elevation: 0,
+                    ),
+                    icon: syncProvider.isSyncing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.cloud_upload, size: 20),
+                    label: Text(
+                      syncProvider.isSyncing ? 'PROCESSING...' : _getMainActionText(playbackState),
+                      style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1,
+                            color: Colors.white,
+                          ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 32),
             ],
           );
         },
       ),
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    final milliseconds = (duration.inMilliseconds.remainder(1000) / 10).floor();
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')},${milliseconds.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildControlButton({
+    required IconData icon,
+    VoidCallback? onPressed,
+    double size = 48,
+    Color? backgroundColor,
+    Color? iconColor,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? Colors.grey.withOpacity(0.3),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          color: iconColor ?? Colors.white,
+          size: size * 0.4,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePlayPause(SyncProvider syncProvider) async {
+    if (widget.wal.storage == WalStorage.sdcard) {
+      _showSnackBar('Playback for SD card audio is not yet available.', Colors.orange);
+      return;
+    }
+
+    try {
+      await syncProvider.toggleWalPlayback(widget.wal);
+    } catch (e) {
+      _showSnackBar('Error playing audio: $e');
+    }
+  }
+
+  Future<void> _handleSkipBackward(SyncProvider syncProvider) async {
+    try {
+      await syncProvider.skipBackward();
+    } catch (e) {
+      _showSnackBar('Error skipping backward: $e');
+    }
+  }
+
+  Future<void> _handleSkipForward(SyncProvider syncProvider) async {
+    try {
+      await syncProvider.skipForward();
+    } catch (e) {
+      _showSnackBar('Error skipping forward: $e');
+    }
+  }
+
+  void _handleMainAction(BuildContext context, SyncProvider syncProvider) {
+    final playbackState = _getPlaybackState(syncProvider);
+
+    if (playbackState.hasError) {
+      syncProvider.retrySync();
+    } else if (playbackState.isSynced) {
+      _showResyncDialog(context, syncProvider);
+    } else {
+      syncProvider.syncWal(widget.wal);
+    }
+  }
+
+  String _getMainActionText(PlaybackState playbackState) {
+    if (playbackState.hasError) return 'RETRY';
+    if (playbackState.isSynced) return 'REPROCESS';
+    return 'PROCESS';
+  }
+
+  Color _getMainActionColor(PlaybackState playbackState) {
+    if (playbackState.hasError) return Colors.red.shade600;
+    if (playbackState.isSynced) return Colors.orange.shade600;
+    return Colors.deepPurple;
+  }
+
+  void _showResyncDialog(BuildContext context, SyncProvider syncProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        title: Text('Reprocess Recording', style: Theme.of(context).textTheme.titleLarge),
+        content: Text(
+          'This will reprocess the audio file and may create a new conversation or update an existing one.',
+          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              syncProvider.resyncWal(widget.wal);
+            },
+            child: const Text('Reprocess', style: TextStyle(color: Colors.orange)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showOptionsMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F1F25),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.info_outline, color: Colors.white),
+              title: Text('File Details', style: Theme.of(context).textTheme.bodyMedium),
+              onTap: () {
+                Navigator.pop(context);
+                _showFileDetailsDialog(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share, color: Colors.white),
+              title: Text('Share Audio', style: Theme.of(context).textTheme.bodyMedium),
+              onTap: () {
+                Navigator.pop(context);
+                _handleShare(context.read<SyncProvider>());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title:
+                  Text('Delete Recording', style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteDialog(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        title: Text('Delete Recording', style: Theme.of(context).textTheme.titleLarge),
+        content: Text(
+          'Are you sure you want to delete this audio file? This action cannot be undone.',
+          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close dialog
+              Navigator.of(context).pop(); // Go back to previous screen
+              context.read<SyncProvider>().deleteWal(widget.wal);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleShare(SyncProvider syncProvider) async {
+    if (widget.wal.storage == WalStorage.sdcard) {
+      _showSnackBar('Sharing for SD card audio is not yet available.', Colors.orange);
+      return;
+    }
+
+    try {
+      await syncProvider.shareWalAsWav(widget.wal);
+    } catch (e) {
+      _showSnackBar('Error sharing audio: $e');
+    }
+  }
+
+  void _showFileDetailsDialog(BuildContext context) {
+    final recordingDate = DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000);
+    final estimatedSize = _estimateFileSize();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        title: Text('File Details', style: Theme.of(context).textTheme.titleLarge),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDetailRow('Recording ID', widget.wal.id.substring(0, 8)),
+            _buildDetailRow('Date & Time', dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
+            _buildDetailRow('Duration', secondsToHumanReadable(widget.wal.seconds)),
+            _buildDetailRow('Audio Format', widget.wal.codec.toFormattedString()),
+            _buildDetailRow('Storage Location', widget.wal.storage == WalStorage.sdcard ? 'SD Card' : 'Phone'),
+            _buildDetailRow('Estimated Size', estimatedSize),
+            _buildDetailRow('Device Model', widget.wal.deviceModel ?? 'Unknown'),
+            if (widget.wal.device.isNotEmpty && widget.wal.device != "phone")
+              _buildDetailRow('Device ID', widget.wal.device),
+            _buildDetailRow('Status', widget.wal.status == WalStatus.synced ? 'Processed' : 'Unprocessed'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Close', style: Theme.of(context).textTheme.labelMedium),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: Theme.of(context).textTheme.labelMedium!.copyWith(color: Colors.grey.shade400),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _estimateFileSize() {
+    // Estimate size based on codec, sample rate, channels, and duration
+    int bytesPerSecond;
+    switch (widget.wal.codec) {
+      case BleAudioCodec.opus:
+      case BleAudioCodec.opusFS320:
+        bytesPerSecond = widget.wal.codec == BleAudioCodec.opusFS320 ? 40000 : 8000; // ~320kbps vs ~64kbps
+        break;
+      case BleAudioCodec.pcm16:
+        bytesPerSecond = widget.wal.sampleRate * 2 * widget.wal.channel; // 16-bit samples
+        break;
+      case BleAudioCodec.pcm8:
+        bytesPerSecond = widget.wal.sampleRate * 1 * widget.wal.channel; // 8-bit samples
+        break;
+      case BleAudioCodec.mulaw16:
+      case BleAudioCodec.mulaw8:
+        bytesPerSecond = widget.wal.sampleRate * 1 * widget.wal.channel; // μ-law is 8-bit encoded
+        break;
+      default:
+        bytesPerSecond = 8000;
+    }
+
+    final totalBytes = bytesPerSecond * widget.wal.seconds;
+    return _formatBytes(totalBytes);
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

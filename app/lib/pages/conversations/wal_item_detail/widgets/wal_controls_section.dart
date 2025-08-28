@@ -74,7 +74,7 @@ class WalControlsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -83,12 +83,13 @@ class WalControlsSection extends StatelessWidget {
             onPressed: playbackState.canPlayOrShare && playbackState.isPlaying
                 ? () => _handleSkipBackward(context.read<SyncProvider>())
                 : null,
+            size: 56,
           ),
           _buildControlButton(
             icon: playbackState.isProcessing
                 ? Icons.hourglass_empty
                 : (playbackState.isPlaying ? Icons.pause : Icons.play_arrow),
-            size: 64,
+            size: 80,
             backgroundColor: Colors.white,
             iconColor: Colors.black,
             onPressed: playbackState.canPlayOrShare && !playbackState.isProcessing
@@ -100,6 +101,7 @@ class WalControlsSection extends StatelessWidget {
             onPressed: playbackState.canPlayOrShare && playbackState.isPlaying
                 ? () => _handleSkipForward(context.read<SyncProvider>())
                 : null,
+            size: 56,
           ),
         ],
       ),

@@ -95,30 +95,18 @@ class WalInfoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      flex: 1,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildAudioInfo(),
-            const Spacer(),
-            Consumer<SyncProvider>(
-              builder: (context, syncProvider, child) {
-                return Column(
-                  children: [
-                    if (playbackState.hasError && syncProvider.syncError != null) _buildErrorSection(syncProvider),
-                    _buildActionButtons(context, syncProvider),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      child: Consumer<SyncProvider>(
+        builder: (context, syncProvider, child) {
+          return Column(
+            children: [
+              if (playbackState.hasError && syncProvider.syncError != null) _buildErrorSection(syncProvider),
+              _buildActionButtons(context, syncProvider),
+            ],
+          );
+        },
       ),
     );
   }
@@ -326,11 +314,44 @@ class WalInfoSection extends StatelessWidget {
   }
 
   Widget _buildActionButtons(BuildContext context, SyncProvider syncProvider) {
-    return Row(
+    // Show prominent action button for main action
+    final mainAction = playbackState.hasError ? 'RETRY' : (playbackState.isSynced ? 'REPROCESS' : 'PROCESS');
+    final mainColor = playbackState.hasError
+        ? Colors.red.shade600
+        : (playbackState.isSynced ? Colors.orange.shade600 : Colors.red.shade600);
+
+    return Column(
       children: [
-        if (playbackState.canPlayOrShare)
-          Expanded(
-            child: ElevatedButton.icon(
+        // Main action button (prominent like "REPLACE" in the image)
+        SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: () => _handleProcessAction(context, syncProvider),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: mainColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              elevation: 0,
+            ),
+            child: Text(
+              mainAction,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+        ),
+
+        if (playbackState.canPlayOrShare) ...[
+          const SizedBox(height: 12),
+          // Secondary share button
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
               onPressed: playbackState.isSharing ? null : () => _handleShare(syncProvider),
               icon: playbackState.isSharing
                   ? const SizedBox(
@@ -339,32 +360,15 @@ class WalInfoSection extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
                   : const Icon(Icons.share, size: 18),
-              label: Text(playbackState.isSharing ? 'Sharing...' : 'Share'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey.shade700,
+              label: Text(playbackState.isSharing ? 'Sharing...' : 'Share Audio'),
+              style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                side: BorderSide(color: Colors.grey.shade600),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               ),
             ),
           ),
-        if (playbackState.canPlayOrShare) const SizedBox(width: 12),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => _handleProcessAction(context, syncProvider),
-            icon: Icon(
-              playbackState.hasError ? Icons.refresh : (playbackState.isSynced ? Icons.refresh : Icons.cloud_upload),
-              size: 18,
-            ),
-            label: Text(playbackState.hasError ? 'Retry' : (playbackState.isSynced ? 'Re-process' : 'Process')),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: playbackState.hasError
-                  ? Colors.red.shade700
-                  : (playbackState.isSynced ? Colors.orange : Colors.deepPurple),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
+        ],
       ],
     );
   }

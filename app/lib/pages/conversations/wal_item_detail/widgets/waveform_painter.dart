@@ -81,6 +81,32 @@ class WaveformPainter extends CustomPainter {
         useActivePaint ? activePaint : paint,
       );
     }
+
+    // Draw progress indicator dot - more prominent like in ss1.jpeg
+    if (isPlaying && playbackProgress > 0) {
+      final progressX = (barCount * playbackProgress) * (barWidth + spacing);
+      final dotPaint = Paint()
+        ..color = const Color(0xFF4A90E2) // Blue color like in the image
+        ..style = PaintingStyle.fill;
+
+      // Draw the progress dot above the waveform
+      canvas.drawCircle(
+        Offset(progressX, size.height * 0.05), // Position higher up
+        6.0, // Larger dot
+        dotPaint,
+      );
+
+      // Draw a subtle vertical line from dot to waveform
+      final linePaint = Paint()
+        ..color = const Color(0xFF4A90E2).withOpacity(0.5)
+        ..strokeWidth = 1.0;
+
+      canvas.drawLine(
+        Offset(progressX, size.height * 0.05 + 6),
+        Offset(progressX, size.height * 0.95),
+        linePaint,
+      );
+    }
   }
 
   void _paintFallbackWaveform(

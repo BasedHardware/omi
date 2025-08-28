@@ -51,24 +51,16 @@ class WalWaveformSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      flex: 2,
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              child: _buildWaveformVisualization(context),
-            ),
-            const SizedBox(height: 16),
-            _buildTimeIndicators(),
-          ],
-        ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          Expanded(
+            child: _buildWaveformVisualization(context),
+          ),
+          const SizedBox(height: 16),
+          _buildTimeIndicators(context),
+        ],
       ),
     );
   }
@@ -79,11 +71,11 @@ class WalWaveformSection extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
+            const CircularProgressIndicator(
               color: Colors.white70,
               strokeWidth: 2,
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
               'Analyzing audio...',
               style: TextStyle(
@@ -120,28 +112,45 @@ class WalWaveformSection extends StatelessWidget {
     );
   }
 
-  Widget _buildTimeIndicators() {
-    return Consumer<SyncProvider>(
-      builder: (context, syncProvider, child) {
-        final currentPos = playbackState.isPlaying ? playbackState.currentPosition : Duration.zero;
-        final totalDur = playbackState.isPlaying && playbackState.totalDuration.inMilliseconds > 0
-            ? playbackState.totalDuration
-            : Duration(seconds: wal.seconds);
+  Widget _buildTimeIndicators(BuildContext context) {
+    final totalDur = Duration(seconds: wal.seconds);
 
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              _formatDuration(currentPos),
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-            ),
-            Text(
-              _formatDuration(totalDur),
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-            ),
-          ],
-        );
-      },
+    // Always show 4 time markers like in ss1.jpeg (0:00, 0:01, 0:02, 0:03)
+    List<String> timeMarkers = [];
+    final intervalSeconds = (totalDur.inSeconds / 3).ceil(); // Divide into 3 intervals for 4 markers
+
+    for (int i = 0; i <= 3; i++) {
+      final seconds = i * intervalSeconds;
+      if (seconds <= totalDur.inSeconds) {
+        timeMarkers.add(_formatTimeMarker(Duration(seconds: seconds)));
+      }
+    }
+
+    // Ensure we always have exactly 4 markers
+    while (timeMarkers.length < 4) {
+      timeMarkers.add(_formatTimeMarker(totalDur));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: timeMarkers
+            .map((marker) => Text(
+                  marker,
+                  style: Theme.of(context).textTheme.labelMedium!.copyWith(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.w400,
+                      ),
+                ))
+            .toList(),
+      ),
     );
+  }
+
+  String _formatTimeMarker(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    return '${minutes}:${seconds.toString().padLeft(2, '0')}';
   }
 }
