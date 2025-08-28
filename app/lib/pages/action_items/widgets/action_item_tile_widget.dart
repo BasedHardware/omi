@@ -151,8 +151,9 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
   String _formatDueDate(DateTime date) {
     final now = DateTime.now();
-    final difference = date.difference(now).inDays;
-
+    final today = DateTime(now.year, now.month, now.day);
+    final targetDate = DateTime(date.year, date.month, date.day);
+    final difference = targetDate.difference(today).inDays;
     if (difference == 0) {
       return 'Today';
     } else if (difference == 1) {
@@ -419,4 +420,4 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       ),
     );
   }
-} 
+}
