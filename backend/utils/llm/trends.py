@@ -27,7 +27,7 @@ class ExpectedOutput(BaseModel):
 
 
 def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
-    person_ids = [s.person_id for s in memory.transcript_segments if s.person_id]
+    person_ids = memory.get_person_ids()
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
