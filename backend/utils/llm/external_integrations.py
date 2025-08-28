@@ -46,12 +46,12 @@ def get_message_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
-    
+
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
         if action_item.created_at is None:
             action_item.created_at = datetime.now(timezone.utc)
-    
+
     return response
 
 
@@ -68,14 +68,14 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       '''.replace(
         '    ', ''
     ).strip()
-    
+
     response = llm_mini.with_structured_output(Structured).invoke(prompt)
-    
+
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
         if action_item.created_at is None:
             action_item.created_at = datetime.now(timezone.utc)
-    
+
     return response
 
 
@@ -84,7 +84,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
 
     all_person_ids = []
     for m in memories:
-        all_person_ids.extend([s.person_id for s in m.transcript_segments if s.person_id])
+        all_person_ids.extend(m.get_person_ids())
 
     people = []
     if all_person_ids:
