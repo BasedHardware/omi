@@ -45,34 +45,39 @@ class WaveformPainter extends CustomPainter {
     double spacing,
     int barCount,
   ) {
-    final dataPointsPerBar = (waveformData!.length / barCount).ceil();
-
+    // Always draw the full number of bars to fill the width
     for (int i = 0; i < barCount; i++) {
       final x = i * (barWidth + spacing);
 
-      // Get average amplitude for this bar
+      // Map this bar index to the waveform data
       double amplitude = 0.0;
-      int count = 0;
-      for (int j = i * dataPointsPerBar; j < (i + 1) * dataPointsPerBar && j < waveformData!.length; j++) {
-        amplitude += waveformData![j];
-        count++;
-      }
-      if (count > 0) {
-        amplitude /= count;
+      if (waveformData!.isNotEmpty) {
+        // Calculate which data point(s) this bar represents
+        final dataIndex = (i * waveformData!.length / barCount).floor();
+        if (dataIndex < waveformData!.length) {
+          amplitude = waveformData![dataIndex];
+        }
       }
 
-      // Ensure minimum height for visibility
-      amplitude = math.max(amplitude, 0.05);
+      // Use raw amplitude with no adjustments
+      final height = amplitude * size.height;
+      final centerY = size.height / 2;
 
-      final height = amplitude * size.height * 0.8;
-      final y = (size.height - height) / 2;
+      // Draw waveform bar from center, extending both up and down
+      final halfHeight = height / 2;
 
       final progressBarIndex = (barCount * playbackProgress).floor();
       final useActivePaint = isPlaying && i <= progressBarIndex;
 
+      // Use more dynamic scaling with lower minimum height
+      final minHeight = 1.0; // Lower minimum for more dynamic range
+      final scaledHeight = height * 1.2; // Slightly amplify the height
+      final displayHeight = math.max(scaledHeight, minHeight);
+      final displayHalfHeight = displayHeight / 2;
+
       canvas.drawLine(
-        Offset(x, y),
-        Offset(x, y + height),
+        Offset(x, centerY - displayHalfHeight),
+        Offset(x, centerY + displayHalfHeight),
         useActivePaint ? activePaint : paint,
       );
     }
@@ -87,22 +92,13 @@ class WaveformPainter extends CustomPainter {
     double spacing,
     int barCount,
   ) {
-    final random = Random(42); // Fixed seed for consistent waveform
-
-    for (int i = 0; i < barCount; i++) {
-      final x = i * (barWidth + spacing);
-      final height = (random.nextDouble() * 0.7 + 0.1) * size.height;
-      final y = (size.height - height) / 2;
-
-      final progressBarIndex = (barCount * playbackProgress).floor();
-      final useActivePaint = isPlaying && i <= progressBarIndex;
-
-      canvas.drawLine(
-        Offset(x, y),
-        Offset(x, y + height),
-        useActivePaint ? activePaint : paint,
-      );
-    }
+    // Paint a single center line when no waveform data is available
+    final centerY = size.height / 2;
+    canvas.drawLine(
+      Offset(0, centerY),
+      Offset(size.width, centerY),
+      paint..strokeWidth = 1,
+    );
   }
 
   @override

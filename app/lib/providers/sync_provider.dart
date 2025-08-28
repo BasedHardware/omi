@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -50,6 +51,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
   StreamSubscription<PlaybackDisposition>? _positionSubscription;
+
+  // Waveform generation
+  final Map<String, List<double>> _waveformCache = {};
+  final Map<String, String> _wavFileCache = {}; // Cache WAV file paths
 
   String? get currentPlayingWalId => _currentPlayingWalId;
   bool get isProcessingAudio => _isProcessingAudio;
@@ -352,6 +357,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       }
 
       if (wavFilePath != null) {
+        // Cache the WAV file path for waveform generation
+        _wavFileCache[wal.id] = wavFilePath;
+
         _currentPlayingWalId = wal.id;
         _isProcessingAudio = false;
 
@@ -748,6 +756,274 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
   }
 
+  // Waveform generation methods
+  Future<List<double>?> getWaveformForWal(String walId) async {
+    debugPrint('generating waveform for WAL $walId');
+    if (_waveformCache.containsKey(walId)) {
+      return _waveformCache[walId];
+    }
+
+    final wal = _allWals.firstWhere((w) => w.id == walId, orElse: () => throw Exception('WAL not found'));
+
+    try {
+      // Generate waveform from the same WAV file used for playback
+      String? wavFilePath = _wavFileCache[walId];
+
+      if (wavFilePath == null) {
+        // Create WAV file if not cached
+        String? audioFilePath = await _getAudioFilePath(wal);
+        if (audioFilePath == null) {
+          return null;
+        }
+
+        if (wal.codec.isOpusSupported()) {
+          wavFilePath = await _decodeOpusToWav(wal, audioFilePath);
+        } else {
+          wavFilePath = await _convertPcmToWav(wal, audioFilePath);
+        }
+
+        if (wavFilePath != null) {
+          _wavFileCache[walId] = wavFilePath;
+        }
+      }
+
+      if (wavFilePath != null) {
+        final waveformData = await _generateWaveformFromWavFile(wavFilePath);
+        _waveformCache[walId] = waveformData;
+        return waveformData;
+      }
+    } catch (e) {
+      debugPrint('Error generating waveform for WAL $walId: $e');
+    }
+
+    return null;
+  }
+
+  Future<List<double>> _generateWaveformFromWavFile(String wavFilePath) async {
+    debugPrint('Generating waveform from WAV file: $wavFilePath');
+    try {
+      final file = File(wavFilePath);
+      if (!file.existsSync()) {
+        debugPrint('WAV file does not exist');
+        return _generateFallbackWaveform();
+      }
+
+      final wavData = await file.readAsBytes();
+
+      // Parse WAV header to get format information
+      final wavInfo = _parseWavHeader(wavData);
+      if (wavInfo == null) {
+        debugPrint('Failed to parse WAV header');
+        return _generateFallbackWaveform();
+      }
+
+      debugPrint(
+          'WAV Info: ${wavInfo.sampleRate}Hz, ${wavInfo.channels} channels, ${wavInfo.bitsPerSample} bits, data size: ${wavInfo.dataSize}');
+
+      // Extract PCM data starting from the data chunk
+      final pcmData = wavData.sublist(wavInfo.dataOffset, wavInfo.dataOffset + wavInfo.dataSize);
+
+      // Convert PCM bytes to samples based on the actual format
+      List<double> samples = [];
+
+      if (wavInfo.bitsPerSample == 16) {
+        // 16-bit PCM samples
+        for (int i = 0; i < pcmData.length - 1; i += 2) {
+          // Convert two bytes to a 16-bit signed integer (little-endian)
+          int sample = pcmData[i] | (pcmData[i + 1] << 8);
+
+          // Convert to signed value
+          if (sample > 32767) {
+            sample = sample - 65536;
+          }
+
+          // Normalize to -1.0 to 1.0 range
+          samples.add(sample / 32768.0);
+        }
+      } else if (wavInfo.bitsPerSample == 8) {
+        // 8-bit PCM samples (unsigned)
+        for (int i = 0; i < pcmData.length; i++) {
+          // Convert unsigned 8-bit to signed and normalize
+          int sample = pcmData[i] - 128;
+          samples.add(sample / 128.0);
+        }
+      } else if (wavInfo.bitsPerSample == 24) {
+        // 24-bit PCM samples
+        for (int i = 0; i < pcmData.length - 2; i += 3) {
+          // Convert three bytes to a 24-bit signed integer (little-endian)
+          int sample = pcmData[i] | (pcmData[i + 1] << 8) | (pcmData[i + 2] << 16);
+
+          // Convert to signed value
+          if (sample > 8388607) {
+            sample = sample - 16777216;
+          }
+
+          // Normalize to -1.0 to 1.0 range
+          samples.add(sample / 8388608.0);
+        }
+      } else if (wavInfo.bitsPerSample == 32) {
+        // 32-bit PCM samples
+        for (int i = 0; i < pcmData.length - 3; i += 4) {
+          // Convert four bytes to a 32-bit signed integer (little-endian)
+          int sample = pcmData[i] | (pcmData[i + 1] << 8) | (pcmData[i + 2] << 16) | (pcmData[i + 3] << 24);
+
+          // Normalize to -1.0 to 1.0 range
+          samples.add(sample / 2147483648.0);
+        }
+      } else {
+        debugPrint('Unsupported bits per sample: ${wavInfo.bitsPerSample}');
+        return _generateFallbackWaveform();
+      }
+
+      // Handle multi-channel audio by taking only the first channel
+      if (wavInfo.channels > 1) {
+        List<double> monoSamples = [];
+        for (int i = 0; i < samples.length; i += wavInfo.channels) {
+          monoSamples.add(samples[i]); // Take first channel only
+        }
+        samples = monoSamples;
+      }
+
+      debugPrint('Extracted ${samples.length} samples from WAV file');
+      return _generateWaveformFromSamples(samples);
+    } catch (e) {
+      debugPrint('Error generating waveform from WAV file: $e');
+      return _generateFallbackWaveform();
+    }
+  }
+
+  WavInfo? _parseWavHeader(Uint8List wavData) {
+    try {
+      if (wavData.length < 44) {
+        debugPrint('WAV file too small');
+        return null;
+      }
+
+      // Check RIFF header
+      final riffHeader = String.fromCharCodes(wavData.sublist(0, 4));
+      if (riffHeader != 'RIFF') {
+        debugPrint('Invalid RIFF header: $riffHeader');
+        return null;
+      }
+
+      // Check WAVE format
+      final waveFormat = String.fromCharCodes(wavData.sublist(8, 12));
+      if (waveFormat != 'WAVE') {
+        debugPrint('Invalid WAVE format: $waveFormat');
+        return null;
+      }
+
+      // Find fmt chunk
+      int offset = 12;
+      int fmtChunkSize = 0;
+      int sampleRate = 0;
+      int channels = 0;
+      int bitsPerSample = 0;
+
+      while (offset < wavData.length - 8) {
+        final chunkId = String.fromCharCodes(wavData.sublist(offset, offset + 4));
+        final chunkSize = ByteData.sublistView(wavData, offset + 4, offset + 8).getUint32(0, Endian.little);
+
+        if (chunkId == 'fmt ') {
+          fmtChunkSize = chunkSize;
+          // Parse format chunk
+          final audioFormat = ByteData.sublistView(wavData, offset + 8, offset + 10).getUint16(0, Endian.little);
+          channels = ByteData.sublistView(wavData, offset + 10, offset + 12).getUint16(0, Endian.little);
+          sampleRate = ByteData.sublistView(wavData, offset + 12, offset + 16).getUint32(0, Endian.little);
+          bitsPerSample = ByteData.sublistView(wavData, offset + 22, offset + 24).getUint16(0, Endian.little);
+
+          if (audioFormat != 1) {
+            debugPrint('Unsupported audio format: $audioFormat (only PCM supported)');
+            return null;
+          }
+
+          break;
+        }
+
+        offset += 8 + chunkSize;
+        // Align to even byte boundary
+        if (chunkSize % 2 == 1) offset++;
+      }
+
+      if (fmtChunkSize == 0) {
+        debugPrint('fmt chunk not found');
+        return null;
+      }
+
+      // Find data chunk
+      offset = 12;
+      while (offset < wavData.length - 8) {
+        final chunkId = String.fromCharCodes(wavData.sublist(offset, offset + 4));
+        final chunkSize = ByteData.sublistView(wavData, offset + 4, offset + 8).getUint32(0, Endian.little);
+
+        if (chunkId == 'data') {
+          return WavInfo(
+            sampleRate: sampleRate,
+            channels: channels,
+            bitsPerSample: bitsPerSample,
+            dataOffset: offset + 8,
+            dataSize: chunkSize,
+          );
+        }
+
+        offset += 8 + chunkSize;
+        // Align to even byte boundary
+        if (chunkSize % 2 == 1) offset++;
+      }
+
+      debugPrint('data chunk not found');
+      return null;
+    } catch (e) {
+      debugPrint('Error parsing WAV header: $e');
+      return null;
+    }
+  }
+
+  List<double> _generateWaveformFromSamples(List<double> samples) {
+    if (samples.isEmpty) {
+      return _generateFallbackWaveform();
+    }
+
+    const int targetBars = 100; // Number of bars in waveform
+    final int samplesPerWindow = (samples.length / targetBars).ceil();
+
+    List<double> waveformData = [];
+
+    for (int i = 0; i < targetBars; i++) {
+      final startIdx = i * samplesPerWindow;
+      final endIdx = math.min(startIdx + samplesPerWindow, samples.length);
+
+      if (startIdx >= samples.length) {
+        break; // Stop generating bars when we run out of samples
+      }
+
+      // Calculate RMS (Root Mean Square) for this segment - exactly like voice recorder
+      double rms = 0.0;
+      int count = 0;
+      for (int j = startIdx; j < endIdx; j++) {
+        // Square the sample and add to sum - same as voice recorder
+        rms += samples[j] * samples[j];
+        count++;
+      }
+
+      if (count > 0) {
+        // Calculate RMS - same as voice recorder
+        rms = math.sqrt(rms / count);
+      }
+
+      // Apply lighter non-linear scaling for more dynamic range
+      final level = math.pow(rms, 0.6).toDouble().clamp(0.02, 1.0);
+      waveformData.add(level);
+    }
+
+    return waveformData;
+  }
+
+  List<double> _generateFallbackWaveform() {
+    // Return empty list when no waveform data is available
+    return [];
+  }
+
   @override
   void dispose() {
     _positionSubscription?.cancel();
@@ -755,4 +1031,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _wal.unsubscribe(this);
     super.dispose();
   }
+}
+
+class WavInfo {
+  final int sampleRate;
+  final int channels;
+  final int bitsPerSample;
+  final int dataOffset;
+  final int dataSize;
+
+  WavInfo({
+    required this.sampleRate,
+    required this.channels,
+    required this.bitsPerSample,
+    required this.dataOffset,
+    required this.dataSize,
+  });
 }

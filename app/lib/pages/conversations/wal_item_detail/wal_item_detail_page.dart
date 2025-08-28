@@ -10,7 +10,6 @@ import 'widgets/wal_waveform_section.dart';
 import 'widgets/wal_controls_section.dart';
 import 'widgets/wal_info_section.dart';
 import 'models/playback_state.dart';
-import 'services/waveform_generator.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -24,12 +23,10 @@ class WalItemDetailPage extends StatefulWidget {
 class _WalItemDetailPageState extends State<WalItemDetailPage> {
   List<double>? _waveformData;
   bool _isProcessingWaveform = false;
-  late WaveformGenerator _waveformGenerator;
 
   @override
   void initState() {
     super.initState();
-    _waveformGenerator = WaveformGenerator();
     _generateWaveform();
   }
 
@@ -44,7 +41,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     });
 
     try {
-      final waveformData = await _waveformGenerator.generateFromWal(widget.wal);
+      final syncProvider = context.read<SyncProvider>();
+      final waveformData = await syncProvider.getWaveformForWal(widget.wal.id);
       if (mounted) {
         setState(() {
           _waveformData = waveformData;
