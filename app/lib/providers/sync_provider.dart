@@ -46,10 +46,25 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isProcessingAudio = false;
   String? _currentSharingWalId;
 
+  // Playback position tracking
+  Duration _currentPosition = Duration.zero;
+  Duration _totalDuration = Duration.zero;
+  StreamSubscription<PlaybackDisposition>? _positionSubscription;
+
   String? get currentPlayingWalId => _currentPlayingWalId;
   bool get isProcessingAudio => _isProcessingAudio;
   bool get isSharingAudio => _currentSharingWalId != null;
   bool isWalSharing(String walId) => _currentSharingWalId == walId;
+  Duration get currentPosition => _currentPosition;
+  Duration get totalDuration => _totalDuration;
+  double get playbackProgress {
+    if (_totalDuration.inMilliseconds <= 0) {
+      return 0.0;
+    }
+    final progress = _currentPosition.inMilliseconds.toDouble() / _totalDuration.inMilliseconds.toDouble();
+    final clampedProgress = progress.clamp(0.0, 1.0);
+    return clampedProgress;
+  }
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -94,6 +109,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         syncedFiles: 0,
         missedFiles: 0,
       );
+    }
+  }
+
+  Future<void> deleteWal(Wal wal) async {
+    try {
+      await _wal.getSyncs().deleteWal(wal);
+      await refreshWals();
+    } catch (e) {
+      debugPrint('Error deleting WAL: $e');
     }
   }
 
@@ -297,12 +321,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       // Stop playback
       await _audioPlayer?.stopPlayer();
       _currentPlayingWalId = null;
+      _currentPosition = Duration.zero;
+      _totalDuration = Duration.zero;
+      _positionSubscription?.cancel();
       notifyListeners();
       return;
     }
 
     // Start playback
     _isProcessingAudio = true;
+    _currentPosition = Duration.zero;
+    _totalDuration = Duration.zero;
     notifyListeners();
 
     try {
@@ -325,20 +354,61 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (wavFilePath != null) {
         _currentPlayingWalId = wal.id;
         _isProcessingAudio = false;
-        notifyListeners();
 
         await _audioPlayer?.startPlayer(
           fromURI: wavFilePath,
           whenFinished: () {
+            debugPrint('Audio playback finished');
             _currentPlayingWalId = null;
+            _currentPosition = Duration.zero;
+            _totalDuration = Duration.zero;
+            _positionSubscription?.cancel();
             notifyListeners();
           },
         );
+
+        // Set up position tracking AFTER starting playback and ensure it's working
+        _positionSubscription?.cancel();
+        _positionSubscription = _audioPlayer?.onProgress?.listen((disposition) {
+          if (_currentPlayingWalId == wal.id) {
+            _currentPosition = disposition.position;
+            _totalDuration = disposition.duration;
+            debugPrint(
+                'Position update: ${_currentPosition.inMilliseconds}ms / ${_totalDuration.inMilliseconds}ms (${(playbackProgress * 100).toStringAsFixed(1)}%)');
+            notifyListeners();
+          }
+        });
+
+        // Also start a manual timer as backup in case onProgress doesn't work
+        Timer.periodic(const Duration(milliseconds: 100), (timer) {
+          if (_currentPlayingWalId != wal.id || !(_audioPlayer?.isPlaying ?? false)) {
+            timer.cancel();
+            return;
+          }
+
+          // Manual position tracking as fallback
+          if (_totalDuration.inMilliseconds > 0) {
+            final estimatedPosition = _currentPosition + const Duration(milliseconds: 100);
+            if (estimatedPosition <= _totalDuration) {
+              _currentPosition = estimatedPosition;
+              debugPrint(
+                  'Manual position update: ${_currentPosition.inMilliseconds}ms / ${_totalDuration.inMilliseconds}ms');
+              notifyListeners();
+            }
+          }
+        });
+
+        // Set initial duration from WAL data
+        _totalDuration = Duration(seconds: wal.seconds);
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('Error playing audio: $e');
       _isProcessingAudio = false;
       _currentPlayingWalId = null;
+      _currentPosition = Duration.zero;
+      _totalDuration = Duration.zero;
+      _positionSubscription?.cancel();
       notifyListeners();
       rethrow;
     }
@@ -650,8 +720,37 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     notifyListeners();
   }
 
+  Future<void> seekToPosition(Duration position) async {
+    if (_audioPlayer != null && _currentPlayingWalId != null) {
+      try {
+        await _audioPlayer!.seekToPlayer(position);
+        _currentPosition = position;
+        notifyListeners();
+      } catch (e) {
+        debugPrint('Error seeking to position: $e');
+      }
+    }
+  }
+
+  Future<void> skipForward({Duration duration = const Duration(seconds: 10)}) async {
+    if (_audioPlayer != null && _currentPlayingWalId != null) {
+      final newPosition = _currentPosition + duration;
+      final clampedPosition = newPosition > _totalDuration ? _totalDuration : newPosition;
+      await seekToPosition(clampedPosition);
+    }
+  }
+
+  Future<void> skipBackward({Duration duration = const Duration(seconds: 10)}) async {
+    if (_audioPlayer != null && _currentPlayingWalId != null) {
+      final newPosition = _currentPosition - duration;
+      final clampedPosition = newPosition < Duration.zero ? Duration.zero : newPosition;
+      await seekToPosition(clampedPosition);
+    }
+  }
+
   @override
   void dispose() {
+    _positionSubscription?.cancel();
     _audioPlayer?.closePlayer();
     _wal.unsubscribe(this);
     super.dispose();

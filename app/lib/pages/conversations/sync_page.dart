@@ -20,6 +20,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'synced_conversations_page.dart';
+import 'wal_item_detail/wal_item_detail_page.dart';
 
 class WalListItem extends StatelessWidget {
   final DateTime date;
@@ -58,8 +59,12 @@ class WalListItem extends StatelessWidget {
         final hasError = syncProvider.failedWal?.id == wal.id;
 
         return GestureDetector(
-          onTap: () async {
-            // TODO
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => WalItemDetailPage(wal: wal),
+              ),
+            );
           },
           child: Padding(
             padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
@@ -108,395 +113,188 @@ class WalListItem extends StatelessWidget {
                     ServiceManager.instance().wal.getSyncs().deleteWal(wal);
                   },
                   child: Padding(
-                    padding: const EdgeInsetsDirectional.all(0),
+                    padding: const EdgeInsets.all(16.0),
                     child: Column(
-                      mainAxisSize: MainAxisSize.max,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              // Device icon and info
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: wal.storage == WalStorage.sdcard
-                                      ? Colors.purple.withOpacity(0.2)
-                                      : Colors.blue.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(
-                                  wal.storage == WalStorage.sdcard ? Icons.sd_card : Icons.phone_android,
-                                  color:
-                                      wal.storage == WalStorage.sdcard ? Colors.purple.shade300 : Colors.blue.shade300,
-                                  size: 20,
-                                ),
+                        Row(
+                          children: [
+                            // Device icon
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: wal.storage == WalStorage.sdcard
+                                    ? Colors.purple.withOpacity(0.2)
+                                    : Colors.blue.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
                               ),
-                              const SizedBox(width: 12),
-                              // Main content
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          secondsToHumanReadable(wal.seconds),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey.withOpacity(0.2),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              wal.codec.toFormattedString(),
-                                              style: TextStyle(
-                                                color: Colors.grey.shade300,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              overflow: TextOverflow.fade,
-                                              softWrap: false,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          wal.deviceModel ?? "Phone Microphone",
-                                          style: TextStyle(
-                                            color: Colors.grey.shade400,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (isSynced) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Colors.green.withOpacity(0.2),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: const Text(
-                                              'Processed ✅',
-                                              style: TextStyle(
-                                                color: Colors.green,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ],
-                                ),
+                              child: Icon(
+                                wal.storage == WalStorage.sdcard ? Icons.sd_card : Icons.phone_android,
+                                color: wal.storage == WalStorage.sdcard ? Colors.purple.shade300 : Colors.blue.shade300,
+                                size: 16,
                               ),
-                              // Actions
-                              if (isSynced)
-                                PopupMenuButton<String>(
-                                  onSelected: (value) async {
-                                    if (value == 'reprocess') {
-                                      WalListItem.showResyncDialog(context, wal, syncProvider);
-                                    } else if (value == 'play') {
-                                      try {
-                                        await syncProvider.toggleWalPlayback(wal);
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Error playing audio: $e')),
-                                          );
-                                        }
-                                      }
-                                    } else if (value == 'share') {
-                                      if (wal.storage == WalStorage.sdcard) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Sharing for SD card audio is not yet available.'),
-                                            backgroundColor: Colors.orange,
-                                          ),
-                                        );
-                                        return;
-                                      }
-                                      try {
-                                        await syncProvider.shareWalAsWav(wal);
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Error sharing audio: $e')),
-                                          );
-                                        }
-                                      }
-                                    }
-                                  },
-                                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                                    const PopupMenuItem<String>(
-                                      value: 'reprocess',
-                                      child: ListTile(leading: Icon(Icons.refresh), title: Text('Re-process')),
+                            ),
+                            const SizedBox(width: 12),
+                            // Main content
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Title and time
+                                  Text(
+                                    dateTimeFormat('MMM dd, yyyy h:mm a',
+                                        DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                    if (canPlayOrShare)
-                                      PopupMenuItem<String>(
-                                        value: 'play',
-                                        child: ListTile(
-                                            leading: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-                                            title: Text(isPlaying ? 'Pause Audio' : 'Play Audio')),
-                                      ),
-                                    if (canPlayOrShare)
-                                      const PopupMenuItem<String>(
-                                        value: 'share',
-                                        child: ListTile(leading: Icon(Icons.share), title: Text('Share Audio')),
-                                      ),
-                                  ],
-                                  icon: const Icon(Icons.more_vert, color: Colors.white70),
-                                )
-                              else if (hasError)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (canPlayOrShare)
-                                      IconButton(
-                                        onPressed: isProcessing
-                                            ? null
-                                            : () async {
-                                                if (wal.storage == WalStorage.sdcard) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text('Playback for SD card audio is not yet available.'),
-                                                      backgroundColor: Colors.orange,
-                                                    ),
-                                                  );
-                                                  return;
-                                                }
-                                                try {
-                                                  await syncProvider.toggleWalPlayback(wal);
-                                                } catch (e) {
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text('Error playing audio: $e'),
-                                                        backgroundColor: Colors.red.shade700,
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              },
-                                        icon: isProcessing
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
-                                            : Icon(
-                                                isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                                                color: isPlaying ? Colors.orange : Colors.white70,
-                                                size: 24,
-                                              ),
-                                        tooltip: isProcessing ? 'Processing...' : (isPlaying ? 'Pause' : 'Play'),
-                                      ),
-                                    if (canPlayOrShare)
-                                      IconButton(
-                                        onPressed: isSharingThisWal
-                                            ? null
-                                            : () async {
-                                                if (wal.storage == WalStorage.sdcard) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text('Sharing for SD card audio is not yet available.'),
-                                                      backgroundColor: Colors.orange,
-                                                    ),
-                                                  );
-                                                  return;
-                                                }
-                                                try {
-                                                  await syncProvider.shareWalAsWav(wal);
-                                                } catch (e) {
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text('Error sharing audio: $e'),
-                                                        backgroundColor: Colors.red.shade700,
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              },
-                                        icon: isSharingThisWal
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
-                                            : const Icon(Icons.share_rounded, color: Colors.white70, size: 20),
-                                        tooltip: isSharingThisWal ? 'Sharing...' : 'Share as WAV',
-                                      ),
-                                    ElevatedButton.icon(
-                                      onPressed: () => syncProvider.retrySync(),
-                                      icon: const Icon(Icons.refresh, size: 14),
-                                      label: const Text('Retry'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red.shade700,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else if (wal.isSyncing)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(20),
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                  const SizedBox(height: 4),
+                                  // Duration and codec
+                                  Row(
                                     children: [
-                                      const SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.orange,
+                                      Text(
+                                        secondsToHumanReadable(wal.seconds),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade400,
+                                          fontSize: 14,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Text(
-                                        "${wal.syncEtaSeconds != null ? "${wal.syncEtaSeconds}s" : "..."} ETA",
-                                        style: const TextStyle(
-                                            color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              else
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (canPlayOrShare)
-                                      IconButton(
-                                        onPressed: isProcessing
-                                            ? null
-                                            : () async {
-                                                if (wal.storage == WalStorage.sdcard) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text('Playback for SD card audio is not yet available.'),
-                                                      backgroundColor: Colors.orange,
-                                                    ),
-                                                  );
-                                                  return;
-                                                }
-                                                try {
-                                                  await syncProvider.toggleWalPlayback(wal);
-                                                } catch (e) {
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text('Error playing audio: $e'),
-                                                        backgroundColor: Colors.red.shade700,
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              },
-                                        icon: isProcessing
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
-                                            : Icon(
-                                                isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                                                color: isPlaying ? Colors.orange : Colors.white70,
-                                                size: 24,
-                                              ),
-                                        tooltip: isProcessing ? 'Processing...' : (isPlaying ? 'Pause' : 'Play'),
-                                      ),
-                                    if (canPlayOrShare)
-                                      IconButton(
-                                        onPressed: isSharingThisWal
-                                            ? null
-                                            : () async {
-                                                if (wal.storage == WalStorage.sdcard) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text('Sharing for SD card audio is not yet available.'),
-                                                      backgroundColor: Colors.orange,
-                                                    ),
-                                                  );
-                                                  return;
-                                                }
-                                                try {
-                                                  await syncProvider.shareWalAsWav(wal);
-                                                } catch (e) {
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text('Error sharing audio: $e'),
-                                                        backgroundColor: Colors.red.shade700,
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              },
-                                        icon: isSharingThisWal
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
-                                            : const Icon(Icons.share_rounded, color: Colors.white70, size: 20),
-                                        tooltip: isSharingThisWal ? 'Sharing...' : 'Share as WAV',
-                                      ),
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        syncProvider.syncWal(wal);
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.deepPurple,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(20),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          wal.codec.toFormattedString(),
+                                          style: TextStyle(
+                                            color: Colors.grey.shade300,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                         ),
                                       ),
-                                      child: const Text(
-                                        'Process',
-                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                      if (isSynced) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.withOpacity(0.2),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'Processed ✅',
+                                            style: TextStyle(
+                                              color: Colors.green,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  // Device model
+                                  Text(
+                                    wal.deviceModel ?? "Phone Microphone",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Status indicator
+                            if (wal.isSyncing)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Processing...',
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
                                 ),
-                            ],
-                          ),
+                              )
+                            else if (hasError)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Error',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              )
+                            else if (!isSynced)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.deepPurple.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Ready',
+                                  style: TextStyle(
+                                    color: Colors.deepPurple,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        if (hasError && syncProvider.syncError != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                            child: Text(
-                              syncProvider.syncError!,
-                              style: TextStyle(color: Colors.red.shade300, fontSize: 12),
-                            ),
-                          ),
-                        if (wal.isSyncing && wal.status != WalStatus.synced)
+                        // Progress bar for syncing
+                        if (wal.isSyncing && wal.status != WalStatus.synced) ...[
+                          const SizedBox(height: 12),
                           LinearProgressIndicator(
                             value: calculateProgress(wal.syncStartedAt ?? DateTime.now(), wal.syncEtaSeconds ?? 0),
                             backgroundColor: Colors.grey[800],
-                            color: Colors.white,
-                            minHeight: 4,
+                            color: Colors.orange,
+                            minHeight: 3,
                           ),
+                        ],
+                        // Error message
+                        if (hasError && syncProvider.syncError != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            syncProvider.syncError!,
+                            style: TextStyle(color: Colors.red.shade300, fontSize: 11),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -506,48 +304,6 @@ class WalListItem extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  static void showResyncDialog(BuildContext context, Wal wal, SyncProvider syncProvider) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: const Text('Reprocess Audio File', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This will reprocess the audio file and may create a new conversation or update an existing one.',
-              style: TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'File: ${secondsToHumanReadable(wal.seconds)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            Text(
-              'Recorded: ${dateTimeFormat('MMM dd, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000))}',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              syncProvider.resyncWal(wal);
-            },
-            child: const Text('Reprocess', style: TextStyle(color: Colors.orange)),
-          ),
-        ],
-      ),
     );
   }
 }
