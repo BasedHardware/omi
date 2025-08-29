@@ -212,6 +212,18 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref.update(prepared_data)
 
 
+def update_conversation_overview_citations(uid: str, conversation_id: str, overview_citations: List[Dict]):
+    """
+    Update conversation with overview citations fields under structured.
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
+        return
+    conversation_ref.update({'structured.overview_citations': overview_citations})
+
+
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)

@@ -37,7 +37,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null || !conversationProvider!.groupedConversations.containsKey(selectedDate) || conversationProvider!.groupedConversations[selectedDate] == null || conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
+    if (conversationProvider == null ||
+        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
+        conversationProvider!.groupedConversations[selectedDate] == null ||
+        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
       // Return cached conversation if available, otherwise create an empty one
       if (_cachedConversation == null) {
         throw StateError("No conversation available");
@@ -193,7 +196,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
     if (!conversation.discarded) {
-      getHasConversationSummaryRating(conversation.id).then((value) {
+      await getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
         notifyListeners();
         if (!hasConversationSummaryRatingSet) {
@@ -204,6 +207,13 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           });
         }
       });
+
+      final refreshed = await getConversationById(conversation.id);
+      if (refreshed != null) {
+        conversationProvider?.updateConversation(refreshed);
+        _cachedConversation = refreshed;
+        notifyListeners();
+      }
     }
 
     // updateLoadingState(false);
