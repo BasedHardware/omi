@@ -311,6 +311,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     final success = await service.addReminder(
       title: widget.actionItem.description,
       notes: 'From Omi',
+      dueDate: widget.actionItem.dueAt,
       listName: 'Reminders',
     );
 
