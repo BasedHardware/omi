@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +6,8 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/widgets/dialog.dart';
+import '../synced_conversations_page.dart';
 
 import 'widgets/wal_detail_app_bar.dart';
 import 'widgets/wal_waveform_section.dart';
@@ -24,6 +27,7 @@ class WalItemDetailPage extends StatefulWidget {
 class _WalItemDetailPageState extends State<WalItemDetailPage> {
   List<double>? _waveformData;
   bool _isProcessingWaveform = false;
+  SyncProvider? _syncProvider;
 
   @override
   void initState() {
@@ -32,18 +36,34 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Save reference to SyncProvider to use safely in dispose()
+    _syncProvider = context.read<SyncProvider>();
+  }
+
+  @override
   void dispose() {
+    // Stop audio playback when exiting the detail page
+    if (_syncProvider != null && _syncProvider!.isWalPlaying(widget.wal.id)) {
+      _syncProvider!.toggleWalPlayback(widget.wal);
+    }
     super.dispose();
   }
 
   Future<void> _generateWaveform() async {
+    if (!mounted) return;
+
     setState(() {
       _isProcessingWaveform = true;
     });
 
     try {
       final syncProvider = context.read<SyncProvider>();
+
+      // Use a separate isolate for waveform generation to avoid blocking main thread
       final waveformData = await syncProvider.getWaveformForWal(widget.wal.id);
+
       if (mounted) {
         setState(() {
           _waveformData = waveformData;
@@ -93,7 +113,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         automaticallyImplyLeading: true,
-        title: Text('Audio Details', style: Theme.of(context).textTheme.titleLarge),
+        title: Text('Recording Details', style: Theme.of(context).textTheme.titleLarge),
         centerTitle: true,
         actions: [
           IconButton(
@@ -129,6 +149,31 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                             fontSize: 16,
                             fontWeight: FontWeight.w400,
                           ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Privacy notice
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.security, color: Colors.blue, size: 14),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Private & secure on your device',
+                            style: TextStyle(
+                              color: Colors.blue,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -201,43 +246,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 ),
               ),
 
-              // Main action button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton.icon(
-                    onPressed: syncProvider.isSyncing ? null : () => _handleMainAction(context, syncProvider),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _getMainActionColor(playbackState),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    icon: syncProvider.isSyncing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.cloud_upload, size: 20),
-                    label: Text(
-                      syncProvider.isSyncing ? 'PROCESSING...' : _getMainActionText(playbackState),
-                      style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1,
-                            color: Colors.white,
-                          ),
-                    ),
-                  ),
-                ),
-              ),
-
               const SizedBox(height: 32),
             ],
           );
@@ -307,57 +315,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     }
   }
 
-  void _handleMainAction(BuildContext context, SyncProvider syncProvider) {
-    final playbackState = _getPlaybackState(syncProvider);
-
-    if (playbackState.hasError) {
-      syncProvider.retrySync();
-    } else if (playbackState.isSynced) {
-      _showResyncDialog(context, syncProvider);
-    } else {
-      syncProvider.syncWal(widget.wal);
-    }
-  }
-
-  String _getMainActionText(PlaybackState playbackState) {
-    if (playbackState.hasError) return 'RETRY';
-    if (playbackState.isSynced) return 'REPROCESS';
-    return 'PROCESS';
-  }
-
-  Color _getMainActionColor(PlaybackState playbackState) {
-    if (playbackState.hasError) return Colors.red.shade600;
-    if (playbackState.isSynced) return Colors.orange.shade600;
-    return Colors.deepPurple;
-  }
-
-  void _showResyncDialog(BuildContext context, SyncProvider syncProvider) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: Text('Reprocess Recording', style: Theme.of(context).textTheme.titleLarge),
-        content: Text(
-          'This will reprocess the audio file and may create a new conversation or update an existing one.',
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              syncProvider.resyncWal(widget.wal);
-            },
-            child: const Text('Reprocess', style: TextStyle(color: Colors.orange)),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showOptionsMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -369,7 +326,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
           children: [
             ListTile(
               leading: const Icon(Icons.info_outline, color: Colors.white),
-              title: Text('File Details', style: Theme.of(context).textTheme.bodyMedium),
+              title: Text('Recording Info', style: Theme.of(context).textTheme.bodyMedium),
               onTap: () {
                 Navigator.pop(context);
                 _showFileDetailsDialog(context);
@@ -377,7 +334,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             ),
             ListTile(
               leading: const Icon(Icons.share, color: Colors.white),
-              title: Text('Share Audio', style: Theme.of(context).textTheme.bodyMedium),
+              title: Text('Share Recording', style: Theme.of(context).textTheme.bodyMedium),
               onTap: () {
                 Navigator.pop(context);
                 _handleShare(context.read<SyncProvider>());
@@ -401,27 +358,18 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   void _showDeleteDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: Text('Delete Recording', style: Theme.of(context).textTheme.titleLarge),
-        content: Text(
-          'Are you sure you want to delete this audio file? This action cannot be undone.',
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Go back to previous screen
-              context.read<SyncProvider>().deleteWal(widget.wal);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+      builder: (context) => getDialog(
+        context,
+        () => Navigator.of(context).pop(),
+        () {
+          Navigator.of(context).pop(); // Close dialog
+          Navigator.of(context).pop(); // Go back to previous screen
+          context.read<SyncProvider>().deleteWal(widget.wal);
+        },
+        'Delete Recording',
+        'Are you sure you want to permanently delete this recording? This can\'t be undone.',
+        okButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
       ),
     );
   }
@@ -447,7 +395,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
-        title: Text('File Details', style: Theme.of(context).textTheme.titleLarge),
+        title: Text('Recording Details', style: Theme.of(context).textTheme.titleLarge),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

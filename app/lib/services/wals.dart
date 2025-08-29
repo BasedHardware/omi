@@ -8,10 +8,13 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
-const chunkSizeInSeconds = 10;
-const flushIntervalInSeconds = 15;
+const chunkSizeInSeconds = 60;
+const flushIntervalInSeconds = 90;
+const sdcardChunkSizeSecs = 60;
+const newFrameSyncDelaySeconds = 15; // wait 15s for new frame synced
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(double percentage); // 0..1
@@ -134,12 +137,12 @@ class Wal {
   Wal(
       {required this.timerStart,
       required this.codec,
+      required this.seconds,
       this.sampleRate = 16000,
       this.channel = 1,
       this.status = WalStatus.inProgress,
       this.storage = WalStorage.mem,
       this.filePath,
-      this.seconds = chunkSizeInSeconds,
       this.device = "phone",
       this.deviceModel,
       this.storageOffset = 0,
@@ -357,8 +360,7 @@ class SDCardWalSync implements IWalSync {
     // Read
     List<List<int>> bytesData = [];
     var bytesLeft = 0;
-    var chunkSizeSecs = 10;
-    var chunkSize = chunkSizeSecs * 100;
+    var chunkSize = sdcardChunkSizeSecs * 100;
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
@@ -424,7 +426,7 @@ class SDCardWalSync implements IWalSync {
       if (bytesData.length - bytesLeft >= chunkSize) {
         var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
         bytesLeft += chunkSize;
-        timerStart += chunkSizeSecs;
+        timerStart += sdcardChunkSizeSecs;
         try {
           var file = await _flushToDisk(chunk, timerStart);
           await callback(file, offset);
@@ -448,7 +450,7 @@ class SDCardWalSync implements IWalSync {
     // Flush remaining bytes only if no error occurred
     if (!hasError && bytesLeft < bytesData.length - 1) {
       var chunk = bytesData.sublist(bytesLeft);
-      timerStart += chunkSizeSecs;
+      timerStart += sdcardChunkSizeSecs;
       var file = await _flushToDisk(chunk, timerStart);
       await callback(file, offset);
     }
@@ -675,16 +677,34 @@ class LocalWalSync implements IWalSync {
 
   @override
   void start() {
-    _wals = SharedPreferencesUtil().wals;
-    debugPrint("wal service start: ${_wals.length}");
-    _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds), (t) async {
+    _initializeWals();
+    _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
       await _chunk();
     });
-    _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds), (t) async {
+    _flushingTimer =
+        Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
       await _flush();
     });
-    // Notify listener that WALs are loaded (including both missing and synced)
-    listener.onWalUpdated();
+  }
+
+  /// Initialize WALs with migration support
+  Future<void> _initializeWals() async {
+    try {
+      // Initialize the file manager
+      await WalFileManager.init();
+
+      // Load WALs from file
+      _wals = await WalFileManager.loadWals();
+
+      debugPrint("wal service start: ${_wals.length}");
+
+      // Notify listener that WALs are loaded (including both missing and synced)
+      listener.onWalUpdated();
+    } catch (e) {
+      debugPrint('Error initializing WALs: $e');
+      _wals = [];
+      listener.onWalUpdated();
+    }
   }
 
   @override
@@ -716,8 +736,6 @@ class LocalWalSync implements IWalSync {
   }
 
   void setDeviceInfo(String? deviceId, String? deviceModel) {
-    debugPrint(deviceId);
-    debugPrint(deviceModel);
     _deviceId = deviceId;
     _deviceModel = deviceModel;
   }
@@ -729,89 +747,79 @@ class LocalWalSync implements IWalSync {
     }
 
     var lossesThreshold = 10 * _framesPerSecond; // 10s
-    var newFrameSyncDelaySeconds = 15; // wait 15s for new frame synced
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * _framesPerSecond;
     if (pivot <= 0) {
       return;
     }
 
-    // Scan backward
     var high = pivot;
-    while (high > 0) {
-      var low = high - _framesPerSecond * chunkSizeInSeconds;
-      if (low < 0) {
-        low = 0;
-      }
-      var chunk = _frames.sublist(low, high);
-      var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
-      var chunkFrameCount = high - low;
+    var low = 0;
+    var chunk = _frames.sublist(low, high);
+    var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
+    var chunkFrameCount = high - low;
 
-      bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-      if (!shouldStored) {
-        // Checking losses threshold
-        bool synced = true;
-        var losses = 0;
-        for (var i = low; i < high; i++) {
-          if (!_frameSynced[i]) {
-            losses++;
-            if (losses >= lossesThreshold) {
-              synced = false;
-              break;
-            }
-          }
-        }
-
-        shouldStored = (synced == false);
-      }
-
-      if (shouldStored) {
-        // track the synced offset
-        int syncedOffset = 0;
-        for (var i = low; i < high; i++) {
-          if (_frameSynced[i]) {
-            syncedOffset++;
-          } else {
+    bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    if (!shouldStored) {
+      // Checking losses threshold
+      bool synced = true;
+      var losses = 0;
+      for (var i = low; i < high; i++) {
+        if (!_frameSynced[i]) {
+          losses++;
+          if (losses >= lossesThreshold) {
+            synced = false;
             break;
           }
         }
-        debugPrint("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount}");
-
-        Wal wal;
-        var walIdx = _wals
-            .indexWhere((w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec);
-        if (walIdx < 0) {
-          wal = Wal(
-            codec: _codec,
-            timerStart: timerStart,
-            data: chunk,
-            storage: WalStorage.mem,
-            status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
-            device: _deviceId ?? "omi",
-            deviceModel: _deviceModel ?? "Omi",
-            totalFrames: chunkFrameCount,
-            syncedFrameOffset: syncedOffset,
-          );
-          _wals.add(wal);
-        } else {
-          wal = _wals[walIdx];
-          wal.data.addAll(chunk);
-          wal.storage = WalStorage.mem;
-          wal.totalFrames = chunkFrameCount;
-          wal.syncedFrameOffset = syncedOffset;
-          wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
-          _wals[walIdx] = wal;
-        }
-
-        if (wal.status == WalStatus.synced) {
-          listener.onWalSynced(wal);
-        }
-        listener.onWalUpdated();
       }
 
-      // next
-      timerEnd -= chunkSizeInSeconds;
-      high = low;
+      shouldStored = (synced == false);
+    }
+
+    if (shouldStored) {
+      // track the synced offset
+      int syncedOffset = 0;
+      for (var i = low; i < high; i++) {
+        if (_frameSynced[i]) {
+          syncedOffset++;
+        } else {
+          break;
+        }
+      }
+      debugPrint("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
+
+      Wal wal;
+      var walIdx =
+          _wals.indexWhere((w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec);
+      if (walIdx < 0) {
+        wal = Wal(
+          codec: _codec,
+          timerStart: timerStart,
+          data: chunk,
+          storage: WalStorage.mem,
+          status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
+          device: _deviceId ?? "omi",
+          deviceModel: _deviceModel ?? "Omi",
+          seconds: chunkFrameCount ~/ _framesPerSecond,
+          totalFrames: chunkFrameCount,
+          syncedFrameOffset: syncedOffset,
+        );
+        _wals.add(wal);
+      } else {
+        wal = _wals[walIdx];
+        wal.data.addAll(chunk);
+        wal.storage = WalStorage.mem;
+        wal.totalFrames = chunkFrameCount;
+        wal.syncedFrameOffset = syncedOffset;
+        wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
+        _wals[walIdx] = wal;
+      }
+
+      if (wal.status == WalStatus.synced) {
+        listener.onWalSynced(wal);
+      }
+      listener.onWalUpdated();
     }
 
     debugPrint("_chunk wals ${_wals.length}");
@@ -822,6 +830,7 @@ class LocalWalSync implements IWalSync {
   }
 
   Future _flush() async {
+    debugPrint("_flushing");
     // Storage file
     for (var i = 0; i < _wals.length; i++) {
       final wal = _wals[i];
@@ -862,7 +871,17 @@ class LocalWalSync implements IWalSync {
     }
 
     // When unlimited storage is enabled, synced WALs are kept as-is with synced status
-    SharedPreferencesUtil().wals = _wals;
+    await _saveWalsToFile();
+  }
+
+  /// Save WALs to file
+  Future<void> _saveWalsToFile() async {
+    debugPrint('Saving WALs to file');
+    try {
+      await WalFileManager.saveWals(_wals);
+    } catch (e) {
+      debugPrint('Error saving WALs to file: $e');
+    }
   }
 
   Future<bool> _deleteWal(Wal wal) async {
@@ -902,7 +921,7 @@ class LocalWalSync implements IWalSync {
     for (final wal in syncedWals) {
       await _deleteWal(wal);
     }
-    SharedPreferencesUtil().wals = _wals;
+    await _saveWalsToFile();
     listener.onWalUpdated();
   }
 
@@ -918,7 +937,7 @@ class LocalWalSync implements IWalSync {
       // Sync the WAL
       final result = await syncWal(wal: _wals[existingWalIndex]);
 
-      SharedPreferencesUtil().wals = _wals;
+      await _saveWalsToFile();
       listener.onWalUpdated();
 
       return result;
@@ -957,7 +976,7 @@ class LocalWalSync implements IWalSync {
     // Empty resp
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
-    var steps = 10;
+    var steps = 3;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
       var right = i;
       var left = right - steps;
@@ -1039,7 +1058,7 @@ class LocalWalSync implements IWalSync {
         throw Exception('Local WAL sync failed: $e');
       }
 
-      SharedPreferencesUtil().wals = _wals;
+      await _saveWalsToFile();
       listener.onWalUpdated();
     }
 
@@ -1106,7 +1125,7 @@ class LocalWalSync implements IWalSync {
       throw Exception('Single WAL sync failed: $e');
     }
 
-    SharedPreferencesUtil().wals = _wals;
+    await _saveWalsToFile();
     listener.onWalUpdated();
 
     progress?.onWalSyncedProgress(1.0);

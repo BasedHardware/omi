@@ -383,12 +383,16 @@ class SharedPreferencesUtil {
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 
   //--------------------------------- Wals ------------------------------------//
+  // WAL persistence has been moved to WalFileManager for better performance
+  // These methods are kept for migration purposes only
 
+  @deprecated
   set wals(List<Wal> wals) {
     final List<String> value = wals.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('wals', value);
   }
 
+  @deprecated
   List<Wal> get wals {
     final List<String> value = getStringList('wals') ?? [];
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());

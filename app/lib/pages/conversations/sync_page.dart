@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -6,6 +7,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 import 'synced_conversations_page.dart';
@@ -23,28 +25,72 @@ class WalListItem extends StatelessWidget {
     required this.walIdx,
   });
 
+  // Cache expensive computations
+  static final Map<String, String> _deviceImageCache = {};
+  static final Map<String, double> _progressCache = {};
+
   double calculateProgress(DateTime? startedAt, int eta) {
-    if (startedAt == null) {
-      return 0.0;
-    }
-    if (eta == 0) {
-      return 0.01;
-    }
-    final elapsed = DateTime.now().difference(startedAt).inSeconds;
-    final progress = elapsed / eta;
-    return progress.clamp(0.0, 1.0);
+    if (startedAt == null) return 0.0;
+    if (eta == 0) return 0.01;
+
+    final cacheKey = '${startedAt?.millisecondsSinceEpoch}_$eta';
+    return _progressCache.putIfAbsent(cacheKey, () {
+      final elapsed = DateTime.now().difference(startedAt!).inSeconds;
+      final progress = elapsed / eta;
+      return progress.clamp(0.0, 1.0);
+    });
   }
 
   String _getDeviceImagePath(String? deviceModel) {
-    if (deviceModel == null) return Assets.images.omiWithoutRope.path;
+    final key = deviceModel ?? 'default';
+    return _deviceImageCache.putIfAbsent(key, () {
+      if (deviceModel == null) return Assets.images.omiWithoutRope.path;
 
-    if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
-      return Assets.images.omiGlass.path;
-    }
-    if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
-      return Assets.images.omiDevkitWithoutRope.path;
-    }
-    return Assets.images.omiWithoutRope.path;
+      if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
+        return Assets.images.omiGlass.path;
+      }
+      if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
+        return Assets.images.omiDevkitWithoutRope.path;
+      }
+      return Assets.images.omiWithoutRope.path;
+    });
+  }
+
+  void _showSdCardInfoDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.amber, size: 24),
+            SizedBox(width: 12),
+            Text('SD Card Audio', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This audio file is stored on your device\'s SD card.',
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'You can process the file but cannot play or share it directly from the SD card.',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it', style: TextStyle(color: Colors.deepPurple)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -60,13 +106,17 @@ class WalListItem extends StatelessWidget {
         final hasError = syncProvider.failedWal?.id == wal.id;
 
         return GestureDetector(
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => WalItemDetailPage(wal: wal),
-              ),
-            );
-          },
+          onTap: wal.storage == WalStorage.sdcard
+              ? () {
+                  _showSdCardInfoDialog(context);
+                }
+              : () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => WalItemDetailPage(wal: wal),
+                    ),
+                  );
+                },
           child: Padding(
             padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
             child: Container(
@@ -75,204 +125,179 @@ class WalListItem extends StatelessWidget {
                 color: const Color(0xFF1F1F25),
                 borderRadius: BorderRadius.circular(16.0),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16.0),
-                child: Dismissible(
-                  key: Key(wal.id),
-                  direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
-                  confirmDismiss: (direction) async {
-                    return await showDialog(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return AlertDialog(
-                          backgroundColor: const Color(0xFF1F1F25),
-                          title: const Text("Confirm Deletion", style: TextStyle(color: Colors.white)),
-                          content: const Text(
-                              "Are you sure you want to delete this audio file? This action cannot be undone.",
-                              style: TextStyle(color: Colors.white70)),
-                          actions: <Widget>[
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              child: const Text("Delete", style: TextStyle(color: Colors.red)),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20.0),
-                    color: Colors.red,
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  onDismissed: (direction) {
-                    ServiceManager.instance().wal.getSyncs().deleteWal(wal);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            // Device image
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.7),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4.0),
-                                child: Image.asset(
-                                  _getDeviceImagePath(wal.deviceModel),
-                                  width: 24,
-                                  height: 24,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            // Main content
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Stack(
+                children: [
+                  Opacity(
+                    opacity: wal.storage == WalStorage.sdcard ? 0.8 : 1.0,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16.0),
+                      child: Dismissible(
+                        key: Key(wal.id),
+                        direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
+                        confirmDismiss: (direction) async {
+                          return await showDialog<bool>(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return getDialog(
+                                context,
+                                () => Navigator.of(context).pop(false),
+                                () => Navigator.of(context).pop(true),
+                                'Confirm Deletion',
+                                'Are you sure you want to delete this audio file? This action cannot be undone.',
+                                okButtonText: 'Delete',
+                                cancelButtonText: 'Cancel',
+                              );
+                            },
+                          );
+                        },
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20.0),
+                          color: Colors.red,
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        onDismissed: (direction) {
+                          ServiceManager.instance().wal.getSyncs().deleteWal(wal);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  // Title and time
-                                  Text(
-                                    dateTimeFormat('MMM dd, yyyy h:mm a',
-                                        DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
+                                  // Device image
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4.0),
+                                      child: Image.asset(
+                                        _getDeviceImagePath(wal.deviceModel),
+                                        width: 24,
+                                        height: 24,
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  // Duration and status
-                                  Row(
-                                    children: [
-                                      Text(
-                                        secondsToHumanReadable(wal.seconds),
-                                        style: TextStyle(
-                                          color: Colors.grey.shade400,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      if (isSynced) ...[
-                                        const SizedBox(width: 8),
-                                        const Icon(
-                                          Icons.check_circle,
-                                          color: Colors.green,
-                                          size: 14,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  // Device model and storage location
-                                  Row(
-                                    children: [
-                                      Text(
-                                        wal.deviceModel ?? "Omi Device",
-                                        style: TextStyle(
-                                          color: Colors.grey.shade500,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      if (wal.storage == WalStorage.sdcard) ...[
-                                        const SizedBox(width: 4),
+                                  const SizedBox(width: 12),
+                                  // Main content
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Title and time
                                         Text(
-                                          "• SD Card",
-                                          style: TextStyle(
-                                            color: Colors.purple.shade300,
-                                            fontSize: 12,
+                                          dateTimeFormat('MMM dd, yyyy h:mm a',
+                                              DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
+                                        const SizedBox(height: 4),
+                                        // Duration and status
+                                        Row(
+                                          children: [
+                                            Text(
+                                              secondsToHumanReadable(wal.seconds),
+                                              style: TextStyle(
+                                                color: Colors.grey.shade400,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        // Device model and storage location
+                                        Row(
+                                          children: [
+                                            Text(
+                                              wal.deviceModel ?? "Omi Device",
+                                              style: TextStyle(
+                                                color: Colors.grey.shade500,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            if (wal.storage == WalStorage.sdcard) ...[
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                "SD Card",
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade500,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ],
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Status indicator
-                            if (wal.isSyncing)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const SizedBox(
-                                      width: 10,
-                                      height: 10,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 1.5,
-                                        color: Colors.orange,
-                                      ),
                                     ),
-                                    const SizedBox(width: 6),
+                                  ),
+                                  // Simplified status indicator
+                                  if (wal.isSyncing)
                                     Text(
-                                      'Processing...',
-                                      style: const TextStyle(
-                                        color: Colors.orange,
+                                      'Processing',
+                                      style: TextStyle(
+                                        color: Colors.white70,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else if (hasError)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Text(
-                                  'Error',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
+                                    )
+                                  else if (hasError)
+                                    Text(
+                                      'Failed',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    )
+                                  else if (wal.status == WalStatus.miss)
+                                    Text(
+                                      'Not Processed',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    )
+                                ],
+                              ),
+                              // Progress bar for syncing - only show if actually syncing
+                              if (wal.isSyncing && wal.status != WalStatus.synced && wal.syncStartedAt != null) ...[
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  height: 2,
+                                  child: LinearProgressIndicator(
+                                    value: calculateProgress(wal.syncStartedAt, wal.syncEtaSeconds ?? 0),
+                                    backgroundColor: Colors.grey[800],
+                                    color: Colors.white70,
                                   ),
                                 ),
-                              )
-                          ],
+                              ],
+                              // Error message
+                              if (hasError && syncProvider.syncError != null) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  syncProvider.syncError!,
+                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        // Progress bar for syncing
-                        if (wal.isSyncing && wal.status != WalStatus.synced) ...[
-                          const SizedBox(height: 12),
-                          LinearProgressIndicator(
-                            value: calculateProgress(wal.syncStartedAt ?? DateTime.now(), wal.syncEtaSeconds ?? 0),
-                            backgroundColor: Colors.grey[800],
-                            color: Colors.orange,
-                            minHeight: 3,
-                          ),
-                        ],
-                        // Error message
-                        if (hasError && syncProvider.syncError != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            syncProvider.syncError!,
-                            style: TextStyle(color: Colors.red.shade300, fontSize: 11),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -350,7 +375,11 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SyncProvider>().refreshWals();
+      final syncProvider = context.read<SyncProvider>();
+      syncProvider.refreshWals();
+
+      // Don't clear sync state on page init - preserve existing state
+      // This ensures that if user navigates away and back, they see the current sync status
     });
   }
 
@@ -371,35 +400,340 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildStorageControlCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Storage Settings',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Keep Audio Files After Processing',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: 6),
+                Text(
+                  SharedPreferencesUtil().unlimitedLocalStorageEnabled
+                      ? 'Create a complete personal archive of all your recordings'
+                      : 'Save storage space by only keeping failed uploads',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  SharedPreferencesUtil().unlimitedLocalStorageEnabled ? 'Complete Archive Mode' : 'Smart Storage Mode',
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            value: SharedPreferencesUtil().unlimitedLocalStorageEnabled,
+            onChanged: (value) {
+              if (value) {
+                _showConsentDialog(context, () {
+                  SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
+                  context.read<SyncProvider>().refreshWals();
+                });
+              } else {
+                SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
+                context.read<SyncProvider>().refreshWals();
+              }
+            },
+            activeColor: Colors.deepPurpleAccent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStorageFilterChips() {
+    return Consumer<SyncProvider>(
+      builder: (context, syncProvider, child) {
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.filter_list, color: Colors.white70, size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    'Filter:',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildFilterChip(
+                    label: 'All Recordings',
+                    isSelected: syncProvider.storageFilter == null,
+                    onTap: () => syncProvider.clearStorageFilter(),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    label: 'Phone Storage',
+                    isSelected:
+                        syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
+                    onTap: () => syncProvider.setStorageFilter(WalStorage.disk),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    label: 'SD Card',
+                    isSelected: syncProvider.storageFilter == WalStorage.sdcard,
+                    onTap: () => syncProvider.setStorageFilter(WalStorage.sdcard),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey.shade400,
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showConsentDialog(BuildContext context, VoidCallback onConfirm) {
+    bool consentConfirmed = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1F1F25),
+            title: Row(
+              children: [
+                Icon(Icons.privacy_tip, color: Colors.orange, size: 24),
+                SizedBox(width: 12),
+                Text('Privacy & Consent', style: TextStyle(color: Colors.white)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'You\'re switching to Complete Archive Mode, which will keep all your audio recordings on this device.',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.privacy_tip, color: Colors.orange, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'Privacy Notice',
+                            style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Your recordings may capture other people\'s voices. Please ensure you have consent from all participants before recording.',
+                        style: TextStyle(color: Colors.orange, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: consentConfirmed,
+                      onChanged: (value) {
+                        setState(() {
+                          consentConfirmed = value ?? false;
+                        });
+                      },
+                      activeColor: Colors.deepPurple,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'I have consent from all participants in my recordings',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              TextButton(
+                onPressed: consentConfirmed
+                    ? () {
+                        Navigator.of(context).pop();
+                        onConfirm();
+                      }
+                    : null,
+                child: Text(
+                  'Enable Storage',
+                  style: TextStyle(
+                    color: consentConfirmed ? Colors.deepPurple : Colors.grey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   void _showDeleteProcessedDialog(BuildContext context, SyncProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => getDialog(
+        context,
+        () => Navigator.of(context).pop(),
+        () async {
+          Navigator.of(context).pop();
+          await provider.deleteAllSyncedWals();
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('All processed audio files have been deleted'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+        'Delete All Processed Files',
+        'This will permanently delete all processed audio files from your phone. This action cannot be undone.',
+        okButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+      ),
+    );
+  }
+
+  void _handleSyncWals(BuildContext context, SyncProvider syncProvider) {
+    // Check if there are any SD card WALs in the missing list
+    final missingWals = syncProvider.missingWals;
+    final sdCardWals = missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
+
+    if (sdCardWals.isNotEmpty) {
+      _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
+    } else {
+      syncProvider.syncWals();
+    }
+  }
+
+  void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
-        title: const Text('Delete All Processed Files', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'This will permanently delete all processed audio files from your device. This action cannot be undone.',
-          style: TextStyle(color: Colors.white70),
+        title: const Row(
+          children: [
+            Icon(Icons.sd_card, color: Colors.blue, size: 24),
+            SizedBox(width: 12),
+            Text('SD Card Processing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ready to process $sdCardCount recording${sdCardCount > 1 ? 's' : ''} from your SD card into conversations.',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: const Text(
+                'After processing, the original files will be removed from your SD card to free up storage space.',
+                style: TextStyle(color: Colors.blue, fontSize: 14),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
-          TextButton(
-            onPressed: () async {
+          ElevatedButton(
+            onPressed: () {
               Navigator.of(context).pop();
-              await provider.deleteAllSyncedWals();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('All processed audio files have been deleted'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
+              syncProvider.syncWals();
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Process'),
           ),
         ],
       ),
@@ -419,7 +753,6 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.red.withOpacity(0.3)),
         ),
         child: Column(
           children: [
@@ -429,7 +762,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 Icon(Icons.error_outline, color: Colors.red, size: 24),
                 SizedBox(width: 12),
                 Text(
-                  'Processing Failed',
+                  'Something Went Wrong',
                   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -447,11 +780,11 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 onPressed: () => syncProvider.retrySync(),
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text(
-                  'Retry Processing',
+                  'Try Again',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade700,
+                  backgroundColor: Colors.grey.shade700,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
@@ -472,7 +805,6 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.orange.withOpacity(0.3)),
         ),
         child: Column(
           children: [
@@ -486,22 +818,30 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 ),
                 SizedBox(width: 12),
                 Text(
-                  'Processing Audio Files...',
+                  'Creating Your Conversations...',
                   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            if (syncProvider.walsSyncedProgress > 0)
-              LinearProgressIndicator(
-                value: syncProvider.walsSyncedProgress,
-                backgroundColor: Colors.grey[800],
-                color: Colors.orange,
-                minHeight: 6,
-              ),
+            LinearProgressIndicator(
+              value:
+                  syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress,
+              backgroundColor: Colors.grey[800],
+              color: Colors.white70,
+              minHeight: 4,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              syncProvider.walBasedProgress > 0
+                  ? '${(syncProvider.walBasedProgress * 100).toInt()}% complete (${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount} recordings)'
+                  : 'Processing...',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 12),
             const Text(
-              'Keep the app open while processing.',
+              'Please keep the app open while we work on your recordings.',
               style: TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ],
@@ -516,7 +856,6 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.green.withOpacity(0.3)),
         ),
         child: Column(
           children: [
@@ -526,14 +865,14 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 Icon(Icons.check_circle, color: Colors.green, size: 24),
                 SizedBox(width: 12),
                 Text(
-                  'Processing Complete!',
+                  'All Done!',
                   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             Text(
-              '${syncProvider.syncedConversationsPointers.length} audio files processed successfully.',
+              'Successfully created ${syncProvider.syncedConversationsPointers.length} conversations from your recordings.',
               style: const TextStyle(color: Colors.white70, fontSize: 14),
               textAlign: TextAlign.center,
             ),
@@ -546,12 +885,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 },
                 icon: const Icon(Icons.visibility, size: 18),
                 label: const Text(
-                  'View Processed Conversations',
+                  'View Your New Conversations',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white70,
+                  foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -583,23 +922,33 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           child: Column(
             children: [
               const SizedBox(height: 8),
-              Text(
-                secondsToHumanReadable(totalSecondsToProcess),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.schedule, color: Colors.white70, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    secondsToHumanReadable(totalSecondsToProcess),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(
-                '${stats.missedFiles} audio files ready to process',
+                totalSecondsToProcess > 0
+                    ? '${stats.missedFiles} audio recording${stats.missedFiles != 1 ? 's' : ''} ready to convert into readable conversations'
+                    : 'All your audio recordings have been processed into conversations',
                 style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
               Divider(color: Colors.grey.withOpacity(0.2)),
@@ -621,7 +970,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       ? null
                       : () {
                           if (context.read<ConnectivityProvider>().isConnected) {
-                            syncProvider.syncWals();
+                            _handleSyncWals(context, syncProvider);
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -629,7 +978,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                   children: [
                                     Icon(Icons.wifi_off, color: Colors.white),
                                     SizedBox(width: 8),
-                                    Text('Internet connection required'),
+                                    Text('Internet connection required for AI processing'),
                                   ],
                                 ),
                                 backgroundColor: Colors.red.shade700,
@@ -641,19 +990,19 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                             );
                           }
                         },
-                  icon: const Icon(Icons.cloud_upload, size: 20),
-                  label: const Text(
-                    'Process All Audio Files',
+                  icon: const Icon(Icons.cloud_upload, size: 20, color: Colors.deepPurpleAccent),
+                  label: Text(
+                    totalSecondsToProcess > 0 ? 'Process Audio' : 'All Audio Processed',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
+                    backgroundColor: totalSecondsToProcess > 0 ? Colors.white : Colors.grey.shade600,
+                    foregroundColor: totalSecondsToProcess > 0 ? Colors.black : Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    elevation: 2,
+                    elevation: 0,
                   ),
                 ),
               ),
@@ -669,8 +1018,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
+        // Only clear sync result if sync is completed or has error
+        // Don't clear if sync is in progress to preserve state
         var provider = Provider.of<SyncProvider>(context, listen: false);
-        provider.clearSyncResult();
+        if (!provider.isSyncing) {
+          provider.clearSyncResult();
+        }
       },
       child: Consumer<SyncProvider>(builder: (context, syncProvider, child) {
         return Scaffold(
@@ -710,14 +1063,61 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               SliverToBoxAdapter(
                 child: Column(
                   children: [
-                    _buildSummaryCard(syncProvider),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
-                      child: Text(
-                        'Audio recordings from your Omi device, including live recordings and files from the device\'s SD card. Phone microphone recordings are not stored here.',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                        textAlign: TextAlign.center,
+                    _buildStorageControlCard(),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1F1F25),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                        ),
+                        child: Theme(
+                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            title: Text(
+                              'How Audio Storage Works',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            iconColor: Colors.white70,
+                            collapsedIconColor: Colors.white70,
+                            initiallyExpanded: false,
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '• Smart Storage (Default): Audio is processed instantly and only failed uploads are kept on your phone',
+                                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                                    ),
+                                    SizedBox(height: 8),
+                                    Text(
+                                      '• Complete Archive: Keep all recordings on your phone for personal use, even after processing',
+                                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      'All audio stays on your device. Uninstalling the app will delete stored files.',
+                                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
+                    ),
+                    _buildSummaryCard(syncProvider),
+                    _buildStorageFilterChips(),
+                    SizedBox(
+                      height: 16,
                     ),
                   ],
                 ),
@@ -736,6 +1136,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   }
 
                   final allWals = syncProvider.allWals;
+                  final filteredWals = syncProvider.filteredWals;
+
                   if (allWals.isEmpty) {
                     return SliverToBoxAdapter(
                       child: Container(
@@ -744,7 +1146,71 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                         decoration: BoxDecoration(
                           color: const Color(0xFF1F1F25),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                        ),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.deepPurple.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.mic_none,
+                                color: Colors.deepPurple,
+                                size: 48,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'No Audio Files Yet',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Your Omi device will automatically save audio recordings here. Once you have recordings, you can process them into readable conversations.',
+                              style: TextStyle(color: Colors.grey, fontSize: 14),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline, color: Colors.blue, size: 16),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Phone microphone recordings are processed instantly and don\'t appear here.',
+                                      style: TextStyle(color: Colors.blue, fontSize: 13),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (filteredWals.isEmpty && syncProvider.storageFilter != null) {
+                    return SliverToBoxAdapter(
+                      child: Container(
+                        margin: const EdgeInsets.all(32.0),
+                        padding: const EdgeInsets.all(32.0),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1F1F25),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                         child: Column(
                           children: [
@@ -755,24 +1221,28 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
-                                Icons.folder_open,
+                                Icons.filter_list_off,
                                 color: Colors.grey,
                                 size: 48,
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'No Audio Files Found',
-                              style: TextStyle(
+                            Text(
+                              syncProvider.storageFilter == WalStorage.sdcard
+                                  ? 'No SD Card Recordings'
+                                  : 'No Phone Storage Recordings',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Text(
-                              'Connect your Omi device and start recording to see audio files here. Phone microphone recordings are processed directly and not stored locally.',
-                              style: TextStyle(color: Colors.grey, fontSize: 14),
+                            Text(
+                              syncProvider.storageFilter == WalStorage.sdcard
+                                  ? 'No audio files found on your device\'s SD card. Make sure your Omi device has recorded audio to its SD card.'
+                                  : 'No audio files found in phone storage. Audio gets stored here when your Omi device transfers recordings to your phone.',
+                              style: const TextStyle(color: Colors.grey, fontSize: 14),
                               textAlign: TextAlign.center,
                             ),
                           ],
@@ -781,7 +1251,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     );
                   }
 
-                  return WalsListWidget(wals: allWals);
+                  return OptimizedWalsListWidget(wals: filteredWals);
                 },
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
@@ -810,33 +1280,95 @@ Map<DateTime, List<Wal>> _groupWalsByDate(List<Wal> wals) {
   return groupedWals;
 }
 
+class OptimizedWalsListWidget extends StatelessWidget {
+  final List<Wal> wals;
+  const OptimizedWalsListWidget({super.key, required this.wals});
+
+  @override
+  Widget build(BuildContext context) {
+    // Flatten the grouped structure for better performance
+    final flattenedItems = _createFlattenedItems(wals);
+
+    return SliverList.builder(
+      itemCount: flattenedItems.length,
+      itemBuilder: (context, index) {
+        final item = flattenedItems[index];
+
+        if (item is DateHeaderItem) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(16, index == 0 ? 0 : 20, 16, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  dateTimeFormat('MMM dd hh:00 a', item.date),
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Container(
+                    height: 1,
+                    color: Color(0xFF35343B),
+                  ),
+                )
+              ],
+            ),
+          );
+        } else if (item is WalItem) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+            child: WalListItem(
+              wal: item.wal,
+              walIdx: item.index,
+              date: item.date,
+            ),
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  List<ListItem> _createFlattenedItems(List<Wal> wals) {
+    final groupedWals = _groupWalsByDate(wals);
+    final List<ListItem> items = [];
+
+    for (final entry in groupedWals.entries) {
+      items.add(DateHeaderItem(entry.key));
+
+      for (int i = 0; i < entry.value.length; i++) {
+        items.add(WalItem(entry.value[i], i, entry.key));
+      }
+    }
+
+    return items;
+  }
+}
+
+// Helper classes for flattened list
+abstract class ListItem {}
+
+class DateHeaderItem extends ListItem {
+  final DateTime date;
+  DateHeaderItem(this.date);
+}
+
+class WalItem extends ListItem {
+  final Wal wal;
+  final int index;
+  final DateTime date;
+  WalItem(this.wal, this.index, this.date);
+}
+
+// Keep the original WalsListWidget for backward compatibility if needed
 class WalsListWidget extends StatelessWidget {
   final List<Wal> wals;
   const WalsListWidget({super.key, required this.wals});
 
   @override
   Widget build(BuildContext context) {
-    var groupedWals = _groupWalsByDate(wals);
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        childCount: groupedWals.keys.length,
-        (context, index) {
-          var date = groupedWals.keys.toList()[index];
-          List<Wal> wals = groupedWals[date] ?? [];
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (index == 0) const SizedBox(height: 16),
-              SyncWalGroupWidget(
-                isFirst: index == 0,
-                wals: wals,
-                date: date,
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    return OptimizedWalsListWidget(wals: wals);
   }
 }

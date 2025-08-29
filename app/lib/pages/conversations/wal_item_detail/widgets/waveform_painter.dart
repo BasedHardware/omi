@@ -129,9 +129,13 @@ class WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return oldDelegate is WaveformPainter &&
-        (oldDelegate.isPlaying != isPlaying ||
-            oldDelegate.waveformData != waveformData ||
-            oldDelegate.playbackProgress != playbackProgress);
+    if (oldDelegate is! WaveformPainter) return true;
+
+    // Only repaint if there are significant changes to avoid excessive redraws
+    final progressDiff = (oldDelegate.playbackProgress - playbackProgress).abs();
+
+    return oldDelegate.isPlaying != isPlaying ||
+        oldDelegate.waveformData != waveformData ||
+        progressDiff > 0.01; // Only repaint if progress changed by more than 1%
   }
 }

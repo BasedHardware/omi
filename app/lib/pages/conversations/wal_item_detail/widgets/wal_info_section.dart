@@ -5,6 +5,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/widgets/dialog.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import '../models/playback_state.dart';
@@ -40,43 +41,22 @@ class WalInfoSection extends StatelessWidget {
   }
 
   void _showResyncDialog(BuildContext context, SyncProvider syncProvider) {
+    final fileInfo =
+        'File: ${secondsToHumanReadable(wal.seconds)}\nRecorded: ${dateTimeFormat('MMM dd, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000))}';
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: const Text('Reprocess Audio File', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This will reprocess the audio file and may create a new conversation or update an existing one.',
-              style: TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'File: ${secondsToHumanReadable(wal.seconds)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            Text(
-              'Recorded: ${dateTimeFormat('MMM dd, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000))}',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              syncProvider.resyncWal(wal);
-            },
-            child: const Text('Reprocess', style: TextStyle(color: Colors.orange)),
-          ),
-        ],
+      builder: (context) => getDialog(
+        context,
+        () => Navigator.of(context).pop(),
+        () {
+          Navigator.of(context).pop();
+          syncProvider.resyncWal(wal);
+        },
+        'Process Recording Again',
+        'This will analyze your recording again and may create a new conversation or update an existing one.\n\n$fileInfo',
+        okButtonText: 'Reprocess',
+        cancelButtonText: 'Cancel',
       ),
     );
   }
@@ -303,7 +283,7 @@ class WalInfoSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Processing Error',
+            'Processing Issue',
             style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
@@ -360,7 +340,7 @@ class WalInfoSection extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
                   : const Icon(Icons.share, size: 18),
-              label: Text(playbackState.isSharing ? 'Sharing...' : 'Share Audio'),
+              label: Text(playbackState.isSharing ? 'Sharing...' : 'Share Recording'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: BorderSide(color: Colors.grey.shade600),

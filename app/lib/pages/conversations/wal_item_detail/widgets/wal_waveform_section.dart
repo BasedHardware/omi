@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -7,7 +8,7 @@ import 'package:omi/utils/other/time_utils.dart';
 import '../models/playback_state.dart';
 import 'waveform_painter.dart';
 
-class WalWaveformSection extends StatelessWidget {
+class WalWaveformSection extends StatefulWidget {
   final Wal wal;
   final List<double>? waveformData;
   final bool isProcessingWaveform;
@@ -20,6 +21,39 @@ class WalWaveformSection extends StatelessWidget {
     required this.isProcessingWaveform,
     required this.playbackState,
   });
+
+  @override
+  State<WalWaveformSection> createState() => _WalWaveformSectionState();
+}
+
+class _WalWaveformSectionState extends State<WalWaveformSection> {
+  Timer? _progressUpdateTimer;
+  double _lastProgress = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startProgressTimer();
+  }
+
+  @override
+  void dispose() {
+    _progressUpdateTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startProgressTimer() {
+    // Throttle progress updates to reduce repaints
+    _progressUpdateTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (mounted && widget.playbackState.isPlaying) {
+        final currentProgress = widget.playbackState.playbackProgress;
+        if ((currentProgress - _lastProgress).abs() > 0.01) {
+          _lastProgress = currentProgress;
+          setState(() {});
+        }
+      }
+    });
+  }
 
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
@@ -38,14 +72,18 @@ class WalWaveformSection extends StatelessWidget {
     BoxConstraints constraints,
     SyncProvider syncProvider,
   ) {
-    if (playbackState.canPlayOrShare && syncProvider.totalDuration.inMilliseconds > 0 && playbackState.isPlaying) {
+    if (widget.playbackState.canPlayOrShare &&
+        syncProvider.totalDuration.inMilliseconds > 0 &&
+        widget.playbackState.isPlaying) {
       final localPosition = details.localPosition;
       final containerWidth = constraints.maxWidth;
       final progress = (localPosition.dx / containerWidth).clamp(0.0, 1.0);
       final seekPosition = Duration(
         milliseconds: (progress * syncProvider.totalDuration.inMilliseconds).round(),
       );
-      syncProvider.seekToPosition(seekPosition);
+
+      // Perform seek operation asynchronously to avoid blocking UI
+      Future.microtask(() => syncProvider.seekToPosition(seekPosition));
     }
   }
 
@@ -66,7 +104,7 @@ class WalWaveformSection extends StatelessWidget {
   }
 
   Widget _buildWaveformVisualization(BuildContext context) {
-    if (isProcessingWaveform) {
+    if (widget.isProcessingWaveform) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -77,7 +115,7 @@ class WalWaveformSection extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Analyzing audio...',
+              'Loading your recording...',
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 12,
@@ -97,11 +135,13 @@ class WalWaveformSection extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 height: double.infinity,
-                child: CustomPaint(
-                  painter: WaveformPainter(
-                    isPlaying: playbackState.isPlaying,
-                    waveformData: waveformData,
-                    playbackProgress: playbackState.playbackProgress,
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: WaveformPainter(
+                      isPlaying: widget.playbackState.isPlaying,
+                      waveformData: widget.waveformData,
+                      playbackProgress: _lastProgress,
+                    ),
                   ),
                 ),
               ),
@@ -113,7 +153,7 @@ class WalWaveformSection extends StatelessWidget {
   }
 
   Widget _buildTimeIndicators(BuildContext context) {
-    final totalDur = Duration(seconds: wal.seconds);
+    final totalDur = Duration(seconds: widget.wal.seconds);
 
     // Always show 4 time markers like in ss1.jpeg (0:00, 0:01, 0:02, 0:03)
     List<String> timeMarkers = [];

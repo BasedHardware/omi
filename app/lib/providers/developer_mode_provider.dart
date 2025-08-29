@@ -25,11 +25,9 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
 
-  bool localSyncEnabled = false;
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
-  bool unlimitedLocalStorageEnabled = false;
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -93,7 +91,6 @@ class DeveloperModeProvider extends BaseProvider {
 
   Future initialize() async {
     setIsLoading(true);
-    localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
     webhookOnConversationCreated.text = SharedPreferencesUtil().webhookOnConversationCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
@@ -101,7 +98,6 @@ class DeveloperModeProvider extends BaseProvider {
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
-    unlimitedLocalStorageEnabled = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -193,11 +189,9 @@ class DeveloperModeProvider extends BaseProvider {
       Logger.error('Error occurred while updating endpoints: $e');
     }
     // Experimental
-    prefs.localSyncEnabled = localSyncEnabled;
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
     prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
-    prefs.unlimitedLocalStorageEnabled = unlimitedLocalStorageEnabled;
 
     MixpanelManager().settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
@@ -213,11 +207,6 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void onLocalSyncEnabledChanged(var value) {
-    localSyncEnabled = value;
-    notifyListeners();
-  }
-
   void onFollowUpQuestionChanged(var value) {
     followUpQuestionEnabled = value;
     notifyListeners();
@@ -230,11 +219,6 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onAutoCreateSpeakersChanged(var value) {
     autoCreateSpeakersEnabled = value;
-    notifyListeners();
-  }
-
-  void onUnlimitedLocalStorageChanged(var value) {
-    unlimitedLocalStorageEnabled = value;
     notifyListeners();
   }
 }

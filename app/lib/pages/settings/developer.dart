@@ -600,33 +600,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     onChanged: provider.onAutoCreateSpeakersChanged,
                   ),
                   const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Local Audio Storage',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    subtitle: const Text(
-                      'Enable local storage of audio files on device',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    value: provider.localSyncEnabled,
-                    onChanged: provider.onLocalSyncEnabledChanged,
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Unlimited Local Phone Storage',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    subtitle: const Text(
-                      'Keep audio files on phone even after they are synced to the system. Files will show sync status labels.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    value: provider.unlimitedLocalStorageEnabled,
-                    onChanged: provider.onUnlimitedLocalStorageChanged,
-                  ),
                   const SizedBox(height: 36),
                   const Text(
                     'Pilot Features',
