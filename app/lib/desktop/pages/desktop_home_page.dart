@@ -169,7 +169,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       return;
     }
     debugPrint(event);
-    PlatformManager.instance.instabug.logInfo(event);
+    PlatformManager.instance.crashReporter.logInfo(event);
   }
 
   bool? previousConnection;

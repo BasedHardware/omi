@@ -16,7 +16,7 @@ def get_plan_type_from_price_id(price_id: str) -> PlanType:
 
     if price_id in (unlimited_monthly_price, unlimited_annual_price):
         return PlanType.unlimited
-    return PlanType.basic
+    raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
 
 
 BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', '0'))

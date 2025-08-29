@@ -1,5 +1,9 @@
 grafana:
   enabled: true
+  serviceAccount:
+    create: true
+    annotations:
+      iam.gke.io/gcp-service-account: "dev-omi-grafana-gsa@based-hardware-dev.iam.gserviceaccount.com"
   ingress:
     enabled: true
     annotations:
@@ -19,6 +23,16 @@ grafana:
     size: 20Gi
     finalizers:
       - kubernetes.io/pvc-protection
+  imageRenderer:
+    enabled: true
+  grafana.ini:
+    rendering:
+      server_url: http://dev-kube-prometheus-stack-grafana-image-renderer:8081/render
+      callback_url: http://dev-kube-prometheus-stack-grafana:80/
+    unified_alerting.screenshots:
+      capture: true
+    server:
+      root_url: https://monitor.omiapi.com/
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

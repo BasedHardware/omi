@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -11,13 +12,17 @@ import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/molecules/omi_popup_menu.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class DesktopActionItem extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
+  final VoidCallback? onChanged;
 
   const DesktopActionItem({
     super.key,
     required this.actionItem,
+    this.onChanged,
   });
 
   @override
@@ -97,11 +102,11 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     }
 
     try {
-     // await updateActionItemDescription(widget.actionItem.conversationId, originalText, newText, widget.actionItem.index);
-      
+      // await updateActionItemDescription(widget.actionItem.conversationId, originalText, newText, widget.actionItem.index);
+
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       await provider.updateActionItemDescription(widget.actionItem, newText);
-      
+
       setState(() => _isEditing = false);
       _showSavedMessage();
     } catch (e) {
@@ -235,15 +240,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   }
 
   bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        date1.month == date2.month &&
-        date1.day == date2.day;
+    return date1.year == date2.year && date1.month == date2.month && date1.day == date2.day;
   }
 
   String _formatDueDate(DateTime date) {
     final now = DateTime.now();
     final difference = date.difference(now).inDays;
-    
+
     if (difference == 0) {
       return 'Today';
     } else if (difference == 1) {
@@ -254,8 +257,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return weekdays[date.weekday - 1];
     } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return '${months[date.month - 1]} ${date.day}';
     }
   }
@@ -325,20 +327,20 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                 children: [
                   _isEditing
                       ? TextField(
-                            controller: _textController,
-                            focusNode: _focusNode,
-                            style: const TextStyle(
-                                color: ResponsiveHelper.textPrimary,
-                                fontSize: 15,
-                                height: 1.4,
-                                fontWeight: FontWeight.w500),
-                            decoration: const InputDecoration(
-                                border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
-                            maxLines: null,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _saveChanges(),
-                            onChanged: (_) => setState(() {}),
-                          )
+                          controller: _textController,
+                          focusNode: _focusNode,
+                          style: const TextStyle(
+                              color: ResponsiveHelper.textPrimary,
+                              fontSize: 15,
+                              height: 1.4,
+                              fontWeight: FontWeight.w500),
+                          decoration: const InputDecoration(
+                              border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                          maxLines: null,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _saveChanges(),
+                          onChanged: (_) => setState(() {}),
+                        )
                       : GestureDetector(
                           onTap: _startEditing,
                           child: AnimatedDefaultTextStyle(
@@ -360,8 +362,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                           ),
                         ),
                   const SizedBox(height: 8),
-                  if (widget.actionItem.dueAt != null) 
-                    _buildDueDateChip(),
+                  if (widget.actionItem.dueAt != null) _buildDueDateChip(),
                 ],
               ),
             ),
@@ -385,39 +386,60 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     return OmiPopupMenuButton<String>(
       icon: FontAwesomeIcons.ellipsisVertical,
       itemBuilder: (context) => [
+        const PopupMenuItem<String>(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(FontAwesomeIcons.penToSquare, color: ResponsiveHelper.textSecondary, size: 14),
+              SizedBox(width: 8),
+              Text('Edit', style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
+            ],
+          ),
+        ),
         PopupMenuItem<String>(
-            value: 'toggle',
-            child: Row(children: [
+          value: 'toggle',
+          child: Row(
+            children: [
               Icon(widget.actionItem.completed ? FontAwesomeIcons.xmark : FontAwesomeIcons.check,
                   color: ResponsiveHelper.textSecondary, size: 14),
               const SizedBox(width: 8),
               Text(widget.actionItem.completed ? 'Mark Incomplete' : 'Mark Complete',
                   style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
-            ],),),
+            ],
+          ),
+        ),
         PopupMenuItem<String>(
-            value: 'due_date',
-            child: Row(children: [
+          value: 'due_date',
+          child: Row(
+            children: [
               const Icon(FontAwesomeIcons.calendar, color: ResponsiveHelper.textSecondary, size: 14),
               const SizedBox(width: 8),
               Text(widget.actionItem.dueAt != null ? 'Edit Due Date' : 'Set Due Date',
                   style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
-            ],),),
+            ],
+          ),
+        ),
         if (widget.actionItem.dueAt != null)
           const PopupMenuItem<String>(
-              value: 'clear_due_date',
-              child: Row(children: [
+            value: 'clear_due_date',
+            child: Row(
+              children: [
                 Icon(FontAwesomeIcons.xmark, color: ResponsiveHelper.textSecondary, size: 14),
                 SizedBox(width: 8),
-                Text('Clear Due Date',
-                    style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
-              ],),),
+                Text('Clear Due Date', style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
+              ],
+            ),
+          ),
         PopupMenuItem<String>(
-            value: 'delete',
-            child: Row(children: [
+          value: 'delete',
+          child: Row(
+            children: [
               Icon(FontAwesomeIcons.trash, color: Colors.red.shade400, size: 14),
               const SizedBox(width: 8),
               Text('Delete', style: TextStyle(color: Colors.red.shade400, fontSize: 14))
-            ],),),
+            ],
+          ),
+        ),
       ],
       onSelected: (value) => _handleMenuSelection(value, context),
     );
@@ -425,6 +447,9 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
 
   void _handleMenuSelection(String value, BuildContext context) {
     switch (value) {
+      case 'edit':
+        _showEditDialog(context);
+        break;
       case 'toggle':
         _toggleCompletion(context);
         break;
@@ -440,11 +465,25 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     }
   }
 
+  Future<void> _showEditDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => DesktopActionItemFormDialog(
+        actionItem: widget.actionItem,
+      ),
+    );
+    if (result == true) {
+      // Refresh handled by the provider automatically
+    }
+  }
+
   void _clearDueDate() async {
     try {
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       await provider.updateActionItemDueDate(widget.actionItem, null);
       _showSavedMessage();
+
+      widget.onChanged?.call();
     } catch (e) {
       debugPrint('Error clearing action item due date: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -462,12 +501,16 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   void _toggleCompletion(BuildContext context) {
     HapticFeedback.lightImpact();
     final newValue = !widget.actionItem.completed;
-    MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
-      conversationId: widget.actionItem.conversationId!,
-      actionItemDescription: widget.actionItem.description,
-      isCompleted: newValue,
-    );
+    if (widget.actionItem.conversationId != null) {
+      MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
+        conversationId: widget.actionItem.conversationId!,
+        actionItemDescription: widget.actionItem.description,
+        isCompleted: newValue,
+      );
+    }
     context.read<ActionItemsProvider>().updateActionItemState(widget.actionItem, newValue);
+
+    widget.onChanged?.call();
   }
 
   void _showDeleteConfirmation(BuildContext context) {
@@ -475,9 +518,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
             title: 'Delete Action Item', message: 'Are you sure you want to delete this action item?')
         .then((confirmed) {
       if (confirmed == true) {
-        context
-            .read<ActionItemsProvider>()
-            .deleteActionItem(widget.actionItem);
+        context.read<ActionItemsProvider>().deleteActionItem(widget.actionItem);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Action item deleted'),
@@ -513,11 +554,9 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
     super.initState();
     final now = DateTime.now();
     final minimumDate = widget.minimumDate ?? now;
-    
+
     if (widget.initialDateTime != null) {
-      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) 
-          ? minimumDate 
-          : widget.initialDateTime!;
+      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) ? minimumDate : widget.initialDateTime!;
     } else {
       _selectedDateTime = now.isBefore(minimumDate) ? minimumDate : now;
     }
@@ -525,16 +564,15 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     final currentMonth = months[_selectedDateTime.month - 1];
     final currentYear = _selectedDateTime.year;
     final minimumDate = widget.minimumDate ?? DateTime.now();
-    
+
     // Check if we can go to previous month
-    final canGoPrevious = _selectedDateTime.year > minimumDate.year || 
-                         (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
-    
+    final canGoPrevious = _selectedDateTime.year > minimumDate.year ||
+        (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
+
     return Material(
       child: Container(
         height: MediaQuery.of(context).size.height * 0.65,
@@ -572,33 +610,35 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                       ),
                     ),
                   ),
-                  
+
                   // Month/Year navigation
                   Row(
                     children: [
                       CupertinoButton(
                         padding: const EdgeInsets.all(8),
-                        onPressed: canGoPrevious ? () {
-                          final newMonth = _selectedDateTime.month == 1 ? 12 : _selectedDateTime.month - 1;
-                          final newYear = _selectedDateTime.month == 1 ? _selectedDateTime.year - 1 : _selectedDateTime.year;
-                          
-                          setState(() {
-                            _selectedDateTime = DateTime(
-                              newYear,
-                              newMonth,
-                              _selectedDateTime.day,
-                              _selectedDateTime.hour,
-                              _selectedDateTime.minute,
-                            );
-                          });
-                        } : null,
+                        onPressed: canGoPrevious
+                            ? () {
+                                final newMonth = _selectedDateTime.month == 1 ? 12 : _selectedDateTime.month - 1;
+                                final newYear =
+                                    _selectedDateTime.month == 1 ? _selectedDateTime.year - 1 : _selectedDateTime.year;
+
+                                setState(() {
+                                  _selectedDateTime = DateTime(
+                                    newYear,
+                                    newMonth,
+                                    _selectedDateTime.day,
+                                    _selectedDateTime.hour,
+                                    _selectedDateTime.minute,
+                                  );
+                                });
+                              }
+                            : null,
                         child: Icon(
                           Icons.chevron_left,
                           color: canGoPrevious ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
                           size: 24,
                         ),
                       ),
-                      
                       Text(
                         '$currentMonth $currentYear',
                         style: const TextStyle(
@@ -607,7 +647,6 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                           color: ResponsiveHelper.textPrimary,
                         ),
                       ),
-                      
                       CupertinoButton(
                         padding: const EdgeInsets.all(8),
                         onPressed: () {
@@ -629,7 +668,7 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                       ),
                     ],
                   ),
-                  
+
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context, _selectedDateTime),

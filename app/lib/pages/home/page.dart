@@ -166,7 +166,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       return;
     }
     debugPrint(event);
-    PlatformManager.instance.instabug.logInfo(event);
+    PlatformManager.instance.crashReporter.logInfo(event);
   }
 
   ///Screens with respect to subpage

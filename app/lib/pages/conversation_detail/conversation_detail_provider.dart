@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -12,8 +13,6 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:tuple/tuple.dart';
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   AppProvider? appProvider;
@@ -248,7 +247,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     } catch (err, stacktrace) {
       print(err);
       var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
-      CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
+      await PlatformManager.instance.crashReporter.reportCrash(err, stacktrace, userAttributes: {
         'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
         'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
       });
