@@ -135,7 +135,7 @@ class _NameWidgetState extends State<NameWidget> {
                         ? null
                         : () async {
                             FocusManager.instance.primaryFocus?.unfocus();
-                            updateGivenName(nameController.text.trim());
+                            AuthService.instance.updateGivenName(nameController.text.trim());
                             widget.goNext();
                           },
                     style: ElevatedButton.styleFrom(

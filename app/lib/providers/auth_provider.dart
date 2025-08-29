@@ -7,6 +7,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
 
@@ -16,6 +17,7 @@ class AuthenticationProvider extends BaseProvider {
   User? user;
   String? authToken;
   bool _loading = false;
+  @override
   bool get loading => _loading;
 
   AuthenticationProvider() {
@@ -63,7 +65,12 @@ class AuthenticationProvider extends BaseProvider {
     if (!loading) {
       setLoadingState(true);
       try {
-        final credential = await AuthService.instance.authenticateWithProvider('google');
+        UserCredential? credential;
+        if (PlatformService.isMobile) {
+          credential = await AuthService.instance.signInWithGoogleMobile();
+        } else {
+          credential = await AuthService.instance.authenticateWithProvider('google');
+        }
         if (credential != null && isSignedIn()) {
           _signIn(onSignIn);
         } else {
@@ -81,7 +88,12 @@ class AuthenticationProvider extends BaseProvider {
     if (!loading) {
       setLoadingState(true);
       try {
-        final credential = await AuthService.instance.authenticateWithProvider('apple');
+        UserCredential? credential;
+        if (PlatformService.isMobile) {
+          credential = await AuthService.instance.signInWithAppleMobile();
+        } else {
+          credential = await AuthService.instance.authenticateWithProvider('apple');
+        }
         if (credential != null && isSignedIn()) {
           _signIn(onSignIn);
         } else {

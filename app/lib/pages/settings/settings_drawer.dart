@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -290,7 +290,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           Navigator.of(ctx).pop(); // Close dialog first
                           await SharedPreferencesUtil().clearUserPreferences();
                           personaProvider.setRouting(PersonaProfileRouting.no_device);
-                          await signOut();
+                          await AuthService.instance.signOut();
                          if (context.mounted){
                             routeToPage(context, const AppShell(), replace: true);
                          }
@@ -363,7 +363,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         SharedPreferencesUtil().hasOmiDevice = null;
                         SharedPreferencesUtil().verifiedPersonaId = null;
                         personaProvider.setRouting(PersonaProfileRouting.no_device);
-                        await signOut();
+                        await AuthService.instance.signOut();
                         if (context.mounted) {
                           routeToPage(context, const AppShell(), replace: true);
                         }

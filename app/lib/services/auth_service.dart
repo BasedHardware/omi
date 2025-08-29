@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/env/env.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -20,6 +23,106 @@ class AuthService {
 
 getFirebaseUser() {
   return FirebaseAuth.instance.currentUser;
+}
+
+/// Google Sign In using the standard google_sign_in package (iOS, Android)
+Future<UserCredential?> signInWithGoogleMobile() async {
+  debugPrint('Using standard Google Sign In for mobile');
+
+  // Trigger the authentication flow
+  final GoogleSignInAccount? googleUser = await GoogleSignIn(
+    scopes: ['profile', 'email'],
+  ).signIn();
+  debugPrint('Google User: $googleUser');
+
+  // Obtain the auth details from the request
+  final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
+  debugPrint('Google Auth: $googleAuth');
+  if (googleAuth == null) {
+    debugPrint('Failed to sign in with Google: googleAuth is NULL');
+    Logger.error('An error occurred while signing in. Please try again later. (Error: 40001)');
+    return null;
+  }
+
+  // Create a new credential
+  if (googleAuth.accessToken == null && googleAuth.idToken == null) {
+    debugPrint('Failed to sign in with Google: accessToken, idToken are NULL');
+    Logger.error('An error occurred while signing in. Please try again later. (Error: 40002)');
+    return null;
+  }
+  final credential = GoogleAuthProvider.credential(
+    accessToken: googleAuth.accessToken,
+    idToken: googleAuth.idToken,
+  );
+
+  // Once signed in, return the UserCredential
+  var result = await FirebaseAuth.instance.signInWithCredential(credential);
+  await _updateUserPreferences(result, 'google');
+  return result;
+}
+
+/// Generates a cryptographically secure random nonce, to be included in a
+/// credential request.
+String generateNonce([int length = 32]) {
+  const charset = '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+  final random = Random.secure();
+  return List.generate(length, (_) => charset[random.nextInt(charset.length)]).join();
+}
+
+/// Returns the sha256 hash of [input] in hex notation.
+String sha256ofString(String input) {
+  final bytes = utf8.encode(input);
+  final digest = sha256.convert(bytes);
+  return digest.toString();
+}
+
+
+Future<UserCredential?> signInWithAppleMobile() async {
+  try {
+    // Sign out the current user first
+    debugPrint('Signing out current user...');
+    await FirebaseAuth.instance.signOut();
+    debugPrint('User signed out successfully.');
+
+    final rawNonce = generateNonce();
+    final nonce = sha256ofString(rawNonce);
+
+    debugPrint('Requesting Apple credential...');
+    final appleCredential = await SignInWithApple.getAppleIDCredential(
+      scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
+      nonce: nonce,
+    );
+
+    if (appleCredential.identityToken == null) {
+      throw Exception('Apple Sign In failed - no identity token received.');
+    }
+
+    // Create an `OAuthCredential` from the credential returned by Apple.
+    final oauthCredential = OAuthProvider("apple.com").credential(
+      idToken: appleCredential.identityToken,
+      rawNonce: rawNonce,
+      accessToken: appleCredential.authorizationCode,
+    );
+
+    // Sign in the user with Firebase.
+    debugPrint('Attempting to sign in with Firebase...');
+    UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+    debugPrint('Firebase sign-in successful.');
+
+    await _updateUserPreferences(userCred, 'apple');
+
+    return userCred;
+  } on FirebaseAuthException catch (e) {
+    debugPrint('FirebaseAuthException: ${e.code} - ${e.message}');
+    if (e.code == 'invalid-credential') {
+      debugPrint('Please check Firebase console configuration for Apple Sign In.');
+    }
+    return null;
+  } catch (e) {
+    debugPrint('Error during Apple Sign In: $e');
+    Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
+    return null;
+  }
 }
 
 Future<void> signInAnonymously() async {
