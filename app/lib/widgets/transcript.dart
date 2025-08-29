@@ -62,9 +62,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   bool _userHasScrolled = false;
   bool _isAutoScrolling = false;
   int _previousSegmentCount = 0;
-  
+
   // Search result tracking
   List<GlobalKey> _segmentKeys = [];
+  List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
   // Define distinct muted colors for different speakers
@@ -104,18 +105,33 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     // Add scroll listener to detect manual scrolling
     _scrollController.addListener(_onScroll);
-    
+
     // Notify parent about scroll controller
     widget.onScrollControllerReady?.call(_scrollController);
 
-    // Auto-scroll to bottom after first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
-    });
+    if (widget.segments.isNotEmpty && widget.isConversationDetail) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottomGently();
+      });
+    }
   }
-  
+
   void _initializeSegmentKeys() {
     _segmentKeys = List.generate(widget.segments.length, (index) => GlobalKey());
+  }
+
+  void _rebuildMatchKeys() {
+    _matchKeys.clear();
+    if (widget.searchQuery.isEmpty) return;
+
+    final searchQuery = widget.searchQuery.toLowerCase();
+    for (var segment in widget.segments) {
+      final text = _getDecodedText(segment.text).toLowerCase();
+      final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
+      for (final _ in matches) {
+        _matchKeys.add(GlobalKey());
+      }
+    }
   }
 
   @override
@@ -127,30 +143,27 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _initializeSegmentKeys();
     }
 
+    if (widget.searchQuery != oldWidget.searchQuery) {
+      _rebuildMatchKeys();
+    }
+
     // Check if new segments were added
     if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
       _previousSegmentCount = widget.segments.length;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottom();
+        _scrollToBottomGently();
       });
     } else {
       _previousSegmentCount = widget.segments.length;
     }
-    
+
     // Handle search result navigation
-    if (widget.currentResultIndex != _previousSearchResultIndex && 
-        widget.currentResultIndex >= 0 && 
+    if (widget.currentResultIndex != _previousSearchResultIndex &&
+        widget.currentResultIndex >= 0 &&
         widget.searchQuery.isNotEmpty) {
       _previousSearchResultIndex = widget.currentResultIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Temporarily allow auto-scrolling for search results
-        final wasUserScrolled = _userHasScrolled;
-        _userHasScrolled = false;
         _scrollToSearchResult();
-        // Restore the user scroll state after a delay
-        Future.delayed(const Duration(milliseconds: 600), () {
-          _userHasScrolled = wasUserScrolled;
-        });
       });
     }
   }
@@ -163,125 +176,102 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _onScroll() {
-    if (_isAutoScrolling) return;
+    if (_isAutoScrolling) {
+      return;
+    }
 
     // Check if user manually scrolled up from the bottom
     if (_scrollController.hasClients) {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.offset;
       final threshold = 100.0; // pixels from bottom
+      final distanceFromBottom = maxScroll - currentScroll;
 
-      if (maxScroll - currentScroll > threshold) {
+      if (distanceFromBottom > threshold) {
         _userHasScrolled = true;
-      } else {
-        // User scrolled back to bottom, resume auto-scrolling
+      } else if (distanceFromBottom < 50.0) {
         _userHasScrolled = false;
       }
     }
   }
 
-  void _scrollToBottom() {
-    if (!_scrollController.hasClients || _userHasScrolled) return;
+
+
+  void _scrollToBottomGently() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    final maxExtent = _scrollController.position.maxScrollExtent;
+
+    final startOffset = (maxExtent - 30).clamp(0.0, maxExtent);
+
+    _scrollController.jumpTo(startOffset);
 
     _isAutoScrolling = true;
     _scrollController
         .animateTo(
-      _scrollController.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
+      maxExtent,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
     )
         .then((_) {
       _isAutoScrolling = false;
     });
   }
-  
-  // Calculate the local search index for a specific segment
-  int _getLocalSearchIndex(int segmentIndex) {
-    if (widget.searchQuery.isEmpty || widget.currentResultIndex < 0) return -1;
-    
-    int currentMatchCount = 0;
-    final searchQuery = widget.searchQuery.toLowerCase();
-    
-    // Count matches in segments before the current one
-    for (int i = 0; i < segmentIndex; i++) {
-      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
-      int startIndex = 0;
-      while (true) {
-        int index = segmentText.indexOf(searchQuery, startIndex);
-        if (index == -1) break;
-        currentMatchCount++;
-        startIndex = index + 1;
-      }
-    }
-    
-    // Count matches in the current segment to see if our target falls within it
-    final currentSegmentText = _getDecodedText(widget.segments[segmentIndex].text).toLowerCase();
-    int segmentMatches = 0;
-    int startIndex = 0;
-    while (true) {
-      int index = currentSegmentText.indexOf(searchQuery, startIndex);
-      if (index == -1) break;
-      segmentMatches++;
-      startIndex = index + 1;
-    }
-    
-    // Check if the current result index falls within this segment
-    if (widget.currentResultIndex >= currentMatchCount && 
-        widget.currentResultIndex < currentMatchCount + segmentMatches) {
-      return widget.currentResultIndex - currentMatchCount;
-    }
-    
-    return -1; // Current result is not in this segment
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottomGently();
+    });
   }
 
   void _scrollToSearchResult() {
-    if (!_scrollController.hasClients || widget.searchQuery.isEmpty) return;
-    
-    // Find which segment contains the current search result
-    int currentMatchCount = 0;
-    int targetSegmentIndex = -1;
-    
-    for (int i = 0; i < widget.segments.length; i++) {
-      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
-      final searchQuery = widget.searchQuery.toLowerCase();
-      
-      // Count matches in this segment
-      int segmentMatches = 0;
-      int startIndex = 0;
-      while (true) {
-        int index = segmentText.indexOf(searchQuery, startIndex);
-        if (index == -1) break;
-        segmentMatches++;
-        startIndex = index + 1;
-      }
-      
-      // Check if current result index falls within this segment
-      if (widget.currentResultIndex < currentMatchCount + segmentMatches) {
-        targetSegmentIndex = i;
-        break;
-      }
-      
-      currentMatchCount += segmentMatches;
+    if (!_scrollController.hasClients) {
+      return;
     }
-    
-    if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
-      final targetKey = _segmentKeys[targetSegmentIndex];
-      final context = targetKey.currentContext;
-      
-      if (context != null) {
-        _isAutoScrolling = true;
-        
-        // Use Scrollable.ensureVisible for smoother, more reliable scrolling
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-          alignment: 0.05, // Position the target 5% from the top of the viewport for smaller scroll
-        ).then((_) {
-          _isAutoScrolling = false;
-        });
-      }
+
+    if (widget.searchQuery.isEmpty) {
+      return;
     }
+
+    if (widget.currentResultIndex < 0 || widget.currentResultIndex >= _matchKeys.length) {
+      return;
+    }
+
+    final matchKey = _matchKeys[widget.currentResultIndex];
+    final context = matchKey.currentContext;
+
+    if (context == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final retryContext = matchKey.currentContext;
+        if (retryContext != null) {
+          _isAutoScrolling = true;
+          Scrollable.ensureVisible(
+            retryContext,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOutCubic,
+            alignment: 0.2,
+          ).then((_) {
+            _isAutoScrolling = false;
+          });
+        }
+      });
+      return;
+    }
+
+    _isAutoScrolling = true;
+    Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
+      alignment: 0.2,
+    ).then((_) {
+      _isAutoScrolling = false;
+    });
   }
 
   String _getDecodedText(String text) {
@@ -289,6 +279,73 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _decodedTextCache[text] = tryDecodingText(text);
     }
     return _decodedTextCache[text]!;
+  }
+
+  // Create highlighted text spans
+  List<InlineSpan> _highlightSearchMatchesWithKeys(
+    String text,
+    String searchQuery,
+    int segmentIndex,
+  ) {
+    if (searchQuery.isEmpty) {
+      return [TextSpan(text: text)];
+    }
+
+    final spans = <InlineSpan>[];
+    final lowerText = text.toLowerCase();
+    final lowerQuery = searchQuery.toLowerCase();
+
+    int globalMatchIndex = 0;
+    for (int i = 0; i < segmentIndex; i++) {
+      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
+      final matches = RegExp(RegExp.escape(lowerQuery), caseSensitive: false).allMatches(segmentText);
+      globalMatchIndex += matches.length;
+    }
+
+    int start = 0;
+    int localMatchCount = 0;
+
+    while (true) {
+      final index = lowerText.indexOf(lowerQuery, start);
+      if (index == -1) {
+        if (start < text.length) {
+          spans.add(TextSpan(text: text.substring(start)));
+        }
+        break;
+      }
+
+      if (index > start) {
+        spans.add(TextSpan(text: text.substring(start, index)));
+      }
+
+      final currentGlobalIndex = globalMatchIndex + localMatchCount;
+      final isCurrentResult = currentGlobalIndex == widget.currentResultIndex;
+
+      final matchKey = currentGlobalIndex < _matchKeys.length ? _matchKeys[currentGlobalIndex] : null;
+
+      spans.add(WidgetSpan(
+        child: Container(
+          key: matchKey,
+          decoration: BoxDecoration(
+            color: isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(2),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: Text(
+            text.substring(index, index + searchQuery.length),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ));
+
+      start = index + searchQuery.length;
+      localMatchCount++;
+    }
+
+    return spans;
   }
 
   Person? _getPersonById(String? personId) {
@@ -335,236 +392,227 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final bool isUser = data.isUser;
 
     return Container(
-      key: segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
-      child: GestureDetector(
-      onTap: () {
-        widget.editSegment?.call(data.id, data.speakerId);
-        MixpanelManager().tagSheetOpened();
-      },
-      child: Padding(
-        padding: EdgeInsetsDirectional.fromSTEB(
-          widget.horizontalMargin ? 16 : 0, 
-          4.0, 
-          widget.horizontalMargin ? 16 : 0, 
-          4.0
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (!isUser) ...[
-              // Avatar for other speakers (left side)
-              Column(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                    child: Image.asset(
-                      person != null
-                          ? speakerImagePath[person.colorIdx!]
-                          : speakerImagePath[data.speakerId % speakerImagePath.length],
-                      width: 24,
-                      height: 24,
-                    ),
+        key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
+        child: GestureDetector(
+          onTap: () {
+            widget.editSegment?.call(data.id, data.speakerId);
+            MixpanelManager().tagSheetOpened();
+          },
+          child: Padding(
+            padding: EdgeInsetsDirectional.fromSTEB(
+                widget.horizontalMargin ? 16 : 0, 4.0, widget.horizontalMargin ? 16 : 0, 4.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (!isUser) ...[
+                  // Avatar for other speakers (left side)
+                  Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                        child: Image.asset(
+                          person != null
+                              ? speakerImagePath[person.colorIdx!]
+                              : speakerImagePath[data.speakerId % speakerImagePath.length],
+                          width: 24,
+                          height: 24,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(width: 8),
                 ],
-              ),
-              const SizedBox(width: 8),
-            ],
-            
-            // Message bubble
-            Expanded(
-              child: Column(
-                crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  // Speaker name (only for non-user messages and only if needed)
-                  if (!isUser) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            suggestion != null && person == null
-                                ? '${suggestion.personName}?'
-                                : (person != null ? person?.name ?? 'Deleted Person' : 'Speaker ${data.speakerId}'),
-                            style: TextStyle(
-                              color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (!data.speechProfileProcessed && (data.personId ?? "").isEmpty) ...[
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.help_outline,
-                              color: Colors.orange,
-                              size: 12,
-                            ),
-                          ],
-                          if (isTagging) ...[
-                            const SizedBox(width: 6),
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.5,
-                                valueColor: AlwaysStoppedAnimation(Colors.white),
-                              ),
-                            )
-                          ] else if (suggestion != null && person == null) ...[
-                            const SizedBox(width: 6),
-                            GestureDetector(
-                              onTap: () => widget.onAcceptSuggestion?.call(suggestion),
-                              child: const Text(
-                                'Tag',
+
+                // Message bubble
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    children: [
+                      // Speaker name (only for non-user messages and only if needed)
+                      if (!isUser) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                suggestion != null && person == null
+                                    ? '${suggestion.personName}?'
+                                    : (person != null ? person.name : 'Speaker ${data.speakerId}'),
                                 style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Colors.white,
+                                  color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            )
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                  
-                  // Chat bubble
-                  Row(
-                    mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-                    children: [
-                      Flexible(
-                        child: Container(
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.75,
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _getSpeakerBubbleColor(isUser, data.speakerId),
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(isUser ? 18 : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser) ? 6 : 18),
-                              topRight: Radius.circular(isUser ? 18 : 18),
-                              bottomLeft: Radius.circular(18),
-                              bottomRight: Radius.circular(isUser ? 6 : 18),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.15),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
-                              ),
+                              if (!data.speechProfileProcessed && (data.personId ?? "").isEmpty) ...[
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.help_outline,
+                                  color: Colors.orange,
+                                  size: 12,
+                                ),
+                              ],
+                              if (isTagging) ...[
+                                const SizedBox(width: 6),
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    valueColor: AlwaysStoppedAnimation(Colors.white),
+                                  ),
+                                )
+                              ] else if (suggestion != null && person == null) ...[
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () => widget.onAcceptSuggestion?.call(suggestion),
+                                  child: const Text(
+                                    'Tag',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: Colors.white,
+                                    ),
+                                  ),
+                                )
+                              ],
                             ],
                           ),
-                          child: SelectionArea(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                RichText(
-                                  textAlign: TextAlign.left,
-                                  text: TextSpan(
-                                    children: widget.searchQuery.isNotEmpty
-                                        ? highlightSearchMatches(
-                                            _getDecodedText(data.text),
-                                            widget.searchQuery,
-                                            currentResultIndex: _getLocalSearchIndex(segmentIdx),
-                                          ).map((span) {
-                                            // Preserve highlight styles, apply default styles only to non-highlighted text
-                                            if (span.style?.backgroundColor != null) {
-                                              return span; // Keep highlight style as is
-                                            }
-                                            return TextSpan(
-                                              text: span.text,
+                        ),
+                      ],
+
+                      // Chat bubble
+                      Row(
+                        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+                        children: [
+                          Flexible(
+                            child: Container(
+                              constraints: BoxConstraints(
+                                maxWidth: MediaQuery.of(context).size.width * 0.75,
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _getSpeakerBubbleColor(isUser, data.speakerId),
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(isUser
+                                      ? 18
+                                      : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
+                                          ? 6
+                                          : 18),
+                                  topRight: Radius.circular(isUser ? 18 : 18),
+                                  bottomLeft: Radius.circular(18),
+                                  bottomRight: Radius.circular(isUser ? 6 : 18),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.15),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: SelectionArea(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    RichText(
+                                      textAlign: TextAlign.left,
+                                      text: TextSpan(
+                                        style: TextStyle(
+                                          letterSpacing: 0.0,
+                                          color: isUser ? Colors.white : Colors.grey.shade100,
+                                          fontSize: 15,
+                                          height: 1.4,
+                                        ),
+                                        children: widget.searchQuery.isNotEmpty
+                                            ? _highlightSearchMatchesWithKeys(
+                                                _getDecodedText(data.text),
+                                                widget.searchQuery,
+                                                segmentIdx,
+                                              )
+                                            : [
+                                                TextSpan(
+                                                  text: _getDecodedText(data.text),
+                                                )
+                                              ],
+                                      ),
+                                    ),
+                                    if (data.translations.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      ...data.translations.map((translation) => Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text(
+                                              _getDecodedText(translation.text),
                                               style: TextStyle(
                                                 letterSpacing: 0.0,
-                                                color: isUser ? Colors.white : Colors.grey.shade100,
-                                                fontSize: 15,
-                                                height: 1.4,
+                                                color: isUser
+                                                    ? Colors.white.withValues(alpha: 0.8)
+                                                    : Colors.grey.shade300.withValues(alpha: 0.8),
+                                                fontSize: 14,
+                                                fontStyle: FontStyle.italic,
+                                                height: 1.3,
                                               ),
-                                            );
-                                          }).toList()
-                                        : [TextSpan(
-                                            text: _getDecodedText(data.text),
-                                            style: TextStyle(
-                                              letterSpacing: 0.0,
-                                              color: isUser ? Colors.white : Colors.grey.shade100,
-                                              fontSize: 15,
-                                              height: 1.4,
+                                              textAlign: TextAlign.left,
                                             ),
-                                          )],
-                                  ),
-                                ),
-                                if (data.translations.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  ...data.translations.map((translation) => Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text(
-                                          _getDecodedText(translation.text),
-                                          style: TextStyle(
-                                            letterSpacing: 0.0,
-                                            color: isUser ? Colors.white.withOpacity(0.8) : Colors.grey.shade300.withOpacity(0.8),
-                                            fontSize: 14,
-                                            fontStyle: FontStyle.italic,
-                                            height: 1.3,
+                                          )),
+                                      const SizedBox(height: 4),
+                                      _buildTranslationNotice(),
+                                    ],
+                                    // Timestamp inside bubble (bottom right)
+                                    if (widget.canDisplaySeconds) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            data.getTimestampString(),
+                                            style: TextStyle(
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                              fontSize: 11,
+                                            ),
                                           ),
-                                          textAlign: TextAlign.left,
-                                        ),
-                                      )),
-                                  const SizedBox(height: 4),
-                                  _buildTranslationNotice(),
-                                ],
-                                // Timestamp inside bubble (bottom right)
-                                if (widget.canDisplaySeconds) ...[
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        data.getTimestampString(),
-                                        style: TextStyle(
-                                          color: isUser ? Colors.white.withOpacity(0.7) : Colors.grey.shade400,
-                                          fontSize: 11,
-                                        ),
+                                        ],
                                       ),
                                     ],
-                                  ),
-                                ],
-                              ],
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            
-            if (isUser) ...[
-              const SizedBox(width: 8),
-              // Avatar for user (right side)  
-              Column(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                    child: Image.asset(
-                      Assets.images.speaker0Icon.path,
-                      width: 24,
-                      height: 24,
-                    ),
+                ),
+
+                if (isUser) ...[
+                  const SizedBox(width: 8),
+                  // Avatar for user (right side)
+                  Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                        child: Image.asset(
+                          Assets.images.speaker0Icon.path,
+                          width: 24,
+                          height: 24,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
                   ),
-                  const SizedBox(height: 2),
                 ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    ));
+              ],
+            ),
+          ),
+        ));
   }
 
   Widget _buildTranslationNotice() {
@@ -591,7 +639,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           },
         );
       },
-      child: Opacity(
+      child: const Opacity(
         opacity: 0.5,
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -619,13 +667,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
 class LiteTranscriptWidget extends StatelessWidget {
   final List<TranscriptSegment> segments;
-  // Cache the processed text to avoid recalculating on every rebuild
-  final String? _cachedText;
 
-  LiteTranscriptWidget({
+  const LiteTranscriptWidget({
     super.key,
     required this.segments,
-  }) : _cachedText = _processText(segments);
+  });
 
   static String? _processText(List<TranscriptSegment> segments) {
     if (segments.isEmpty) return null;
@@ -636,12 +682,13 @@ class LiteTranscriptWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (_cachedText == null) {
+    final processedText = _processText(segments);
+    if (processedText == null) {
       return const SizedBox.shrink();
     }
 
     return Text(
-      _cachedText!,
+      processedText,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
@@ -650,8 +697,11 @@ class LiteTranscriptWidget extends StatelessWidget {
   }
 }
 
-String getLastTranscript(List<TranscriptSegment> transcriptSegments, {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
-  var transcript = TranscriptSegment.segmentsAsString(transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0), includeTimestamps: includeTimestamps);
+String getLastTranscript(List<TranscriptSegment> transcriptSegments,
+    {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
+  var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0),
+      includeTimestamps: includeTimestamps);
   if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0));
   return tryDecodingText(transcript);
 }
