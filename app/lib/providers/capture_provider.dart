@@ -396,8 +396,7 @@ class CaptureProvider extends ChangeNotifier
         _socket?.send(trimmedValue);
 
         // Mark as synced
-        // Dont need to mark as synced if the option unlimitedLocalStorageEnabled is on
-        if (_isWalSupported && !SharedPreferencesUtil().unlimitedLocalStorageEnabled) {
+        if (_isWalSupported) {
           _wal.getSyncs().phone.onBytesSync(value);
         }
       }

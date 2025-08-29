@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -121,6 +120,15 @@ class Wal {
 
   int frameSize = 160;
 
+  // New fields for sync offset tracking
+  int totalFrames = 0; // Total frames in this WAL
+  int syncedFrameOffset = 0; // How many frames from start are synced (continuous)
+
+  // Computed properties
+  bool get isFullySynced => syncedFrameOffset >= totalFrames && totalFrames > 0;
+  double get syncProgress => totalFrames > 0 ? syncedFrameOffset / totalFrames : 0.0;
+  int get remainingFrames => totalFrames - syncedFrameOffset;
+
   String get id => '${device}_$timerStart';
 
   Wal(
@@ -137,7 +145,9 @@ class Wal {
       this.storageOffset = 0,
       this.storageTotalBytes = 0,
       this.fileNum = 1,
-      this.data = const []}) {
+      this.data = const [],
+      this.totalFrames = 0,
+      this.syncedFrameOffset = 0}) {
     frameSize = codec.getFrameSize();
   }
 
@@ -145,8 +155,8 @@ class Wal {
     return Wal(
       timerStart: json['timer_start'],
       codec: mapNameToCodec(json['codec']),
-      channel: json['channel'],
-      sampleRate: json['sample_rate'],
+      channel: json['channel'] ?? 1,
+      sampleRate: json['sample_rate'] ?? 16000,
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       filePath: json['file_path'],
@@ -156,6 +166,8 @@ class Wal {
       storageOffset: json['storage_offset'] ?? 0,
       storageTotalBytes: json['storage_total_bytes'] ?? 0,
       fileNum: json['file_num'] ?? 1,
+      totalFrames: json['total_frames'] ?? 0,
+      syncedFrameOffset: json['synced_frame_offset'] ?? 0,
     );
   }
 
@@ -174,6 +186,8 @@ class Wal {
       'storage_offset': storageOffset,
       'storage_total_bytes': storageTotalBytes,
       'file_num': fileNum,
+      'total_frames': totalFrames,
+      'synced_frame_offset': syncedFrameOffset,
     };
   }
 
@@ -264,6 +278,8 @@ class SDCardWalSync implements IWalSync {
         fileNum: 1,
         device: _device!.id,
         deviceModel: deviceModel,
+        totalFrames: seconds * codec.getFramesPerSecond(),
+        syncedFrameOffset: 0, // SD card WALs start unsynced
       ));
     }
 
@@ -643,7 +659,7 @@ class LocalWalSync implements IWalSync {
   List<Wal> _wals = const [];
 
   List<List<int>> _frames = [];
-  final HashSet<int> _syncFrameSeq = HashSet();
+  List<bool> _frameSynced = []; // Boolean array matching _frames size
 
   Timer? _chunkingTimer;
   Timer? _flushingTimer;
@@ -680,7 +696,7 @@ class LocalWalSync implements IWalSync {
     await _flush();
 
     _frames = [];
-    _syncFrameSeq.clear();
+    _frameSynced = [];
   }
 
   Future onAudioCodecChanged(BleAudioCodec codec) async {
@@ -692,7 +708,7 @@ class LocalWalSync implements IWalSync {
     await _chunk();
     await _flush();
     _frames = [];
-    _syncFrameSeq.clear();
+    _frameSynced = [];
 
     // update fps
     _framesPerSecond = codec.getFramesPerSecond();
@@ -727,45 +743,69 @@ class LocalWalSync implements IWalSync {
       if (low < 0) {
         low = 0;
       }
-      var synced = true;
-      var losses = 0;
       var chunk = _frames.sublist(low, high);
-      for (var f in chunk) {
-        var head = f.sublist(0, 3);
-        var seq = Uint8List.fromList(head..add(0)).buffer.asByteData().getInt32(0);
-        if (!_syncFrameSeq.contains(seq)) {
-          losses++;
-          if (losses >= lossesThreshold) {
-            synced = false;
+      var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
+      var chunkFrameCount = high - low;
+
+      bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+      if (!shouldStored) {
+        // Checking losses threshold
+        bool synced = true;
+        var losses = 0;
+        for (var i = low; i < high; i++) {
+          if (!_frameSynced[i]) {
+            losses++;
+            if (losses >= lossesThreshold) {
+              synced = false;
+              break;
+            }
+          }
+        }
+
+        shouldStored = (synced == false);
+      }
+
+      if (shouldStored) {
+        // track the synced offset
+        int syncedOffset = 0;
+        for (var i = low; i < high; i++) {
+          if (_frameSynced[i]) {
+            syncedOffset++;
+          } else {
             break;
           }
         }
-      }
-      var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
-      if (!synced) {
-        var missWalIdx =
-            _wals.indexWhere((w) => w.timerStart == timerStart && w.device == "phone" && w.codec == _codec);
-        Wal missWal;
-        if (missWalIdx < 0) {
-          missWal = Wal(
+        debugPrint("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount}");
+
+        Wal wal;
+        var walIdx = _wals
+            .indexWhere((w) => w.timerStart == timerStart && w.device == (_deviceId ?? "omi") && w.codec == _codec);
+        if (walIdx < 0) {
+          wal = Wal(
             codec: _codec,
             timerStart: timerStart,
             data: chunk,
             storage: WalStorage.mem,
-            status: WalStatus.miss,
+            status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
+            totalFrames: chunkFrameCount,
+            syncedFrameOffset: syncedOffset,
           );
-          _wals.add(missWal);
+          _wals.add(wal);
         } else {
-          missWal = _wals[missWalIdx];
-          missWal.data.addAll(chunk);
-          missWal.storage = WalStorage.mem;
-          missWal.status = WalStatus.miss;
-          _wals[missWalIdx] = missWal;
+          wal = _wals[walIdx];
+          wal.data.addAll(chunk);
+          wal.storage = WalStorage.mem;
+          wal.totalFrames = chunkFrameCount;
+          wal.syncedFrameOffset = syncedOffset;
+          wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
+          _wals[walIdx] = wal;
         }
 
-        // send
+        if (wal.status == WalStatus.synced) {
+          listener.onWalSynced(wal);
+        }
         listener.onWalUpdated();
       }
 
@@ -778,6 +818,7 @@ class LocalWalSync implements IWalSync {
 
     // clean
     _frames.removeRange(0, pivot);
+    _frameSynced.removeRange(0, pivot);
   }
 
   Future _flush() async {
@@ -887,12 +928,20 @@ class LocalWalSync implements IWalSync {
 
   void onByteStream(List<int> value) async {
     _frames.add(value);
+    _frameSynced.add(false); // Initially not synced
   }
 
   void onBytesSync(List<int> value) {
-    var head = value.sublist(0, 3);
-    var seq = Uint8List.fromList(head..add(0)).buffer.asByteData().getInt32(0);
-    _syncFrameSeq.add(seq);
+    // Find the frame index that matches this value by comparing the first 3 bytes
+    for (int i = _frames.length - 1; i >= 0; i--) {
+      if (_frames[i].length >= 3 &&
+          _frames[i][0] == value[0] &&
+          _frames[i][1] == value[1] &&
+          _frames[i][2] == value[2]) {
+        _frameSynced[i] = true;
+        break;
+      }
+    }
   }
 
   @override
@@ -1140,8 +1189,10 @@ class WalSyncs implements IWalSync {
     // Estimate size based on codec, sample rate, channels, and duration
     int bytesPerSecond;
     switch (wal.codec) {
+      case BleAudioCodec.opusFS320:
+        bytesPerSecond = 16000;
       case BleAudioCodec.opus:
-        bytesPerSecond = 8000; // ~64kbps
+        bytesPerSecond = 8000;
         break;
       case BleAudioCodec.pcm16:
         bytesPerSecond = wal.sampleRate * 2 * wal.channel; // 16-bit samples

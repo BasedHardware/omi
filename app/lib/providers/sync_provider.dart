@@ -7,7 +7,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/services.dart';
@@ -381,8 +380,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           if (_currentPlayingWalId == wal.id) {
             _currentPosition = disposition.position;
             _totalDuration = disposition.duration;
-            debugPrint(
-                'Position update: ${_currentPosition.inMilliseconds}ms / ${_totalDuration.inMilliseconds}ms (${(playbackProgress * 100).toStringAsFixed(1)}%)');
             notifyListeners();
           }
         });
@@ -399,8 +396,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             final estimatedPosition = _currentPosition + const Duration(milliseconds: 100);
             if (estimatedPosition <= _totalDuration) {
               _currentPosition = estimatedPosition;
-              debugPrint(
-                  'Manual position update: ${_currentPosition.inMilliseconds}ms / ${_totalDuration.inMilliseconds}ms');
               notifyListeners();
             }
           }
