@@ -298,10 +298,10 @@ def _save_action_items(uid: str, conversation: Conversation):
     """
     if not conversation.structured or not conversation.structured.action_items:
         return
-    
+
     action_items_data = []
     now = datetime.now(timezone.utc)
-    
+
     for action_item in conversation.structured.action_items:
         action_item_data = {
             'description': action_item.description,
@@ -310,10 +310,10 @@ def _save_action_items(uid: str, conversation: Conversation):
             'updated_at': action_item.updated_at or now,
             'due_at': action_item.due_at,
             'completed_at': action_item.completed_at,
-            'conversation_id': conversation.id
+            'conversation_id': conversation.id,
         }
         action_items_data.append(action_item_data)
-    
+
     if action_items_data:
         # Delete existing action items for this conversation first (in case of reprocessing)
         action_items_db.delete_action_items_for_conversation(uid, conversation.id)
@@ -378,7 +378,7 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
 ) -> Conversation:
-    person_ids = [segment.person_id for segment in conversation.transcript_segments if segment.person_id]
+    person_ids = conversation.get_person_ids()
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))

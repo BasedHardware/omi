@@ -208,7 +208,7 @@ class PureSocket implements IPureSocket {
     debugPrintStack(stackTrace: trace);
 
     _listener?.onError(err, trace);
-    PlatformManager.instance.instabug.reportCrash(err, trace);
+    PlatformManager.instance.crashReporter.reportCrash(err, trace);
   }
 
   @override

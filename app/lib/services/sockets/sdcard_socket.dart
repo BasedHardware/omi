@@ -116,7 +116,7 @@ class SdCardSocketService {
         },
         onError: (err, stackTrace) {
           onWebsocketConnectionError(err); // error during connection
-          PlatformManager.instance.instabug.reportCrash(err!, stackTrace);
+          PlatformManager.instance.crashReporter.reportCrash(err!, stackTrace);
         },
         onDone: (() {
           debugPrint('Websocket connection onDone sd'); // FIXME
@@ -128,7 +128,7 @@ class SdCardSocketService {
       // no closing reason or code
       print(err);
       debugPrint('Websocket connection failed sd: $err');
-      PlatformManager.instance.instabug.reportCrash(err!, stackTrace);
+      PlatformManager.instance.crashReporter.reportCrash(err!, stackTrace);
       onWebsocketConnectionFailed(err); // initial connection failed
     });
 

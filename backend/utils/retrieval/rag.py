@@ -83,7 +83,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
 
     all_person_ids = []
     for m in memories:
-        all_person_ids.extend([s.person_id for s in m.transcript_segments if s.person_id])
+        all_person_ids.extend(m.get_person_ids())
 
     people = []
     if all_person_ids:

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -39,11 +40,10 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
@@ -51,7 +51,7 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/debugging/instabug_manager.dart';
+import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 Future<bool> _init() async {
@@ -128,32 +128,27 @@ void main() async {
   // _setupAudioSession();
 
   bool isAuth = await _init();
-  if (Env.instabugApiKey != null) {
-    await PlatformManager.instance.instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
-    runZonedGuarded(
-      () async {
-        await InstabugManager.init(
-          token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.none],
-        );
-        if (isAuth) {
-          PlatformManager.instance.instabug.identifyUser(
-            FirebaseAuth.instance.currentUser?.email ?? '',
-            SharedPreferencesUtil().fullName,
-            SharedPreferencesUtil().uid,
-          );
-        }
-        FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
-        };
-        PlatformManager.instance.instabug.setColorTheme(ColorTheme.dark);
-        runApp(const MyApp());
-      },
-      CrashReporting.reportCrash,
+  await CrashlyticsManager.init();
+  if (isAuth) {
+    PlatformManager.instance.crashReporter.identifyUser(
+      FirebaseAuth.instance.currentUser?.email ?? '',
+      SharedPreferencesUtil().fullName,
+      SharedPreferencesUtil().uid,
     );
-  } else {
-    runApp(const MyApp());
   }
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+    
+  runZonedGuarded(
+    () => runApp(const MyApp()),
+    (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true),
+  );
 }
 
 class MyApp extends StatefulWidget {
@@ -254,8 +249,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           return WithForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
-                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null)
-                  PlatformManager.instance.instabug.getNavigatorObserver()!,
                 if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -274,9 +267,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     secondary: Colors.deepPurple,
                     surface: Colors.black38,
                   ),
-                  snackBarTheme: SnackBarThemeData(
-                    backgroundColor: const Color(0xFF1F1F25),
-                    contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+                  snackBarTheme: const SnackBarThemeData(
+                    backgroundColor: Color(0xFF1F1F25),
+                    contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
                   ),
                   textTheme: TextTheme(
                     titleLarge: const TextStyle(fontSize: 18, color: Colors.white),

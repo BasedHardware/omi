@@ -1,6 +1,7 @@
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/debugging/instabug_manager.dart';
+import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/utils/debugging/crash_reporter.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// Centralized platform manager for all platform-specific services
@@ -16,22 +17,14 @@ class PlatformManager {
   // Service instances
   MixpanelManager get mixpanel => MixpanelManager();
   IntercomManager get intercom => IntercomManager.instance;
-  InstabugManager get instabug => InstabugManager.instance;
+  CrashReporter get crashReporter => CrashlyticsManager.instance;
 
-  /// Initialize all platform services
   static Future<void> initializeServices() async {
     await MixpanelManager.init();
     await IntercomManager.instance.initIntercom();
-    // Note: Instabug initialization is handled separately in main.dart
-    // due to its specific initialization requirements
   }
 
-  /// Check if analytics services are supported on current platform
   bool get isAnalyticsSupported => PlatformService.isAnalyticsSupported;
-
-  /// Check if debugging services are supported on current platform
-  bool get isDebuggingSupported => PlatformService.isInstabugSupported;
-
-  /// Check if current platform is macOS
+  bool get isDebuggingSupported => PlatformService.isCrashlyticsSupported;
   bool get isMacOS => PlatformService.isMacOS;
 }

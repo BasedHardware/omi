@@ -3,17 +3,17 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 void logErrorMessage(String message, String deviceId) {
   debugPrint('($deviceId) $message');
-  PlatformManager.instance.instabug.reportCrash(Exception(message), StackTrace.current);
+  PlatformManager.instance.crashReporter.reportCrash(Exception(message), StackTrace.current);
 }
 
 void logCommonErrorMessage(String message) {
   debugPrint(message);
-  PlatformManager.instance.instabug.reportCrash(Exception(message), StackTrace.current);
+  PlatformManager.instance.crashReporter.reportCrash(Exception(message), StackTrace.current);
 }
 
 void logCrashMessage(String message, String deviceId, Object e, StackTrace stackTrace) {
   logErrorMessage('$message error: $e', deviceId);
-  PlatformManager.instance.instabug.reportCrash(e, stackTrace);
+  PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
 }
 
 void logServiceNotFoundError(String serviceName, String deviceId) {
