@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -17,11 +17,11 @@ Future<String> getAuthHeader() async {
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    SharedPreferencesUtil().authToken = await getIdToken() ?? '';
+    SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
   }
 
   if (!hasAuthToken) {
-    if (isSignedIn()) {
+    if (AuthService.instance.isSignedIn()) {
       // should only throw if the user is signed in but the token is not found
       // if the user is not signed in, the token will always be empty
       throw Exception('No auth token found');
@@ -48,7 +48,7 @@ Future<http.Response?> makeApiCall({
     if (response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
       // Refresh the token
-      SharedPreferencesUtil().authToken = await getIdToken() ?? '';
+      SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
         // Update the header with the new token
         headers['Authorization'] = 'Bearer ${SharedPreferencesUtil().authToken}';
@@ -57,13 +57,13 @@ Future<http.Response?> makeApiCall({
         Logger.log('Token refreshed and request retried');
         if (response.statusCode == 401) {
           // Force user to sign in again
-          await signOut();
+          await AuthService.instance.signOut();
           Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
               message: 'Authentication failed. Please sign in again.');
         }
       } else {
         // Force user to sign in again
-        await signOut();
+        await AuthService.instance.signOut();
         Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
             message: 'Authentication failed. Please sign in again.');
       }
