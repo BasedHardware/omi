@@ -719,27 +719,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const BatteryInfoWidget(),
-          Consumer<HomeProvider>(builder: (context, provider, child) {
-            if (provider.selectedIndex == 0) {
-              return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-                if (convoProvider.missingWalsInSeconds >= 120) {
-                  return GestureDetector(
-                    onTap: () {
-                      routeToPage(context, const SyncPage());
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.only(left: 12),
-                      child: const Icon(Icons.download, color: Colors.white, size: 28),
-                    ),
-                  );
-                } else {
-                  return const SizedBox.shrink();
-                }
-              });
-            } else {
-              return const SizedBox.shrink();
-            }
-          }),
+          const SizedBox.shrink(),
           // Top Title App Bar - titles removed for Actions, Memories, and Apps pages
           Consumer<HomeProvider>(
             builder: (context, provider, child) {

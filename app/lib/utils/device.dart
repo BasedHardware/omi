@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:version/version.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -41,5 +42,17 @@ class DeviceUtils {
         return ('You are already on the latest version', false, latestVersionStr);
       }
     }
+  }
+
+  static String getDeviceImagePathByModel(String? deviceModel) {
+    if (deviceModel == null) return Assets.images.omiWithoutRope.path;
+
+    if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
+      return Assets.images.omiGlass.path;
+    }
+    if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
+      return Assets.images.omiDevkitWithoutRope.path;
+    }
+    return Assets.images.omiWithoutRope.path;
   }
 }
