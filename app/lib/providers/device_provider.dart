@@ -325,6 +325,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
   }
 
+  Future<bool> updateDeviceName(String newName) async {
+    if (connectedDevice == null) return false;
+
+    try {
+      var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+      if (connection == null) return false;
+
+      final success = await connection.writeDeviceName(newName);
+      if (success) {
+        // Update the connected device with the new name
+        connectedDevice = connectedDevice!.copyWith(deviceName: newName);
+        pairedDevice = pairedDevice!.copyWith(deviceName: newName);
+
+        // Save to preferences
+        SharedPreferencesUtil().btDevice = pairedDevice!;
+
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      Logger.error('Failed to update device name: $e');
+    }
+
+    return false;
+  }
+
   Future checkFirmwareUpdates() async {
     int retryCount = 0;
     const maxRetries = 3;

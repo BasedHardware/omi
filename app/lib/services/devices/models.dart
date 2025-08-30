@@ -33,6 +33,7 @@ const String modelNumberCharacteristicUuid = '00002a24-0000-1000-8000-00805f9b34
 const String firmwareRevisionCharacteristicUuid = '00002a26-0000-1000-8000-00805f9b34fb';
 const String hardwareRevisionCharacteristicUuid = '00002a27-0000-1000-8000-00805f9b34fb';
 const String manufacturerNameCharacteristicUuid = '00002a29-0000-1000-8000-00805f9b34fb';
+const String deviceNameCharacteristicUuid = '19b10007-e8f2-537e-4f6c-d104768a1214';
 
 const String frameServiceUuid = "7A230001-5475-A6A4-654C-8431F6AD49C4";
 

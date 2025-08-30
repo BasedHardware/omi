@@ -6,12 +6,12 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/device_name_dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
@@ -161,9 +161,29 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
   var provider = Provider.of<DeviceProvider>(context, listen: true);
 
   return [
-    ListTile(
-      title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Omi DevKit'),
+    GestureDetector(
+      onTap: () {
+        if (device != null) {
+          showDialog(
+            context: context,
+            builder: (context) => DeviceNameDialog(
+              currentName: device.deviceName,
+              onNameChanged: (newName) {
+                // The dialog handles updating the device name
+                // This will trigger a rebuild of the provider
+              },
+            ),
+          );
+        }
+      },
+      child: ListTile(
+        title: const Text('Device Name'),
+        subtitle: Text(device?.deviceName ?? 'Omi DevKit'),
+        trailing: const Icon(
+          Icons.edit,
+          size: 16,
+        ),
+      ),
     ),
     ListTile(
       title: const Text('Device ID'),

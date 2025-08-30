@@ -89,8 +89,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           index += query.length;
         }
       }
-    }
-    else if (selectedTab == ConversationTab.summary) {
+    } else if (selectedTab == ConversationTab.summary) {
       // Count matches in app summaries
       final summarizedApp = provider.getSummarizedApp();
       if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) {
@@ -103,11 +102,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           index += query.length;
         }
       }
-     }
+    }
 
-     _totalSearchResults = count;
-     _currentSearchIndex = count > 0 ? 1 : 0;
-   }
+    _totalSearchResults = count;
+    _currentSearchIndex = count > 0 ? 1 : 0;
+  }
 
   void _navigateSearch(bool next) {
     if (_totalSearchResults == 0) return;
@@ -238,6 +237,36 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case 'reprocess':
         if (!provider.loadingReprocessConversation) {
           await provider.reprocessConversation();
+        }
+        break;
+      case 'delete_conversation':
+        HapticFeedback.mediumImpact();
+        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+        if (connectivityProvider.isConnected) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.pop(context),
+              () {
+                context
+                    .read<ConversationProvider>()
+                    .deleteConversation(provider.conversation, provider.conversationIdx);
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context, {'deleted': true}); // Close detail page
+              },
+              'Delete Conversation?',
+              'Are you sure you want to delete this conversation? This action cannot be undone.',
+              okButtonText: 'Confirm',
+            ),
+          );
+        } else {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                'Unable to Delete Conversation', 'Please check your internet connection and try again.',
+                singleButton: true, okButtonText: 'OK'),
+          );
         }
         break;
     }
@@ -484,6 +513,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                               ),
+                            PullDownMenuItem(
+                              title: 'Delete Conversation',
+                              iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16),
+                              onTap: () => _handleMenuSelection(context, 'delete_conversation', provider),
+                            ),
                           ],
                           buttonBuilder: (context, showMenu) => GestureDetector(
                             onTap: () {
@@ -502,57 +536,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      // Delete button (third)
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: provider.loadingReprocessConversation
-                              ? null
-                              : () {
-                                  HapticFeedback.mediumImpact();
-                                  final connectivityProvider =
-                                      Provider.of<ConnectivityProvider>(context, listen: false);
-                                  if (connectivityProvider.isConnected) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (c) => getDialog(
-                                        context,
-                                        () => Navigator.pop(context),
-                                        () {
-                                          context
-                                              .read<ConversationProvider>()
-                                              .deleteConversation(provider.conversation, provider.conversationIdx);
-                                          Navigator.pop(context); // Close dialog
-                                          Navigator.pop(context, {'deleted': true}); // Close detail page
-                                        },
-                                        'Delete Conversation?',
-                                        'Are you sure you want to delete this conversation? This action cannot be undone.',
-                                        okButtonText: 'Confirm',
-                                      ),
-                                    );
-                                  } else {
-                                    showDialog(
-                                      context: context,
-                                      builder: (c) => getDialog(
-                                          context,
-                                          () => Navigator.pop(context),
-                                          () => Navigator.pop(context),
-                                          'Unable to Delete Conversation',
-                                          'Please check your internet connection and try again.',
-                                          singleButton: true,
-                                          okButtonText: 'OK'),
-                                    );
-                                  }
-                                },
-                          icon: const FaIcon(FontAwesomeIcons.trashCan, size: 16.0, color: Colors.white),
                         ),
                       ),
                     ],

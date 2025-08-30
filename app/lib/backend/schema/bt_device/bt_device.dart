@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/preferences.dart';
@@ -135,6 +136,7 @@ class BtDevice {
   String? _firmwareRevision;
   String? _hardwareRevision;
   String? _manufacturerName;
+  String? _deviceName;
 
   BtDevice(
       {required this.name,
@@ -144,11 +146,13 @@ class BtDevice {
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
-      String? manufacturerName}) {
+      String? manufacturerName,
+      String? deviceName}) {
     _modelNumber = modelNumber;
     _firmwareRevision = firmwareRevision;
     _hardwareRevision = hardwareRevision;
     _manufacturerName = manufacturerName;
+    _deviceName = deviceName;
   }
 
   // create an empty device
@@ -160,19 +164,22 @@ class BtDevice {
         _modelNumber = '',
         _firmwareRevision = '',
         _hardwareRevision = '',
-        _manufacturerName = '';
+        _manufacturerName = '',
+        _deviceName = '';
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';
   String get firmwareRevision => _firmwareRevision ?? 'Unknown';
   String get hardwareRevision => _hardwareRevision ?? 'Unknown';
   String get manufacturerName => _manufacturerName ?? 'Unknown';
+  String get deviceName => _deviceName ?? name;
 
   // set details
   set modelNumber(String modelNumber) => _modelNumber = modelNumber;
   set firmwareRevision(String firmwareRevision) => _firmwareRevision = firmwareRevision;
   set hardwareRevision(String hardwareRevision) => _hardwareRevision = hardwareRevision;
   set manufacturerName(String manufacturerName) => _manufacturerName = manufacturerName;
+  set deviceName(String deviceName) => _deviceName = deviceName;
 
   String getShortId() => BtDevice.shortId(id);
 
@@ -192,7 +199,8 @@ class BtDevice {
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
-      String? manufacturerName}) {
+      String? manufacturerName,
+      String? deviceName}) {
     return BtDevice(
       name: name ?? this.name,
       id: id ?? this.id,
@@ -202,6 +210,7 @@ class BtDevice {
       firmwareRevision: firmwareRevision ?? _firmwareRevision,
       hardwareRevision: hardwareRevision ?? _hardwareRevision,
       manufacturerName: manufacturerName ?? _manufacturerName,
+      deviceName: deviceName ?? _deviceName,
     );
   }
 
@@ -225,6 +234,7 @@ class BtDevice {
           firmwareRevision: device.firmwareRevision,
           hardwareRevision: device.hardwareRevision,
           manufacturerName: device.manufacturerName,
+          deviceName: device.deviceName,
         );
       } else {
         return BtDevice.empty();
@@ -247,6 +257,7 @@ class BtDevice {
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
+    var deviceName = name; // Default to the Bluetooth advertising name
     var t = DeviceType.omi;
     try {
       var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
@@ -275,10 +286,26 @@ class BtDevice {
         }
       }
 
+      // Read device name from Omi service
+      final omiService = await conn.getService(omiServiceUuid);
+      if (omiService != null) {
+        var deviceNameCharacteristic = conn.getCharacteristic(omiService, deviceNameCharacteristicUuid);
+        if (deviceNameCharacteristic != null) {
+          try {
+            var deviceNameBytes = await deviceNameCharacteristic.read();
+            if (deviceNameBytes.isNotEmpty) {
+              deviceName = String.fromCharCodes(deviceNameBytes);
+            }
+          } catch (e) {
+            // Device name characteristic might not be available on older firmware
+            debugPrint('Could not read device name: $e');
+          }
+        }
+      }
+
       if (type == DeviceType.openglass) {
         t = DeviceType.openglass;
       } else {
-        final omiService = await conn.getService(omiServiceUuid);
         if (omiService != null) {
           var imageCaptureControlCharacteristic = conn.getCharacteristic(omiService, imageDataStreamCharacteristicUuid);
           if (imageCaptureControlCharacteristic != null) {
@@ -295,6 +322,7 @@ class BtDevice {
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
+      deviceName: deviceName,
       type: t,
     );
   }
@@ -353,6 +381,7 @@ class BtDevice {
       firmwareRevision: json['firmwareRevision'],
       hardwareRevision: json['hardwareRevision'],
       manufacturerName: json['manufacturerName'],
+      deviceName: json['deviceName'],
     );
   }
 
@@ -367,6 +396,7 @@ class BtDevice {
       'firmwareRevision': firmwareRevision,
       'hardwareRevision': hardwareRevision,
       'manufacturerName': manufacturerName,
+      'deviceName': deviceName,
     };
   }
 }

@@ -318,6 +318,10 @@ abstract class DeviceConnection {
     void Function(int)? onAccelChange,
   });
 
+  // Device name methods (optional implementation for subclasses)
+  Future<String?> readDeviceName() async => null;
+  Future<bool> writeDeviceName(String deviceName) async => false;
+
   void _showDeviceDisconnectedNotification() {
     NotificationService.instance.createNotification(
       title: '${device.name} Disconnected',

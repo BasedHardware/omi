@@ -635,6 +635,54 @@ class OmiDeviceConnection extends DeviceConnection {
     return bleBytesStream;
   }
 
+  // Device name read/write methods
+  @override
+  Future<String?> readDeviceName() async {
+    if (_omiService == null) {
+      logServiceNotFoundError('Omi', deviceId);
+      return null;
+    }
+
+    var deviceNameCharacteristic = getCharacteristic(_omiService!, deviceNameCharacteristicUuid);
+    if (deviceNameCharacteristic == null) {
+      logCharacteristicNotFoundError('Device name', deviceId);
+      return null;
+    }
+
+    try {
+      var value = await deviceNameCharacteristic.read();
+      if (value.isNotEmpty) {
+        return String.fromCharCodes(value);
+      }
+    } catch (e, stackTrace) {
+      logCrashMessage('Device name read', deviceId, e, stackTrace);
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> writeDeviceName(String deviceName) async {
+    if (_omiService == null) {
+      logServiceNotFoundError('Omi', deviceId);
+      return false;
+    }
+
+    var deviceNameCharacteristic = getCharacteristic(_omiService!, deviceNameCharacteristicUuid);
+    if (deviceNameCharacteristic == null) {
+      logCharacteristicNotFoundError('Device name', deviceId);
+      return false;
+    }
+
+    try {
+      await deviceNameCharacteristic.write(deviceName.codeUnits);
+      debugPrint('Device name written successfully: $deviceName');
+      return true;
+    } catch (e, stackTrace) {
+      logCrashMessage('Device name write', deviceId, e, stackTrace);
+      return false;
+    }
+  }
+
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({
     void Function(int)? onAccelChange,
