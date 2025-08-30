@@ -45,6 +45,8 @@ dependencies:
 
   # Auth
   flutter_web_auth_2: 5.0.0-alpha.3
+  google_sign_in: 6.2.2
+  sign_in_with_apple: ^6.1.1
 
   # Analytics and Support
   intercom_flutter: 9.3.3
@@ -132,6 +134,7 @@ dependency_overrides:
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
+  google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0
   image: ^4.2.0
   integration_test:
