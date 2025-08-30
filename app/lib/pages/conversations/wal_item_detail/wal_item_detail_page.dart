@@ -6,6 +6,7 @@ import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/waveform_section.dart';
@@ -364,6 +365,15 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Image.asset(
+                    DeviceUtils.getDeviceImagePathByModel(widget.wal.deviceModel),
+                    height: 60,
+                  ),
+                ),
+              ),
               _buildDetailRow('Recording ID', widget.wal.id.substring(0, 8)),
               _buildDetailRow('Date & Time', dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
               _buildDetailRow('Duration', secondsToHumanReadable(widget.wal.seconds)),
