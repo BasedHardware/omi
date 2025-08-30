@@ -1,32 +1,29 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/services/wals.dart';
-import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/widgets/waveform_painter.dart';
+import 'package:provider/provider.dart';
 
-import '../models/playback_state.dart';
-import 'waveform_painter.dart';
-
-class WalWaveformSection extends StatefulWidget {
-  final Wal wal;
+class WaveformSection extends StatefulWidget {
+  final int seconds;
   final List<double>? waveformData;
   final bool isProcessingWaveform;
   final PlaybackState playbackState;
 
-  const WalWaveformSection({
+  const WaveformSection({
     super.key,
-    required this.wal,
+    required this.seconds,
     required this.waveformData,
     required this.isProcessingWaveform,
     required this.playbackState,
   });
 
   @override
-  State<WalWaveformSection> createState() => _WalWaveformSectionState();
+  State<WaveformSection> createState() => _WaveformSectionState();
 }
 
-class _WalWaveformSectionState extends State<WalWaveformSection> {
+class _WaveformSectionState extends State<WaveformSection> {
   Timer? _progressUpdateTimer;
   double _lastProgress = 0.0;
 
@@ -43,7 +40,6 @@ class _WalWaveformSectionState extends State<WalWaveformSection> {
   }
 
   void _startProgressTimer() {
-    // Throttle progress updates to reduce repaints
     _progressUpdateTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (mounted && widget.playbackState.isPlaying) {
         final currentProgress = widget.playbackState.playbackProgress;
@@ -53,18 +49,6 @@ class _WalWaveformSectionState extends State<WalWaveformSection> {
         }
       }
     });
-  }
-
-  String _formatDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    } else {
-      return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
   }
 
   void _handleWaveformTap(
@@ -153,7 +137,7 @@ class _WalWaveformSectionState extends State<WalWaveformSection> {
   }
 
   Widget _buildTimeIndicators(BuildContext context) {
-    final totalDur = Duration(seconds: widget.wal.seconds);
+    final totalDur = Duration(seconds: widget.seconds);
 
     // Always show 4 time markers like in ss1.jpeg (0:00, 0:01, 0:02, 0:03)
     List<String> timeMarkers = [];

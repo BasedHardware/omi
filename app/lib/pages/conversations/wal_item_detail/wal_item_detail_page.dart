@@ -1,19 +1,15 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
-import '../synced_conversations_page.dart';
-
-import 'widgets/wal_detail_app_bar.dart';
-import 'widgets/wal_waveform_section.dart';
-import 'widgets/wal_controls_section.dart';
-import 'widgets/wal_info_section.dart';
-import 'models/playback_state.dart';
+import 'package:omi/widgets/waveform_section.dart';
+import 'package:provider/provider.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -58,25 +54,14 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       _isProcessingWaveform = true;
     });
 
-    try {
-      final syncProvider = context.read<SyncProvider>();
+    final syncProvider = context.read<SyncProvider>();
+    final waveformData = await syncProvider.getWaveformForWal(widget.wal.id);
 
-      // Use a separate isolate for waveform generation to avoid blocking main thread
-      final waveformData = await syncProvider.getWaveformForWal(widget.wal.id);
-
-      if (mounted) {
-        setState(() {
-          _waveformData = waveformData;
-          _isProcessingWaveform = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error generating waveform: $e');
-      if (mounted) {
-        setState(() {
-          _isProcessingWaveform = false;
-        });
-      }
+    if (mounted) {
+      setState(() {
+        _waveformData = waveformData;
+        _isProcessingWaveform = false;
+      });
     }
   }
 
@@ -184,8 +169,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 flex: 6,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: WalWaveformSection(
-                    wal: widget.wal,
+                  child: WaveformSection(
+                    seconds: widget.wal.seconds,
                     waveformData: _waveformData,
                     isProcessingWaveform: _isProcessingWaveform,
                     playbackState: playbackState,
@@ -292,27 +277,15 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       return;
     }
 
-    try {
-      await syncProvider.toggleWalPlayback(widget.wal);
-    } catch (e) {
-      _showSnackBar('Error playing audio: $e');
-    }
+    await syncProvider.toggleWalPlayback(widget.wal);
   }
 
   Future<void> _handleSkipBackward(SyncProvider syncProvider) async {
-    try {
-      await syncProvider.skipBackward();
-    } catch (e) {
-      _showSnackBar('Error skipping backward: $e');
-    }
+    await syncProvider.skipBackward();
   }
 
   Future<void> _handleSkipForward(SyncProvider syncProvider) async {
-    try {
-      await syncProvider.skipForward();
-    } catch (e) {
-      _showSnackBar('Error skipping forward: $e');
-    }
+    await syncProvider.skipForward();
   }
 
   void _showOptionsMenu(BuildContext context) {
@@ -380,11 +353,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       return;
     }
 
-    try {
-      await syncProvider.shareWalAsWav(widget.wal);
-    } catch (e) {
-      _showSnackBar('Error sharing audio: $e');
-    }
+    await syncProvider.shareWalAsWav(widget.wal);
   }
 
   void _showFileDetailsDialog(BuildContext context) {

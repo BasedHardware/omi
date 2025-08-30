@@ -136,10 +136,6 @@ class SharedPreferencesUtil {
 
   bool get daySummaryToggled => getBool('daySummaryToggled') ?? false;
 
-  set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
-
-  bool get localSyncEnabled => getBool('localSyncEnabled') ?? true;
-
   bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation') ?? true;
 
   set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);

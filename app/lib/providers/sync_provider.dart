@@ -7,16 +7,14 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/other/time_utils.dart';
 
-import '../services/audio_player_service.dart';
-import '../services/waveform_service.dart';
+import '../utils/audio_player_utils.dart';
+import '../utils/waveform_utils.dart';
 import '../models/sync_state.dart';
-import '../services/conversation_sync_service.dart';
+import '../utils/conversation_sync_utils.dart';
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
-  final AudioPlayerService _audioPlayerService = AudioPlayerService();
-  final WaveformService _waveformService = WaveformService();
-  final ConversationSyncService _conversationSyncService = ConversationSyncService();
+  final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils();
 
   // WAL management
   List<Wal> _allWals = [];
@@ -57,19 +55,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Wal? get failedWal => _syncState.failedWal;
 
   // Audio playback delegates
-  String? get currentPlayingWalId => _audioPlayerService.currentPlayingWalId;
-  bool get isProcessingAudio => _audioPlayerService.isProcessingAudio;
-  bool get isSharingAudio => _audioPlayerService.isSharingAudio;
-  bool isWalSharing(String walId) => _audioPlayerService.isWalSharing(walId);
-  Duration get currentPosition => _audioPlayerService.currentPosition;
-  Duration get totalDuration => _audioPlayerService.totalDuration;
-  double get playbackProgress => _audioPlayerService.playbackProgress;
+  String? get currentPlayingWalId => _audioPlayerUtils.currentPlayingId;
+  bool get isProcessingAudio => _audioPlayerUtils.isProcessingAudio;
+  bool get isSharingAudio => _audioPlayerUtils.isSharingAudio;
+  bool isWalSharing(String walId) => _audioPlayerUtils.isSharing(walId);
+  Duration get currentPosition => _audioPlayerUtils.currentPosition;
+  Duration get totalDuration => _audioPlayerUtils.totalDuration;
+  double get playbackProgress => _audioPlayerUtils.playbackProgress;
 
   IWalService get _walService => ServiceManager.instance().wal;
 
   SyncProvider() {
     _walService.subscribe(this, this);
-    _audioPlayerService.addListener(_onAudioPlayerStateChanged);
+    _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _initializeProvider();
   }
 
@@ -90,77 +88,30 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _isLoadingWals = true;
     notifyListeners();
 
-    try {
-      _allWals = await _walService.getSyncs().getAllWals();
-      debugPrint('SyncProvider: Loaded ${_allWals.length} WALs (${missingWals.length} missing)');
-    } catch (e) {
-      debugPrint('SyncProvider: Error refreshing WALs: $e');
-      _allWals = [];
-    } finally {
-      _isLoadingWals = false;
-      notifyListeners();
-    }
+    _allWals = await _walService.getSyncs().getAllWals();
+    debugPrint('SyncProvider: Loaded ${_allWals.length} WALs (${missingWals.length} missing)');
+
+    _isLoadingWals = false;
+    notifyListeners();
   }
 
   Future<WalStats> getWalStats() async {
-    try {
-      return await _walService.getSyncs().getWalStats();
-    } catch (e) {
-      debugPrint('SyncProvider: Error getting WAL stats: $e');
-      return _createEmptyWalStats();
-    }
-  }
-
-  WalStats _createEmptyWalStats() {
-    return WalStats(
-      totalFiles: 0,
-      phoneFiles: 0,
-      sdcardFiles: 0,
-      phoneSize: 0,
-      sdcardSize: 0,
-      syncedFiles: 0,
-      missedFiles: 0,
-    );
+    return await _walService.getSyncs().getWalStats();
   }
 
   Future<void> deleteWal(Wal wal) async {
-    try {
-      await _walService.getSyncs().deleteWal(wal);
-      await refreshWals();
-    } catch (e) {
-      debugPrint('SyncProvider: Error deleting WAL ${wal.id}: $e');
-      rethrow;
-    }
+    await _walService.getSyncs().deleteWal(wal);
+    await refreshWals();
   }
 
   Future<void> deleteAllSyncedWals() async {
-    try {
-      await _walService.getSyncs().deleteAllSyncedWals();
-      await refreshWals();
-    } catch (e) {
-      debugPrint('SyncProvider: Error deleting all synced WALs: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> resyncWal(Wal wal) async {
-    debugPrint("SyncProvider: Resyncing WAL ${wal.id}");
-    _updateSyncState(_syncState.toIdle());
-
-    await _performSync(
-      operation: () => _walService.getSyncs().resyncWal(wal),
-      context: 'resync WAL ${wal.id}',
-      failedWal: wal,
-    );
+    await _walService.getSyncs().deleteAllSyncedWals();
+    await refreshWals();
   }
 
   Future<void> syncWals() async {
-    debugPrint("SyncProvider: Syncing all WALs");
     _updateSyncState(_syncState.toIdle());
-
-    // Store initial missing WALs count for progress calculation
     _initialMissingWalsCount = missingWals.length;
-
     await _performSync(
       operation: () => _walService.getSyncs().syncAll(progress: this),
       context: 'sync all WALs',
@@ -168,9 +119,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
-    debugPrint("SyncProvider: Syncing WAL ${wal.id}");
     _updateSyncState(_syncState.toIdle());
-
     await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
       context: 'sync WAL ${wal.id}',
@@ -243,72 +192,56 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> _processConversationResults(SyncLocalFilesResponse result) async {
     _updateSyncState(_syncState.toFetchingConversations());
-
-    try {
-      final conversations = await _conversationSyncService.processConversationIds(
-        newConversationIds: result.newConversationIds,
-        updatedConversationIds: result.updatedConversationIds,
-      );
-
-      _updateSyncState(_syncState.toCompleted(conversations: conversations));
-    } catch (e) {
-      debugPrint('SyncProvider: Error processing conversation results: $e');
-      _updateSyncState(_syncState.toError(
-        message: 'Failed to fetch conversation details: ${e.toString()}',
-      ));
-    }
+    final conversations = await ConversationSyncUtils.processConversationIds(
+      newConversationIds: result.newConversationIds,
+      updatedConversationIds: result.updatedConversationIds,
+    );
+    _updateSyncState(_syncState.toCompleted(conversations: conversations));
   }
 
   // Audio playback delegate methods
-  bool isWalPlaying(String walId) => _audioPlayerService.isWalPlaying(walId);
-  bool canPlayOrShareWal(Wal wal) => _audioPlayerService.canPlayOrShareWal(wal);
+  bool isWalPlaying(String walId) => _audioPlayerUtils.isPlaying(walId);
+  bool canPlayOrShareWal(Wal wal) => _audioPlayerUtils.canPlayOrShare(wal);
 
   Future<void> toggleWalPlayback(Wal wal) async {
-    await _audioPlayerService.toggleWalPlayback(wal);
+    await _audioPlayerUtils.togglePlayback(wal);
   }
 
   Future<void> shareWalAsWav(Wal wal) async {
-    await _audioPlayerService.shareWalAsWav(wal);
+    await _audioPlayerUtils.shareAsAudio(wal);
   }
 
   Future<void> seekToPosition(Duration position) async {
-    await _audioPlayerService.seekToPosition(position);
+    await _audioPlayerUtils.seekToPosition(position);
   }
 
   Future<void> skipForward({Duration duration = const Duration(seconds: 10)}) async {
-    await _audioPlayerService.skipForward(duration: duration);
+    await _audioPlayerUtils.skipForward(duration: duration);
   }
 
   Future<void> skipBackward({Duration duration = const Duration(seconds: 10)}) async {
-    await _audioPlayerService.skipBackward(duration: duration);
+    await _audioPlayerUtils.skipBackward(duration: duration);
   }
 
-  // Waveform generation delegate method
   Future<List<double>?> getWaveformForWal(String walId) async {
-    // Find the WAL by ID
     final wal = _allWals.firstWhere((w) => w.id == walId, orElse: () => throw Exception('WAL not found'));
 
-    // Ensure WAV file exists for waveform generation
-    String? wavFilePath = _audioPlayerService.getCachedWavPath(walId);
+    String? wavFilePath = _audioPlayerUtils.getCachedAudioPath(walId);
     if (wavFilePath == null && canPlayOrShareWal(wal)) {
-      wavFilePath = await _audioPlayerService.ensureWavFileExists(wal);
+      wavFilePath = await _audioPlayerUtils.ensureAudioFileExists(wal);
     }
 
-    // Use compute to run waveform generation on background thread
     return await compute(_generateWaveformInBackground, {
       'walId': walId,
       'wavFilePath': wavFilePath,
     });
   }
 
-  // Static method for background waveform generation
   static Future<List<double>?> _generateWaveformInBackground(Map<String, dynamic> params) async {
     final String walId = params['walId'];
     final String? wavFilePath = params['wavFilePath'];
 
-    // Create a new instance of WaveformService for the isolate
-    final waveformService = WaveformService();
-    return await waveformService.getWaveformForWal(walId, wavFilePath);
+    return await WaveformUtils.generateWaveform(walId, wavFilePath);
   }
 
   @override
@@ -359,9 +292,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   @override
   void dispose() {
-    _audioPlayerService.removeListener(_onAudioPlayerStateChanged);
-    _audioPlayerService.dispose();
-    _waveformService.clearCache();
+    _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
+    _audioPlayerUtils.dispose();
+    WaveformUtils.clearCache();
     _walService.unsubscribe(this);
     super.dispose();
   }

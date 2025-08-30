@@ -381,7 +381,6 @@ class CaptureProvider extends ChangeNotifier
       // Local sync
       // Support: opus codec
       var checkWalSupported = codec.isOpusSupported() &&
-          SharedPreferencesUtil().localSyncEnabled &&
           (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
@@ -608,9 +607,6 @@ class CaptureProvider extends ChangeNotifier
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
-
-    // Set device info for phone recording
-    _wal.getSyncs().phone.setDeviceInfo("phone", "Phone Microphone");
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {

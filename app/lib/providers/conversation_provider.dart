@@ -10,7 +10,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
 
-class ConversationProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
+class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
@@ -32,93 +32,16 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   List<ServerConversation> processingConversations = [];
 
-  IWalService get _wal => ServiceManager.instance().wal;
   final AppReviewService _appReviewService = AppReviewService();
 
-  List<Wal> _missingWals = [];
-
-  List<Wal> get missingWals => _missingWals;
-
-  int get missingWalsInSeconds =>
-      _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
-
-  Future<List<Wal>> getAllWals() async {
-    try {
-      final wals = await _wal.getSyncs().getAllWals();
-      debugPrint('ConversationProvider.getAllWals() returned ${wals.length} WALs');
-      return wals;
-    } catch (e) {
-      debugPrint('Error in ConversationProvider.getAllWals(): $e');
-      return [];
-    }
-  }
-
-  Future<WalStats> getWalStats() async {
-    try {
-      return await _wal.getSyncs().getWalStats();
-    } catch (e) {
-      debugPrint('Error in ConversationProvider.getWalStats(): $e');
-      return WalStats(
-        totalFiles: 0,
-        phoneFiles: 0,
-        sdcardFiles: 0,
-        phoneSize: 0,
-        sdcardSize: 0,
-        syncedFiles: 0,
-        missedFiles: 0,
-      );
-    }
-  }
-
-  Future<void> deleteAllSyncedWals() async {
-    try {
-      await _wal.getSyncs().deleteAllSyncedWals();
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error deleting all synced WALs: $e');
-    }
-  }
-
-  Future<void> resyncWal(Wal wal) async {
-    try {
-      debugPrint("provider > resyncWal ${wal.id}");
-      clearSyncResult(); // Clear previous sync results
-      setIsSyncing(true);
-      _walsSyncedProgress = 0.0;
-      var res = await _wal.getSyncs().resyncWal(wal);
-      if (res != null) {
-        if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
-          print('Resynced memories: ${res.newConversationIds} ${res.updatedConversationIds}');
-          await getSyncedConversationsData(res);
-        }
-      }
-      setSyncCompleted(true);
-      setIsSyncing(false);
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error resyncing WAL: $e');
-      setIsSyncing(false);
-      notifyListeners();
-    }
-  }
-
-  double _walsSyncedProgress = 0.0;
-
-  double get walsSyncedProgress => _walsSyncedProgress;
-
-  bool isSyncing = false;
-  bool syncCompleted = false;
   bool isFetchingConversations = false;
-  List<SyncedConversationPointer> syncedConversationsPointers = [];
 
   ConversationProvider() {
-    _wal.subscribe(this, this);
     _preload();
   }
 
   _preload() async {
-    _missingWals = await _wal.getSyncs().getMissingWals();
-    notifyListeners();
+    // Initialization logic if needed
   }
 
   void resetGroupedConvos() {
@@ -619,165 +542,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   void dispose() {
     _processingConversationWatchTimer?.cancel();
     _refreshDebounceTimer?.cancel();
-    _wal.unsubscribe(this);
     super.dispose();
-  }
-
-  @override
-  void onWalUpdated() async {
-    _missingWals = await _wal.getSyncs().getMissingWals();
-    notifyListeners();
-  }
-
-  @override
-  void onWalSynced(Wal wal, {ServerConversation? conversation}) async {
-    _missingWals = await _wal.getSyncs().getMissingWals();
-    notifyListeners();
-  }
-
-  @override
-  void onStatusChanged(WalServiceStatus status) {}
-
-  @override
-  void onWalSyncedProgress(double percentage) {
-    _walsSyncedProgress = percentage;
-  }
-
-  Future syncWals() async {
-    debugPrint("provider > syncWals");
-    clearSyncResult(); // Clear previous sync results
-    _walsSyncedProgress = 0.0;
-    setIsSyncing(true);
-    var res = await _wal.getSyncs().syncAll(progress: this);
-    if (res != null) {
-      if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
-        await getSyncedConversationsData(res);
-      }
-    }
-    setSyncCompleted(true);
-    setIsSyncing(false);
-    notifyListeners();
-    return;
-  }
-
-  Future syncWal(Wal wal) async {
-    debugPrint("provider > syncWal ${wal.id}");
-    clearSyncResult(); // Clear previous sync results
-    setIsSyncing(true);
-    _walsSyncedProgress = 0.0;
-    var res = await _wal.getSyncs().syncWal(wal: wal, progress: this);
-    if (res != null) {
-      if (res.newConversationIds.isNotEmpty || res.updatedConversationIds.isNotEmpty) {
-        print('Synced memories: ${res.newConversationIds} ${res.updatedConversationIds}');
-        await getSyncedConversationsData(res);
-      }
-    }
-    setSyncCompleted(true);
-    setIsSyncing(false);
-    notifyListeners();
-    return;
-  }
-
-  void setSyncCompleted(bool value) {
-    syncCompleted = value;
-    notifyListeners();
-  }
-
-  Future getSyncedConversationsData(SyncLocalFilesResponse syncResult) async {
-    List<dynamic> newConversations = syncResult.newConversationIds;
-    List<dynamic> updatedConversations = syncResult.updatedConversationIds;
-    setIsFetchingConversations(true);
-    List<Future<ServerConversation?>> newConversationsFutures =
-        newConversations.map((item) => getConversationDetails(item)).toList();
-
-    List<Future<ServerConversation?>> updatedConversationsFutures =
-        updatedConversations.map((item) => getConversationDetails(item)).toList();
-    var syncedConversations = {'new_memories': [], 'updated_memories': []};
-    try {
-      final newConversationsResponses = await Future.wait(newConversationsFutures);
-      syncedConversations['new_memories'] = newConversationsResponses;
-
-      final updatedConversationsResponses = await Future.wait(updatedConversationsFutures);
-      syncedConversations['updated_memories'] = updatedConversationsResponses;
-      addSyncedConversationsToGroupedConversations(syncedConversations);
-      setIsFetchingConversations(false);
-    } catch (e) {
-      print('Error during API calls: $e');
-      setIsFetchingConversations(false);
-    }
-  }
-
-  void addSyncedConversationsToGroupedConversations(Map syncedConversations) {
-    if (syncedConversations['new_memories'] != []) {
-      for (var conversation in syncedConversations['new_memories']!) {
-        if (conversation != null && conversation.status == ConversationStatus.completed) {
-          addConversation(conversation);
-        }
-      }
-    }
-    if (syncedConversations['updated_memories'] != []) {
-      for (var conversation in syncedConversations['updated_memories']!) {
-        if (conversation != null && conversation.status == ConversationStatus.completed) {
-          upsertConversation(conversation);
-        }
-      }
-    }
-    for (var conversation in syncedConversations['new_memories']!) {
-      if (conversation != null && conversation.status == ConversationStatus.completed) {
-        var res = getConversationDateAndIndex(conversation);
-        syncedConversationsPointers.add(SyncedConversationPointer(
-            type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
-      }
-    }
-    if (syncedConversations['updated_memories'] != []) {
-      for (var conversation in syncedConversations['updated_memories']!) {
-        if (conversation != null && conversation.status == ConversationStatus.completed) {
-          var res = getConversationDateAndIndex(conversation);
-          syncedConversationsPointers.add(SyncedConversationPointer(
-              type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
-        }
-      }
-    }
-  }
-
-  void updateSyncedConversationPointerIndex(SyncedConversationPointer mem, int index) {
-    var oldIdx = syncedConversationsPointers.indexOf(mem);
-    syncedConversationsPointers[oldIdx] = mem.copyWith(index: index);
-    notifyListeners();
-  }
-
-  void updateSyncedConversation(ServerConversation conversation) {
-    var id = syncedConversationsPointers.indexWhere((e) => e.conversation.id == conversation.id);
-    if (id != -1) {
-      syncedConversationsPointers[id] = syncedConversationsPointers[id].copyWith(conversation: conversation);
-    }
-    updateConversationInSortedList(conversation);
-    notifyListeners();
-  }
-
-  (DateTime, int) getConversationDateAndIndex(ServerConversation conversation) {
-    var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
-    var idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
-    if (idx == -1 && groupedConversations.containsKey(date)) {
-      groupedConversations[date]!.add(conversation);
-    }
-    return (date, idx);
-  }
-
-  Future<ServerConversation?> getConversationDetails(String conversationId) async {
-    var conversation = await getConversationById(conversationId);
-    return conversation;
-  }
-
-  void clearSyncResult() {
-    syncCompleted = false;
-    syncedConversationsPointers = [];
-    notifyListeners();
-  }
-
-  void setIsSyncing(bool value) {
-    isSyncing = value;
-    notifyListeners();
   }
 
   void setIsFetchingConversations(bool value) {
@@ -884,6 +649,20 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       }
     });
 
+    notifyListeners();
+  }
+
+  (DateTime, int) getConversationDateAndIndex(ServerConversation conversation) {
+    var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+    var idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
+    if (idx == -1 && groupedConversations.containsKey(date)) {
+      groupedConversations[date]!.add(conversation);
+    }
+    return (date, idx);
+  }
+
+  void updateSyncedConversation(ServerConversation conversation) {
+    updateConversationInSortedList(conversation);
     notifyListeners();
   }
 }

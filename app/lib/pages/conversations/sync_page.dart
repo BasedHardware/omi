@@ -25,35 +25,25 @@ class WalListItem extends StatelessWidget {
     required this.walIdx,
   });
 
-  // Cache expensive computations
-  static final Map<String, String> _deviceImageCache = {};
-  static final Map<String, double> _progressCache = {};
-
   double calculateProgress(DateTime? startedAt, int eta) {
     if (startedAt == null) return 0.0;
     if (eta == 0) return 0.01;
 
-    final cacheKey = '${startedAt?.millisecondsSinceEpoch}_$eta';
-    return _progressCache.putIfAbsent(cacheKey, () {
-      final elapsed = DateTime.now().difference(startedAt!).inSeconds;
-      final progress = elapsed / eta;
-      return progress.clamp(0.0, 1.0);
-    });
+    final elapsed = DateTime.now().difference(startedAt!).inSeconds;
+    final progress = elapsed / eta;
+    return progress.clamp(0.0, 1.0);
   }
 
   String _getDeviceImagePath(String? deviceModel) {
-    final key = deviceModel ?? 'default';
-    return _deviceImageCache.putIfAbsent(key, () {
-      if (deviceModel == null) return Assets.images.omiWithoutRope.path;
+    if (deviceModel == null) return Assets.images.omiWithoutRope.path;
 
-      if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
-        return Assets.images.omiGlass.path;
-      }
-      if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
-        return Assets.images.omiDevkitWithoutRope.path;
-      }
-      return Assets.images.omiWithoutRope.path;
-    });
+    if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
+      return Assets.images.omiGlass.path;
+    }
+    if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
+      return Assets.images.omiDevkitWithoutRope.path;
+    }
+    return Assets.images.omiWithoutRope.path;
   }
 
   void _showSdCardInfoDialog(BuildContext context) {
