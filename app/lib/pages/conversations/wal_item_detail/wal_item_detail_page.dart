@@ -359,7 +359,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text('Recording Details', style: theme.textTheme.titleLarge),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -374,7 +373,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   ),
                 ),
               ),
-              _buildDetailRow('Recording ID', widget.wal.id.substring(0, 8)),
+              _buildDetailRow('Recording ID', widget.wal.id),
               _buildDetailRow('Date & Time', dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
               _buildDetailRow('Duration', secondsToHumanReadable(widget.wal.seconds)),
               _buildDetailRow('Audio Format', widget.wal.codec.toFormattedString()),

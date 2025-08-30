@@ -206,8 +206,6 @@ class WalListItem extends StatelessWidget {
                                     _buildStatusChip('Processing', Colors.orange)
                                   else if (hasError)
                                     _buildStatusChip('Failed', Colors.red)
-                                  else if (isSynced)
-                                    Icon(Icons.check_circle, color: Theme.of(context).colorScheme.secondary)
                                   else if (wal.status == WalStatus.miss)
                                     _buildStatusChip('Not Processed', Colors.grey)
                                 ],
@@ -627,7 +625,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
+        backgroundColor: theme.colorScheme.primary,
         title: Row(
           children: [
             Icon(Icons.sd_card, color: theme.colorScheme.secondary, size: 24),
