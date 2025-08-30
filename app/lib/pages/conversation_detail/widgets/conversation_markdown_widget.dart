@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
-import 'package:omi/utils/other/temp.dart';
 
 class ConversationMarkdownWidget extends StatefulWidget {
   final String content;
@@ -25,7 +24,6 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _paragraphKeys = [];
   int _previousSearchResultIndex = -1;
-  bool _isAutoScrolling = false;
 
   List<String> _paragraphs = [];
 
@@ -142,16 +140,12 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
       final context = targetKey.currentContext;
 
       if (context != null) {
-        _isAutoScrolling = true;
-
         Scrollable.ensureVisible(
           context,
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOut,
           alignment: 0.05,
-        ).then((_) {
-          _isAutoScrolling = false;
-        });
+        );
       }
     }
   }
@@ -251,10 +245,8 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
     );
   }
 
-  static int _globalMatchCount = 0;
-
   static void _resetGlobalCounter() {
-    _globalMatchCount = 0;
+    // Reset counter logic if needed
   }
 
   String _highlightSearchInMarkdown(
@@ -288,85 +280,6 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
     }
 
     return result;
-  }
-
-  String _stripMarkdownFormatting(String content) {
-    // Remove bold (**text** or __text__)
-    content = content.replaceAllMapped(
-      RegExp(r'\*\*(.*?)\*\*|__(.*?)__'),
-      (match) => match.group(1) ?? match.group(2) ?? '',
-    );
-
-    // Remove italic (*text* or _text_)
-    content = content.replaceAllMapped(
-      RegExp(r'\*(.*?)\*|_(.*?)_'),
-      (match) => match.group(1) ?? match.group(2) ?? '',
-    );
-
-    // Remove headers (# ## ### etc.)
-    content = content.replaceAll(
-      RegExp(r'^#{1,6}\s+', multiLine: true),
-      '',
-    );
-
-    content = content.replaceAllMapped(
-      RegExp(r'\[([^\]]+)\]\([^\)]+\)'),
-      (match) => match.group(1) ?? '',
-    );
-
-    content = content.replaceAll(
-      RegExp(r'^[\s]*[-\*\+]\s+', multiLine: true),
-      '',
-    );
-
-    return content;
-  }
-
-  TextSpan _buildHighlightedTextSpan(String content, String searchQuery, int currentResultIndex, TextStyle baseStyle) {
-    if (searchQuery.isEmpty) {
-      return TextSpan(text: content, style: baseStyle);
-    }
-
-    String displayContent = _stripMarkdownFormatting(content);
-
-    final matches = RegExp(searchQuery, caseSensitive: false).allMatches(displayContent);
-    if (matches.isEmpty) {
-      return TextSpan(text: displayContent, style: baseStyle);
-    }
-
-    List<TextSpan> spans = [];
-    int lastEnd = 0;
-    int matchIndex = 0;
-
-    for (final match in matches) {
-      if (match.start > lastEnd) {
-        spans.add(TextSpan(
-          text: displayContent.substring(lastEnd, match.start),
-          style: baseStyle,
-        ));
-      }
-
-      final isCurrentMatch = matchIndex == currentResultIndex;
-      spans.add(TextSpan(
-        text: displayContent.substring(match.start, match.end),
-        style: baseStyle.copyWith(
-          backgroundColor: isCurrentMatch ? Colors.orange : Colors.deepPurple,
-          color: Colors.white,
-        ),
-      ));
-
-      lastEnd = match.end;
-      matchIndex++;
-    }
-
-    if (lastEnd < displayContent.length) {
-      spans.add(TextSpan(
-        text: displayContent.substring(lastEnd),
-        style: baseStyle,
-      ));
-    }
-
-    return TextSpan(children: spans);
   }
 }
 
