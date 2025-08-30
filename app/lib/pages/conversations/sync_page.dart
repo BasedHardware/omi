@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -34,49 +36,56 @@ class WalListItem extends StatelessWidget {
     return progress.clamp(0.0, 1.0);
   }
 
-  String _getDeviceImagePath(String? deviceModel) {
-    if (deviceModel == null) return Assets.images.omiWithoutRope.path;
-
-    if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
-      return Assets.images.omiGlass.path;
-    }
-    if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
-      return Assets.images.omiDevkitWithoutRope.path;
-    }
-    return Assets.images.omiWithoutRope.path;
+  Widget _buildStatusChip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
   }
 
   void _showSdCardInfoDialog(BuildContext context) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: const Row(
+        backgroundColor: theme.colorScheme.primary,
+        title: Row(
           children: [
-            Icon(Icons.info_outline, color: Colors.amber, size: 24),
-            SizedBox(width: 12),
-            Text('SD Card Audio', style: TextStyle(color: Colors.white)),
+            const Icon(Icons.info_outline, color: Colors.amber, size: 24),
+            const SizedBox(width: 12),
+            Text('SD Card Audio', style: theme.textTheme.titleLarge),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'This audio file is stored on your device\'s SD card.',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
+              style: theme.textTheme.bodyMedium,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'You can process the file but cannot play or share it directly from the SD card.',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it', style: TextStyle(color: Colors.deepPurple)),
+            child: Text('Got it', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -124,20 +133,13 @@ class WalListItem extends StatelessWidget {
                       child: Dismissible(
                         key: Key(wal.id),
                         direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
-                        confirmDismiss: (direction) async {
-                          return await showDialog<bool>(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return getDialog(
-                                context,
-                                () => Navigator.of(context).pop(false),
-                                () => Navigator.of(context).pop(true),
-                                'Confirm Deletion',
-                                'Are you sure you want to delete this audio file? This action cannot be undone.',
-                                okButtonText: 'Delete',
-                                cancelButtonText: 'Cancel',
-                              );
-                            },
+                        confirmDismiss: (direction) {
+                          return OmiConfirmDialog.show(
+                            context,
+                            title: 'Confirm Deletion',
+                            message: 'Are you sure you want to delete this audio file? This action cannot be undone.',
+                            confirmLabel: 'Delete',
+                            confirmColor: Colors.red,
                           );
                         },
                         background: Container(
@@ -167,7 +169,7 @@ class WalListItem extends StatelessWidget {
                                     child: Padding(
                                       padding: const EdgeInsets.all(4.0),
                                       child: Image.asset(
-                                        _getDeviceImagePath(wal.deviceModel),
+                                        DeviceUtils.getDeviceImagePathByModel(wal.deviceModel),
                                         width: 24,
                                         height: 24,
                                       ),
@@ -179,7 +181,6 @@ class WalListItem extends StatelessWidget {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        // Title and time
                                         Text(
                                           dateTimeFormat('MMM dd, yyyy h:mm a',
                                               DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
@@ -190,73 +191,23 @@ class WalListItem extends StatelessWidget {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
-                                        // Duration and status
-                                        Row(
-                                          children: [
-                                            Text(
-                                              secondsToHumanReadable(wal.seconds),
-                                              style: TextStyle(
-                                                color: Colors.grey.shade400,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 2),
-                                        // Device model and storage location
-                                        Row(
-                                          children: [
-                                            Text(
-                                              wal.deviceModel ?? "Omi Device",
-                                              style: TextStyle(
-                                                color: Colors.grey.shade500,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            if (wal.storage == WalStorage.sdcard) ...[
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                "SD Card",
-                                                style: TextStyle(
-                                                  color: Colors.grey.shade500,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                            ],
-                                          ],
+                                        Text(
+                                          '${secondsToHumanReadable(wal.seconds)} • ${wal.deviceModel ?? "Omi Device"}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade400,
+                                            fontSize: 14,
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
                                   // Simplified status indicator
                                   if (wal.isSyncing)
-                                    Text(
-                                      'Processing',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    )
+                                    _buildStatusChip('Processing', Colors.orange)
                                   else if (hasError)
-                                    Text(
-                                      'Failed',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    )
+                                    _buildStatusChip('Failed', Colors.red)
                                   else if (wal.status == WalStatus.miss)
-                                    Text(
-                                      'Not Processed',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    )
+                                    _buildStatusChip('Not Processed', Colors.grey)
                                 ],
                               ),
                               // Progress bar for syncing - only show if actually syncing
@@ -559,29 +510,28 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  padding: EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.grey.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.privacy_tip, color: Colors.orange, size: 16),
-                          SizedBox(width: 6),
+                          Icon(Icons.privacy_tip, color: Colors.grey.shade400, size: 16),
+                          const SizedBox(width: 6),
                           Text(
                             'Privacy Notice',
-                            style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600, fontSize: 14),
+                            style: TextStyle(color: Colors.grey.shade300, fontWeight: FontWeight.w600, fontSize: 14),
                           ),
                         ],
                       ),
-                      SizedBox(height: 6),
+                      const SizedBox(height: 6),
                       Text(
                         'Your recordings may capture other people\'s voices. Please ensure you have consent from all participants before recording.',
-                        style: TextStyle(color: Colors.orange, fontSize: 13),
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                       ),
                     ],
                   ),
@@ -636,30 +586,26 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
-  void _showDeleteProcessedDialog(BuildContext context, SyncProvider provider) {
-    showDialog(
-      context: context,
-      builder: (context) => getDialog(
-        context,
-        () => Navigator.of(context).pop(),
-        () async {
-          Navigator.of(context).pop();
-          await provider.deleteAllSyncedWals();
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('All processed audio files have been deleted'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        },
-        'Delete All Processed Files',
-        'This will permanently delete all processed audio files from your phone. This action cannot be undone.',
-        okButtonText: 'Delete',
-        cancelButtonText: 'Cancel',
-      ),
+  void _showDeleteProcessedDialog(BuildContext context, SyncProvider provider) async {
+    final confirmed = await OmiConfirmDialog.show(
+      context,
+      title: 'Delete All Processed Files',
+      message: 'This will permanently delete all processed audio files from your phone. This action cannot be undone.',
+      confirmLabel: 'Delete',
+      confirmColor: Colors.red,
     );
+
+    if (confirmed == true && context.mounted) {
+      await provider.deleteAllSyncedWals();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All processed audio files have been deleted'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
   }
 
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) {
@@ -675,15 +621,16 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   }
 
   void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: const Row(
+        backgroundColor: theme.colorScheme.surface,
+        title: Row(
           children: [
-            Icon(Icons.sd_card, color: Colors.blue, size: 24),
-            SizedBox(width: 12),
-            Text('SD Card Processing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            Icon(Icons.sd_card, color: theme.colorScheme.secondary, size: 24),
+            const SizedBox(width: 12),
+            Text('SD Card Processing', style: theme.textTheme.titleLarge),
           ],
         ),
         content: Column(
@@ -692,19 +639,18 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           children: [
             Text(
               'Ready to process $sdCardCount recording${sdCardCount > 1 ? 's' : ''} from your SD card into conversations.',
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+              style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.grey.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
               ),
-              child: const Text(
+              child: Text(
                 'After processing, the original files will be removed from your SD card to free up storage space.',
-                style: TextStyle(color: Colors.blue, fontSize: 14),
+                style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
               ),
             ),
           ],
@@ -712,7 +658,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -720,7 +666,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               syncProvider.syncWals();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: theme.colorScheme.secondary,
               foregroundColor: Colors.white,
             ),
             child: const Text('Process'),
@@ -879,8 +825,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white70,
-                  foregroundColor: Colors.black,
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -980,14 +926,15 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                             );
                           }
                         },
-                  icon: const Icon(Icons.cloud_upload, size: 20, color: Colors.deepPurpleAccent),
+                  icon: const Icon(Icons.cloud_upload, size: 20),
                   label: Text(
                     totalSecondsToProcess > 0 ? 'Process Audio' : 'All Audio Processed',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: totalSecondsToProcess > 0 ? Colors.white : Colors.grey.shade600,
-                    foregroundColor: totalSecondsToProcess > 0 ? Colors.black : Colors.white,
+                    backgroundColor:
+                        totalSecondsToProcess > 0 ? Theme.of(context).colorScheme.secondary : Colors.grey.shade600,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -1168,20 +1115,19 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                             ),
                             const SizedBox(height: 12),
                             Container(
-                              padding: EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
+                                color: Colors.grey.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.blue.withOpacity(0.3)),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(Icons.info_outline, color: Colors.blue, size: 16),
-                                  SizedBox(width: 8),
+                                  Icon(Icons.info_outline, color: Colors.grey.shade400, size: 16),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       'Phone microphone recordings are processed instantly and don\'t appear here.',
-                                      style: TextStyle(color: Colors.blue, fontSize: 13),
+                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                                     ),
                                   ),
                                 ],
