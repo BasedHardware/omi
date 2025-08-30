@@ -207,7 +207,7 @@ class WalListItem extends StatelessWidget {
                                   else if (hasError)
                                     _buildStatusChip('Failed', Colors.red)
                                   else if (isSynced)
-                                    const Icon(Icons.check_circle, color: Colors.green)
+                                    const Icon(Icons.check_circle, color: Colors.lightGreen)
                                   else if (wal.status == WalStatus.miss)
                                     _buildStatusChip('Not Processed', Colors.grey)
                                 ],
