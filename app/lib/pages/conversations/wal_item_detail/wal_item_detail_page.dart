@@ -5,9 +5,9 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/waveform_section.dart';
 import 'package:provider/provider.dart';
 
@@ -93,9 +93,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         automaticallyImplyLeading: true,
         title: Text('Recording Details', style: Theme.of(context).textTheme.titleLarge),
@@ -107,6 +105,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
           ),
         ],
       ),
+      backgroundColor: Theme.of(context).colorScheme.primary,
       body: Consumer<SyncProvider>(
         builder: (context, syncProvider, child) {
           final playbackState = _getPlaybackState(syncProvider);
@@ -119,16 +118,15 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 child: Column(
                   children: [
                     Text(
-                      'Recording ${widget.wal.id.substring(0, 1)}',
+                      dateTimeFormat('dd MMM yyyy', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                            fontSize: 32,
+                            fontSize: 28,
                             fontWeight: FontWeight.w600,
                           ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Text(
-                      dateTimeFormat(
-                          'dd MMM yyyy  H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                      dateTimeFormat('H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                       style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                             color: Colors.grey.shade400,
                             fontSize: 16,
@@ -140,19 +138,18 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.grey.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.security, color: Colors.blue, size: 14),
+                          Icon(Icons.security, color: Colors.grey.shade400, size: 14),
                           const SizedBox(width: 6),
-                          const Text(
+                          Text(
                             'Private & secure on your device',
                             style: TextStyle(
-                              color: Colors.blue,
+                              color: Colors.grey.shade400,
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),
@@ -187,9 +184,9 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                     return Text(
                       _formatDuration(currentPos),
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                            fontSize: 56,
+                            fontSize: 48,
                             fontWeight: FontWeight.w300,
-                            letterSpacing: 3,
+                            letterSpacing: 2,
                           ),
                     );
                   },
@@ -214,8 +211,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           ? Icons.hourglass_empty
                           : (playbackState.isPlaying ? Icons.pause : Icons.play_arrow),
                       size: 80,
-                      backgroundColor: Colors.white,
-                      iconColor: Colors.black,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      iconColor: Colors.white,
                       onPressed: playbackState.canPlayOrShare && !playbackState.isProcessing
                           ? () => _handlePlayPause(context.read<SyncProvider>())
                           : null,
@@ -257,7 +254,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: backgroundColor ?? Colors.grey.withOpacity(0.3),
+        color: backgroundColor ?? Theme.of(context).colorScheme.surface,
         shape: BoxShape.circle,
       ),
       child: IconButton(
@@ -318,7 +315,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               title:
                   Text('Delete Recording', style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.red)),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close options menu
                 _showDeleteDialog(context);
               },
             ),
@@ -328,23 +325,19 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     );
   }
 
-  void _showDeleteDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => getDialog(
-        context,
-        () => Navigator.of(context).pop(),
-        () {
-          Navigator.of(context).pop(); // Close dialog
-          Navigator.of(context).pop(); // Go back to previous screen
-          context.read<SyncProvider>().deleteWal(widget.wal);
-        },
-        'Delete Recording',
-        'Are you sure you want to permanently delete this recording? This can\'t be undone.',
-        okButtonText: 'Delete',
-        cancelButtonText: 'Cancel',
-      ),
+  void _showDeleteDialog(BuildContext context) async {
+    final confirmed = await OmiConfirmDialog.show(
+      context,
+      title: 'Delete Recording',
+      message: 'Are you sure you want to permanently delete this recording? This can\'t be undone.',
+      confirmLabel: 'Delete',
+      confirmColor: Colors.red,
     );
+
+    if (confirmed == true && mounted) {
+      Navigator.of(context).pop(); // Go back to previous screen
+      context.read<SyncProvider>().deleteWal(widget.wal);
+    }
   }
 
   Future<void> _handleShare(SyncProvider syncProvider) async {
@@ -357,34 +350,37 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   void _showFileDetailsDialog(BuildContext context) {
+    final theme = Theme.of(context);
     final recordingDate = DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000);
     final estimatedSize = _estimateFileSize();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: Text('Recording Details', style: Theme.of(context).textTheme.titleLarge),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDetailRow('Recording ID', widget.wal.id.substring(0, 8)),
-            _buildDetailRow('Date & Time', dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
-            _buildDetailRow('Duration', secondsToHumanReadable(widget.wal.seconds)),
-            _buildDetailRow('Audio Format', widget.wal.codec.toFormattedString()),
-            _buildDetailRow('Storage Location', widget.wal.storage == WalStorage.sdcard ? 'SD Card' : 'Phone'),
-            _buildDetailRow('Estimated Size', estimatedSize),
-            _buildDetailRow('Device Model', widget.wal.deviceModel ?? 'Unknown'),
-            if (widget.wal.device.isNotEmpty && widget.wal.device != "phone")
-              _buildDetailRow('Device ID', widget.wal.device),
-            _buildDetailRow('Status', widget.wal.status == WalStatus.synced ? 'Processed' : 'Unprocessed'),
-          ],
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        title: Text('Recording Details', style: theme.textTheme.titleLarge),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('Recording ID', widget.wal.id.substring(0, 8)),
+              _buildDetailRow('Date & Time', dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
+              _buildDetailRow('Duration', secondsToHumanReadable(widget.wal.seconds)),
+              _buildDetailRow('Audio Format', widget.wal.codec.toFormattedString()),
+              _buildDetailRow('Storage Location', widget.wal.storage == WalStorage.sdcard ? 'SD Card' : 'Phone'),
+              _buildDetailRow('Estimated Size', estimatedSize),
+              _buildDetailRow('Device Model', widget.wal.deviceModel ?? 'Unknown'),
+              if (widget.wal.device.isNotEmpty && widget.wal.device != "phone")
+                _buildDetailRow('Device ID', widget.wal.device),
+              _buildDetailRow('Status', widget.wal.status == WalStatus.synced ? 'Processed' : 'Unprocessed'),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Close', style: Theme.of(context).textTheme.labelMedium),
+            child: Text('Close', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.secondary)),
           ),
         ],
       ),
@@ -393,22 +389,18 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
   Widget _buildDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: Theme.of(context).textTheme.labelMedium!.copyWith(color: Colors.grey.shade400),
-            ),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium!.copyWith(color: Colors.grey.shade400),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
       ),
