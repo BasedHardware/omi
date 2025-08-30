@@ -77,42 +77,14 @@ static void boot_led_sequence(void)
 
 void set_led_state()
 {
-    static uint8_t charging_blink_state = 0;
-    
     // Set LED state based on connection and charging status
     if (is_charging)
     {
-        // Charging: Blink green LED and alternate with connectivity status
-        charging_blink_state = (charging_blink_state + 1) % 4; // 4-state cycle
-        
-        if (charging_blink_state < 2)
-        {
-            // First half of cycle: Green LED on
-            set_led_green(true);
-            set_led_red(false);
-            set_led_blue(false);
-        }
-        else
-        {
-            // Second half of cycle: Show connectivity status
-            set_led_green(false);
-            if (is_connected)
-            {
-                set_led_blue(true);
-                set_led_red(false);
-            }
-            else
-            {
-                set_led_red(true);
-                set_led_blue(false);
-            }
-        }
-        return;
+        set_led_green(true);
     }
     else
     {
         set_led_green(false);
-        charging_blink_state = 0; // Reset blink state when not charging
     }
 
     // If device is off, turn off all status LEDs except charging indicator
