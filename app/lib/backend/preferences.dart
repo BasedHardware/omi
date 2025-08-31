@@ -156,6 +156,10 @@ class SharedPreferencesUtil {
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
+  int get conversationSilenceDuration => getInt('conversationSilenceDuration') ?? 120;
+
+  set conversationSilenceDuration(int value) => saveInt('conversationSilenceDuration', value);
+
   String get transcriptionModel => getString('transcriptionModel3') ?? 'soniox';
 
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
