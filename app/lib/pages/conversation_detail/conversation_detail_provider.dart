@@ -37,7 +37,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null || !conversationProvider!.groupedConversations.containsKey(selectedDate) || conversationProvider!.groupedConversations[selectedDate] == null || conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
+    if (conversationProvider == null ||
+        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
+        conversationProvider!.groupedConversations[selectedDate] == null ||
+        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
       // Return cached conversation if available, otherwise create an empty one
       if (_cachedConversation == null) {
         throw StateError("No conversation available");
@@ -186,7 +189,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       print('titleFocusNode focus changed');
       if (!titleFocusNode!.hasFocus) {
         conversation.structured.title = titleController!.text;
-        updateConversationTitle(conversation.id, titleController!.text);
+        // Skip updating title for the welcome conversation (it's local only)
+        if (conversation.id != 'welcome') {
+          updateConversationTitle(conversation.id, titleController!.text);
+        }
       }
     });
 
