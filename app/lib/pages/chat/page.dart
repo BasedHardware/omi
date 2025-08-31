@@ -569,45 +569,47 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               // const SizedBox(width: 8),
                               !shouldShowSendButton(provider)
                                   ? const SizedBox.shrink()
-                                  : GestureDetector(
-                                      onTap: provider.sendingMessage || provider.isUploadingFiles
-                                          ? null
-                                          : () {
-                                              HapticFeedback.mediumImpact(); // Changed from lightImpact to mediumImpact
-                                              String message = textController.text;
-                                              if (message.isEmpty) return;
-                                              if (connectivityProvider.isConnected) {
-                                                _sendMessageUtil(message);
-                                              } else {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(
-                                                    content:
-                                                        Text('Please check your internet connection and try again'),
-                                                    duration: Duration(seconds: 2),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                      child: Container(
-                                        height: 44,
-                                        width: 44,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(22),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.1),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 2),
+                                  : ValueListenableBuilder<TextEditingValue>(
+                                      valueListenable: textController,
+                                      builder: (context, value, child) {
+                                        bool canSend = value.text.trim().isNotEmpty &&
+                                            !provider.sendingMessage &&
+                                            !provider.isUploadingFiles &&
+                                            connectivityProvider.isConnected;
+
+                                        return GestureDetector(
+                                          onTap: canSend
+                                              ? () {
+                                                  HapticFeedback.mediumImpact();
+                                                  String message = textController.text.trim();
+                                                  if (message.isEmpty) return;
+                                                  _sendMessageUtil(message);
+                                                }
+                                              : null,
+                                          child: Container(
+                                            height: 44,
+                                            width: 44,
+                                            decoration: BoxDecoration(
+                                              color: canSend ? Colors.white : Colors.grey.withOpacity(0.3),
+                                              borderRadius: BorderRadius.circular(22),
+                                              boxShadow: canSend
+                                                  ? [
+                                                      BoxShadow(
+                                                        color: Colors.black.withOpacity(0.1),
+                                                        blurRadius: 8,
+                                                        offset: const Offset(0, 2),
+                                                      ),
+                                                    ]
+                                                  : [],
                                             ),
-                                          ],
-                                        ),
-                                        child: const Icon(
-                                          FontAwesomeIcons.arrowUp,
-                                          color: Color(0xFF35343B),
-                                          size: 20,
-                                        ),
-                                      ),
+                                            child: Icon(
+                                              FontAwesomeIcons.arrowUp,
+                                              color: canSend ? const Color(0xFF35343B) : Colors.grey,
+                                              size: 20,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
                             ],
                           ),
