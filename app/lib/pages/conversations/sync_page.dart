@@ -59,7 +59,8 @@ class WalListItem extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: theme.colorScheme.primary,
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             const Icon(Icons.info_outline, color: Colors.amber, size: 24),
@@ -206,8 +207,6 @@ class WalListItem extends StatelessWidget {
                                     _buildStatusChip('Processing', Colors.orange)
                                   else if (hasError)
                                     _buildStatusChip('Failed', Colors.red)
-                                  else if (isSynced)
-                                    Icon(Icons.check_circle, color: Theme.of(context).colorScheme.secondary)
                                   else if (wal.status == WalStatus.miss)
                                     _buildStatusChip('Not Processed', Colors.grey)
                                 ],
@@ -494,7 +493,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            backgroundColor: const Color(0xFF1F1F25),
+            backgroundColor: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Row(
               children: [
                 Icon(Icons.privacy_tip, color: Colors.orange, size: 24),
@@ -627,7 +627,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Icon(Icons.sd_card, color: theme.colorScheme.secondary, size: 24),
@@ -973,24 +974,22 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               FutureBuilder<WalStats>(
                 future: syncProvider.getWalStats(),
                 builder: (context, snapshot) {
-                  if (snapshot.hasData && snapshot.data!.syncedFiles > 0) {
-                    return PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'delete_all') {
-                          _showDeleteProcessedDialog(context, syncProvider);
-                        }
-                      },
-                      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                        const PopupMenuItem<String>(
-                          value: 'delete_all',
-                          child: ListTile(
-                            leading: Icon(Icons.delete_sweep),
-                            title: Text('Delete All Processed Files'),
-                          ),
+                  return PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'delete_all') {
+                        _showDeleteProcessedDialog(context, syncProvider);
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'delete_all',
+                        child: ListTile(
+                          leading: Icon(Icons.delete_sweep),
+                          title: Text('Delete All Processed Files'),
                         ),
-                      ],
-                    );
-                  }
+                      ),
+                    ],
+                  );
                   return const SizedBox.shrink();
                 },
               ),
