@@ -77,6 +77,7 @@ async def _listen(
     include_speech_profile: bool = True,
     stt_service: STTService = None,
     including_combined_segments: bool = False,
+    conversation_timeout: int = 120,
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
@@ -346,7 +347,7 @@ async def _listen(
     seconds_to_trim = None
     seconds_to_add = None
 
-    conversation_creation_timeout = 120
+    conversation_creation_timeout = conversation_timeout
 
     # Process existing conversations
     def _process_in_progess_memories():
@@ -503,8 +504,14 @@ async def _listen(
                 and (codec == 'opus' or codec == 'pcm16')
                 and include_speech_profile
             ):
-                file_path = get_profile_audio_if_exists(uid)
-                speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
+                try:
+                    file_path = get_profile_audio_if_exists(uid)
+                    print(f"Speech profile file_path for {uid}: {file_path}")
+                    speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
+                    print(f"Speech profile duration for {uid}: {speech_profile_duration}")
+                except Exception as e:
+                    print(f"Error getting speech profile for {uid}: {e}")
+                    file_path, speech_profile_duration = None, 0
 
             speech_profile_processed = not (speech_profile_duration > 0)
 
@@ -1026,12 +1033,18 @@ async def _listen(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
 
-        # Pusher tasks
-        pusher_tasks = [asyncio.create_task(pusher_connect())]
-        if transcript_consume is not None:
-            pusher_tasks.append(asyncio.create_task(transcript_consume()))
-        if audio_bytes_consume is not None:
-            pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
+        # Pusher tasks (optional - only if pusher service is configured)
+        pusher_tasks = []
+        try:
+            pusher_tasks.append(asyncio.create_task(pusher_connect()))
+            if transcript_consume is not None:
+                pusher_tasks.append(asyncio.create_task(transcript_consume()))
+            if audio_bytes_consume is not None:
+                pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
+            print(f"Pusher tasks initialized for {uid}")
+        except Exception as e:
+            print(f"Pusher service not available, continuing without it: {e}")
+            pusher_tasks = []
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
@@ -1091,8 +1104,9 @@ async def listen_handler_v3(
     channels: int = 1,
     include_speech_profile: bool = True,
     stt_service: STTService = None,
+    conversation_timeout: int = 120,
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, False, conversation_timeout)
 
 
 @router.websocket("/v4/listen")
@@ -1105,6 +1119,7 @@ async def listen_handler(
     channels: int = 1,
     include_speech_profile: bool = True,
     stt_service: STTService = None,
+    conversation_timeout: int = 120,
 ):
     await _listen(
         websocket,
@@ -1116,4 +1131,5 @@ async def listen_handler(
         include_speech_profile,
         None,
         including_combined_segments=True,
+        conversation_timeout=conversation_timeout,
     )
