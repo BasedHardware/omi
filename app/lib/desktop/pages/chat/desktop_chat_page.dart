@@ -1677,17 +1677,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         messageProvider.sendInitialAppMessage(app);
       }
 
-      // Show confirmation
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Now chatting with ${app?.name ?? 'Omi'}'),
-          backgroundColor: ResponsiveHelper.purplePrimary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-
       scrollToBottom();
     }
   }
