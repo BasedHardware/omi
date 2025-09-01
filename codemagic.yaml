@@ -134,8 +134,9 @@ workflows:
         - name: Upload debug symbols to Firebase Crashlytics
           script: | 
             echo "Find build artifacts"
-            dsymPath=$(find $CM_BUILD_DIR/build/ios/archive/Runner.xcarchive -name "*.dSYM" | head -1)
+            dsymPath=$(find $HOME/Library/Developer/Xcode/DerivedData -name "*.dSYM" | head -1)
             if [[ -z ${dsymPath} ]]
+            then
               echo "No debug symbols were found, skip publishing to Firebase Crashlytics"
             else
               echo "Publishing debug symbols from $dsymPath to Firebase Crashlytics"
