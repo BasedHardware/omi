@@ -407,33 +407,33 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         ),
                       ),
                       // Search button (second) - only show on transcript and summary tabs
-                      if (_controller?.index != 2)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () {
-                              setState(() {
-                                _isSearching = !_isSearching;
-                                if (!_isSearching) {
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                  _searchFocusNode.unfocus();
-                                } else {
-                                  _searchFocusNode.requestFocus();
-                                }
-                              });
-                              HapticFeedback.mediumImpact();
-                            },
-                            icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
-                          ),
-                        ),
+                      // if (_controller?.index != 2)
+                      //   Container(
+                      //     width: 36,
+                      //     height: 36,
+                      //     margin: const EdgeInsets.only(right: 8),
+                      //     decoration: BoxDecoration(
+                      //       color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
+                      //       shape: BoxShape.circle,
+                      //     ),
+                      //     child: IconButton(
+                      //       padding: EdgeInsets.zero,
+                      //       onPressed: () {
+                      //         setState(() {
+                      //           _isSearching = !_isSearching;
+                      //           if (!_isSearching) {
+                      //             _searchQuery = '';
+                      //             _searchController.clear();
+                      //             _searchFocusNode.unfocus();
+                      //           } else {
+                      //             _searchFocusNode.requestFocus();
+                      //           }
+                      //         });
+                      //         HapticFeedback.mediumImpact();
+                      //       },
+                      //       icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                      //     ),
+                      //   ),
                       // Developer Tools button (third) - iOS style pull-down menu
                       Container(
                         width: 36,
