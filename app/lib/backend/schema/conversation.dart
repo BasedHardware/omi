@@ -30,7 +30,8 @@ class ConversationExternalData {
 
   ConversationExternalData({required this.text});
 
-  factory ConversationExternalData.fromJson(Map<String, dynamic> json) => ConversationExternalData(text: json['text'] ?? '');
+  factory ConversationExternalData.fromJson(Map<String, dynamic> json) =>
+      ConversationExternalData(text: json['text'] ?? '');
 
   Map<String, dynamic> toJson() => {'text': text};
 }
@@ -50,8 +51,10 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ?? ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ?? ConversationPostProcessingModel.fal_whisperx,
+      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+          ConversationPostProcessingStatus.in_progress,
+      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+          ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
   }
@@ -71,7 +74,8 @@ enum ServerProcessingConversationStatus {
   const ServerProcessingConversationStatus(this.value);
 
   static ServerProcessingConversationStatus valuesFromString(String value) {
-    return ServerProcessingConversationStatus.values.firstWhereOrNull((e) => e.value == value) ?? ServerProcessingConversationStatus.unknown;
+    return ServerProcessingConversationStatus.values.firstWhereOrNull((e) => e.value == value) ??
+        ServerProcessingConversationStatus.unknown;
   }
 }
 
@@ -116,6 +120,7 @@ class ServerConversation {
   final List<ConversationPhoto> photos;
 
   final List<AppResponse> appResults;
+  final List<String> suggestedSummarizationApps;
   final ConversationSource? source;
   final String? language; // applies to friend/omi only
 
@@ -136,6 +141,7 @@ class ServerConversation {
     this.finishedAt,
     this.transcriptSegments = const [],
     this.appResults = const [],
+    this.suggestedSummarizationApps = const [],
     this.geolocation,
     this.photos = const [],
     this.discarded = false,
@@ -153,16 +159,26 @@ class ServerConversation {
       structured: Structured.fromJson(json['structured']),
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
       finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']).toLocal() : null,
-      transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      appResults: ((json['apps_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
+      transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
+          .map((segment) => TranscriptSegment.fromJson(segment))
+          .toList(),
+      appResults:
+          ((json['apps_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
+      suggestedSummarizationApps:
+          ((json['suggested_summarization_apps'] ?? []) as List<dynamic>).map((appId) => appId.toString()).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
-      photos: json['photos'] != null ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList() : [],
+      photos: json['photos'] != null
+          ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
+          : [],
       discarded: json['discarded'] ?? false,
       source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
       language: json['language'],
       deleted: json['deleted'] ?? false,
-      externalIntegration: json['external_data'] != null ? ConversationExternalData.fromJson(json['external_data']) : null,
-      status: json['status'] != null ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed : ConversationStatus.completed,
+      externalIntegration:
+          json['external_data'] != null ? ConversationExternalData.fromJson(json['external_data']) : null,
+      status: json['status'] != null
+          ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
+          : ConversationStatus.completed,
     );
   }
 
@@ -175,6 +191,7 @@ class ServerConversation {
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'plugins_results': appResults.map((result) => result.toJson()).toList(),
+      'suggested_summarization_apps': suggestedSummarizationApps,
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
@@ -191,9 +208,13 @@ class ServerConversation {
   }
 
   int speakerWithMostUnassignedSegments() {
-    var speakers = transcriptSegments.where((element) => element.personId == null && !element.isUser).map((e) => e.speakerId).toList();
+    var speakers = transcriptSegments
+        .where((element) => element.personId == null && !element.isUser)
+        .map((e) => e.speakerId)
+        .toList();
     if (speakers.isEmpty) return -1;
-    var segmentsBySpeakers = groupBy(speakers, (e) => e).entries.reduce((a, b) => a.value.length > b.value.length ? a : b).key;
+    var segmentsBySpeakers =
+        groupBy(speakers, (e) => e).entries.reduce((a, b) => a.value.length > b.value.length ? a : b).key;
     return segmentsBySpeakers;
   }
 
@@ -286,7 +307,8 @@ class SyncedConversationPointer {
     );
   }
 
-  SyncedConversationPointer copyWith({SyncedConversationType? type, int? index, DateTime? key, ServerConversation? conversation}) {
+  SyncedConversationPointer copyWith(
+      {SyncedConversationType? type, int? index, DateTime? key, ServerConversation? conversation}) {
     return SyncedConversationPointer(
       type: type ?? this.type,
       index: index ?? this.index,

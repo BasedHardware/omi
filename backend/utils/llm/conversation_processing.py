@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -175,12 +175,12 @@ def get_transcript_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
-    
+
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
         if action_item.created_at is None:
             action_item.created_at = datetime.now(timezone.utc)
-    
+
     return response
 
 
@@ -281,12 +281,12 @@ def get_reprocess_transcript_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
-    
+
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
         if action_item.created_at is None:
             action_item.created_at = datetime.now(timezone.utc)
-    
+
     return response
 
 
@@ -322,10 +322,97 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     return content
 
 
+class SuggestedAppsSelection(BaseModel):
+    suggested_apps: List[str] = Field(
+        description='List of up to 3 app IDs that are most suitable for processing this conversation, ordered by relevance. Empty list if none are suitable.'
+    )
+    reasoning: str = Field(
+        description='Brief explanation of why these apps were selected based on the conversation content.'
+    )
+
+
 class BestAppSelection(BaseModel):
     app_id: str = Field(
         description='The ID of the best app for processing this conversation, or an empty string if none are suitable.'
     )
+
+
+def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[App]) -> Tuple[List[str], str]:
+    """
+    Get top 3 suggested apps for the given conversation based on its structured content
+    and the specific task/outcome each app provides.
+    Returns tuple of (suggested_app_ids, reasoning)
+    """
+    if not apps:
+        return [], "No apps available"
+
+    if not conversation.structured:
+        return [], "No structured content available"
+
+    structured_data = conversation.structured
+    conversation_details = f"""
+    Title: {structured_data.title or 'N/A'}
+    Category: {structured_data.category.value if structured_data.category else 'N/A'}
+    Overview: {structured_data.overview or 'N/A'}
+    Action Items: {ActionItem.actions_to_string(structured_data.action_items) if structured_data.action_items else 'None'}
+    Events Mentioned: {Event.events_to_string(structured_data.events) if structured_data.events else 'None'}
+    """
+
+    apps_xml = "<apps>\n"
+    for app in apps:
+        apps_xml += f"""  <app>
+    <id>{app.id}</id>
+    <name>{app.name}</name>
+    <description>{app.description}</description>
+    <memory_prompt>{app.memory_prompt}</memory_prompt>
+  </app>\n"""
+    apps_xml += "</apps>"
+
+    prompt = f"""
+    You are an expert app recommendation system. Your goal is to suggest the top 3 most suitable apps for processing the given conversation based on the conversation's structured content and each app's specific capabilities.
+
+    <conversation_details>
+    {conversation_details.strip()}
+    </conversation_details>
+
+    <available_apps>
+    {apps_xml.strip()}
+    </available_apps>
+
+    Task:
+    1. Analyze the conversation's structured content: title, category, overview, action items, and events.
+    2. For each app, evaluate how well its description and memory_prompt align with the conversation's content and themes.
+    3. Consider the potential value and relevance of each app's output for this specific conversation.
+    4. Select up to 3 apps that would provide the most meaningful and valuable analysis, ordered by relevance (most relevant first).
+
+    Selection Criteria:
+    - **Content Alignment**: App's purpose should directly relate to the conversation's topics, category, or themes
+    - **Value Potential**: App should be able to extract meaningful insights from this specific conversation
+    - **Specificity**: Prefer apps with specific, targeted functionality over generic ones
+    - **Actionability**: Prioritize apps that can provide actionable insights or useful analysis
+
+    Quality Standards:
+    - Only suggest apps that have clear relevance to the conversation content
+    - If fewer than 3 apps are truly suitable, suggest only the relevant ones
+    - If no apps are genuinely suitable, return an empty list
+    - Do not force matches - quality over quantity
+
+    Provide your suggestions with brief reasoning explaining why these apps are most suitable for this conversation.
+    """
+
+    try:
+        with_parser = llm_mini.with_structured_output(SuggestedAppsSelection)
+        response: SuggestedAppsSelection = with_parser.invoke(prompt)
+
+        # Validate that suggested app IDs exist in the available apps
+        valid_app_ids = {app.id for app in apps}
+        suggested_apps = [app_id for app_id in response.suggested_apps if app_id in valid_app_ids]
+
+        return suggested_apps, response.reasoning
+
+    except Exception as e:
+        print(f"Error getting suggested apps: {e}")
+        return [], f"Error in app suggestion: {str(e)}"
 
 
 def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:
@@ -354,11 +441,12 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     <id>{app.id}</id>
     <name>{app.name}</name>
     <description>{app.description}</description>
+    <memory_prompt>{app.memory_prompt}</memory_prompt>
   </app>\n"""
     apps_xml += "</apps>"
 
     prompt = f"""
-    You are an expert app selector. Your goal is to determine if any available app is genuinely suitable for processing the given conversation details based on the app's specific task and the potential value of its outcome.
+    You are an expert app selector. Your goal is to determine the single best app for processing the given conversation based on the conversation's structured content and each app's specific capabilities.
 
     <conversation_details>
     {conversation_details.strip()}
@@ -369,17 +457,19 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     </available_apps>
 
     Task:
-    1. Analyze the conversation's content, themes, action items, and events provided in `<conversation_details>`.
-    2. For each app in `<available_apps>`, evaluate its specific `<task>` and `<description>`.
-    3. Determine if applying an app's `<task>` to this specific conversation would produce a meaningful, relevant, and valuable outcome.
-    4. Select the single best app whose task aligns most strongly with the conversation content and provides the most useful potential outcome.
+    1. Analyze the conversation's structured content: title, category, overview, action items, and events.
+    2. For each app, evaluate how well its description and memory_prompt align with the conversation's content.
+    3. Determine which single app would provide the most meaningful, relevant, and valuable analysis for this specific conversation.
+    4. Select the app whose capabilities best match the conversation's themes and content.
 
     Critical Instructions:
-    - Only select an app if its specific task is highly relevant to the conversation's topics and details. A generic match based on description alone is NOT sufficient.
-    - Consider the *potential outcome* of applying the app's task. Would the result be insightful given this conversation?
-    - If no app's task strongly aligns with the conversation content or offers a valuable potential outcome (e.g., a business conversation when all apps are for medical analysis), you MUST return an empty `app_id`.
-    - Do not force a match. It is better to return an empty `app_id` than to select an inappropriate app.
-    - Provide ONLY the `app_id` of the best matching app, or an empty string if no app is suitable.
+    - Only select an app if its specific capabilities are highly relevant to the conversation's content and themes
+    - Consider the potential value and actionability of the app's output for this conversation
+    - If no app is genuinely suitable for this conversation, return an empty app_id
+    - Do not force a match - it's better to return empty than select an inappropriate app
+    - Focus on quality and relevance over generic applicability
+
+    Provide ONLY the app_id of the best matching app, or an empty string if no app is suitable.
     """
 
     try:
