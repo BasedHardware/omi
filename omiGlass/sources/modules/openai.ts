@@ -1,9 +1,9 @@
 import axios from "axios";
-import fs from "fs";
+import * as FileSystem from 'expo-file-system';
 import { keys } from "../keys";
 
 export async function transcribeAudio(audioPath: string) {
-    const audioBase64 = fs.readFileSync(audioPath, { encoding: 'base64' });
+    const audioBase64 = await FileSystem.readAsStringAsync(audioPath, { encoding: FileSystem.EncodingType.Base64 });
     try {
         const response = await axios.post("https://api.openai.com/v1/audio/transcriptions", {
             audio: audioBase64,
@@ -58,13 +58,13 @@ export async function textToSpeech(text: string) {
 }
 
 // Function to convert image to base64
-function imageToBase64(path: string) {
-    const image = fs.readFileSync(path, { encoding: 'base64' });
+async function imageToBase64(path: string) {
+    const image = await FileSystem.readAsStringAsync(path, { encoding: FileSystem.EncodingType.Base64 });
     return `data:image/jpeg;base64,${image}`; // Adjust the MIME type if necessary (e.g., image/png)
 }
 
 export async function describeImage(imagePath: string) {
-    const imageBase64 = imageToBase64(imagePath);
+    const imageBase64 = await imageToBase64(imagePath);
     try {
         const response = await axios.post("https://api.openai.com/v1/images/descriptions", {
             image: imageBase64,
