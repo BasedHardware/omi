@@ -36,6 +36,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/notifications.dart';
@@ -244,6 +245,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => UserProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
+          ChangeNotifierProvider(create: (context) => SyncProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -317,8 +319,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
   }
 }
-
-
 
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;

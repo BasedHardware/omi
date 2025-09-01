@@ -378,12 +378,10 @@ class CaptureProvider extends ChangeNotifier
         _commandBytes.add(snapshot.sublist(3));
       }
 
-      // Support: opus codec, 1m from the first device connects
-      var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
+      // Local sync
+      // Support: opus codec
       var checkWalSupported = codec.isOpusSupported() &&
-          (deviceFirstConnectedAt != null &&
-              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
-          SharedPreferencesUtil().localSyncEnabled;
+          (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
@@ -391,15 +389,12 @@ class CaptureProvider extends ChangeNotifier
         _wal.getSyncs().phone.onByteStream(snapshot);
       }
 
-      // send ws
+      // Send WS
       if (_socket?.state == SocketServiceState.connected) {
         final trimmedValue = value.sublist(3);
         _socket?.send(trimmedValue);
 
-        // Process audio bytes for waveform visualization
-        _processAudioBytesForVisualization(trimmedValue);
-
-        // synced
+        // Mark as synced
         if (_isWalSupported) {
           _wal.getSyncs().phone.onBytesSync(value);
         }
@@ -510,6 +505,13 @@ class CaptureProvider extends ChangeNotifier
     final deviceId = _recordingDevice!.id;
     BleAudioCodec codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+
+    // Set device info for WAL creation
+    var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+    var pd = await _recordingDevice!.getDeviceInfo(connection);
+    String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    _wal.getSyncs().phone.setDeviceInfo(_recordingDevice!.id, deviceModel);
+
     await streamButton(deviceId);
     await streamAudioToWs(deviceId, codec);
 
@@ -611,8 +613,6 @@ class CaptureProvider extends ChangeNotifier
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(bytes);
       }
-      // Process audio bytes for waveform visualization
-      _processAudioBytesForVisualization(bytes);
     }, onRecording: () {
       updateRecordingState(RecordingState.record);
     }, onStop: () {
