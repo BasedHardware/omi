@@ -504,14 +504,8 @@ async def _listen(
                 and (codec == 'opus' or codec == 'pcm16')
                 and include_speech_profile
             ):
-                try:
-                    file_path = get_profile_audio_if_exists(uid)
-                    print(f"Speech profile file_path for {uid}: {file_path}")
-                    speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
-                    print(f"Speech profile duration for {uid}: {speech_profile_duration}")
-                except Exception as e:
-                    print(f"Error getting speech profile for {uid}: {e}")
-                    file_path, speech_profile_duration = None, 0
+                file_path = get_profile_audio_if_exists(uid)
+                speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
             speech_profile_processed = not (speech_profile_duration > 0)
 
@@ -1033,18 +1027,12 @@ async def _listen(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
 
-        # Pusher tasks (optional - only if pusher service is configured)
-        pusher_tasks = []
-        try:
-            pusher_tasks.append(asyncio.create_task(pusher_connect()))
-            if transcript_consume is not None:
-                pusher_tasks.append(asyncio.create_task(transcript_consume()))
-            if audio_bytes_consume is not None:
-                pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
-            print(f"Pusher tasks initialized for {uid}")
-        except Exception as e:
-            print(f"Pusher service not available, continuing without it: {e}")
-            pusher_tasks = []
+        # Pusher tasks
+        pusher_tasks = [asyncio.create_task(pusher_connect())]
+        if transcript_consume is not None:
+            pusher_tasks.append(asyncio.create_task(transcript_consume()))
+        if audio_bytes_consume is not None:
+            pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
