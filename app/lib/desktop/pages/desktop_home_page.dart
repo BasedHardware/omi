@@ -11,6 +11,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'apps/desktop_apps_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'conversations/desktop_conversations_page.dart';
@@ -169,7 +170,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       return;
     }
     debugPrint(event);
-    PlatformManager.instance.instabug.logInfo(event);
+    PlatformManager.instance.crashReporter.logInfo(event);
   }
 
   bool? previousConnection;
@@ -540,8 +541,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           _buildProfileCard(),
 
                           // Sync notification when available
-                          Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-                            if (homeProvider.selectedIndex == 0 && convoProvider.missingWalsInSeconds >= 120) {
+                          Consumer2<ConversationProvider, SyncProvider>(
+                              builder: (context, convoProvider, syncProvider, child) {
+                            if (homeProvider.selectedIndex == 0 && syncProvider.missingWalsInSeconds >= 120) {
                               return Container(
                                 margin: const EdgeInsets.fromLTRB(0, 8, 0, 16),
                                 child: Material(

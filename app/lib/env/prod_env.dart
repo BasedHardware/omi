@@ -13,10 +13,6 @@ final class ProdEnv implements EnvFields {
   final String? openAIAPIKey = _ProdEnv.openAIAPIKey;
 
   @override
-  @EnviedField(varName: 'INSTABUG_API_KEY', obfuscate: true)
-  final String? instabugApiKey = _ProdEnv.instabugApiKey;
-
-  @override
   @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
   final String? mixpanelProjectToken = _ProdEnv.mixpanelProjectToken;
 

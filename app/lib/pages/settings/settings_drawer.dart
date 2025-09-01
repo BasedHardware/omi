@@ -19,6 +19,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'device_settings.dart';
+import '../conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,
@@ -142,6 +143,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const UsagePage(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Storage',
+                icon: const FaIcon(FontAwesomeIcons.database, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const SyncPage(),
                     ),
                   );
                 },
@@ -293,7 +307,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           await AuthService.instance.signOut();
                          if (context.mounted){
                             routeToPage(context, const AppShell(), replace: true);
-                         }
+                          }
                         },
                         "Sign Out?",
                         "Are you sure you want to sign out?",

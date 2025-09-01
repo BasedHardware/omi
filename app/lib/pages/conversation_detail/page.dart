@@ -89,8 +89,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           index += query.length;
         }
       }
-    }
-    else if (selectedTab == ConversationTab.summary) {
+    } else if (selectedTab == ConversationTab.summary) {
       // Count matches in app summaries
       final summarizedApp = provider.getSummarizedApp();
       if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) {
@@ -103,11 +102,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           index += query.length;
         }
       }
-     }
+    }
 
-     _totalSearchResults = count;
-     _currentSearchIndex = count > 0 ? 1 : 0;
-   }
+    _totalSearchResults = count;
+    _currentSearchIndex = count > 0 ? 1 : 0;
+  }
 
   void _navigateSearch(bool next) {
     if (_totalSearchResults == 0) return;
@@ -408,33 +407,33 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         ),
                       ),
                       // Search button (second) - only show on transcript and summary tabs
-                      if (_controller?.index != 2)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () {
-                              setState(() {
-                                _isSearching = !_isSearching;
-                                if (!_isSearching) {
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                  _searchFocusNode.unfocus();
-                                } else {
-                                  _searchFocusNode.requestFocus();
-                                }
-                              });
-                              HapticFeedback.mediumImpact();
-                            },
-                            icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
-                          ),
-                        ),
+                      // if (_controller?.index != 2)
+                      //   Container(
+                      //     width: 36,
+                      //     height: 36,
+                      //     margin: const EdgeInsets.only(right: 8),
+                      //     decoration: BoxDecoration(
+                      //       color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
+                      //       shape: BoxShape.circle,
+                      //     ),
+                      //     child: IconButton(
+                      //       padding: EdgeInsets.zero,
+                      //       onPressed: () {
+                      //         setState(() {
+                      //           _isSearching = !_isSearching;
+                      //           if (!_isSearching) {
+                      //             _searchQuery = '';
+                      //             _searchController.clear();
+                      //             _searchFocusNode.unfocus();
+                      //           } else {
+                      //             _searchFocusNode.requestFocus();
+                      //           }
+                      //         });
+                      //         HapticFeedback.mediumImpact();
+                      //       },
+                      //       icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                      //     ),
+                      //   ),
                       // Developer Tools button (third) - iOS style pull-down menu
                       Container(
                         width: 36,
@@ -734,114 +733,145 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   top: 0,
                   left: 0,
                   right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: SafeArea(
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Search transcript or summary...',
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          prefixIcon: const Icon(Icons.search, color: Colors.white70),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? Container(
-                                  width: _searchQuery.isNotEmpty ? 150 : 40,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      if (_searchQuery.isNotEmpty) ...[
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.withOpacity(0.3),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Text(
-                                            '$_currentSearchIndex/$_totalSearchResults',
-                                            style: const TextStyle(
-                                                color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Material(
-                                          color: Colors.transparent,
-                                          child: InkWell(
-                                            borderRadius: BorderRadius.circular(16),
-                                            onTap: _totalSearchResults > 0 ? () => _navigateSearch(false) : null,
-                                            child: Container(
-                                              width: 28,
-                                              height: 28,
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(18),
-                                              ),
-                                              child: Icon(Icons.keyboard_arrow_up,
-                                                  color: _totalSearchResults > 0 ? Colors.white70 : Colors.white30,
-                                                  size: 22),
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      // Close search if search bar is empty and user taps outside
+                      if (_searchQuery.isEmpty) {
+                        setState(() {
+                          _isSearching = false;
+                          _searchController.clear();
+                          _searchFocusNode.unfocus();
+                        });
+                      }
+                    },
+                    child: Container(
+                      color: Colors.transparent,
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            child: SafeArea(
+                              child: GestureDetector(
+                                onTap: () {}, // Prevent tap from bubbling up
+                                child: TextField(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search transcript or summary...',
+                                    hintStyle: TextStyle(color: Colors.grey[400]),
+                                    prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                                    suffixIcon: _searchQuery.isNotEmpty
+                                        ? Container(
+                                            width: _searchQuery.isNotEmpty ? 150 : 40,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment: MainAxisAlignment.end,
+                                              children: [
+                                                if (_searchQuery.isNotEmpty) ...[
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey.withOpacity(0.3),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Text(
+                                                      '$_currentSearchIndex/$_totalSearchResults',
+                                                      style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w500),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Material(
+                                                    color: Colors.transparent,
+                                                    child: InkWell(
+                                                      borderRadius: BorderRadius.circular(16),
+                                                      onTap:
+                                                          _totalSearchResults > 0 ? () => _navigateSearch(false) : null,
+                                                      child: Container(
+                                                        width: 28,
+                                                        height: 28,
+                                                        decoration: BoxDecoration(
+                                                          borderRadius: BorderRadius.circular(18),
+                                                        ),
+                                                        child: Icon(Icons.keyboard_arrow_up,
+                                                            color: _totalSearchResults > 0
+                                                                ? Colors.white70
+                                                                : Colors.white30,
+                                                            size: 22),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Material(
+                                                    color: Colors.transparent,
+                                                    child: InkWell(
+                                                      borderRadius: BorderRadius.circular(16),
+                                                      onTap:
+                                                          _totalSearchResults > 0 ? () => _navigateSearch(true) : null,
+                                                      child: Container(
+                                                        width: 28,
+                                                        height: 28,
+                                                        decoration: BoxDecoration(
+                                                          borderRadius: BorderRadius.circular(18),
+                                                        ),
+                                                        child: Icon(Icons.keyboard_arrow_down,
+                                                            color: _totalSearchResults > 0
+                                                                ? Colors.white70
+                                                                : Colors.white30,
+                                                            size: 22),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                ],
+                                                Material(
+                                                  color: Colors.transparent,
+                                                  child: InkWell(
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    onTap: () {
+                                                      setState(() {
+                                                        _searchQuery = '';
+                                                        _searchController.clear();
+                                                        _totalSearchResults = 0;
+                                                        _currentSearchIndex = 0;
+                                                      });
+                                                    },
+                                                    child: Container(
+                                                      width: 28,
+                                                      height: 28,
+                                                      decoration: BoxDecoration(
+                                                        borderRadius: BorderRadius.circular(16),
+                                                      ),
+                                                      child: const Icon(Icons.clear, color: Colors.white70, size: 22),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ),
-                                        ),
-                                        Material(
-                                          color: Colors.transparent,
-                                          child: InkWell(
-                                            borderRadius: BorderRadius.circular(16),
-                                            onTap: _totalSearchResults > 0 ? () => _navigateSearch(true) : null,
-                                            child: Container(
-                                              width: 28,
-                                              height: 28,
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(18),
-                                              ),
-                                              child: Icon(Icons.keyboard_arrow_down,
-                                                  color: _totalSearchResults > 0 ? Colors.white70 : Colors.white30,
-                                                  size: 22),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                      ],
-                                      Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(16),
-                                          onTap: () {
-                                            setState(() {
-                                              _searchQuery = '';
-                                              _searchController.clear();
-                                              _totalSearchResults = 0;
-                                              _currentSearchIndex = 0;
-                                            });
-                                          },
-                                          child: Container(
-                                            width: 28,
-                                            height: 28,
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(16),
-                                            ),
-                                            child: const Icon(Icons.clear, color: Colors.white70, size: 22),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                          )
+                                        : null,
+                                    filled: true,
+                                    fillColor: const Color(0xFF1C1C1E).withOpacity(0.95),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                   ),
-                                )
-                              : null,
-                          filled: true,
-                          fillColor: const Color(0xFF1C1C1E).withOpacity(0.95),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _searchQuery = value;
+                                      _updateSearchResults();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value;
-                            _updateSearchResults();
-                          });
-                        },
+                        ],
                       ),
                     ),
                   ),

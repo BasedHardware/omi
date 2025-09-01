@@ -22,6 +22,21 @@ enum BleAudioCodec {
     return this == BleAudioCodec.opusFS320 || this == BleAudioCodec.opus;
   }
 
+  String toFormattedString() {
+    switch (this) {
+      case BleAudioCodec.opusFS320:
+        return 'OPUS (320)';
+      case BleAudioCodec.opus:
+        return 'OPUS';
+      case BleAudioCodec.pcm16:
+        return 'PCM (16kHz)';
+      case BleAudioCodec.pcm8:
+        return 'PCM (8kHz)';
+      default:
+        return toString().split('.').last.toUpperCase();
+    }
+  }
+
   int getFramesPerSecond() {
     return this == BleAudioCodec.opusFS320 ? 50 : 100;
   }

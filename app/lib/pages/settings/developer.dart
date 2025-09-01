@@ -600,15 +600,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     onChanged: provider.onAutoCreateSpeakersChanged,
                   ),
                   const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Local Sync',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    value: provider.localSyncEnabled,
-                    onChanged: provider.onLocalSyncEnabledChanged,
-                  ),
                   const SizedBox(height: 36),
                   const Text(
                     'Pilot Features',

@@ -13,6 +13,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
@@ -29,10 +30,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
   DateTime? _reconnectAt;
-  final int _connectionCheckSeconds = 10;
+  final int _connectionCheckSeconds = 15; // 10s periods, 5s for each scan
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
+
+  // Track firmware update state to prevent showing dialog during updates
+  bool _isFirmwareUpdateInProgress = false;
+  bool get isFirmwareUpdateInProgress => _isFirmwareUpdateInProgress;
 
   // Current and latest firmware versions for UI display
   String get currentFirmwareVersion => pairedDevice?.firmwareRevision ?? 'Unknown';
@@ -40,6 +45,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   String get latestFirmwareVersion => _latestFirmwareVersion;
 
   Timer? _disconnectNotificationTimer;
+  final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
+  final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
@@ -64,7 +71,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         return;
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
-      pairedDevice = await connectedDevice!.getDeviceInfo(connection);
+      pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       SharedPreferencesUtil().btDevice = pairedDevice!;
     } else {
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
@@ -228,6 +235,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _bleBatteryLevelListener?.cancel();
     _reconnectionTimer?.cancel();
+    _disconnectDebouncer.cancel();
+    _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
@@ -245,7 +254,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
 
-    PlatformManager.instance.instabug.logInfo('Omi Device Disconnected');
+    PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
       NotificationService.instance.createNotification(
@@ -310,7 +319,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _checkFirmwareUpdates();
   }
 
+  void _handleDeviceConnected(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return;
+    }
+    _onDeviceConnected(connection.device);
+  }
+
   void _checkFirmwareUpdates() async {
+    if (_isFirmwareUpdateInProgress) {
+      return;
+    }
+
     await checkFirmwareUpdates();
 
     // Show firmware update dialog if needed
@@ -355,7 +376,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void showFirmwareUpdateDialog(BuildContext context) {
-    if (!_havingNewFirmware || !SharedPreferencesUtil().showFirmwareUpdateDialog) {
+    if (!_havingNewFirmware || !SharedPreferencesUtil().showFirmwareUpdateDialog || _isFirmwareUpdateInProgress) {
       return;
     }
 
@@ -364,11 +385,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       builder: (context) => ConfirmationDialog(
         title: 'Firmware Update Available',
         description:
-            'A new firmware update (${_latestFirmwareVersion}) is available for your Omi device. Would you like to update now?',
+            'A new firmware update ($_latestFirmwareVersion) is available for your Omi device. Would you like to update now?',
         confirmText: 'Update',
         cancelText: 'Later',
         onConfirm: () {
           Navigator.of(context).pop();
+          setFirmwareUpdateInProgress(true);
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => FirmwareUpdate(device: pairedDevice),
@@ -397,16 +419,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
-        var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-        if (connection == null) {
-          return;
-        }
-        _onDeviceConnected(connection.device);
+        _disconnectDebouncer.cancel();
+        _connectDebouncer.run(() => _handleDeviceConnected(deviceId));
         break;
       case DeviceConnectionState.disconnected:
+        _connectDebouncer.cancel();
         if (deviceId == connectedDevice?.id) {
-          onDeviceDisconnected();
+          _disconnectDebouncer.run(onDeviceDisconnected);
         }
+        break;
       default:
         Logger.debug("Device connection state is not supported $state");
     }
@@ -424,5 +445,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleDisconnectDevice(connectedDevice!);
     _reconnectAt = DateTime.now().add(Duration(seconds: 30));
+  }
+
+  // Reset firmware update state when update completes or fails
+  void resetFirmwareUpdateState() {
+    _isFirmwareUpdateInProgress = false;
+    notifyListeners();
+  }
+
+  // Set firmware update state when starting an update
+  void setFirmwareUpdateInProgress(bool inProgress) {
+    _isFirmwareUpdateInProgress = inProgress;
+    notifyListeners();
   }
 }

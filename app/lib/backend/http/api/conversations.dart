@@ -22,7 +22,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
     return CreateConversationResponse.fromJson(jsonDecode(response.body));
   } else {
     // TODO: Server returns 304 doesn't recover
-    PlatformManager.instance.instabug.reportCrash(Exception('Failed to create conversation'), StackTrace.current,
+    PlatformManager.instance.crashReporter.reportCrash(Exception('Failed to create conversation'), StackTrace.current,
         userAttributes: {'response': response.body});
   }
   return null;

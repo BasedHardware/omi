@@ -52,6 +52,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var filter: SCContentFilter?
     private var stream: SCStream?
     private var audioSettings: [String: Any]!
+    private var streamOutputReference: AudioManager?
     
     // Activity management to prevent system sleep
     private var preventSleepActivity: NSObjectProtocol?
@@ -130,7 +131,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         if let scStream = stream {
             Task {
                 try? await scStream.stopCapture()
-                self.stream = nil
+                await MainActor.run {
+                    self.stream = nil
+                }
             }
         }
         
@@ -152,6 +155,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         self.scStreamSourceFormat = nil
         self.micNode = nil
         self.audioEngine = nil
+        self.streamOutputReference = nil
         
         // Stop system-level activities.
         stopSleepPrevention()
@@ -497,7 +501,10 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             throw AudioManagerError.engineStartError("Failed to create SCStream instance")
         }
         
+        streamOutputReference = self
+        
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
+        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .global(qos: .userInitiated))
         try await stream.startCapture()
     }
     
@@ -743,7 +750,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     // MARK: - SCStream Delegate Methods
     
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard sampleBuffer.isValid, type == .audio else { return }
+        guard sampleBuffer.isValid else { return }
+        
+        guard type == .audio else { return }
         
         guard let pcmBufferFromSCStream = sampleBuffer.asPCMBuffer else {
             print("ERROR: SCStream: Failed to get PCM buffer from CMSampleBuffer")
@@ -812,6 +821,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
         }
         self.stream = nil
+        self.streamOutputReference = nil
     }
 
     private func setupDeviceListChangeObserver() {

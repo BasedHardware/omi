@@ -19,7 +19,7 @@ Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   );
   if (response == null) return false;
   if (response.statusCode == 200) return true;
-  PlatformManager.instance.instabug.reportCrash(Exception('Failed to update user geolocation'), StackTrace.current,
+  PlatformManager.instance.crashReporter.reportCrash(Exception('Failed to update user geolocation'), StackTrace.current,
       userAttributes: {'response': response.body});
   return false;
 }
