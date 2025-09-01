@@ -115,8 +115,8 @@ workflows:
           xcode-project use-profiles
 
           # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          BUILD_NAME=1.0.71
+          BUILD_NUMBER=416
           flutter build ipa \
             --release \
             --build-name=$BUILD_NAME \
@@ -132,7 +132,7 @@ workflows:
     publishing:
       scripts:
         - name: Upload debug symbols to Firebase Crashlytics
-          script: | 
+          script: |
             echo "Find build artifacts"
             dsymPath=$(find $HOME/Library/Developer/Xcode/DerivedData -name "*.dSYM" | head -1)
             if [[ -z ${dsymPath} ]]
@@ -140,9 +140,20 @@ workflows:
               echo "No debug symbols were found, skip publishing to Firebase Crashlytics"
             else
               echo "Publishing debug symbols from $dsymPath to Firebase Crashlytics"
-              ls -d -- ios/Pods/*
-              $CM_BUILD_DIR/ios/Pods/FirebaseCrashlytics/upload-symbols \
-                -gsp ios/Runner/GoogleService-Info.plist -p ios $dsymPath
+
+              # Find the upload-symbols script in the Pods directory
+              uploadScriptPath=$(find ios/Pods/FirebaseCrashlytics -name "upload-symbols" -type f 2>/dev/null | head -1)
+
+              if [[ -n ${uploadScriptPath} ]]
+              then
+                echo "Found upload-symbols script at: $uploadScriptPath"
+                # Make sure it's executable
+                chmod +x "$uploadScriptPath"
+                "$uploadScriptPath" \
+                  -gsp ios/Runner/GoogleService-Info.plist -p ios $dsymPath
+              else
+                echo "upload-symbols script not found. Skipping Firebase Crashlytics upload."
+              fi
             fi
       email:
         recipients:
