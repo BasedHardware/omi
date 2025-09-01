@@ -674,6 +674,12 @@ class MixpanelManager {
     });
   }
 
+  void summarizedAppCreateTemplateClicked({required String conversationId}) {
+    track('Summarized App Create Template Clicked', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
   // Action Items Page Events
   void actionItemsPageOpened() => track('Action Items Page Opened');
 

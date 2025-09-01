@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/cupertino.dart';
@@ -80,7 +81,7 @@ class AddAppProvider extends ChangeNotifier {
     appProvider = provider;
   }
 
-  Future init() async {
+  Future init({bool presetForConversationAnalysis = false}) async {
     setIsLoading(true);
     if (categories.isEmpty) {
       await getCategories();
@@ -91,6 +92,27 @@ class AddAppProvider extends ChangeNotifier {
     if (paymentPlans.isEmpty) {
       await getPaymentPlans();
     }
+
+    // Preset values for conversation analysis template
+    if (presetForConversationAnalysis) {
+      // Set category to conversation-analysis
+      setAppCategory('conversation-analysis');
+
+      // Add memories capability
+      final memoriesCapability = capabilities.firstWhereOrNull(
+        (cap) => cap.id == 'memories',
+      );
+      if (memoriesCapability != null && !selectedCapabilities.contains(memoriesCapability)) {
+        selectedCapabilities.add(memoriesCapability);
+      }
+
+      // Set a helpful default name and description
+      appNameController.text = 'My Conversation Analyzer';
+      appDescriptionController.text = 'A custom app to analyze and summarize conversations based on my specific needs.';
+
+      checkValidity();
+    }
+
     setIsLoading(false);
   }
 

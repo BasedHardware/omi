@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
@@ -37,7 +38,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null || !conversationProvider!.groupedConversations.containsKey(selectedDate) || conversationProvider!.groupedConversations[selectedDate] == null || conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
+    if (conversationProvider == null ||
+        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
+        conversationProvider!.groupedConversations[selectedDate] == null ||
+        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
       // Return cached conversation if available, otherwise create an empty one
       if (_cachedConversation == null) {
         throw StateError("No conversation available");
@@ -284,13 +288,68 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     return null;
   }
 
-  void setPreferredSummarizationApp(String appId) {
-    setPreferredSummarizationAppServer(appId);
-    notifyListeners();
+  /// Returns the list of suggested summarization apps for this conversation
+  List<String> getSuggestedApps() {
+    return conversation.suggestedSummarizationApps;
+  }
+
+  /// Returns the list of suggested apps that are available in the current apps list
+  List<App> getAvailableSuggestedApps() {
+    final suggestedAppIds = getSuggestedApps();
+    if (suggestedAppIds.isEmpty || appProvider == null) return [];
+
+    return appProvider!.apps
+        .where((app) => suggestedAppIds.contains(app.id) && app.worksWithMemories() && app.enabled)
+        .toList();
+  }
+
+  /// Returns the list of suggested apps from the API (includes unavailable apps)
+  Future<List<App>> getSuggestedAppsFromAPI() async {
+    try {
+      return await getConversationSuggestedApps(conversation.id);
+    } catch (e) {
+      debugPrint('Error fetching suggested apps: $e');
+      return [];
+    }
+  }
+
+  /// Checks if an app is in the suggested apps list
+  bool isAppSuggested(String appId) {
+    return getSuggestedApps().contains(appId);
+  }
+
+  /// Checks if a suggested app is available/enabled for the user
+  bool isSuggestedAppAvailable(String appId) {
+    if (appProvider == null) return false;
+    return appProvider!.apps.any((app) => app.id == appId && app.worksWithMemories() && app.enabled);
   }
 
   void setCachedConversation(ServerConversation conversation) {
     _cachedConversation = conversation;
     notifyListeners();
+  }
+
+  void setPreferredSummarizationApp(String appId) {
+    setPreferredSummarizationAppServer(appId);
+    notifyListeners();
+  }
+
+  void trackLastUsedSummarizationApp(String appId) {
+    SharedPreferencesUtil().lastUsedSummarizationAppId = appId;
+    notifyListeners();
+  }
+
+  String? getLastUsedSummarizationAppId() {
+    final lastUsedId = SharedPreferencesUtil().lastUsedSummarizationAppId;
+    return lastUsedId.isEmpty ? null : lastUsedId;
+  }
+
+  App? getLastUsedSummarizationApp() {
+    final lastUsedId = getLastUsedSummarizationAppId();
+    if (lastUsedId == null || appProvider == null) return null;
+
+    return appProvider!.apps.firstWhereOrNull(
+      (app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled,
+    );
   }
 }
