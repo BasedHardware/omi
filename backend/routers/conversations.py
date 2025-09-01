@@ -62,7 +62,9 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
-    processed_conversation = process_conversation(uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id)
+    processed_conversation = process_conversation(
+        uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id
+    )
 
     return processed_conversation
 
@@ -159,17 +161,17 @@ def set_action_item_status(
     for i, action_item_idx in enumerate(data.items_idx):
         if action_item_idx >= len(action_items):
             continue
-        
+
         action_item = action_items[action_item_idx]
         new_completed_status = data.values[i]
-        
+
         # Set completed status
         action_item.completed = new_completed_status
-        
+
         # Handle created_at backwards compatibility
         if action_item.created_at is None:
             action_item.created_at = conversation.created_at
-        
+
         # Set completed_at timestamp
         if new_completed_status:
             # Mark as completed - set completed_at to current time
@@ -542,6 +544,40 @@ def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depe
     )
 
 
+@router.get("/v1/conversations/{conversation_id}/suggested-apps", response_model=dict, tags=['conversations'])
+def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    from utils.apps import get_available_apps, get_available_app_by_id_with_reviews
+    from models.app import App
+
+    conversation_data = _get_conversation_by_id(uid, conversation_id)
+    conversation = Conversation(**conversation_data)
+
+    # Get suggested app models with full data (similar to /v1/apps endpoint)
+    suggested_apps = []
+    for app_id in conversation.suggested_summarization_apps:
+        app_data = get_available_app_by_id_with_reviews(app_id, uid)
+        if app_data:
+            app = App(**app_data)
+            # Add user-specific data
+            from utils.apps import get_is_user_paid_app
+
+            app.is_user_paid = get_is_user_paid_app(app.id, uid)
+
+            # Add payment link with user reference
+            if app.payment_link:
+                app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
+
+            # Generate thumbnail URLs if thumbnails exist
+            if app.thumbnails:
+                from utils.other.storage import get_app_thumbnail_url
+
+                app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
+
+            suggested_apps.append(app)
+
+    return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
+
+
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
 def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Depends(auth.get_current_user_uid)):
     conversation_data = _get_conversation_by_id(uid, conversation_id)
@@ -555,6 +591,3 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     summary = generate_summary_with_prompt(full_transcript, request.prompt)
 
     return {"summary": summary}
-
-
-

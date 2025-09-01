@@ -257,6 +257,10 @@ class SharedPreferencesUtil {
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
+  String get lastUsedSummarizationAppId => getString('lastUsedSummarizationAppId') ?? '';
+
+  set lastUsedSummarizationAppId(String value) => saveString('lastUsedSummarizationAppId', value);
+
   List<ServerConversation> get cachedConversations {
     if (getBool('migratedMemories') ?? false) {
       if (getStringList('cachedMemories') != null || getStringList('cachedMemories')!.isNotEmpty) {
