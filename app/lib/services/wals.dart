@@ -193,6 +193,20 @@ class Wal {
   getFileName() {
     return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
   }
+
+  /// Get the full file path, handling both old full paths and new filename-only storage
+  static Future<String?> getFilePath(String? pathOrName) async {
+    if (pathOrName == null || pathOrName.isEmpty) {
+      return null;
+    }
+
+    final directory = await getApplicationDocumentsDirectory();
+    if (pathOrName.contains('/')) {
+      final filename = pathOrName.split('/').last;
+      return '${directory.path}/$filename';
+    }
+    return '${directory.path}/$pathOrName';
+  }
 }
 
 class SDCardWalSync implements IWalSync {
@@ -789,13 +803,15 @@ class LocalWalSync implements IWalSync {
 
   Future _flush() async {
     debugPrint("_flushing");
-    // Storage file
     for (var i = 0; i < _wals.length; i++) {
       final wal = _wals[i];
 
       if (wal.storage == WalStorage.mem) {
-        final directory = await getApplicationDocumentsDirectory();
-        String filePath = '${directory.path}/${wal.getFileName()}';
+        String? filePath = await Wal.getFilePath(wal.getFileName());
+        if (filePath == null) {
+          throw Exception('Flushing to storage failed. Cannot get file path.');
+        }
+
         List<int> data = [];
         for (int i = 0; i < wal.data.length; i++) {
           var frame = wal.data[i].sublist(3);
@@ -810,7 +826,7 @@ class LocalWalSync implements IWalSync {
         }
         final file = File(filePath);
         await file.writeAsBytes(data);
-        wal.filePath = filePath;
+        wal.filePath = wal.getFileName(); // Store only filename, not full path
         wal.storage = WalStorage.disk;
 
         debugPrint("_flush file ${wal.filePath}");
@@ -819,16 +835,6 @@ class LocalWalSync implements IWalSync {
       }
     }
 
-    // Clean synced wal (only if unlimited storage is disabled)
-    if (!SharedPreferencesUtil().unlimitedLocalStorageEnabled) {
-      for (var i = _wals.length - 1; i >= 0; i--) {
-        if (_wals[i].status == WalStatus.synced) {
-          await _deleteWal(_wals[i]);
-        }
-      }
-    }
-
-    // When unlimited storage is enabled, synced WALs are kept as-is with synced status
     await _saveWalsToFile();
   }
 
@@ -840,9 +846,12 @@ class LocalWalSync implements IWalSync {
   Future<bool> _deleteWal(Wal wal) async {
     if (wal.filePath != null && wal.filePath!.isNotEmpty) {
       try {
-        final file = File(wal.filePath!);
-        if (file.existsSync()) {
-          await file.delete();
+        final fullPath = await Wal.getFilePath(wal.filePath);
+        if (fullPath != null) {
+          final file = File(fullPath);
+          if (file.existsSync()) {
+            await file.delete();
+          }
         }
       } catch (e) {
         debugPrint(e.toString());
@@ -927,12 +936,19 @@ class LocalWalSync implements IWalSync {
           continue;
         }
 
-        debugPrint("sync wal: ${wal.id} file: ${wal.filePath}");
+        final fullPath = await Wal.getFilePath(wal.filePath);
+        debugPrint("sync wal: ${wal.id} file: $fullPath");
 
         try {
-          File file = File(wal.filePath!);
+          if (fullPath == null) {
+            debugPrint("could not construct file path for wal id ${wal.id}");
+            wal.status = WalStatus.corrupted;
+            continue;
+          }
+
+          File file = File(fullPath);
           if (!file.existsSync()) {
-            debugPrint("file ${wal.filePath} is not exists");
+            debugPrint("file $fullPath does not exist");
             wal.status = WalStatus.corrupted;
             continue;
           }
@@ -1013,13 +1029,19 @@ class LocalWalSync implements IWalSync {
       wal.status = WalStatus.corrupted;
     }
     try {
-      File file = File(wal.filePath!);
-      if (!file.existsSync()) {
-        debugPrint("file ${wal.filePath} is not exists");
+      final fullPath = await Wal.getFilePath(wal.filePath);
+      if (fullPath == null) {
+        debugPrint("could not construct file path for wal id ${wal.id}");
         wal.status = WalStatus.corrupted;
       } else {
-        walFile = file;
-        wal.isSyncing = true;
+        File file = File(fullPath);
+        if (!file.existsSync()) {
+          debugPrint("file $fullPath does not exist");
+          wal.status = WalStatus.corrupted;
+        } else {
+          walFile = file;
+          wal.isSyncing = true;
+        }
       }
     } catch (e) {
       wal.status = WalStatus.corrupted;
