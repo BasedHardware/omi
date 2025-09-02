@@ -439,9 +439,8 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     for app in apps:
         apps_xml += f"""  <app>
     <id>{app.id}</id>
-    <name>{app.name}</name>
+    <category>{app.category}</category>
     <description>{app.description}</description>
-    <memory_prompt>{app.memory_prompt}</memory_prompt>
   </app>\n"""
     apps_xml += "</apps>"
 
@@ -458,7 +457,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
 
     Task:
     1. Analyze the conversation's structured content: title, category, overview, action items, and events.
-    2. For each app, evaluate how well its description and memory_prompt align with the conversation's content.
+    2. For each app, evaluate how well its description and category align with the conversation's content.
     3. Determine which single app would provide the most meaningful, relevant, and valuable analysis for this specific conversation.
     4. Select the app whose capabilities best match the conversation's themes and content.
 
