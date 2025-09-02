@@ -2,23 +2,20 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
-class PermissionsMobileWidget extends StatefulWidget {
+class PermissionsWidget extends StatefulWidget {
   final VoidCallback goNext;
 
-  const PermissionsMobileWidget({super.key, required this.goNext});
+  const PermissionsWidget({super.key, required this.goNext});
 
   @override
-  State<PermissionsMobileWidget> createState() => _PermissionsMobileWidgetState();
+  State<PermissionsWidget> createState() => _PermissionsWidgetState();
 }
 
-class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
+class _PermissionsWidgetState extends State<PermissionsWidget> {
   String _getButtonText(OnboardingProvider provider) {
     bool allPermissionsGranted = provider.hasLocationPermission && provider.hasNotificationPermission && (Platform.isAndroid ? provider.hasBackgroundPermission : true);
     return allPermissionsGranted ? 'Continue' : 'Allow All';
