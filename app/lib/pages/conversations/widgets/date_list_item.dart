@@ -32,7 +32,7 @@ class DateListItem extends StatelessWidget {
           Expanded(
             child: Container(
               height: 1,
-              color: Color(0xFF35343B),
+              color: const Color(0xFF35343B),
             ),
           )
         ],
