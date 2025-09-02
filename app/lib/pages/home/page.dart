@@ -496,7 +496,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(0,
                                                   duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -529,7 +529,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(1,
                                                   duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -564,7 +564,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(2,
                                                   duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -597,7 +597,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(3,
                                                   duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -713,41 +713,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      toolbarHeight: PlatformService.isDesktop ? 80 : null,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const BatteryInfoWidget(),
           const SizedBox.shrink(),
-          // Top Title App Bar - titles removed for Actions, Memories, and Apps pages
-          Consumer<HomeProvider>(
-            builder: (context, provider, child) {
-              if (provider.selectedIndex == 1 || provider.selectedIndex == 2 || provider.selectedIndex == 3) {
-                return const SizedBox.shrink();
-              } else {
-                return const Expanded(
-                  child: Center(
-                    child: Text(
-                      '',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                );
-              }
-            },
-          ),
           Row(
             children: [
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F25),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
@@ -818,16 +796,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               width: 0.5,
                             ),
                           ),
-                          child: Row(
+                          child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
+                              Icon(
                                 FontAwesomeIcons.solidComment,
                                 size: 14,
                                 color: Colors.white70,
                               ),
-                              const SizedBox(width: 6),
-                              const Text(
+                              SizedBox(width: 6),
+                              Text(
                                 'Ask',
                                 style: TextStyle(
                                   color: Colors.white70,
