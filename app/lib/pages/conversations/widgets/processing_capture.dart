@@ -82,8 +82,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
+    return Consumer<CaptureProvider>(
+        builder: (context, provider, child) {
       var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
           ? provider.conversationProvider!.conversations.first.id
           : null;
@@ -232,7 +232,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
-              color: Color(0xFF35343B),
+              color: const Color(0xFF35343B),
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -252,7 +252,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
-              color: Color(0xFF35343B),
+              color: const Color(0xFF35343B),
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -741,9 +741,7 @@ class ProcessingConversationWidget extends StatefulWidget {
 class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      return GestureDetector(
+    return  GestureDetector(
           onTap: () async {
             routeToPage(
               context,
@@ -782,8 +780,8 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                 ],
               ),
             ),
-          ));
-    });
+          ),
+        );
   }
 
   _getConversationHeader(BuildContext context) {
@@ -804,7 +802,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
               const SizedBox(width: 20),
               Container(
                 decoration: BoxDecoration(
-                  color: Color(0xFF35343B),
+                  color: const Color(0xFF35343B),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
