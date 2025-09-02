@@ -174,7 +174,7 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 // Battery Service Handlers
 //
 
-#define BATTERY_REFRESH_INTERVAL 15000 // 15 seconds
+#define BATTERY_REFRESH_INTERVAL 30000 // 30 seconds
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 void broadcast_battery_level(struct k_work *work_item);
@@ -238,13 +238,14 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     // Initiate PHY, Data Length, and MTU updates
     update_phy(current_connection);
+
     // Add a delay before data length and MTU updates as per Nordic example
     k_sleep(K_MSEC(1000));
     update_data_length(current_connection);
     update_mtu(current_connection);
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-    k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
+    k_work_schedule(&battery_work, K_MSEC(5000));
 #endif
 
     is_connected = true;

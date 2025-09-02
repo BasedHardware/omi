@@ -12,11 +12,11 @@ LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define BATTERY_STATES_COUNT 16
 
-#define ADC_TOTAL_SAMPLES 20
+#define ADC_TOTAL_SAMPLES 50
 // +1 for the calibration sample
 int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 
-#define ADC_RESOLUTION 10
+#define ADC_RESOLUTION 12
 #define ADC_GAIN ADC_GAIN_1_3
 #define ADC_REFERENCE ADC_REF_INTERNAL
 #define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10)
@@ -54,6 +54,12 @@ BatteryState battery_states[BATTERY_STATES_COUNT] = {
 };
 
 extern bool is_charging;
+
+// Moving average filter for voltage smoothing
+static uint16_t voltage_history[5];
+static uint8_t history_index = 0;
+static bool history_initialized = false;
+static bool last_charging_state = false;
 
 static const struct adc_channel_cfg m_1st_channel_cfg = {
     .gain = ADC_GAIN,
@@ -95,7 +101,8 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     int err;
 
     // Voltage divider circuit
-    const uint16_t R1 = 1115; // based on practical measurements adjusted on the omi device, in theory, R1 is > 1MOhm.
+    // Based on practical measurements adjusted on the omi device
+    const uint16_t R1 = 1115;
     const uint16_t R2 = 499;
 
     k_mutex_lock(&battery_mut, K_FOREVER);
@@ -106,6 +113,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
         k_mutex_unlock(&battery_mut);
         return err;
     }
+
     // Set pin low to enable battery voltage measurement path
     gpio_pin_set(bat_read_pin.port, bat_read_pin.pin, 0);
 
@@ -143,25 +151,85 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     }
     int32_t avg_adc_raw_val = sum_adc_raw / ADC_TOTAL_SAMPLES;
 
-    LOG_DBG("Average ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, avg_adc_raw_val);
+    LOG_INF("Average ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, avg_adc_raw_val);
 
-    // Convert average ADC value to millivolts at the ADC pin
+    // Calculate median of valid samples, discarding the first one (post-calibration)
+    // Copy samples to a temporary array for sorting
+    int16_t sorted_samples[ADC_TOTAL_SAMPLES];
+    for (int i = 0; i < ADC_TOTAL_SAMPLES; i++) {
+        sorted_samples[i] = sample_buffer[i + 1];
+    }
+
+    // Simple bubble sort for median calculation
+    for (int i = 0; i < ADC_TOTAL_SAMPLES - 1; i++) {
+        for (int j = 0; j < ADC_TOTAL_SAMPLES - i - 1; j++) {
+            if (sorted_samples[j] > sorted_samples[j + 1]) {
+                int16_t temp = sorted_samples[j];
+                sorted_samples[j] = sorted_samples[j + 1];
+                sorted_samples[j + 1] = temp;
+            }
+        }
+    }
+
+    // Calculate median
+    int32_t median_adc_raw_val;
+    if (ADC_TOTAL_SAMPLES % 2 == 0) {
+        // Even number of samples - average of two middle values
+        median_adc_raw_val = (sorted_samples[ADC_TOTAL_SAMPLES/2 - 1] + sorted_samples[ADC_TOTAL_SAMPLES/2]) / 2;
+    } else {
+        // Odd number of samples - middle value
+        median_adc_raw_val = sorted_samples[ADC_TOTAL_SAMPLES/2];
+    }
+
+    LOG_INF("Median ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, median_adc_raw_val);
+
+    // Convert median ADC value to millivolts at the ADC pin
     uint16_t adc_vref_mv = adc_ref_internal(adc_dev);
-    err = adc_raw_to_millivolts(adc_vref_mv, ADC_GAIN, ADC_RESOLUTION, &avg_adc_raw_val);
+    err = adc_raw_to_millivolts(adc_vref_mv, ADC_GAIN, ADC_RESOLUTION, &median_adc_raw_val);
     if (err) {
         LOG_WRN("ADC raw to millivolts conversion failed (error %d)", err);
         gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
         k_mutex_unlock(&battery_mut);
         return err;
     }
-    // avg_adc_raw_val now holds millivolts at the ADC input pin (AIN0)
+    LOG_INF("ADC mV at pin (after conversion): %d", median_adc_raw_val);
 
-    LOG_DBG("ADC mV at pin (after conversion): %d", avg_adc_raw_val);
+    // Sub 16mV when charging to correct voltage skew
+    // Based on practical measurements adjusted on the omi device
+    if (is_charging) {
+        median_adc_raw_val -= 16;
+    }
 
     // Calculate battery voltage using the voltage divider formula
-    *battery_millivolt = (uint16_t)(avg_adc_raw_val * ((float)(R1 + R2) / R2));
+    uint16_t raw_battery_millivolt = (uint16_t)(median_adc_raw_val * ((float)(R1 + R2) / R2));
 
-    LOG_DBG("Calculated battery millivolt: %u mV", *battery_millivolt);
+    // Check if charging state changed - if so, clear history for clean readings
+    if (last_charging_state != is_charging) {
+        history_initialized = false;
+        history_index = 0;
+        last_charging_state = is_charging;
+    }
+
+    // Apply moving average filter for smoother readings
+    voltage_history[history_index] = raw_battery_millivolt;
+    history_index = (history_index + 1) % 5;
+
+    if (!history_initialized) {
+        // Fill all history slots with the first reading
+        for (int i = 0; i < 5; i++) {
+            voltage_history[i] = raw_battery_millivolt;
+        }
+        history_initialized = true;
+    }
+
+    // Calculate moving average
+    uint32_t sum = 0;
+    for (int i = 0; i < 5; i++) {
+        sum += voltage_history[i];
+    }
+    *battery_millivolt = (uint16_t)(sum / 5);
+
+    LOG_INF("Raw battery millivolt: %u mV, Filtered: %u mV", raw_battery_millivolt, *battery_millivolt);
 
     // Restore bat_read_pin to INPUT state to save power/avoid affecting other circuits
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
