@@ -202,8 +202,11 @@ class AudioPlayerUtils extends ChangeNotifier {
 
   Future<String?> _getAudioFilePath(Wal wal) async {
     if (wal.filePath != null && wal.filePath!.isNotEmpty) {
-      final file = File(wal.filePath!);
-      if (file.existsSync()) return wal.filePath!;
+      final fullPath = await Wal.getFilePath(wal.filePath);
+      if (fullPath != null) {
+        final file = File(fullPath);
+        if (file.existsSync()) return fullPath;
+      }
     }
 
     if (wal.data.isNotEmpty) {
