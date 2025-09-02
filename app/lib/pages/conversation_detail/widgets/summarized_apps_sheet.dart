@@ -126,93 +126,103 @@ class _AppsList extends StatelessWidget {
     required this.currentAppId,
   });
 
+  // Track app installation state
+  static final Map<String, bool> _installingApps = {};
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<App>>(
-      future: provider.getSuggestedAppsFromAPI(),
-      builder: (context, snapshot) {
-        final availableApps = provider.appsList.where((app) => app.worksWithMemories() && app.enabled).toList();
-        final suggestedAppsFromAPI = snapshot.data ?? [];
-        final lastUsedApp = provider.getLastUsedSummarizationApp();
+    final availableApps = provider.appsList.where((app) => app.worksWithMemories() && app.enabled).toList();
+    final suggestedAppIds = provider.getSuggestedApps();
+    final lastUsedApp = provider.getLastUsedSummarizationApp();
 
-        // Filter out suggested apps and last used app from other apps
-        final otherApps = availableApps
-            .where((app) => !provider.isAppSuggested(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
-            .toList();
+    // Convert suggested app IDs to App objects
+    final suggestedApps = suggestedAppIds
+        .map((appId) => provider.appsList.firstWhereOrNull((app) => app.id == appId))
+        .where((app) => app != null)
+        .cast<App>()
+        .toList();
 
-        return ListView(
-          children: [
-            // Auto option
-            _AppListItem(
-              app: null,
-              isSelected: currentAppId == null,
-              onTap: () => _handleAutoAppTap(context),
-              trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
-              subtitle: 'Let Omi automatically choose the best app for this summary.',
+    // Filter out suggested apps and last used app from other apps
+    final otherApps = availableApps
+        .where((app) => !provider.isAppSuggested(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
+        .toList();
+
+    return ListView(
+      children: [
+        // Auto option
+        _AppListItem(
+          app: null,
+          isSelected: currentAppId == null,
+          onTap: () => _handleAutoAppTap(context),
+          trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
+          subtitle: 'Let Omi automatically choose the best app for this summary.',
+          provider: provider,
+        ),
+
+        // Suggested Apps section
+        if (suggestedApps.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Suggested Apps',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
+          ),
+          ...suggestedApps.map((app) {
+            final isAvailable = provider.isSuggestedAppAvailable(app.id);
+            final isInstalling = _AppsList._installingApps[app.id] == true;
+            return _AppListItem(
+              app: app,
+              isSelected: app.id == currentAppId,
+              onTap: () => isAvailable ? _handleAppTap(context, app) : _handleUnavailableAppTap(context, app),
+              isSuggested: true,
+              isInstalling: isInstalling,
+              provider: provider,
+            );
+          }),
+        ],
 
-            // Suggested Apps section
-            if (suggestedAppsFromAPI.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  'Suggested Apps',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+        // Other Apps section (includes last used app at top)
+        if (otherApps.isNotEmpty || lastUsedApp != null) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              suggestedApps.isNotEmpty ? 'Other Apps' : 'Available Apps',
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
-              ...suggestedAppsFromAPI.map((app) {
-                final isAvailable = provider.isSuggestedAppAvailable(app.id);
-                return _AppListItem(
-                  app: app,
-                  isSelected: app.id == currentAppId,
-                  onTap: () => isAvailable ? _handleAppTap(context, app) : _handleUnavailableAppTap(context, app),
-                  isSuggested: true,
-                  isUnavailable: !isAvailable,
-                );
-              }),
-            ],
+            ),
+          ),
+          // Show last used app first if available
+          if (lastUsedApp != null)
+            _AppListItem(
+              app: lastUsedApp,
+              isSelected: lastUsedApp.id == currentAppId,
+              onTap: () => _handleAppTap(context, lastUsedApp),
+              isLastUsed: true,
+              provider: provider,
+            ),
+          // Then show other apps
+          ...otherApps.map((app) => _AppListItem(
+                app: app,
+                isSelected: app.id == currentAppId,
+                onTap: () => _handleAppTap(context, app),
+                provider: provider,
+              )),
+        ],
 
-            // Other Apps section (includes last used app at top)
-            if (otherApps.isNotEmpty || lastUsedApp != null) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  suggestedAppsFromAPI.isNotEmpty ? 'Other Apps' : 'Available Apps',
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              // Show last used app first if available
-              if (lastUsedApp != null)
-                _AppListItem(
-                  app: lastUsedApp,
-                  isSelected: lastUsedApp.id == currentAppId,
-                  onTap: () => _handleAppTap(context, lastUsedApp),
-                  isLastUsed: true,
-                ),
-              // Then show other apps
-              ...otherApps.map((app) => _AppListItem(
-                    app: app,
-                    isSelected: app.id == currentAppId,
-                    onTap: () => _handleAppTap(context, app),
-                  )),
-            ],
+        // Create Template option
+        const _CreateTemplateListItem(),
 
-            // Create Template option
-            const _CreateTemplateListItem(),
-
-            // Enable Apps option
-            const _EnableAppsListItem(),
-          ],
-        );
-      },
+        // Enable Apps option
+        const _EnableAppsListItem(),
+      ],
     );
   }
 
@@ -254,37 +264,69 @@ class _AppsList extends StatelessWidget {
     return;
   }
 
-  void _handleUnavailableAppTap(BuildContext context, App app) {
-    // Show dialog or navigate to app installation
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: Text(
-          'App Not Available',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          '${app.name} is suggested for this conversation but not installed. Would you like to install it?',
-          style: TextStyle(color: Colors.grey[300]),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+  void _handleUnavailableAppTap(BuildContext context, App app) async {
+    // Check if app is already being installed
+    if (_AppsList._installingApps[app.id] == true) {
+      return;
+    }
+
+    // Set installing state
+    _AppsList._installingApps[app.id] = true;
+
+    try {
+      final appProvider = context.read<AppProvider>();
+      final conversationProvider = context.read<ConversationDetailProvider>();
+      final conversationId = conversationProvider.conversation.id;
+
+      // Find the app index in the apps list for toggleApp
+      final appIndex = appProvider.apps.indexWhere((a) => a.id == app.id);
+
+      // Install/enable the app
+      await appProvider.toggleApp(app.id, true, appIndex >= 0 ? appIndex : null);
+
+      // Check if installation was successful
+      final installedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id && a.enabled);
+
+      if (installedApp != null) {
+        // Track analytics
+        MixpanelManager().summarizedAppSelected(
+          conversationId: conversationId,
+          selectedAppId: app.id,
+          previousAppId: conversationProvider.getSummarizedApp()?.appId,
+        );
+
+        // Track the last used app
+        conversationProvider.trackLastUsedSummarizationApp(app.id);
+
+        // Close the bottom sheet
+        Navigator.pop(context);
+
+        // Set the app for reprocessing and reprocess the conversation
+        conversationProvider.setSelectedAppForReprocessing(installedApp);
+        await conversationProvider.reprocessConversation(appId: app.id);
+      } else {
+        // Installation failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to install ${app.name}. Please try again.'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.red,
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Close bottom sheet
-              // Navigate to apps page or specific app installation
-              routeToPage(context, const AppsPage(showAppBar: true));
-            },
-            child: Text('Install', style: TextStyle(color: Colors.blue)),
-          ),
-        ],
-      ),
-    );
+        );
+      }
+    } catch (e) {
+      // Handle installation error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error installing ${app.name}: ${e.toString()}'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      // Clear installing state
+      _AppsList._installingApps[app.id] = false;
+    }
   }
 }
 
@@ -295,8 +337,9 @@ class _AppListItem extends StatelessWidget {
   final Widget? trailingIcon;
   final String? subtitle;
   final bool isSuggested;
-  final bool isUnavailable;
   final bool isLastUsed;
+  final bool isInstalling;
+  final ConversationDetailProvider? provider;
 
   const _AppListItem({
     required this.app,
@@ -305,8 +348,9 @@ class _AppListItem extends StatelessWidget {
     this.trailingIcon,
     this.subtitle,
     this.isSuggested = false,
-    this.isUnavailable = false,
     this.isLastUsed = false,
+    this.isInstalling = false,
+    this.provider,
   });
 
   @override
@@ -320,7 +364,7 @@ class _AppListItem extends StatelessWidget {
             child: Text(
               app != null ? app!.name.decodeString : 'Auto',
               style: TextStyle(
-                color: isUnavailable ? Colors.grey : Colors.white,
+                color: Colors.white,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 fontSize: 16,
               ),
@@ -350,7 +394,7 @@ class _AppListItem extends StatelessWidget {
               app!.description.decodeString,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: isUnavailable ? Colors.grey[600] : Colors.grey, fontSize: 12),
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
             )
           : subtitle != null
               ? Text(
@@ -358,14 +402,42 @@ class _AppListItem extends StatelessWidget {
                   style: const TextStyle(color: Colors.grey, fontSize: 12),
                 )
               : null,
-      trailing: isSelected
-          ? const Icon(Icons.check, color: Colors.green, size: 20)
-          : isUnavailable
-              ? const Icon(Icons.download, color: Colors.grey, size: 20)
-              : trailingIcon,
+      trailing: _buildTrailingWidget(),
       selected: isSelected,
       onTap: onTap,
     );
+  }
+
+  Widget _buildTrailingWidget() {
+    // Check if this app is currently being processed
+    final isProcessing = provider != null &&
+        provider!.loadingReprocessConversation &&
+        ((app != null && provider!.selectedAppForReprocessing?.id == app!.id) ||
+            (app == null && provider!.selectedAppForReprocessing == null));
+
+    if (isSelected) {
+      return const Icon(Icons.check, color: Colors.green, size: 20);
+    } else if (isInstalling) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    } else if (isProcessing) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    } else {
+      return trailingIcon ?? const SizedBox.shrink();
+    }
   }
 
   Widget _buildLeadingIcon() {
