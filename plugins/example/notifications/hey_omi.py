@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 import logging
 import time
 import os
+import requests
 from collections import defaultdict
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -21,6 +22,15 @@ print(f"API key loaded (last 4 chars): ...{api_key[-4:]}")
 
 client = OpenAI(api_key=api_key)
 
+# OMI App credentials for notifications
+omi_app_id = os.getenv('HEY_OMI_APP_ID')
+omi_app_secret = os.getenv('HEY_OMI_APP_SECRET')
+
+if not omi_app_id or not omi_app_secret:
+    raise ValueError("HEY_OMI_APP_ID and HEY_OMI_APP_SECRET environment variables are required")
+
+print(f"OMI App ID loaded: {omi_app_id}")
+
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 # Set up logging
@@ -31,7 +41,7 @@ logger = logging.getLogger(__name__)
 TRIGGER_PHRASES = ["hey omi", "hey, omi"]  # Base triggers
 PARTIAL_FIRST = ["hey", "hey,"]  # First part of trigger
 PARTIAL_SECOND = ["omi"]  # Second part of trigger
-QUESTION_AGGREGATION_TIME = 5  # seconds to wait for collecting the question
+QUESTION_AGGREGATION_TIME = 10  # seconds to wait for collecting the question
 
 # Replace the message buffer with a class to better manage state
 class MessageBuffer:
@@ -81,7 +91,7 @@ message_buffer = MessageBuffer()
 
 # Add cooldown tracking
 notification_cooldowns = defaultdict(float)
-NOTIFICATION_COOLDOWN = 10  # 10 seconds cooldown between notifications for each session
+NOTIFICATION_COOLDOWN = 15  # 15 seconds cooldown between notifications for each session
 
 # Add these near the top of the file, after the imports
 if os.getenv('HTTPS_PROXY'):
@@ -101,7 +111,7 @@ def get_openai_response(text):
     """Get response from OpenAI for the user's question"""
     try:
         logger.info(f"Sending question to OpenAI: {text}")
-        
+
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -112,7 +122,7 @@ def get_openai_response(text):
             max_tokens=150,
             timeout=30
         )
-        
+
         answer = response.choices[0].message.content.strip()
         logger.info(f"Received response from OpenAI: {answer}")
         return answer
@@ -120,13 +130,38 @@ def get_openai_response(text):
         logger.error(f"Error getting OpenAI response: {str(e)}")
         return "I'm sorry, I encountered an error processing your request."
 
+
+def send_omi_notification(uid: str, message: str):
+    """Send notification using OMI's notifications endpoint"""
+    try:
+        url = f"https://api.omi.me/v2/integrations/{omi_app_id}/notification"
+        headers = {
+            "Authorization": f"Bearer {omi_app_secret}",
+            "Content-Type": "application/json"
+        }
+        params = {
+            "uid": uid,
+            "message": message
+        }
+
+        logger.info(f"Sending notification to OMI for uid {uid}: {message}")
+
+        response = requests.post(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+
+        logger.info(f"Successfully sent notification to OMI for uid {uid}")
+        return True
+    except Exception as e:
+        logger.error(f"Error sending notification to OMI: {str(e)}")
+        return False
+
 @router.post('/webhook')
 async def webhook(request: WebhookRequest):
     logger.info("Received webhook POST request")
     logger.info(f"Received data: {request.dict()}")
     
     session_id = request.session_id
-    uid = request.uid
+    uid = request.uid or session_id  # Use session_id as uid if uid is not provided
     logger.info(f"Processing request for session_id: {session_id}, uid: {uid}")
     
     if not session_id:
@@ -141,12 +176,18 @@ async def webhook(request: WebhookRequest):
     # Add debug logging
     logger.debug(f"Current buffer state for session {session_id}: {buffer_data}")
     
+    # Check and handle cooldown
+    last_notification_time = notification_cooldowns.get(session_id, 0)
+    time_since_last_notification = current_time - last_notification_time
+
+    # If cooldown has expired, reset it
+    if time_since_last_notification >= NOTIFICATION_COOLDOWN:
+        notification_cooldowns[session_id] = 0
+
     # Only check cooldown if we have a trigger and are about to process
-    if buffer_data['trigger_detected'] and not buffer_data['response_sent']:
-        time_since_last_notification = current_time - notification_cooldowns[session_id]
-        if time_since_last_notification < NOTIFICATION_COOLDOWN:
-            logger.info(f"Cooldown active. {NOTIFICATION_COOLDOWN - time_since_last_notification:.0f}s remaining")
-            return WebhookResponse(status="success")
+    if buffer_data['trigger_detected'] and not buffer_data['response_sent'] and time_since_last_notification < NOTIFICATION_COOLDOWN:
+        logger.info(f"Cooldown active. {NOTIFICATION_COOLDOWN - time_since_last_notification:.0f}s remaining")
+        return WebhookResponse(status="success")
     
     # Process each segment
     for segment in segments:
@@ -164,7 +205,7 @@ async def webhook(request: WebhookRequest):
             buffer_data['collected_question'] = []
             buffer_data['response_sent'] = False
             buffer_data['partial_trigger'] = False
-            notification_cooldowns[session_id] = current_time  # Set cooldown when trigger is detected
+            # Note: cooldown is now set when notification is actually sent, not when trigger is detected
             
             # Extract any question part that comes after the trigger
             question_part = text.split('omi,')[-1].strip() if 'omi,' in text.lower() else ''
@@ -222,15 +263,27 @@ async def webhook(request: WebhookRequest):
             )
             
             if should_process and buffer_data['collected_question']:
-                # Process question and send response
+                # Process question and send notification
                 full_question = ' '.join(buffer_data['collected_question']).strip()
                 if not full_question.endswith('?'):
                     full_question += '?'
-                
+
                 logger.info(f"Processing complete question: {full_question}")
                 response = get_openai_response(full_question)
                 logger.info(f"Got response from OpenAI: {response}")
-                
+
+                # Send notification using OMI endpoint
+                if uid:
+                    notification_success = send_omi_notification(uid, response)
+                    if notification_success:
+                        logger.info(f"Successfully sent notification for session {session_id}")
+                        # Set cooldown timestamp when notification is successfully sent
+                        notification_cooldowns[session_id] = current_time
+                    else:
+                        logger.error(f"Failed to send notification for session {session_id}")
+                else:
+                    logger.error(f"No uid provided for session {session_id}, cannot send notification")
+
                 # Reset all states
                 buffer_data['trigger_detected'] = False
                 buffer_data['trigger_time'] = 0
@@ -238,8 +291,9 @@ async def webhook(request: WebhookRequest):
                 buffer_data['response_sent'] = True
                 buffer_data['partial_trigger'] = False
                 has_processed = True
-                
-                return WebhookResponse(status="success", message=response)
+
+                # Return success without message (notification sent separately)
+                return WebhookResponse(status="success")
     
     # Return success if no response needed
     return WebhookResponse(status="success")
