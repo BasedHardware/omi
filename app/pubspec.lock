@@ -1741,14 +1741,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.1"
-  posthog_flutter:
-    dependency: "direct main"
-    description:
-      name: posthog_flutter
-      sha256: c0ce2896b546b835aa1c2a928e90159aae3d6ced843c9cc85c726b9d7e9a1f8b
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.0"
   process:
     dependency: transitive
     description:
@@ -1957,14 +1949,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.1"
-  siri_wave:
-    dependency: "direct main"
-    description:
-      name: siri_wave
-      sha256: "0b92945d37f46e58ae3d5c1adb69879a0db12d656ba68537925d0a3ec759937c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.0"
   skeletonizer:
     dependency: "direct main"
     description:

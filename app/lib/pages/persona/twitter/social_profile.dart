@@ -7,7 +7,6 @@ import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/persona/twitter/verify_identity_screen.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 class SocialHandleScreen extends StatefulWidget {
@@ -181,10 +180,6 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 await signInAnonymously();
                               }
                               var handle = _controller.text.trim();
-                              await Posthog().capture(
-                                eventName: 'x_handle_submitted',
-                                properties: {'handle': handle, 'uid': FirebaseAuth.instance.currentUser?.uid ?? ''},
-                              );
                               SharedPreferencesUtil().hasOmiDevice = false;
                               Provider.of<PersonaProvider>(context, listen: false).setRouting(widget.routing);
                               await provider.getTwitterProfile(handle);
@@ -223,14 +218,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             ? TextButton(
                                 onPressed: () async {
                                   FocusScope.of(context).unfocus();
-                                  await Posthog().capture(
-                                    eventName: 'pressed_i_have_omi',
-                                    properties: {
-                                      'username': _controller.text,
-                                    },
-                                  );
-
-                                  routeToPage(context, OnboardingWrapper());
+                                  routeToPage(context, const OnboardingWrapper());
                                 },
                                 child: const Text(
                                   'Connect Omi Device',
