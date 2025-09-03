@@ -8,14 +8,6 @@ import 'package:upgrader/upgrader.dart';
 class MyUpgrader extends Upgrader {
   MyUpgrader({super.debugLogging, super.debugDisplayOnce});
 
-  @override
-  bool isUpdateAvailable() {
-    final storeVersion = currentAppStoreVersion;
-    final installedVersion = currentInstalledVersion;
-    // print('storeVersion=$storeVersion');
-    // print('installedVersion=$installedVersion');
-    return super.isUpdateAvailable();
-  }
 }
 
 class MyUpgradeAlert extends UpgradeAlert {
