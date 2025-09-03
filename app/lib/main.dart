@@ -296,7 +296,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     return LoggerSnackbar(exception: data);
                   },
                 ),
-                child: const AppShell(), // Use AppShell instead of DeciderWidget
+                child: const AppShell(),
               ),
             ),
           );

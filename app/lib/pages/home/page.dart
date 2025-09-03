@@ -30,7 +30,6 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -41,7 +40,6 @@ import 'package:omi/utils/enums.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
 
-import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
 import 'widgets/out_of_credits_widget.dart';
 
