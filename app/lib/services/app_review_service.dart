@@ -13,6 +13,9 @@ class AppReviewService {
   AppReviewService._internal();
 
   final InAppReview _inAppReview = InAppReview.instance;
+
+  static const String _appStoreId = '6651027111';
+  static final Uri _playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=com.friend.ios');
   static const String _hasCompletedFirstActionItemKey = 'has_completed_first_action_item';
   static const String _hasShownReviewPromptKey = 'has_shown_review_prompt';
   static const String _hasFirstConversationKey = 'has_first_conversation';
@@ -164,24 +167,16 @@ class AppReviewService {
                             // Use in-app review for iOS
                             if (await _inAppReview.isAvailable()) {
                               await _inAppReview.requestReview();
-                              MixpanelManager()
-                                  .track('App Review Requested');
+                              MixpanelManager().track('App Review Requested');
                             } else {
-                              await _inAppReview.openStoreListing(
-                                appStoreId: '6651027111',
-                              );
-                              MixpanelManager()
-                                  .track('App Store Opened');
+                              await _inAppReview.openStoreListing(appStoreId: _appStoreId);
+                              MixpanelManager().track('App Store Opened');
                             }
                           } else {
                             // Open Play Store
-                            final Uri playStoreUrl =
-                                Uri.parse('https://play.google.com/store/apps/details?id=com.friend.ios');
-
-                            if (await canLaunchUrl(playStoreUrl)) {
-                              await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
-                              MixpanelManager()
-                                  .track('Play Store Opened');
+                            if (await canLaunchUrl(_playStoreUrl)) {
+                              await launchUrl(_playStoreUrl, mode: LaunchMode.externalApplication);
+                              MixpanelManager().track('Play Store Opened');
                             }
                           }
                         } catch (e) {
