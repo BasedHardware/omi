@@ -48,7 +48,6 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -88,14 +87,6 @@ Future<bool> _init() async {
   return isAuth;
 }
 
-Future<void> initPostHog() async {
-  final config = PostHogConfig(Env.posthogApiKey!);
-  config.debug = true;
-  config.captureApplicationLifecycleEvents = true;
-  config.host = 'https://us.i.posthog.com';
-  await Posthog().setup(config);
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -123,9 +114,7 @@ void main() async {
   }
 
   FlutterForegroundTask.initCommunicationPort();
-  if (Env.posthogApiKey != null && !PlatformService.isDesktop) {
-    await initPostHog();
-  }
+
   // _setupAudioSession();
 
   bool isAuth = await _init();
@@ -248,9 +237,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         builder: (context, child) {
           return WithForegroundTask(
             child: MaterialApp(
-              navigatorObservers: [
-                if (Env.posthogApiKey != null) PosthogObserver(),
-              ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,
               navigatorKey: MyApp.navigatorKey,
