@@ -59,7 +59,6 @@ extern bool is_charging;
 static uint16_t voltage_history[5];
 static uint8_t history_index = 0;
 static bool history_initialized = false;
-static bool last_charging_state = false;
 
 static const struct adc_channel_cfg m_1st_channel_cfg = {
     .gain = ADC_GAIN,
@@ -89,10 +88,10 @@ struct adc_sequence sequence = {
 
 static void battery_charging_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
-    if(gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
-        is_charging = true;
-    } else {
-        is_charging = false;
+    int err = battery_charging_state_read();
+    if (err)
+    {
+        LOG_ERR("Failed to read charging state (%d)", err);
     }
 }
 
@@ -101,8 +100,8 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     int err;
 
     // Voltage divider circuit
-    // Based on practical measurements adjusted on the omi device
-    const uint16_t R1 = 1115;
+    // based on practical measurements adjusted on the omi device
+    const uint16_t R1 = 1091;
     const uint16_t R2 = 499;
 
     k_mutex_lock(&battery_mut, K_FOREVER);
@@ -144,15 +143,6 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
         return err;
     }
 
-    // Average valid samples, discarding the first one (post-calibration)
-    int32_t sum_adc_raw = 0;
-    for (int i = 0; i < ADC_TOTAL_SAMPLES; i++) {
-        sum_adc_raw += sample_buffer[i + 1];
-    }
-    int32_t avg_adc_raw_val = sum_adc_raw / ADC_TOTAL_SAMPLES;
-
-    LOG_INF("Average ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, avg_adc_raw_val);
-
     // Calculate median of valid samples, discarding the first one (post-calibration)
     // Copy samples to a temporary array for sorting
     int16_t sorted_samples[ADC_TOTAL_SAMPLES];
@@ -172,50 +162,41 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     }
 
     // Calculate median
-    int32_t median_adc_raw_val;
+    int32_t adc_raw_val;
     if (ADC_TOTAL_SAMPLES % 2 == 0) {
-        // Even number of samples - average of two middle values
-        median_adc_raw_val = (sorted_samples[ADC_TOTAL_SAMPLES/2 - 1] + sorted_samples[ADC_TOTAL_SAMPLES/2]) / 2;
+        adc_raw_val = (sorted_samples[ADC_TOTAL_SAMPLES/2 - 1] + sorted_samples[ADC_TOTAL_SAMPLES/2]) / 2;
     } else {
-        // Odd number of samples - middle value
-        median_adc_raw_val = sorted_samples[ADC_TOTAL_SAMPLES/2];
+        adc_raw_val = sorted_samples[ADC_TOTAL_SAMPLES/2];
     }
 
-    LOG_INF("Median ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, median_adc_raw_val);
+    LOG_INF("Median ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, adc_raw_val);
 
     // Convert median ADC value to millivolts at the ADC pin
     uint16_t adc_vref_mv = adc_ref_internal(adc_dev);
-    err = adc_raw_to_millivolts(adc_vref_mv, ADC_GAIN, ADC_RESOLUTION, &median_adc_raw_val);
+    err = adc_raw_to_millivolts(adc_vref_mv, ADC_GAIN, ADC_RESOLUTION, &adc_raw_val);
     if (err) {
         LOG_WRN("ADC raw to millivolts conversion failed (error %d)", err);
         gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
         k_mutex_unlock(&battery_mut);
         return err;
     }
-    LOG_INF("ADC mV at pin (after conversion): %d", median_adc_raw_val);
+    LOG_INF("ADC mV at pin (after conversion): %d, charging: %s", adc_raw_val, is_charging?"true":"false");
 
     // Sub 16mV when charging to correct voltage skew
-    // Based on practical measurements adjusted on the omi device
+    // based on practical measurements adjusted on the omi device
     if (is_charging) {
-        median_adc_raw_val -= 16;
+        adc_raw_val -= 16;
     }
 
     // Calculate battery voltage using the voltage divider formula
-    uint16_t raw_battery_millivolt = (uint16_t)(median_adc_raw_val * ((float)(R1 + R2) / R2));
-
-    // Check if charging state changed - if so, clear history for clean readings
-    if (last_charging_state != is_charging) {
-        history_initialized = false;
-        history_index = 0;
-        last_charging_state = is_charging;
-    }
+    uint16_t raw_battery_millivolt = (uint16_t)(adc_raw_val * ((float)(R1 + R2) / R2));
 
     // Apply moving average filter for smoother readings
     voltage_history[history_index] = raw_battery_millivolt;
     history_index = (history_index + 1) % 5;
 
+    // Fill all history slots with the first reading
     if (!history_initialized) {
-        // Fill all history slots with the first reading
         for (int i = 0; i < 5; i++) {
             voltage_history[i] = raw_battery_millivolt;
         }
@@ -240,6 +221,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     }
 
     k_mutex_unlock(&battery_mut);
+
     return 0;
 }
 
@@ -295,6 +277,67 @@ int battery_set_slow_charge()
     return 0;
 }
 
+int battery_charging_state_read()
+{
+    if(gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
+        is_charging = true;
+    } else {
+        is_charging = false;
+    }
+    return 0;
+}
+
+int battery_enable_read()
+{
+    int err;
+
+    // Perform voltage divider configs
+    err = gpio_pin_configure_dt(&bat_read_pin, GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1);
+    if (err < 0) {
+        LOG_ERR("Failed to configure bat_read_pin to output: %d", err);
+        return err;
+    }
+
+    // Set pin low to enable battery voltage measurement path
+    gpio_pin_set(bat_read_pin.port, bat_read_pin.pin, 0);
+    k_msleep(10);
+
+    if (!device_is_ready(adc_dev)) {
+        LOG_ERR("ADC device %s is not ready", adc_dev->name);
+        gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
+        return -ENODEV;
+    }
+
+    err = adc_channel_setup(adc_dev, &m_1st_channel_cfg);
+    if (err) {
+        LOG_ERR("ADC channel setup failed (error %d)", err);
+        gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
+        return err;
+    }
+
+    // Trigger offset calibration with proper settling time
+    NRF_SAADC_S->TASKS_CALIBRATEOFFSET = 1;
+    k_msleep(5);
+
+    // Read samples
+    err = adc_read(adc_dev, &sequence);
+    if (err) {
+        LOG_WRN("ADC read failed (error %d)", err);
+        gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
+        return err;
+    }
+
+    // Restore bat_read_pin
+    err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
+    if (err < 0) {
+        LOG_ERR("Failed to configure bat_read_pin to input: %d", err);
+        return err;
+    }
+
+    return 0;
+}
+
+
 int battery_init()
 {
     int err;
@@ -302,27 +345,43 @@ int battery_init()
     k_mutex_lock(&battery_mut, K_FOREVER);
 
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
-    if (err < 0)
-    {
+    if (err < 0) {
         LOG_ERR("Failed to configure enable pin (%d)", err);
+        k_mutex_unlock(&battery_mut);
         return err;
     }
 
     err = gpio_pin_configure_dt(&bat_chg_pin, GPIO_INPUT | GPIO_PULL_UP);
-    if (err < 0)
-    {
+    if (err < 0) {
         LOG_ERR("Failed to configure enable pin (%d)", err);
+        k_mutex_unlock(&battery_mut);
         return err;
     }
     battery_charging_callback(NULL, NULL, 0);
     err = gpio_pin_interrupt_configure_dt(&bat_chg_pin, GPIO_INT_EDGE_BOTH);
     if (err < 0) {
         LOG_ERR("Failed to configure interrupt for bat_chg_pin (%d)", err);
+        k_mutex_unlock(&battery_mut);
         return err;
     }
     gpio_init_callback(&bat_chg_cb, battery_charging_callback, BIT(bat_chg_pin.pin));
     gpio_add_callback(bat_chg_pin.port, &bat_chg_cb);
 
+    err = battery_enable_read();
+    if (err < 0) {
+        LOG_ERR("Failed to enable battery read (%d)", err);
+        k_mutex_unlock(&battery_mut);
+        return err;
+    }
+
     k_mutex_unlock(&battery_mut);
+
+    // Charging state read
+    int chargingStateErr;
+    chargingStateErr = battery_charging_state_read();
+    if (chargingStateErr) {
+        LOG_ERR("Failed to read charging state (%d)", chargingStateErr);
+    }
+
     return 0;
 }
