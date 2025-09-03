@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AppReviewService {
   static final AppReviewService _instance = AppReviewService._internal();
@@ -12,6 +13,9 @@ class AppReviewService {
   AppReviewService._internal();
 
   final InAppReview _inAppReview = InAppReview.instance;
+
+  static const String _appStoreId = '6651027111';
+  static final Uri _playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=com.friend.ios');
   static const String _hasCompletedFirstActionItemKey = 'has_completed_first_action_item';
   static const String _hasShownReviewPromptKey = 'has_shown_review_prompt';
   static const String _hasFirstConversationKey = 'has_first_conversation';
@@ -82,9 +86,9 @@ class AppReviewService {
   Future<bool> showReviewPromptIfNeeded(BuildContext context, {bool isProcessingFirstConversation = false}) async {
     final hasCompleted = await hasCompletedFirstActionItem();
     final isFirst = await isFirstConversation();
-    
+
     bool shouldShow = false;
-    
+
     if (isProcessingFirstConversation && isFirst) {
       final hasShownForConversation = await hasShownReviewForConversation();
       if (!hasShownForConversation) {
@@ -159,18 +163,21 @@ class AppReviewService {
                         Navigator.of(context).pop();
 
                         try {
-                          // Check if the in-app review is available
-                          if (await _inAppReview.isAvailable()) {
-                            // Request the review
-                            await _inAppReview.requestReview();
-                            MixpanelManager()
-                                .track('App Review Requested', properties: {'source': 'action_item_completion'});
+                          if (Platform.isIOS) {
+                            // Use in-app review for iOS
+                            if (await _inAppReview.isAvailable()) {
+                              await _inAppReview.requestReview();
+                              MixpanelManager().track('App Review Requested');
+                            } else {
+                              await _inAppReview.openStoreListing(appStoreId: _appStoreId);
+                              MixpanelManager().track('App Store Opened');
+                            }
                           } else {
-                            await _inAppReview.openStoreListing(
-                              appStoreId: Platform.isIOS ? '6651027111' : null,
-                            );
-                            MixpanelManager()
-                                .track('App Store Opened', properties: {'source': 'action_item_completion'});
+                            // Open Play Store
+                            if (await canLaunchUrl(_playStoreUrl)) {
+                              await launchUrl(_playStoreUrl, mode: LaunchMode.externalApplication);
+                              MixpanelManager().track('Play Store Opened');
+                            }
                           }
                         } catch (e) {
                           debugPrint('Error requesting review: $e');
@@ -206,7 +213,7 @@ class AppReviewService {
                     TextButton(
                       onPressed: () {
                         HapticFeedback.lightImpact();
-                        MixpanelManager().track('App Review Skipped', properties: {'source': 'action_item_completion'});
+                        MixpanelManager().track('App Review Skipped');
                         Navigator.of(context).pop();
                       },
                       child: const Text(
