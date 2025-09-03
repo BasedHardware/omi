@@ -1,9 +1,43 @@
 import axios from "axios";
 import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 import { keys } from "../keys";
 
-export async function transcribeAudio(audioPath: string) {
-    const audioBase64 = await FileSystem.readAsStringAsync(audioPath, { encoding: FileSystem.EncodingType.Base64 });
+function blobToBase64(blob: Blob | File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const result = reader.result as string;
+            // Remove the data URL prefix to get just the base64 string
+            const base64 = result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+
+export async function transcribeAudio(audioInput: string | File | Blob) {
+    let audioBase64: string;
+    
+    if (Platform.OS === 'web') {
+        if (typeof audioInput === 'string') {
+            // If it's a URL, fetch it first
+            const response = await fetch(audioInput);
+            const blob = await response.blob();
+            audioBase64 = await blobToBase64(blob);
+        } else {
+            // If it's a File or Blob object
+            audioBase64 = await blobToBase64(audioInput as Blob);
+        }
+    } else {
+        // Mobile: expect a file path string
+        audioBase64 = await FileSystem.readAsStringAsync(audioInput as string, { 
+            encoding: FileSystem.EncodingType.Base64 
+        });
+    }
+    
     try {
         const response = await axios.post("https://api.openai.com/v1/audio/transcriptions", {
             audio: audioBase64,
@@ -58,13 +92,34 @@ export async function textToSpeech(text: string) {
 }
 
 // Function to convert image to base64
-async function imageToBase64(path: string) {
-    const image = await FileSystem.readAsStringAsync(path, { encoding: FileSystem.EncodingType.Base64 });
-    return `data:image/jpeg;base64,${image}`; // Adjust the MIME type if necessary (e.g., image/png)
+async function imageToBase64(imageInput: string | File | Blob): Promise<string> {
+    let base64: string;
+    
+    if (Platform.OS === 'web') {
+        if (typeof imageInput === 'string') {
+            // If it's a URL, fetch it first
+            const response = await fetch(imageInput);
+            const blob = await response.blob();
+            base64 = await blobToBase64(blob);
+        } else {
+            // If it's a File or Blob object
+            base64 = await blobToBase64(imageInput as Blob);
+        }
+        
+        // Determine MIME type for web
+        const mimeType = (imageInput as File)?.type || 'image/jpeg';
+        return `data:${mimeType};base64,${base64}`;
+    } else {
+        // Mobile: expect a file path string
+        const image = await FileSystem.readAsStringAsync(imageInput as string, { 
+            encoding: FileSystem.EncodingType.Base64 
+        });
+        return `data:image/jpeg;base64,${image}`;
+    }
 }
 
-export async function describeImage(imagePath: string) {
-    const imageBase64 = await imageToBase64(imagePath);
+export async function describeImage(imageInput: string | File | Blob) {
+    const imageBase64 = await imageToBase64(imageInput);
     try {
         const response = await axios.post("https://api.openai.com/v1/images/descriptions", {
             image: imageBase64,
