@@ -164,8 +164,6 @@ flutter:
     - assets/images/herologo.png
     - assets/fonts/
     - assets/images/
-    - assets/lottie_animations/
-    - assets/pdfs/
     - assets/silero_vad.onnx
     - assets/silero_vad.v5.onnx
     - shorebird.yaml
