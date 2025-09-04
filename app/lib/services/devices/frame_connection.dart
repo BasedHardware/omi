@@ -470,4 +470,10 @@ class FrameDeviceConnection extends DeviceConnection {
   Future<void> performSetLedDimRatio(int ratio) async {
     // Frame does not support LED dimming
   }
+
+  @override
+  Future<int> performGetFeatures() {
+    // Frame does not support features check
+    return Future.value(0);
+  }
 }

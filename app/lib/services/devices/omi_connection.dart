@@ -22,9 +22,12 @@ class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _buttonService;
   BluetoothService? _speakerService;
   BluetoothService? _settingsService;
+  BluetoothService? _featuresService;
 
   static const String settingsServiceUuid = '19b10010-e8f2-537e-4f6c-d104768a1214';
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
+  static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
+  static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
   OmiDeviceConnection(super.device, super.bleDevice);
 
@@ -69,6 +72,12 @@ class OmiDeviceConnection extends DeviceConnection {
     _settingsService = await getService(settingsServiceUuid);
     if (_settingsService == null) {
       logServiceNotFoundError('Settings', deviceId);
+    }
+
+    _featuresService = await getService(featuresServiceUuid);
+    if (_featuresService == null) {
+      // This is not a critical service, so we don't throw an exception
+      logServiceNotFoundError('Features', deviceId);
     }
   }
 
@@ -759,5 +768,23 @@ class OmiDeviceConnection extends DeviceConnection {
       return value[0];
     }
     return null;
+  }
+
+  @override
+  Future<int> performGetFeatures() async {
+    if (_featuresService == null) {
+      logServiceNotFoundError('Features', deviceId);
+      return 0;
+    }
+    var featuresCharacteristic = getCharacteristic(_featuresService!, featuresCharacteristicUuid);
+    if (featuresCharacteristic == null) {
+      logCharacteristicNotFoundError('Features', deviceId);
+      return 0;
+    }
+    var value = await featuresCharacteristic.read();
+    if (value.length >= 4) {
+      return ByteData.view(Uint8List.fromList(value).buffer).getUint32(0, Endian.little);
+    }
+    return 0;
   }
 }
