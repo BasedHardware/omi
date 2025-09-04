@@ -13,7 +13,6 @@ import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:image/image.dart' as img;
 
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
@@ -22,6 +21,10 @@ class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _accelService;
   BluetoothService? _buttonService;
   BluetoothService? _speakerService;
+  BluetoothService? _settingsService;
+
+  static const String settingsServiceUuid = '19b10010-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
 
   OmiDeviceConnection(super.device, super.bleDevice);
 
@@ -61,6 +64,11 @@ class OmiDeviceConnection extends DeviceConnection {
     _buttonService = await getService(buttonServiceUuid);
     if (_buttonService == null) {
       logServiceNotFoundError('Button', deviceId);
+    }
+
+    _settingsService = await getService(settingsServiceUuid);
+    if (_settingsService == null) {
+      logServiceNotFoundError('Settings', deviceId);
     }
   }
 
@@ -664,8 +672,6 @@ class OmiDeviceConnection extends DeviceConnection {
     }
 
     var listener = accelCharacteristic.lastValueStream.listen((value) {
-      // debugPrint('Battery level listener: $value');
-
       if (value.length > 4) {
         //for some reason, the very first reading is four bytes
 
@@ -721,5 +727,37 @@ class OmiDeviceConnection extends DeviceConnection {
     device.cancelWhenDisconnected(listener);
 
     return listener;
+  }
+
+  @override
+  Future<void> performSetLedDimRatio(int ratio) async {
+    if (_settingsService == null) {
+      logServiceNotFoundError('Settings', deviceId);
+      return;
+    }
+    var dimRatioCharacteristic = getCharacteristic(_settingsService!, settingsDimRatioCharacteristicUuid);
+    if (dimRatioCharacteristic == null) {
+      logCharacteristicNotFoundError('Settings dim ratio', deviceId);
+      return;
+    }
+    await dimRatioCharacteristic.write([ratio.clamp(0, 100)]);
+  }
+
+  @override
+  Future<int?> performGetLedDimRatio() async {
+    if (_settingsService == null) {
+      logServiceNotFoundError('Settings', deviceId);
+      return null;
+    }
+    var dimRatioCharacteristic = getCharacteristic(_settingsService!, settingsDimRatioCharacteristicUuid);
+    if (dimRatioCharacteristic == null) {
+      logCharacteristicNotFoundError('Settings dim ratio', deviceId);
+      return null;
+    }
+    var value = await dimRatioCharacteristic.read();
+    if (value.isNotEmpty) {
+      return value[0];
+    }
+    return null;
   }
 }
