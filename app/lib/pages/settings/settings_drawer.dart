@@ -190,6 +190,15 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
+                title: 'Share Omi for Android',
+                icon: const FaIcon(FontAwesomeIcons.googlePlay, color: Color(0xFF8E8E93), size: 20),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await Share.share('https://play.google.com/store/apps/details?id=com.friend.ios');
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
                 title: 'Share Omi for Mac',
                 icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
