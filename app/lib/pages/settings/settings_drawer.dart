@@ -180,14 +180,24 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           // Share & Get Section
           _buildSectionContainer(
             children: [
-              _buildSettingsItem(
-                title: 'Share Omi for iPhone',
-                icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Colors.white, size: 20),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-                },
-              ),
+              if (PlatformService.isIOS)
+                _buildSettingsItem(
+                  title: 'Share Omi for iPhone',
+                  icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Colors.white, size: 20),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+                  },
+                ),
+              if (PlatformService.isAndroid)
+                _buildSettingsItem(
+                  title: 'Share Omi for Android',
+                  icon: const FaIcon(FontAwesomeIcons.googlePlay, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await Share.share('https://play.google.com/store/apps/details?id=com.friend.ios');
+                  },
+                ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
                 title: 'Share Omi for Mac',
