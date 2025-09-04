@@ -234,13 +234,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
     if (_hasDimmingFeature == false) {
       return const ListTile(
-        title: Text('LED Brightness'),
+        title: Text('Dimming'),
         subtitle: Text('This feature is not available on your device.'),
       );
     }
 
     return ListTile(
-      title: const Text('LED Brightness'),
+      title: const Text('Dimming'),
       subtitle: Slider(
         value: _dimRatio,
         min: 0,
