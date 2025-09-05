@@ -1,12 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/backend/auth.dart' as backend_auth;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
 
@@ -16,6 +17,7 @@ class AuthenticationProvider extends BaseProvider {
   User? user;
   String? authToken;
   bool _loading = false;
+  @override
   bool get loading => _loading;
 
   AuthenticationProvider() {
@@ -40,7 +42,7 @@ class AuthenticationProvider extends BaseProvider {
           try {
             if (SharedPreferencesUtil().authToken.isEmpty ||
                 DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
-              authToken = await backend_auth.getIdToken();
+              authToken = await AuthService.instance.getIdToken();
             }
           } catch (e) {
             authToken = null;
@@ -62,11 +64,21 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
-      await backend_auth.signInWithGoogle();
-      if (isSignedIn()) {
-        _signIn(onSignIn);
-      } else {
-        AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
+      try {
+        UserCredential? credential;
+        if (PlatformService.isMobile) {
+          credential = await AuthService.instance.signInWithGoogleMobile();
+        } else {
+          credential = await AuthService.instance.authenticateWithProvider('google');
+        }
+        if (credential != null && isSignedIn()) {
+          _signIn(onSignIn);
+        } else {
+          AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
+        }
+      } catch (e) {
+        debugPrint('OAuth Google sign in error: $e');
+        AppSnackbar.showSnackbarError('Authentication failed. Please try again.');
       }
       setLoadingState(false);
     }
@@ -75,11 +87,21 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> onAppleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
-      await backend_auth.signInWithApple();
-      if (isSignedIn()) {
-        _signIn(onSignIn);
-      } else {
-        AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
+      try {
+        UserCredential? credential;
+        if (PlatformService.isMobile) {
+          credential = await AuthService.instance.signInWithAppleMobile();
+        } else {
+          credential = await AuthService.instance.authenticateWithProvider('apple');
+        }
+        if (credential != null && isSignedIn()) {
+          _signIn(onSignIn);
+        } else {
+          AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
+        }
+      } catch (e) {
+        debugPrint('OAuth Apple sign in error: $e');
+        AppSnackbar.showSnackbarError('Authentication failed. Please try again.');
       }
       setLoadingState(false);
     }
@@ -87,7 +109,7 @@ class AuthenticationProvider extends BaseProvider {
 
   Future<String?> _getIdToken() async {
     try {
-      final token = await backend_auth.getIdToken();
+      final token = await AuthService.instance.getIdToken();
       NotificationService.instance.saveNotificationToken();
 
       debugPrint('Token: $token');
@@ -137,7 +159,7 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> linkWithGoogle() async {
     setLoading(true);
     try {
-      final result = await backend_auth.linkWithGoogle();
+      final result = await AuthService.instance.linkWithGoogle();
       if (result == null) {
         setLoading(false);
         return;
@@ -178,7 +200,7 @@ class AuthenticationProvider extends BaseProvider {
           // Sign in with existing account
           await FirebaseAuth.instance.signInWithCredential(existingCred!);
           final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          await backend_auth.getIdToken();
+          await AuthService.instance.getIdToken();
 
           SharedPreferencesUtil().onboardingCompleted = false;
           SharedPreferencesUtil().uid = newUserId ?? '';
