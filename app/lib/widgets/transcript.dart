@@ -9,7 +9,6 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/pages/conversation_detail/widgets.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;

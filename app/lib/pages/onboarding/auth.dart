@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/widgets/sign_in_button.dart';
 import 'package:omi/widgets/consent_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 

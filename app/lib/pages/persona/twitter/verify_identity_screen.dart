@@ -6,7 +6,6 @@ import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/persona/twitter/clone_success_sceen.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -61,10 +60,6 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
     final tweetText = Uri.encodeComponent('Verifying my clone($username): https://personas.omi.me/u/$username');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
     setPostTweetClicked(true);
-    await Posthog().capture(eventName: 'post_tweet_clicked', properties: {
-      'x_handle': handle,
-      'persona_username': username,
-    });
     setState(() {
       _isLoading = false;
     });
@@ -86,7 +81,6 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
       final isVerified = await context.read<PersonaProvider>().verifyTweet();
       if (isVerified) {
         final message = await getPersonaInitialMessage(username);
-        await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle});
         SharedPreferencesUtil().hasPersonaCreated = true;
         routeToPage(
             context,

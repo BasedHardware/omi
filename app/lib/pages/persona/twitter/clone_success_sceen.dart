@@ -7,7 +7,6 @@ import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../persona_profile.dart';
@@ -31,13 +30,11 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
 
     // If user is not anonymous (signed in with Google/Apple), they came from create/update flow
     if (user != null && !user.isAnonymous) {
-      Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': true});
       Navigator.pop(context);
       Navigator.pop(context);
       Navigator.pop(context);
     } else {
       // Anonymous user, just go to profile
-      Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': false});
       Provider.of<PersonaProvider>(context, listen: false).setRouting(widget.routing);
       routeToPage(context, const PersonaProfilePage(), replace: true);
     }

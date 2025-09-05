@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:video_player/video_player.dart';
 
 class DeviceSelectionPage extends StatefulWidget {
@@ -154,9 +153,6 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                           child: ElevatedButton(
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
-                              await Posthog().capture(
-                                eventName: 'clicked_get_started',
-                              );
                               if (mounted) {
                                 routeToPage(context, const OnboardingWrapper());
                               }
