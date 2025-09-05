@@ -62,11 +62,11 @@ class _DesktopAboutOmiPageState extends State<DesktopAboutOmiPage> {
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('7000+ members and counting.', style: TextStyle(color: Colors.white70)),
+              subtitle: const Text('8000+ members and counting.', style: TextStyle(color: Colors.white70)),
               trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Join Discord');
-                launchUrl(Uri.parse('https://discord.gg/omi'));
+                launchUrl(Uri.parse('http://discord.omi.me'));
               },
             ),
           ],
