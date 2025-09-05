@@ -459,4 +459,21 @@ class FrameDeviceConnection extends DeviceConnection {
   Future<bool> performWriteToStorage(int numFile, int command, int offset) {
     return Future.value(false);
   }
+
+  @override
+  Future<int?> performGetLedDimRatio() {
+    // Frame does not support LED dimming
+    return Future.value(null);
+  }
+
+  @override
+  Future<void> performSetLedDimRatio(int ratio) async {
+    // Frame does not support LED dimming
+  }
+
+  @override
+  Future<int> performGetFeatures() {
+    // Frame does not support features check
+    return Future.value(0);
+  }
 }
