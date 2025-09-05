@@ -57,7 +57,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.includeSpeechProfile = false,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
-        '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}';
+        '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
+        '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
     String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v4/listen$params';
 
