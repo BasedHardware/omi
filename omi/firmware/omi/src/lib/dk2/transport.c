@@ -23,6 +23,8 @@
 #include "mic.h"
 #include "accel.h"
 #include "haptic.h"
+#include "settings.h"
+#include "features.h"
 #include <math.h> // For float conversion in logs
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -59,6 +61,9 @@ static struct bt_conn_cb _callback_references;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+static ssize_t settings_dim_ratio_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+static ssize_t settings_dim_ratio_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+static ssize_t features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
 // Forward declarations for update functions and callbacks
 static void update_phy(struct bt_conn *conn);
@@ -97,6 +102,28 @@ static struct bt_gatt_attr audio_service_attr[] = {
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
+
+// --- Settings Service ---
+static struct bt_uuid_128 settings_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10010, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_dim_ratio_characteristic_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10011, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static struct bt_gatt_attr settings_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
+    BT_GATT_CHARACTERISTIC(&settings_dim_ratio_characteristic_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE, settings_dim_ratio_read_handler, settings_dim_ratio_write_handler, NULL),
+};
+
+static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
+
+// --- Features Service ---
+static struct bt_uuid_128 features_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10020, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 features_characteristic_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10021, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static struct bt_gatt_attr features_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&features_service_uuid),
+    BT_GATT_CHARACTERISTIC(&features_characteristic_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, features_read_handler, NULL, NULL),
+};
+
+static struct bt_gatt_service features_service = BT_GATT_SERVICE(features_service_attr);
 
 
 // Advertisement data
@@ -152,6 +179,65 @@ static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_ga
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
     amount = speak(len, buf);
     return len;
+}
+
+static ssize_t settings_dim_ratio_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+{
+    if (len != 1) {
+        LOG_WRN("Invalid length for dim ratio write: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint8_t new_ratio = ((uint8_t *)buf)[0];
+    if (new_ratio > 100) {
+        new_ratio = 100; // Cap the value at 100
+    }
+
+    LOG_INF("Received new dim ratio: %u", new_ratio);
+    int err = app_settings_save_dim_ratio(new_ratio);
+    if (err) {
+        LOG_ERR("Failed to save dim ratio setting: %d", err);
+    }
+
+    return len;
+}
+
+static ssize_t settings_dim_ratio_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    uint8_t current_ratio = app_settings_get_dim_ratio();
+    LOG_INF("Reading dim ratio: %u", current_ratio);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_ratio, sizeof(current_ratio));
+}
+
+static ssize_t features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    uint32_t features = 0;
+
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+    features |= OMI_FEATURE_SPEAKER;
+#endif
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
+    features |= OMI_FEATURE_ACCELEROMETER;
+#endif
+#ifdef CONFIG_OMI_ENABLE_BUTTON
+    features |= OMI_FEATURE_BUTTON;
+#endif
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+    features |= OMI_FEATURE_BATTERY;
+#endif
+#ifdef CONFIG_OMI_ENABLE_USB
+    features |= OMI_FEATURE_USB;
+#endif
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    features |= OMI_FEATURE_HAPTIC;
+#endif
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    features |= OMI_FEATURE_OFFLINE_STORAGE;
+#endif
+    // LED dimming is always enabled now with PWM.
+    features |= OMI_FEATURE_LED_DIMMING;
+
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &features, sizeof(features));
 }
 
 
@@ -854,6 +940,8 @@ int transport_start()
 
     // Start advertising
     bt_gatt_service_register(&audio_service);
+    bt_gatt_service_register(&settings_service);
+    bt_gatt_service_register(&features_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
