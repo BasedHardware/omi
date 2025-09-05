@@ -57,8 +57,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // Audio playback delegates
   String? get currentPlayingWalId => _audioPlayerUtils.currentPlayingId;
   bool get isProcessingAudio => _audioPlayerUtils.isProcessingAudio;
-  bool get isSharingAudio => _audioPlayerUtils.isSharingAudio;
-  bool isWalSharing(String walId) => _audioPlayerUtils.isSharing(walId);
   Duration get currentPosition => _audioPlayerUtils.currentPosition;
   Duration get totalDuration => _audioPlayerUtils.totalDuration;
   double get playbackProgress => _audioPlayerUtils.playbackProgress;

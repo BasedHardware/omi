@@ -10,6 +10,7 @@ class WaveformSection extends StatefulWidget {
   final List<double>? waveformData;
   final bool isProcessingWaveform;
   final PlaybackState playbackState;
+  final bool isPlaying;
 
   const WaveformSection({
     super.key,
@@ -17,6 +18,7 @@ class WaveformSection extends StatefulWidget {
     required this.waveformData,
     required this.isProcessingWaveform,
     required this.playbackState,
+    required this.isPlaying,
   });
 
   @override
@@ -41,7 +43,7 @@ class _WaveformSectionState extends State<WaveformSection> {
 
   void _startProgressTimer() {
     _progressUpdateTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (mounted && widget.playbackState.isPlaying) {
+      if (mounted && widget.isPlaying) {
         final currentProgress = widget.playbackState.playbackProgress;
         if ((currentProgress - _lastProgress).abs() > 0.01) {
           _lastProgress = currentProgress;
@@ -56,9 +58,7 @@ class _WaveformSectionState extends State<WaveformSection> {
     BoxConstraints constraints,
     SyncProvider syncProvider,
   ) {
-    if (widget.playbackState.canPlayOrShare &&
-        syncProvider.totalDuration.inMilliseconds > 0 &&
-        widget.playbackState.isPlaying) {
+    if (widget.playbackState.canPlayOrShare && syncProvider.totalDuration.inMilliseconds > 0 && widget.isPlaying) {
       final localPosition = details.localPosition;
       final containerWidth = constraints.maxWidth;
       final progress = (localPosition.dx / containerWidth).clamp(0.0, 1.0);
@@ -122,7 +122,7 @@ class _WaveformSectionState extends State<WaveformSection> {
                 child: RepaintBoundary(
                   child: CustomPaint(
                     painter: WaveformPainter(
-                      isPlaying: widget.playbackState.isPlaying,
+                      isPlaying: widget.isPlaying,
                       waveformData: widget.waveformData,
                       playbackProgress: _lastProgress,
                     ),
