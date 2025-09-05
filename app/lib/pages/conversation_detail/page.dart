@@ -158,7 +158,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
 
-      // Find the proper date and index for this conversation in the grouped conversations
+      if (widget.isFromOnboarding) {
+        // For onboarding, skip provider lookup; use local date/index
+        final d = DateTime(
+            widget.conversation.createdAt.year, widget.conversation.createdAt.month, widget.conversation.createdAt.day);
+        provider.conversationIdx = 0;
+        provider.selectedDate = d;
+        await provider.initConversation();
+        return;
+      }
+
+      // Normal conversations: find date/index from provider
       var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
       provider.conversationIdx = index >= 0 ? index : 0;
       provider.selectedDate = date;
