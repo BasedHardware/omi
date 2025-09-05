@@ -26,7 +26,8 @@
     "react-native-ble-plx": "^3.1.2",
     "react-native-quick-base64": "^2.0.8",
     "react-native-typography": "^1.4.1",
-    "react-native-web": "~0.19.6"
+    "react-native-web": "~0.19.6",
+    "expo-file-system": "~18.0.12"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
