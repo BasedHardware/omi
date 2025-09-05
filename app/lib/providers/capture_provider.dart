@@ -47,6 +47,7 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
+  DateTime? _keepAliveLastExecutedAt;
 
   // Method channel for system audio permissions
   static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
@@ -854,11 +855,20 @@ class CaptureProvider extends ChangeNotifier
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-      debugPrint("[Provider] keep alive...");
+      debugPrint("[Provider] keep alive");
+      // rate 1/15s
+      if (_keepAliveLastExecutedAt != null &&
+          DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
+        debugPrint("[Provider] keep alive - hitting rate limits 1/15s");
+        return;
+      }
+
+      _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
         return;
       }
+
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
         await _initiateWebsocket(audioCodec: codec);
