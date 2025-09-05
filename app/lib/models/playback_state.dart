@@ -1,7 +1,6 @@
 class PlaybackState {
   final bool isPlaying;
   final bool isProcessing;
-  final bool isSharing;
   final bool canPlayOrShare;
   final bool isSynced;
   final bool hasError;
@@ -12,7 +11,6 @@ class PlaybackState {
   const PlaybackState({
     required this.isPlaying,
     required this.isProcessing,
-    required this.isSharing,
     required this.canPlayOrShare,
     required this.isSynced,
     required this.hasError,
