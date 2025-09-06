@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:flutter/services.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/pages/settings/widgets/toggle_section_widget.dart';
@@ -34,7 +32,9 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
-      context.read<McpProvider>().fetchKeys();
+      if (mounted) {
+        context.read<McpProvider>().fetchKeys();
+      }
     });
     super.initState();
   }
@@ -75,12 +75,16 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
               children: [
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: responsive.spacing(baseSpacing: 24)),
-                  child: ListView(
-                    shrinkWrap: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(height: responsive.spacing(baseSpacing: 24)),
                       _buildHeader(responsive),
                       SizedBox(height: responsive.spacing(baseSpacing: 24)),
+                      Expanded(
+                        child: ListView(
+                      shrinkWrap: true,
+                      children: [
                       Container(
                         padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
                         decoration: BoxDecoration(
@@ -122,7 +126,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                     await DebugLogManager.setEnabled(v);
                                     setState(() {});
                                   },
-                                  activeColor: ResponsiveHelper.purplePrimary,
+                                  activeThumbColor: ResponsiveHelper.purplePrimary,
                                 ),
                               ],
                             ),
@@ -134,11 +138,11 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
                                       foregroundColor: ResponsiveHelper.textPrimary,
-                                      padding: EdgeInsets.symmetric(
+                                      padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 12,
                                       ),
-                                      minimumSize: Size(double.infinity, 48),
+                                      minimumSize: const Size(double.infinity, 48),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                         side: BorderSide(
@@ -147,7 +151,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                         ),
                                       ),
                                     ),
-                                    icon: Icon(
+                                    icon: const Icon(
                                       Icons.upload_file,
                                       size: 16,
                                       color: ResponsiveHelper.textPrimary,
@@ -174,10 +178,11 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                         return;
                                       }
 
-                                      if (!mounted) return;
+                                      if (!context.mounted) return;
+                                      final backgroundColor = Theme.of(context).colorScheme.primary;
                                       final selected = await showModalBottomSheet<File>(
                                         context: context,
-                                        backgroundColor: Theme.of(context).colorScheme.primary,
+                                        backgroundColor: backgroundColor,
                                         shape: const RoundedRectangleBorder(
                                           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                         ),
@@ -186,13 +191,13 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                             child: ListView.separated(
                                               shrinkWrap: true,
                                               itemCount: files.length,
-                                              separatorBuilder: (context, index) => const Divider(height: 1),
-                                              itemBuilder: (context, index) {
+                                              separatorBuilder: (ctx, index) => const Divider(height: 1),
+                                              itemBuilder: (ctx, index) {
                                                 final file = files[index];
                                                 return ListTile(
                                                   title: Text(
                                                     file.path.split('/').last,
-                                                    style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
+                                                    style: TextStyle(color: Theme.of(ctx).colorScheme.onPrimary),
                                                   ),
                                                   subtitle: Text(
                                                     '${(file.lengthSync() / 1024).toStringAsFixed(1)} KB',
@@ -232,7 +237,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                       await DebugLogManager.clear();
                                       AppSnackbar.showSnackbar('Debug logs cleared');
                                     },
-                                    icon: Icon(
+                                    icon: const Icon(
                                       Icons.delete_outline,
                                       color: ResponsiveHelper.textSecondary,
                                       size: 20,
@@ -272,7 +277,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                             ),
                           ),
                           trailing: provider.loadingExportMemories
-                              ? SizedBox(
+                              ? const SizedBox(
                                   height: 16,
                                   width: 16,
                                   child: CircularProgressIndicator(
@@ -280,7 +285,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : Icon(
+                              : const Icon(
                                   Icons.upload,
                                   color: ResponsiveHelper.textSecondary,
                                 ),
@@ -384,7 +389,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                     context: context,
                                     builder: (context) => const CreateMcpApiKeyDialog(),
                                   ),
-                                  icon: Icon(
+                                  icon: const Icon(
                                     Icons.add,
                                     color: ResponsiveHelper.textPrimary,
                                     size: 18,
@@ -408,7 +413,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                             Consumer<McpProvider>(
                               builder: (context, provider, child) {
                                 if (provider.isLoading && provider.keys.isEmpty) {
-                                  return Center(
+                                  return const Center(
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       color: ResponsiveHelper.purplePrimary,
@@ -713,7 +718,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            minimumSize: Size(double.infinity, 50),
+                            minimumSize: const Size(double.infinity, 50),
                           ),
                           child: Text(
                             'Save Settings',
@@ -725,30 +730,33 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                         ),
                       ),
                       SizedBox(height: responsive.spacing(baseSpacing: 32)),
-                    ],
-                  ),
-                ),
-                if (provider.savingSettingsLoading)
-                  Container(
-                    color: Colors.black54,
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
-                          SizedBox(height: responsive.spacing(baseSpacing: 16)),
-                          Text(
-                            'Syncing Developer Settings...',
-                            style: responsive.bodyLarge.copyWith(
-                              color: ResponsiveHelper.textPrimary,
-                            ),
-                          ),
                         ],
                       ),
                     ),
+                  ],
+                ),
+              ),
+              if (provider.savingSettingsLoading)
+                Container(
+                  color: Colors.black54,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
+                        SizedBox(height: responsive.spacing(baseSpacing: 16)),
+                        Text(
+                          'Syncing Developer Settings...',
+                          style: responsive.bodyLarge.copyWith(
+                            color: ResponsiveHelper.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-              ],
-            ),
+                ),
+            ],
+          ),
           );
         },
       ),
