@@ -66,7 +66,7 @@ You'll need the following components to build your own omiGlass:
 
 2. Set up your API keys:
 
-   - Copy the `.env.example` file to create a new `.env` file:
+   - Copy the `.env.template` file to create a new `.env` file:
      ```bash
      cp .env.example .env
      ```

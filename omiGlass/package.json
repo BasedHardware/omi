@@ -13,29 +13,30 @@
     "prompts": "ts-node ./prompts/generate.ts"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~4.0.1",
+    "@expo/metro-runtime": "~5.0.4",
     "axios": "^1.6.8",
     "cli-progress": "^3.12.0",
-    "expo": "^52.0.46",
-    "expo-status-bar": "~2.0.1",
-    "expo-system-ui": "~4.0.9",
+    "expo": "53",
+    "expo-status-bar": "~2.2.3",
+    "expo-system-ui": "~5.0.11",
     "ollama": "^0.5.1",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-native": "0.76.9",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-native": "0.79.5",
     "react-native-ble-plx": "^3.1.2",
     "react-native-quick-base64": "^2.0.8",
     "react-native-typography": "^1.4.1",
-    "react-native-web": "~0.19.6"
+    "react-native-web": "^0.20.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/cli-progress": "^3.11.5",
-    "@types/react": "~18.3.12",
+    "@types/react": "~19.0.10",
+    "@types/react-dom": "^19.1.9",
     "@types/web-bluetooth": "^0.0.20",
     "gh-pages": "^6.1.1",
     "ts-node": "^10.9.2",
-    "typescript": "~5.3.3"
+    "typescript": "~5.8.3"
   },
   "private": true
 }
