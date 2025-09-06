@@ -7,8 +7,8 @@ import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
-import 'package:omi/pages/settings/about.dart';
-import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/desktop/pages/settings/desktop_about_page.dart';
+import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -1193,7 +1193,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         );
         break;
       case 'developer':
-        routeToPage(context, const DeveloperSettingsPage());
+        routeToPage(context, const DesktopDeveloperSettingsPage());
         break;
       case 'help':
         if (PlatformService.isIntercomSupported) {
@@ -1201,7 +1201,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         }
         break;
       case 'about':
-        routeToPage(context, const AboutOmiPage());
+        routeToPage(context, const DesktopAboutOmiPage());
         break;
       case 'signout':
         _showSignOutDialog();
