@@ -19,9 +19,11 @@ import 'package:omi/utils/file.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:uuid/uuid.dart';
+import 'chat_session_provider.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
+  ChatSessionProvider? chatSessionProvider;
   List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
 
@@ -41,6 +43,10 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void updateChatSessionProvider(ChatSessionProvider p) {
+    chatSessionProvider = p;
   }
 
   void setNextMessageOriginIsVoice(bool isVoice) {
@@ -250,7 +256,11 @@ class MessageProvider extends ChangeNotifier {
   Future<void> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
-      var res = await uploadFilesServer(files, appId: appId);
+      var res = await uploadFilesServer(
+        files,
+        appId: appId,
+        chatSessionId: chatSessionProvider?.selectedSessionId,
+      );
       if (res != null) {
         uploadedFiles.addAll(res);
       } else {
@@ -268,30 +278,39 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future refreshMessages({bool dropdownSelected = false}) async {
+    // If no session is selected, show empty messages (blank chat)
+    if (chatSessionProvider?.selectedSessionId == null) {
+      messages = [];
+      setLoadingMessages(false);
+      notifyListeners();
+      return;
+    }
+
     setLoadingMessages(true);
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-    }
     messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
-    if (messages.isEmpty) {
-      messages = SharedPreferencesUtil().cachedMessages;
-    } else {
-      SharedPreferencesUtil().cachedMessages = messages;
-      setHasCachedMessages(true);
-    }
+
+    // Don't fall back to cached messages - each session should show only its own messages
+    // Empty sessions should remain empty and show the welcome screen
     setLoadingMessages(false);
     notifyListeners();
   }
 
   void setMessagesFromCache() {
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-      messages = SharedPreferencesUtil().cachedMessages;
-    }
+    // In multi-chat context, don't load global cached messages
+    // Let each session load its own messages via refreshMessages()
+    // This prevents showing wrong messages from other sessions
     notifyListeners();
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
+    // If no session is selected, return empty messages (blank chat)
+    if (chatSessionProvider?.selectedSessionId == null) {
+      messages = [];
+      setLoadingMessages(false);
+      notifyListeners();
+      return messages;
+    }
+
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
@@ -300,6 +319,7 @@ class MessageProvider extends ChangeNotifier {
     var mes = await getMessagesServer(
       appId: appProvider?.selectedChatAppId,
       dropdownSelected: dropdownSelected,
+      chatSessionId: chatSessionProvider?.selectedSessionId,
     );
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Learning from your memories...';
@@ -319,7 +339,10 @@ class MessageProvider extends ChangeNotifier {
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
+    var mes = await clearChatServer(
+      appId: appProvider?.selectedChatAppId,
+      chatSessionId: chatSessionProvider?.selectedSessionId,
+    );
     messages = mes;
     setClearingChat(false);
     notifyListeners();
@@ -370,6 +393,12 @@ class MessageProvider extends ChangeNotifier {
     if (currentAppId == 'no_selected') {
       currentAppId = null;
     }
+
+    // Auto-create session if none selected and app is available
+    if (chatSessionProvider?.selectedSessionId == null && currentAppId != null && currentAppId != 'no_selected') {
+      await chatSessionProvider?.createSession(appId: currentAppId, title: 'New Chat');
+    }
+
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
@@ -377,6 +406,7 @@ class MessageProvider extends ChangeNotifier {
     MixpanelManager().chatVoiceInputUsed(
       chatTargetId: chatTargetId,
       isPersonaChat: isPersonaChat,
+      chatSessionId: chatSessionProvider?.selectedSessionId,
     );
 
     setShowTypingIndicator(true);
@@ -386,7 +416,11 @@ class MessageProvider extends ChangeNotifier {
 
     try {
       bool firstChunkRecieved = false;
-      await for (var chunk in sendVoiceMessageStreamServer([file])) {
+      await for (var chunk in sendVoiceMessageStreamServer(
+        [file],
+        appId: currentAppId,
+        chatSessionId: chatSessionProvider?.selectedSessionId,
+      )) {
         if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
@@ -440,6 +474,11 @@ class MessageProvider extends ChangeNotifier {
       currentAppId = null;
     }
 
+    // Auto-create session if none selected and app is available
+    if (chatSessionProvider?.selectedSessionId == null && currentAppId != null && currentAppId != 'no_selected') {
+      await chatSessionProvider?.createSession(appId: currentAppId, title: 'New Chat');
+    }
+
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
@@ -451,6 +490,7 @@ class MessageProvider extends ChangeNotifier {
       chatTargetId: chatTargetId,
       isPersonaChat: isPersonaChat,
       isVoiceInput: _isNextMessageFromVoice,
+      chatSessionId: chatSessionProvider?.selectedSessionId,
     );
     _isNextMessageFromVoice = false;
 
@@ -473,7 +513,12 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(
+        text,
+        appId: currentAppId,
+        chatSessionId: chatSessionProvider?.selectedSessionId,
+        filesId: fileIds,
+      )) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);
@@ -518,7 +563,10 @@ class MessageProvider extends ChangeNotifier {
 
   Future sendInitialAppMessage(App? app) async {
     setSendingMessage(true);
-    ServerMessage message = await getInitialAppMessage(app?.id);
+    ServerMessage message = await getInitialAppMessage(
+      app?.id,
+      chatSessionId: chatSessionProvider?.selectedSessionId,
+    );
     addMessage(message);
     setSendingMessage(false);
     notifyListeners();

@@ -69,7 +69,8 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 maxWidth: 250.0,
                 maxHeight: 350.0,
               ),
-              offset: Offset((MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context), 114),
+              offset:
+                  Offset((MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context), 114),
               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
               onSelected: (String? val) async {
                 if (val == null || val == provider.selectedChatAppId) {
@@ -103,10 +104,6 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 // select app by id
                 provider.setSelectedChatAppId(val);
                 await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
-                var app = provider.getSelectedApp();
-                if (context.read<MessageProvider>().messages.isEmpty) {
-                  context.read<MessageProvider>().sendInitialAppMessage(app);
-                }
               },
               itemBuilder: (BuildContext context) {
                 return _getAppsDropdownItems(context, provider);

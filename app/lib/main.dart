@@ -33,6 +33,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -145,7 +146,7 @@ void main() async {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
-    
+
   runZonedGuarded(
     () => runApp(const MyApp()),
     (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true),
@@ -200,10 +201,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
           ListenableProvider(create: (context) => AppProvider()),
-          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
+          ChangeNotifierProvider(create: (context) => ChatSessionProvider()),
+          ChangeNotifierProxyProvider2<AppProvider, ChatSessionProvider, MessageProvider>(
             create: (context) => MessageProvider(),
-            update: (BuildContext context, value, MessageProvider? previous) =>
-                (previous?..updateAppProvider(value)) ?? MessageProvider(),
+            update: (BuildContext context, app, sessions, MessageProvider? previous) =>
+                (previous
+                  ?..updateAppProvider(app)
+                  ..updateChatSessionProvider(sessions)) ??
+                (MessageProvider()
+                  ..updateAppProvider(app)
+                  ..updateChatSessionProvider(sessions)),
           ),
           ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
               CaptureProvider>(
