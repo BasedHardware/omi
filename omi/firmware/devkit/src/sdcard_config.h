@@ -7,6 +7,9 @@
  * 
  * Centralizes all SD card related paths and configuration to avoid hardcoded values
  * throughout the codebase and make the system more configurable.
+ * 
+ * Note: Audio chunking system is controlled by CONFIG_OMI_ENABLE_AUDIO_CHUNKING
+ * in the project configuration file (prj_*.conf).
  */
 
 // SD Card mount point and base paths

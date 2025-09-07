@@ -39,7 +39,12 @@ bool sd_enabled = false;
 static char current_chunk_filename[CHUNK_FILENAME_MAX_LENGTH];
 bool chunk_active = false;  // Made non-static for external access
 static bool system_boot_complete = false;  // Prevent chunking during boot
-bool chunking_enabled = true;  // GLOBAL FLAG: Set to true to enable chunking system
+// Chunking enabled flag - now controlled by CONFIG_OMI_ENABLE_AUDIO_CHUNKING
+#ifdef CONFIG_OMI_ENABLE_AUDIO_CHUNKING
+bool chunking_enabled = true;
+#else
+bool chunking_enabled = false;
+#endif
 static atomic_t chunk_cycle_counter = ATOMIC_INIT(0);  // Thread-safe counter for 500ms cycles
 
 // Persistent chunk counter for unique filenames across reboots

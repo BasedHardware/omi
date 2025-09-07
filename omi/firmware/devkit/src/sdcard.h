@@ -155,6 +155,7 @@ extern bool chunk_active;
 
 /**
  * @brief Global flag to enable/disable chunking system
+ * Controlled by CONFIG_OMI_ENABLE_AUDIO_CHUNKING in project configuration
  * Set to false to use legacy file system, true for chunking
  */
 extern bool chunking_enabled;

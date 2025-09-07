@@ -55,4 +55,13 @@ config OMI_ENABLE_HAPTIC
         "Enable the haptic support."
     default n
 
+config OMI_ENABLE_AUDIO_CHUNKING
+    bool "Enable Audio Chunking System"
+    depends on OMI_ENABLE_OFFLINE_STORAGE
+    help
+        "Enable the time-based audio chunking system for better file management.
+         Creates 5-minute audio chunks with unique filenames across reboots.
+         Disable to use legacy numbered file system (a01.txt)."
+    default y
+
 endmenu
