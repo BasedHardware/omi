@@ -248,10 +248,16 @@ def batch_delete_messages(
     parent_doc_ref, batch_size=450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ):
     messages_ref = parent_doc_ref.collection('messages')
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    # Only filter by plugin_id if app_id is provided
+    if app_id is not None:
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    # Filter by chat_session_id if provided
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
-    print('batch_delete_messages', app_id)
+
+    print('batch_delete_messages', app_id, chat_session_id)
 
     while True:
         docs_stream = messages_ref.limit(batch_size).stream()
@@ -385,9 +391,25 @@ def create_chat_session(uid: str, app_id: str, title: Optional[str] = None):
 
 
 def delete_chat_session(uid, chat_session_id):
+    """Delete a chat session and all its associated messages."""
     user_ref = db.collection('users').document(uid)
+
+    # First, get the session to extract its app_id
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.delete()
+    session_doc = session_ref.get()
+
+    if session_doc.exists:
+        session_data = session_doc.to_dict()
+        app_id = session_data.get('app_id') or session_data.get('plugin_id')
+
+        # Delete all messages belonging to this session
+        batch_delete_messages(user_ref, app_id=app_id, chat_session_id=chat_session_id)
+
+        # Then delete the session itself
+        session_ref.delete()
+    else:
+        # Session doesn't exist, but try to delete any orphaned messages anyway
+        batch_delete_messages(user_ref, chat_session_id=chat_session_id)
 
 
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
