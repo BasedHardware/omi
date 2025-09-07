@@ -146,6 +146,11 @@ class SendMessageRequest(BaseModel):
     file_ids: Optional[List[str]] = []
 
 
+class CreateSessionRequest(BaseModel):
+    app_id: str
+    title: Optional[str] = None
+
+
 class ChatSession(BaseModel):
     id: str
     message_ids: Optional[List[str]] = []
