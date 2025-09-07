@@ -19,7 +19,7 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
 ### 2. Navigate to MAC Folder
 
 ```bash
-cd MAC/
+cd MAC
 ```
 
 ### 3. Flash the Firmware
@@ -51,7 +51,7 @@ JLinkExe -CommanderScript program_app.jlink
 ### 2. Navigate to WINDOWS Folder
 
 ```cmd
-cd WINDOWS\
+cd WINDOWS
 ```
 
 ### 3. Flash the Firmware
