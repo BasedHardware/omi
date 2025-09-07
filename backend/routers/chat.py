@@ -16,6 +16,7 @@ from models.chat import (
     ChatSession,
     Message,
     SendMessageRequest,
+    CreateSessionRequest,
     MessageSender,
     ResponseMessage,
     MessageConversation,
@@ -63,6 +64,7 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
@@ -71,8 +73,14 @@ def send_message(
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    # get chat session - use specific session if provided, otherwise get default for app
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+    else:
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
@@ -262,22 +270,64 @@ def create_initial_message(
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    # Use specific session if provided, otherwise get default for app
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+        actual_chat_session_id = chat_session_id
+    else:
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        actual_chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
-        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
+        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=actual_chat_session_id
     )
     print('get_messages', len(messages), compat_app_id)
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
     return messages
+
+
+# **************************************
+# ********** CHAT SESSIONS *************
+# **************************************
+
+
+@router.get('/v2/chat-sessions', response_model=List[ChatSession], tags=['chat'])
+def list_chat_sessions(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """List all chat sessions for a specific app."""
+    sessions = chat_db.get_chat_sessions(uid, app_id)
+    return [ChatSession(**session) for session in sessions]
+
+
+@router.post('/v2/chat-sessions', response_model=ChatSession, tags=['chat'])
+def create_chat_session(data: CreateSessionRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Create a new chat session for a specific app."""
+    session = chat_db.create_chat_session(uid, data.app_id, data.title)
+    return ChatSession(**session)
+
+
+@router.delete('/v2/chat-sessions/{session_id}', tags=['chat'])
+def delete_chat_session(session_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Delete a specific chat session."""
+    # Verify session exists and belongs to user
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+
+    # Delete the session
+    chat_db.delete_chat_session(uid, session_id)
+    return {"status": "ok"}
 
 
 @router.post("/v2/voice-messages")

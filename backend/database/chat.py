@@ -337,6 +337,53 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
     return None
 
 
+def get_chat_sessions(uid: str, app_id: str):
+    """Get all chat sessions for a specific app_id."""
+    session_ref = (
+        db.collection('users')
+        .document(uid)
+        .collection('chat_sessions')
+        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+
+    sessions = []
+    for session in session_ref.stream():
+        sessions.append(session.to_dict())
+
+    return sessions
+
+
+def get_chat_session_by_id(uid: str, chat_session_id: str):
+    """Get a specific chat session by its ID."""
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_doc = session_ref.get()
+
+    if session_doc.exists:
+        return session_doc.to_dict()
+
+    return None
+
+
+def create_chat_session(uid: str, app_id: str, title: Optional[str] = None):
+    """Create a new chat session for a specific app."""
+    import uuid
+    from datetime import datetime, timezone
+
+    session_data = {
+        'id': str(uuid.uuid4()),
+        'app_id': app_id,
+        'plugin_id': app_id,  # Legacy compatibility
+        'title': title or f"Chat {datetime.now().strftime('%m/%d %H:%M')}",
+        'message_ids': [],
+        'file_ids': [],
+        'created_at': datetime.now(timezone.utc),
+    }
+
+    return add_chat_session(uid, session_data)
+
+
 def delete_chat_session(uid, chat_session_id):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
