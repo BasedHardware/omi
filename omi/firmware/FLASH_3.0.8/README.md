@@ -1,4 +1,4 @@
-# Flashing Instructions for Omi Firmware v3.0.7
+# Flashing Instructions for Omi Firmware v3.0.8
 
 This guide provides step-by-step instructions for flashing the Omi firmware using J-Link on both macOS and Windows systems.
 
@@ -24,7 +24,7 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
 ### Step 2: Replace Existing Firmware Files
 
 **For macOS:**
-1. Navigate to the `MAC/` folder in your FLASH_3.0.7 directory
+1. Navigate to the `MAC/` folder in your FLASH_3.0.8 directory
 2. **Backup existing files** (optional but recommended):
    ```bash
    mv merged.hex merged.hex.backup
@@ -35,7 +35,7 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
    - Copy the downloaded `merged_CPUNET.hex` to the `MAC/` folder
 
 **For Windows:**
-1. Navigate to the `WINDOWS\` folder in your FLASH_3.0.7 directory
+1. Navigate to the `WINDOWS\` folder in your FLASH_3.0.8 directory
 2. **Backup existing files** (optional but recommended):
    - Rename `merged.hex` to `merged.hex.backup`
    - Rename `merged_CPUNET.hex` to `merged_CPUNET.hex.backup`
