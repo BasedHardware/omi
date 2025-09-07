@@ -14,6 +14,9 @@ import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/desktop/pages/chat/widgets/desktop_welcome_screen.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -134,6 +137,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         provider.refreshMessages();
       }
 
+      // Load sessions for current app if available
+      final appId = context.read<AppProvider>().selectedChatAppId;
+      if (appId.isNotEmpty && appId != 'no_selected') {
+        await context.read<ChatSessionProvider>().loadSessions(appId: appId);
+      }
+
       _fadeController.forward();
       _slideController.forward();
 
@@ -193,7 +202,16 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                                 opacity: _fadeAnimation,
                                 child: SlideTransition(
                                   position: _slideAnimation,
-                                  child: _buildChatContent(provider, connectivityProvider),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 280,
+                                        child: _buildSessionsPanel(context),
+                                      ),
+                                      const VerticalDivider(width: 1, color: Colors.white10),
+                                      Expanded(child: _buildChatContent(provider, connectivityProvider)),
+                                    ],
+                                  ),
                                 ),
                               )
                             : _buildChatContent(provider, connectivityProvider),
@@ -207,6 +225,129 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           ),
         );
       },
+    );
+  }
+
+  Widget _buildSessionsPanel(BuildContext context) {
+    return Container(
+      color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
+      child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
+        builder: (context, appProvider, sessions, messageProvider, _) {
+          final appId = appProvider.selectedChatAppId;
+          if (appId.isEmpty || appId == 'no_selected') {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Select an app to manage threads', style: TextStyle(color: ResponsiveHelper.textSecondary)),
+              ),
+            );
+          }
+
+          final selectedId = sessions.getSelectedSessionIdForApp(appId);
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(
+                  children: [
+                    const Text('Threads',
+                        style:
+                            TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                        foregroundColor: ResponsiveHelper.textPrimary,
+                      ),
+                      onPressed: () async {
+                        final created = await sessions.createSession(appId: appId);
+                        if (created != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('New thread created')),
+                          );
+                          await messageProvider.refreshMessages(dropdownSelected: true);
+                        }
+                      },
+                      icon: const Icon(Icons.add, size: 14),
+                      label: const Text('New'),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Colors.white12),
+              if (sessions.isLoading)
+                const Expanded(
+                  child:
+                      Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
+                )
+              else if (sessions.sessions.isEmpty)
+                const Expanded(
+                  child: Center(child: Text('No threads yet', style: TextStyle(color: ResponsiveHelper.textSecondary))),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: sessions.sessions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+                    itemBuilder: (ctx, idx) {
+                      final s = sessions.sessions[idx];
+                      final isSelected = s.id == selectedId;
+                      return ListTile(
+                        dense: true,
+                        selected: isSelected,
+                        selectedTileColor: Colors.white10,
+                        title: Text(
+                          s.title?.isNotEmpty == true ? s.title! : 'Thread ${sessions.sessions.length - idx}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: ResponsiveHelper.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                          s.createdAt.toLocal().toString(),
+                          style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 11),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: ResponsiveHelper.textSecondary, size: 18),
+                          onPressed: () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (dCtx) => AlertDialog(
+                                backgroundColor: ResponsiveHelper.backgroundSecondary,
+                                title:
+                                    const Text('Delete thread?', style: TextStyle(color: ResponsiveHelper.textPrimary)),
+                                content: const Text('This cannot be undone.',
+                                    style: TextStyle(color: ResponsiveHelper.textSecondary)),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
+                                  TextButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('Delete')),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              final ok = await sessions.deleteSession(sessionId: s.id);
+                              if (ok) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Thread deleted')),
+                                );
+                                await messageProvider.refreshMessages(dropdownSelected: true);
+                              }
+                            }
+                          },
+                        ),
+                        onTap: () async {
+                          await sessions.setSelectedSessionIdForApp(appId, s.id);
+                          await messageProvider.refreshMessages(dropdownSelected: true);
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -414,7 +555,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     }
 
     if (provider.messages.isEmpty) {
-      return _buildEmptyState(connectivityProvider.isConnected);
+      return connectivityProvider.isConnected
+          ? DesktopWelcomeScreen(
+              sendMessage: _sendMessageUtil,
+              appName: context.read<AppProvider>().getSelectedApp()?.name,
+            )
+          : _buildEmptyState(false);
     }
 
     return _buildMessagesList(provider);
@@ -1670,12 +1816,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     if (selectedAppId != currentAppId) {
       appProvider.setSelectedChatAppId(app?.id);
 
+      // Load sessions for the new app
+      final chatSessionProvider = context.read<ChatSessionProvider>();
+      await chatSessionProvider.loadSessions(appId: selectedAppId);
+
       final messageProvider = context.read<MessageProvider>();
       await messageProvider.refreshMessages(dropdownSelected: true);
-
-      if (messageProvider.messages.isEmpty) {
-        messageProvider.sendInitialAppMessage(app);
-      }
 
       scrollToBottom();
     }

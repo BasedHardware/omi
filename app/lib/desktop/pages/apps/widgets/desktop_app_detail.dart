@@ -1230,9 +1230,6 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     }
     appProvider.setSelectedChatAppId(appId);
     await messageProvider.refreshMessages();
-    if (messageProvider.messages.isEmpty) {
-      messageProvider.sendInitialAppMessage(selectedApp);
-    }
   }
 
   void _handleWebAppTap() {

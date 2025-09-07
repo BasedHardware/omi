@@ -368,6 +368,7 @@ class MixpanelManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
+    String? chatSessionId,
   }) =>
       track('Chat Message Sent', properties: {
         'message_length': message.length,
@@ -377,12 +378,14 @@ class MixpanelManager {
         'chat_target_id': chatTargetId,
         'is_persona_chat': isPersonaChat,
         'is_voice_input': isVoiceInput,
+        if (chatSessionId != null) 'chat_session_id': chatSessionId,
       });
 
-  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
+  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat, String? chatSessionId}) {
     track('Chat Voice Input Used', properties: {
       'chat_target_id': chatTargetId,
       'is_persona_chat': isPersonaChat,
+      if (chatSessionId != null) 'chat_session_id': chatSessionId,
     });
   }
 
