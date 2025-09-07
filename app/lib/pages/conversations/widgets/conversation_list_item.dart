@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui' as ui;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -67,6 +70,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
+          if (widget.conversation.isLocked) {
+            MixpanelManager().paywallOpened('Conversation List Item');
+            routeToPage(context, const UsagePage(showUpgradeDialog: true));
+            return;
+          }
           MixpanelManager().conversationListItemClicked(widget.conversation, widget.conversationIdx);
           context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
@@ -85,7 +93,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
           }
         },
         child: Padding(
-          padding: EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
+          padding:
+              EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
           child: Container(
             width: double.maxFinite,
             decoration: BoxDecoration(
@@ -122,7 +131,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     );
                   } else {
                     return showDialog(
-                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
+                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
+                          singleButton: true, okButtonText: 'OK'),
                       context: context,
                     );
                   }
@@ -150,10 +161,29 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       widget.conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
                       widget.conversation.discarded
                           ? const SizedBox.shrink()
-                          : Text(
-                              structured.overview.decodeString,
-                              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-                              maxLines: 2,
+                          : Stack(
+                              children: [
+                                Text(
+                                  structured.overview.decodeString,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium!
+                                      .copyWith(color: Colors.grey.shade300, height: 1.3),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (widget.conversation.isLocked)
+                                  Positioned.fill(
+                                    child: ClipRRect(
+                                      child: BackdropFilter(
+                                        filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                                        child: Container(
+                                          color: Colors.transparent,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                       widget.conversation.discarded
                           ? Column(
@@ -170,12 +200,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                     ),
                                     Text(
                                       "${widget.conversation.photos.length} photos",
-                                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium!
+                                          .copyWith(color: Colors.grey.shade300, height: 1.3),
                                     )
                                   ]),
                                 Text(
                                   widget.conversation.getTranscript(maxCount: 100),
-                                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium!
+                                      .copyWith(color: Colors.grey.shade300, height: 1.3),
                                 ),
                               ],
                             )
@@ -208,7 +244,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     widget.conversation.structured.getEmoji(),
                     style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
                   ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded) const SizedBox(width: 8),
+                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
+                  const SizedBox(width: 8),
                 if (widget.conversation.structured.category.isNotEmpty)
                   Flexible(
                     child: Container(
@@ -219,7 +256,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
                         widget.conversation.getTag(),
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium!
+                            .copyWith(color: widget.conversation.getTagTextColor()),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -291,7 +331,8 @@ class ConversationNewStatusIndicator extends StatefulWidget {
   State<ConversationNewStatusIndicator> createState() => _ConversationNewStatusIndicatorState();
 }
 
-class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator> with SingleTickerProviderStateMixin {
+class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacityAnim;
 

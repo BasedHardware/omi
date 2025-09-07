@@ -23,6 +23,7 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
+from utils.subscription import can_access_premium_features
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
@@ -377,10 +378,20 @@ async def get_conversations_via_integration(
         end_date=end_date,
     )
 
+    has_premium_access = can_access_premium_features(uid)
+
     # Convert database conversations
     conversation_items = []
     for conv in conversations_data:
         try:
+            if conv.get('is_locked', False) and not has_premium_access:
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+                conv['transcript_segments'] = []
+                conv['apps_results'] = []
+                conv['plugins_results'] = []
+                conv['suggested_summarization_apps'] = []
+
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments
@@ -500,10 +511,20 @@ async def search_conversations_via_integration(
     if conversation_ids:
         full_conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
 
+    has_premium_access = can_access_premium_features(uid)
+
     # Convert database conversations to integration model
     conversation_items = []
     for conv in full_conversations:
         try:
+            if conv.get('is_locked', False) and not has_premium_access:
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+                conv['transcript_segments'] = []
+                conv['apps_results'] = []
+                conv['plugins_results'] = []
+                conv['suggested_summarization_apps'] = []
+
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments

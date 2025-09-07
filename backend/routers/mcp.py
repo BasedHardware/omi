@@ -18,6 +18,7 @@ from firebase_admin import auth
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 import database.mcp_api_key as mcp_api_key_db
+from utils.subscription import can_access_premium_features
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 
 router = APIRouter()
@@ -148,6 +149,8 @@ def get_conversations(
         end_date=end_date,
         categories=[c.value for c in category_list],
     )
+
+    # Paywall is enforced on the detail endpoint, list view can show basic data.
     return conversations
 
 
@@ -158,4 +161,16 @@ def get_conversations(
 )
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     print("get_conversation_by_id", uid, conversation_id)
-    return conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if conversation.get('is_locked', False):
+        if not can_access_premium_features(uid):
+            raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
+        else:
+            # Unlock it
+            conversations_db.update_conversation(uid, conversation_id, {'is_locked': False})
+            conversation['is_locked'] = False
+
+    return conversation

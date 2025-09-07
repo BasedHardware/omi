@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
@@ -34,7 +35,10 @@ class OutOfCreditsWidget extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               TextButton(
-                onPressed: () => routeToPage(context, const UsagePage()),
+                onPressed: () {
+                  MixpanelManager().paywallOpened('Out of Credits Banner');
+                  routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                },
                 child: const Text(
                   'Check Usage',
                   style: TextStyle(color: Color(0xFFC4B5FD), fontWeight: FontWeight.bold, fontSize: 13),

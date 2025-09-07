@@ -12,6 +12,7 @@ from models.conversation import SearchRequest
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.subscription import can_access_premium_features
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -23,6 +24,15 @@ def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if conversation.get('is_locked', False):
+        if not can_access_premium_features(uid):
+            raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
+        else:
+            # Unlock it
+            conversations_db.update_conversation(uid, conversation_id, {'is_locked': False})
+            conversation['is_locked'] = False
+
     return conversation
 
 
@@ -55,9 +65,7 @@ def reprocess_conversation(
     :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
     :return: The updated conversation after reprocessing.
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -81,13 +89,26 @@ def get_conversations(
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
-    return conversations_db.get_conversations(
+    conversations = conversations_db.get_conversations(
         uid,
         limit,
         offset,
         include_discarded=include_discarded,
         statuses=statuses.split(",") if len(statuses) > 0 else [],
     )
+
+    has_premium_access = can_access_premium_features(uid)
+    if not has_premium_access:
+        for conv in conversations:
+            if conv.get('is_locked', False):
+                # Keep overview for blurred UI, but clear other sensitive data
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+                conv['transcript_segments'] = []
+                conv['apps_results'] = []
+                conv['plugins_results'] = []
+                conv['suggested_summarization_apps'] = []
+    return conversations
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])

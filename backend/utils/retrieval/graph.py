@@ -40,6 +40,7 @@ from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
+from utils.subscription import can_access_premium_features
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -302,6 +303,10 @@ def query_vectors(state: GraphState):
         limit=100,
     )
     memories = conversations_db.get_conversations_by_id(uid, memories_id)
+
+    # Filter out locked conversations if user doesn't have premium access
+    if not can_access_premium_features(uid):
+        memories = [m for m in memories if not m.get('is_locked', False)]
 
     # stream
     # if state.get('streaming', False):

@@ -10,6 +10,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/subscription.dart';
@@ -24,7 +25,8 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class UsagePage extends StatefulWidget {
-  const UsagePage({super.key});
+  final bool showUpgradeDialog;
+  const UsagePage({super.key, this.showUpgradeDialog = false});
 
   @override
   State<UsagePage> createState() => _UsagePageState();
@@ -93,6 +95,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         ? 'price_1RtJQ71F8wnoWYvwKMPaGlGY' // Annual plan
         : 'price_1RtJPm1F8wnoWYvwhVJ38kLb'; // Monthly plan
 
+    MixpanelManager().upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
     await _handleUpgrade(priceId);
   }
 
@@ -154,7 +157,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         if (result == true) {
           AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
           context.read<UsageProvider>().fetchSubscription();
+          MixpanelManager().upgradeSucceeded();
         } else {
+          MixpanelManager().upgradeCancelled();
           // Optional: handle cancellation or failure
         }
       } else {
@@ -377,6 +382,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
+      if (widget.showUpgradeDialog) {
+        _showPlansSheet();
+      }
     });
   }
 

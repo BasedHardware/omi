@@ -97,9 +97,6 @@ async def _listen(
         except Exception as e:
             print(f"Error sending credit limit notification: {e}")
 
-        await websocket.close(code=4002, reason="Usage limit exceeded")
-        return
-
     # Frame size, codec
     frame_size: int = 160
     if codec == "opus_fs320":
@@ -164,11 +161,6 @@ async def _listen(
                     await send_credit_limit_notification(uid)
                 except Exception as e:
                     print(f"Error sending credit limit notification: {e}")
-
-                nonlocal websocket_close_code
-                websocket_close_code = 4002
-                websocket_active = False
-                break
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)

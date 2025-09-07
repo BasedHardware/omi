@@ -56,6 +56,7 @@ from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
+from utils.subscription import can_access_premium_features
 from utils.webhooks import conversation_created_webhook
 
 
@@ -431,6 +432,11 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+
+    # Set lock status based on premium feature access for new conversations
+    if not is_reprocess:
+        if not can_access_premium_features(uid):
+            conversation.is_locked = True
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
