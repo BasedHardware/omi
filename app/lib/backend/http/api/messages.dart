@@ -10,18 +10,27 @@ import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
+Uri _buildApiUri(String path, {Map<String, dynamic>? query}) {
+  final base = Env.apiBaseUrl!;
+  final baseUri = Uri.parse(base);
+  return baseUri.replace(
+    path: '${baseUri.path.endsWith('/') ? baseUri.path.substring(0, baseUri.path.length - 1) : baseUri.path}$path',
+    queryParameters: query?.map((k, v) => MapEntry(k, v?.toString())),
+  );
+}
+
 Future<List<ServerMessage>> getMessagesServer({
   String? appId,
   bool dropdownSelected = false,
+  String? chatSessionId,
 }) async {
   if (appId == 'no_selected') appId = null;
-  // TODO: Add pagination
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}&dropdown_selected=$dropdownSelected',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  final uri = _buildApiUri('/v2/messages', query: {
+    if (appId != null) 'app_id': appId,
+    'dropdown_selected': dropdownSelected,
+    if (chatSessionId != null) 'chat_session_id': chatSessionId,
+  });
+  var response = await makeApiCall(url: uri.toString(), headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
@@ -36,14 +45,13 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer({String? appId}) async {
+Future<List<ServerMessage>> clearChatServer({String? appId, String? chatSessionId}) async {
   if (appId == 'no_selected') appId = null;
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
+  final uri = _buildApiUri('/v2/messages', query: {
+    if (appId != null) 'app_id': appId,
+    if (chatSessionId != null) 'chat_session_id': chatSessionId,
+  });
+  var response = await makeApiCall(url: uri.toString(), headers: {}, method: 'DELETE', body: '');
   if (response == null) throw Exception('Failed to delete chat');
   if (response.statusCode == 200) {
     return [ServerMessage.fromJson(jsonDecode(response.body))];
@@ -76,14 +84,15 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
-  var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v2/messages';
-  }
+Stream<ServerMessageChunk> sendMessageStreamServer(String text,
+    {String? appId, String? chatSessionId, List<String>? filesId}) async* {
+  final uri = _buildApiUri('/v2/messages', query: {
+    if (appId != null && appId.isNotEmpty && appId != 'null' && appId != 'no_selected') 'app_id': appId,
+    if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
+  });
 
   try {
-    final request = await HttpClient().postUrl(Uri.parse(url));
+    final request = await HttpClient().postUrl(uri);
     request.headers.set('Authorization', await getAuthHeader());
     request.headers.contentType = ContentType.json;
     request.write(jsonEncode({'text': text, 'file_ids': filesId}));
@@ -135,9 +144,12 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
   }
 }
 
-Future<ServerMessage> getInitialAppMessage(String? appId) {
+Future<ServerMessage> getInitialAppMessage(String? appId, {String? chatSessionId}) {
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v2/initial-message?app_id=$appId',
+    url: _buildApiUri('/v2/initial-message', query: {
+      if (appId != null) 'app_id': appId,
+      if (chatSessionId != null) 'chat_session_id': chatSessionId,
+    }).toString(),
     headers: {},
     method: 'POST',
     body: '',
@@ -151,10 +163,15 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
   });
 }
 
-Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async* {
+Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
+    {String? appId, String? chatSessionId}) async* {
+  final uri = _buildApiUri('/v2/voice-messages', query: {
+    if (appId != null && appId.isNotEmpty && appId != 'null' && appId != 'no_selected') 'app_id': appId,
+    if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
+  });
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v2/voice-messages'),
+    uri,
   );
   for (var file in files) {
     request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
@@ -208,14 +225,14 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
   }
 }
 
-Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
-  var url = '${Env.apiBaseUrl}v2/files?app_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v2/files';
-  }
+Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId, String? chatSessionId}) async {
+  final uri = _buildApiUri('/v2/files', query: {
+    if (appId != null && appId.isNotEmpty && appId != 'null' && appId != 'no_selected') 'app_id': appId,
+    if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
+  });
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse(url),
+    uri,
   );
   request.headers.addAll({'Authorization': await getAuthHeader()});
   for (var file in files) {

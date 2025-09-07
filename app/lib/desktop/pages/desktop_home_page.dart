@@ -253,9 +253,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               }
               appProvider.setSelectedChatAppId(appId);
               await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
-              }
             }
           } else {
             if (mounted) {

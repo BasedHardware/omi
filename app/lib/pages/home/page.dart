@@ -272,9 +272,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               }
               appProvider.setSelectedChatAppId(appId);
               await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
-              }
             }
           } else {
             if (mounted) {

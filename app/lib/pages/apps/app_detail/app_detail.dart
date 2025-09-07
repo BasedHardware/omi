@@ -303,11 +303,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         await messageProvider.refreshMessages();
                         App? selectedApp = await appProvider.getAppFromId(appId);
 
-                        // Send initial message if chat is empty
-                        if (messageProvider.messages.isEmpty) {
-                          messageProvider.sendInitialAppMessage(selectedApp);
-                        }
-
                         // Navigate directly to chat page
                         if (mounted) {
                           Navigator.push(
