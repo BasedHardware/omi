@@ -107,10 +107,23 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
-    if not data.get('author') and not data.get('email'):
-        user = get_user_from_uid(uid)
-        data['author'] = user.get('display_name', '')
-        data['email'] = user['email']
+    data['uid'] = uid
+    # Ensure we have valid author and email
+    user = get_user_from_uid(uid) if uid else None
+
+    # Set author if not provided or invalid
+    if not data.get('author') or not data.get('author').strip():
+        if user and user.get('display_name') and user.get('display_name').strip():
+            data['author'] = user['display_name'].strip()
+        else:
+            data['author'] = f"User {uid[:8]}" if uid else "Anonymous User"
+
+    # Set email if not provided
+    if not data.get('email'):
+        if user and user.get('email'):
+            data['email'] = user['email']
+        else:
+            data['email'] = f"{uid}@example.com" if uid else "anonymous@example.com"
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
