@@ -7,6 +7,48 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
 - Omi device connected via USB
 - J-Link software installed (see installation instructions below)
 - Appropriate USB drivers for your device
+- Latest firmware files downloaded from GitHub releases
+
+## Important: Update Firmware Files Before Flashing
+
+⚠️ **Critical Step**: Before flashing, you must replace the existing firmware files with the latest versions from GitHub releases.
+
+### Step 1: Download Latest Firmware
+
+1. Go to the [Omi GitHub Releases page](https://github.com/BasedHardware/omi/releases)
+2. Find the latest release version
+3. Download the following files:
+   - `merged.hex` - Application core firmware
+   - `merged_CPUNET.hex` - Network core firmware
+
+### Step 2: Replace Existing Firmware Files
+
+**For macOS:**
+1. Navigate to the `MAC/` folder in your FLASH_3.0.7 directory
+2. **Backup existing files** (optional but recommended):
+   ```bash
+   mv merged.hex merged.hex.backup
+   mv merged_CPUNET.hex merged_CPUNET.hex.backup
+   ```
+3. **Replace with downloaded files**:
+   - Copy the downloaded `merged.hex` to the `MAC/` folder
+   - Copy the downloaded `merged_CPUNET.hex` to the `MAC/` folder
+
+**For Windows:**
+1. Navigate to the `WINDOWS\` folder in your FLASH_3.0.7 directory
+2. **Backup existing files** (optional but recommended):
+   - Rename `merged.hex` to `merged.hex.backup`
+   - Rename `merged_CPUNET.hex` to `merged_CPUNET.hex.backup`
+3. **Replace with downloaded files**:
+   - Copy the downloaded `merged.hex` to the `WINDOWS\` folder
+   - Copy the downloaded `merged_CPUNET.hex` to the `WINDOWS\` folder
+
+### Step 3: Verify File Replacement
+
+Ensure that:
+- The new `merged.hex` and `merged_CPUNET.hex` files are in the correct platform folder
+- The file sizes match the downloaded files (they should be different from the original files)
+- The modification dates reflect when you copied them
 
 ## macOS Instructions
 
@@ -71,7 +113,8 @@ JLink.exe -CommanderScript program_app.jlink
 After completing the flashing process:
 
 - **Success Indicator**: If the LEDs start blinking, you have successfully flashed the board! 🎉
-- The device should now be running firmware version 3.0.7
+- The device should now be running the latest firmware version you downloaded from GitHub releases
+- You can verify the firmware version through the Omi app or device interface
 
 ## Troubleshooting
 
@@ -91,6 +134,13 @@ After completing the flashing process:
    - Make sure to flash the network core (`program_net.jlink`) first
    - Wait for each command to complete before running the next one
    - Check that no other applications are using the device
+   - Verify you have the latest firmware files from GitHub releases
+
+4. **Firmware File Issues**
+   - Ensure `merged.hex` and `merged_CPUNET.hex` are the latest versions from GitHub releases
+   - Check that file sizes are reasonable (typically several hundred KB to a few MB)
+   - Verify files are not corrupted by re-downloading if necessary
+   - Make sure files are in the correct platform folder (MAC/ or WINDOWS/)
 
 ### Getting Help
 
