@@ -268,7 +268,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       context,
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOutCubic,
-      alignment: 0.2,
+      alignment: 0.40,
     ).then((_) {
       _isAutoScrolling = false;
     });
