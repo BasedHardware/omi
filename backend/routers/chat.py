@@ -70,8 +70,9 @@ def send_message(
     compat_app_id = app_id or plugin_id
     print('send_message', data.text, compat_app_id, uid)
 
-    if compat_app_id in ['null', '']:
-        compat_app_id = None
+    # Handle null/empty app_id - use a consistent default instead of None
+    if compat_app_id in ['null', '', None]:
+        compat_app_id = 'default-chat'
 
     # get chat session - use specific session if provided, otherwise get default for app
     if chat_session_id:
@@ -193,41 +194,77 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
     return {'message': 'Message reported'}
 
 
-@router.delete('/v2/messages', tags=['chat'], response_model=Message)
+@router.delete('/v2/messages', tags=['chat'])
 def clear_chat_messages(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    app_id: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    if compat_app_id in ['null', '']:
-        compat_app_id = None
+    # Handle null/empty app_id - use a consistent default instead of None
+    if compat_app_id in ['null', '', None]:
+        compat_app_id = 'default-chat'
 
-    # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    # get current chat session - use specific session if provided, otherwise get default for app
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+    else:
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
-    # clean thread chat file
-    fc_tool = FileChatTool()
-    fc_tool.cleanup(uid)
-
     # clear session
     if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, compat_app_id)
+    # clean thread chat file in background to avoid blocking response
+    import threading
+
+    def cleanup_in_background():
+        try:
+            fc_tool = FileChatTool()
+            fc_tool.cleanup(uid)
+        except Exception as e:
+            print(f"Background cleanup error: {str(e)}")
+
+    threading.Thread(target=cleanup_in_background, daemon=True).start()
+
+    return {
+        "status": "success",
+        "message": "Messages cleared successfully",
+        "cleared": {
+            "app_id": compat_app_id,
+            "chat_session_id": chat_session_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    }
 
 
-def initial_message_util(uid: str, app_id: Optional[str] = None):
-    print('initial_message_util', app_id)
+def initial_message_util(uid: str, app_id: Optional[str] = None, target_chat_session_id: Optional[str] = None):
+    print('initial_message_util', app_id, target_chat_session_id)
 
-    # init chat session
-    chat_session = acquire_chat_session(uid, app_id=app_id)
-
-    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
-    print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
+    # init chat session - use specific session if provided
+    if target_chat_session_id:
+        # Recreate the cleared session with the same ID
+        cs = ChatSession(id=target_chat_session_id, created_at=datetime.now(timezone.utc), plugin_id=app_id)
+        chat_session = chat_db.add_chat_session(uid, cs.dict())
+        # For a cleared session, start fresh (no previous messages)
+        prev_messages = []
+        print('initial_message_util recreated session', target_chat_session_id, 'for', app_id)
+    else:
+        # Get/create default session
+        chat_session = acquire_chat_session(uid, app_id=app_id)
+        # Get messages from the specific session only
+        prev_messages = list(
+            reversed(chat_db.get_messages(uid, limit=5, app_id=app_id, chat_session_id=chat_session['id']))
+        )
+        print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
 
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -265,7 +302,7 @@ def create_initial_message(
     app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     compat_app_id = app_id or plugin_id
-    return initial_message_util(uid, compat_app_id)
+    return initial_message_util(uid, compat_app_id, None)
 
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
@@ -276,8 +313,9 @@ def get_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    if compat_app_id in ['null', '']:
-        compat_app_id = None
+    # Handle null/empty app_id - use a consistent default instead of None
+    if compat_app_id in ['null', '', None]:
+        compat_app_id = 'default-chat'
 
     # Use specific session if provided, otherwise get default for app
     if chat_session_id:
@@ -293,8 +331,6 @@ def get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=actual_chat_session_id
     )
     print('get_messages', len(messages), compat_app_id)
-    if not messages:
-        return [initial_message_util(uid, compat_app_id)]
     return messages
 
 
@@ -515,31 +551,56 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
     return {'message': 'Message reported'}
 
 
-@router.delete('/v1/messages', tags=['chat'], response_model=Message)
+@router.delete('/v1/messages', tags=['chat'])
 def clear_chat_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    if compat_app_id in ['null', '']:
-        compat_app_id = None
+    # Handle null/empty app_id - use a consistent default instead of None
+    if compat_app_id in ['null', '', None]:
+        compat_app_id = 'default-chat'
 
-    # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    # get current chat session - use specific session if provided, otherwise get default for app
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+    else:
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
-    # clean thread chat file
-    fc_tool = FileChatTool()
-    fc_tool.cleanup(uid)
-
     # clear session
     if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, compat_app_id)
+    # clean thread chat file in background to avoid blocking response
+    import threading
+
+    def cleanup_in_background():
+        try:
+            fc_tool = FileChatTool()
+            fc_tool.cleanup(uid)
+        except Exception as e:
+            print(f"Background cleanup error: {str(e)}")
+
+    threading.Thread(target=cleanup_in_background, daemon=True).start()
+
+    return {
+        "status": "success",
+        "message": "Messages cleared successfully",
+        "cleared": {
+            "app_id": compat_app_id,
+            "chat_session_id": chat_session_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    }
 
 
 @router.post("/v1/voice-message/transcribe")
@@ -595,4 +656,4 @@ def create_initial_message(
     plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     compat_app_id = app_id or plugin_id
-    return initial_message_util(uid, compat_app_id)
+    return initial_message_util(uid, compat_app_id, None)
