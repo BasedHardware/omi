@@ -45,18 +45,32 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer({String? appId, String? chatSessionId}) async {
+Future<Map<String, dynamic>?> clearChatServer({String? appId, String? chatSessionId}) async {
   if (appId == 'no_selected') appId = null;
   final uri = _buildApiUri('/v2/messages', query: {
     if (appId != null) 'app_id': appId,
     if (chatSessionId != null) 'chat_session_id': chatSessionId,
   });
   var response = await makeApiCall(url: uri.toString(), headers: {}, method: 'DELETE', body: '');
-  if (response == null) throw Exception('Failed to delete chat');
+  if (response == null) return null;
+
   if (response.statusCode == 200) {
-    return [ServerMessage.fromJson(jsonDecode(response.body))];
+    final body = utf8.decode(response.bodyBytes);
+    final result = jsonDecode(body) as Map<String, dynamic>;
+
+    // Handle new structured response format
+    if (result['status'] == 'success') {
+      debugPrint('Chat cleared successfully for app: ${result['cleared']?['app_id']}');
+      debugPrint('Session: ${result['cleared']?['chat_session_id']}');
+      debugPrint('Timestamp: ${result['cleared']?['timestamp']}');
+      return result;
+    } else {
+      debugPrint('Clear chat failed: ${result['message'] ?? 'Unknown error'}');
+      return null;
+    }
   } else {
-    throw Exception('Failed to delete chat');
+    debugPrint('Clear chat HTTP error: ${response.statusCode} ${response.body}');
+    return null;
   }
 }
 
