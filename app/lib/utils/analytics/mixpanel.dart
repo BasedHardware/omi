@@ -440,6 +440,15 @@ class MixpanelManager {
   void deletedActionItem(ServerConversation conversation) =>
       track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
+  void paywallOpened(String source) => track('Paywall Opened', properties: {'source': source});
+
+  void upgradePlanSelected({required String plan, required String source}) =>
+      track('Upgrade Plan Selected', properties: {'plan': plan, 'source': source});
+
+  void upgradeSucceeded() => track('Upgrade Succeeded');
+
+  void upgradeCancelled() => track('Upgrade Cancelled');
+
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 
   void upgradeModalClicked() => track('Upgrade Modal Clicked');

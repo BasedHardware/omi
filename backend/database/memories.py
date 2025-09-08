@@ -213,6 +213,28 @@ def delete_memories_for_conversation(uid: str, memory_id: str):
     print('delete_memories_for_conversation', memory_id, len(removed_ids))
 
 
+def unlock_all_memories(uid: str):
+    """
+    Finds all memories for a user with is_locked: True and updates them to is_locked = False.
+    """
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    locked_memories_query = memories_ref.where(filter=FieldFilter('is_locked', '==', True))
+
+    batch = db.batch()
+    docs = locked_memories_query.stream()
+    count = 0
+    for doc in docs:
+        batch.update(doc.reference, {'is_locked': False})
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
+    print(f"Unlocked all memories for user {uid}")
+
+
 # **************************************
 # ********* MIGRATION HELPERS **********
 # **************************************

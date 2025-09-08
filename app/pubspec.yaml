@@ -44,8 +44,9 @@ dependencies:
   firebase_crashlytics: 4.3.2
 
   # Auth
+  flutter_web_auth_2: 5.0.0-alpha.3
   google_sign_in: 6.2.2
-  google_sign_in_all_platforms: 1.2.0
+  sign_in_with_apple: ^6.1.1
 
   # Analytics and Support
   intercom_flutter: 9.3.3
@@ -81,8 +82,9 @@ dependencies:
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
   json_annotation: ^4.9.0
-  json_serializable: 6.8.0
+  json_serializable: ^6.9.5
   package_info_plus: ^8.0.1
+  device_info_plus: ^11.5.0
   path_provider: 2.1.5
   flutter_foreground_task: 9.1.0
   upgrader: 11.4.0
@@ -95,7 +97,6 @@ dependencies:
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: 3.9.2
   flutter_timezone: 3.0.1
-  sign_in_with_apple: ^6.1.1
   cached_network_image: 3.4.1
   map_launcher: ^3.5.0
   internet_connection_checker_plus: ^2.7.2
@@ -122,7 +123,6 @@ dependencies:
 
 dependency_overrides:
   uuid: ^4.4.0
-  google_sign_in_ios: 5.7.5
   opus_flutter_ios:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
@@ -135,6 +135,7 @@ dependency_overrides:
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
+  google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0
   image: ^4.2.0
   integration_test:

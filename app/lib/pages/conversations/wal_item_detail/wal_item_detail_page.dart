@@ -24,6 +24,7 @@ class WalItemDetailPage extends StatefulWidget {
 class _WalItemDetailPageState extends State<WalItemDetailPage> {
   List<double>? _waveformData;
   bool _isProcessingWaveform = false;
+  bool _isSharing = false;
   SyncProvider? _syncProvider;
 
   @override
@@ -70,7 +71,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     return PlaybackState(
       isPlaying: syncProvider.isWalPlaying(widget.wal.id),
       isProcessing: syncProvider.isProcessingAudio && syncProvider.currentPlayingWalId == widget.wal.id,
-      isSharing: syncProvider.isWalSharing(widget.wal.id),
       canPlayOrShare: syncProvider.canPlayOrShareWal(widget.wal),
       isSynced: widget.wal.status == WalStatus.synced,
       hasError: syncProvider.failedWal?.id == widget.wal.id,
@@ -110,6 +110,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       body: Consumer<SyncProvider>(
         builder: (context, syncProvider, child) {
           final playbackState = _getPlaybackState(syncProvider);
+          final isPlaying = syncProvider.isWalPlaying(widget.wal.id);
 
           return Column(
             children: [
@@ -172,6 +173,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                     waveformData: _waveformData,
                     isProcessingWaveform: _isProcessingWaveform,
                     playbackState: playbackState,
+                    isPlaying: isPlaying,
                   ),
                 ),
               ),
@@ -181,7 +183,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Consumer<SyncProvider>(
                   builder: (context, syncProvider, child) {
-                    final currentPos = playbackState.isPlaying ? playbackState.currentPosition : Duration.zero;
+                    final currentPos = isPlaying ? playbackState.currentPosition : Duration.zero;
                     return Text(
                       _formatDuration(currentPos),
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(
@@ -202,7 +204,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   children: [
                     _buildControlButton(
                       icon: Icons.replay_10,
-                      onPressed: playbackState.canPlayOrShare && playbackState.isPlaying
+                      onPressed: playbackState.canPlayOrShare && isPlaying
                           ? () => _handleSkipBackward(context.read<SyncProvider>())
                           : null,
                       size: 60,
@@ -210,7 +212,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                     _buildControlButton(
                       icon: playbackState.isProcessing
                           ? Icons.hourglass_empty
-                          : (playbackState.isPlaying ? Icons.pause : Icons.play_arrow),
+                          : (isPlaying ? Icons.pause : Icons.play_arrow),
                       size: 80,
                       backgroundColor: Theme.of(context).colorScheme.secondary,
                       iconColor: Colors.white,
@@ -220,7 +222,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                     ),
                     _buildControlButton(
                       icon: Icons.forward_10,
-                      onPressed: playbackState.canPlayOrShare && playbackState.isPlaying
+                      onPressed: playbackState.canPlayOrShare && isPlaying
                           ? () => _handleSkipForward(context.read<SyncProvider>())
                           : null,
                       size: 60,
@@ -347,7 +349,14 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       return;
     }
 
-    await syncProvider.shareWalAsWav(widget.wal);
+    setState(() => _isSharing = true);
+    try {
+      await syncProvider.shareWalAsWav(widget.wal);
+    } finally {
+      if (mounted) {
+        setState(() => _isSharing = false);
+      }
+    }
   }
 
   void _showFileDetailsDialog(BuildContext context) {

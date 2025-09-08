@@ -12,6 +12,7 @@
 #include "lib/dk2/haptic.h"
 #include "spi_flash.h"
 #include "sd_card.h"
+#include "lib/dk2/settings.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -143,6 +144,28 @@ int main(void)
     {
         LOG_ERR("Failed to suspend unused modules (err %d)", ret);
         ret = 0;
+    }
+
+    // Initialize settings
+    LOG_INF("Initializing settings...\n");
+    ret = app_settings_init();
+    if (ret)
+    {
+        LOG_ERR("Failed to initialize settings (err %d)", ret);
+        app_settings_save_dim_ratio(5);
+        set_led_red(true);
+        k_msleep(500);
+        set_led_red(false);
+        k_msleep(200);
+        app_settings_save_dim_ratio(100);
+        set_led_red(true);
+        k_msleep(500);
+        set_led_red(false);
+        k_msleep(200);
+        app_settings_save_dim_ratio(30);
+        set_led_red(true);
+        k_msleep(500);
+        set_led_red(false);
     }
 
     // Initialize LEDs
