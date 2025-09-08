@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/services/auth_service.dart';
 
 class ChangeNameWidget extends StatefulWidget {
   const ChangeNameWidget({super.key});
@@ -21,7 +21,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
 
   @override
   void initState() {
-    user = getFirebaseUser();
+    user = AuthService.instance.getFirebaseUser();
     nameController = TextEditingController(text: user?.displayName ?? '');
     super.initState();
   }
@@ -60,7 +60,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
                 return;
               }
               SharedPreferencesUtil().givenName = nameController.text;
-              updateGivenName(nameController.text);
+              AuthService.instance.updateGivenName(nameController.text);
               AppSnackbar.showSnackbar('Name updated successfully!');
               Navigator.of(context).pop();
             },
@@ -101,7 +101,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
                 return;
               }
               SharedPreferencesUtil().givenName = nameController.text;
-              updateGivenName(nameController.text);
+              AuthService.instance.updateGivenName(nameController.text);
               AppSnackbar.showSnackbar('Name updated successfully!');
               Navigator.of(context).pop();
             },
