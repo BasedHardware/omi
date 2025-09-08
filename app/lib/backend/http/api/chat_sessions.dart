@@ -35,18 +35,31 @@ Future<List<ChatSession>> listChatSessions({required String uid, required List<S
     }
   }
 
+  // Remove duplicates by session ID
+  final uniqueSessions = <String, ChatSession>{};
+  for (final session in allSessions) {
+    uniqueSessions[session.id] = session;
+  }
+  final deduplicatedSessions = uniqueSessions.values.toList();
+
   // Sort by creation date (newest first)
-  allSessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  return allSessions;
+  deduplicatedSessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  return deduplicatedSessions;
 }
 
 Future<ChatSession?> createChatSession({required String uid, required String appId, String? title}) async {
   final uri = _buildUri('/v2/chat-sessions');
+
+  final Map<String, dynamic> body = {
+    'app_id': appId, // Send actual app_id ('omi' for OMI, actual ID for others)
+    if (title != null && title.isNotEmpty) 'title': title,
+  };
+
   final response = await makeApiCall(
     url: uri.toString(),
     headers: {},
     method: 'POST',
-    body: jsonEncode({'app_id': appId, if (title != null && title.isNotEmpty) 'title': title}),
+    body: jsonEncode(body),
   );
   if (response == null) return null;
   if (response.statusCode == 200) {

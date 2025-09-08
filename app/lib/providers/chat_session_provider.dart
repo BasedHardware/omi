@@ -21,14 +21,16 @@ class ChatSessionProvider extends ChangeNotifier {
     _appProvider = appProvider;
   }
 
-  Future<void> selectSession(String sessionId, String appId, {AppProvider? appProvider}) async {
+  Future<void> selectSession(String sessionId, String? appId, {AppProvider? appProvider}) async {
     // ONLY set selection when user explicitly selects a thread
     _currentAppId = appId;
     _selectedSessionId = sessionId;
 
     // Switch to the thread's app if different from current app
-    if (appProvider != null && appProvider.selectedChatAppId != appId) {
-      appProvider.setSelectedChatAppId(appId);
+    final currentSelectedAppId = appProvider?.selectedChatAppId ?? 'no_selected';
+    final targetAppId = appId ?? 'no_selected';
+    if (appProvider != null && currentSelectedAppId != targetAppId) {
+      appProvider.setSelectedChatAppId(targetAppId);
     }
 
     notifyListeners();
@@ -36,13 +38,15 @@ class ChatSessionProvider extends ChangeNotifier {
 
   Future<void> switchToApp(String appId) async {
     // ALWAYS show welcome screen when switching apps - no exceptions
-    _currentAppId = appId;
+    // Convert no_selected to 'omi' for OMI app
+    final effectiveAppId = (appId.isEmpty || appId == 'no_selected') ? 'omi' : appId;
+    _currentAppId = effectiveAppId;
     _selectedSessionId = null;
     notifyListeners();
   }
 
   Future<void> loadSessions({bool refresh = false}) async {
-    // Load ALL sessions across all apps
+    // Load ALL sessions across all apps including OMI
     if (!refresh && _sessions.isNotEmpty) return;
     _isLoading = true;
     notifyListeners();
@@ -51,12 +55,11 @@ class ChatSessionProvider extends ChangeNotifier {
 
       // Get all app IDs to fetch sessions from all apps
       final allAppIds = _appProvider?.apps.map((app) => app.id).toList() ?? [];
-      if (allAppIds.isEmpty) {
-        _sessions = [];
-        return;
-      }
 
-      final list = await api.listChatSessions(uid: uid, appIds: allAppIds);
+      // Add OMI app to the list
+      final appIdsWithOmi = ['omi', ...allAppIds]; // Use 'omi' for OMI app
+
+      final list = await api.listChatSessions(uid: uid, appIds: appIdsWithOmi);
       _sessions = list;
     } catch (e) {
       debugPrint('loadSessions error: $e');
@@ -70,9 +73,8 @@ class ChatSessionProvider extends ChangeNotifier {
     final uid = SharedPreferencesUtil().uid;
     final session = await api.createChatSession(uid: uid, appId: appId, title: title);
     if (session != null) {
-      if (_currentAppId == appId) {
-        _sessions = [session, ..._sessions];
-      }
+      // Always add new sessions to the list (they're already filtered by current context)
+      _sessions = [session, ..._sessions];
       _selectedSessionId = session.id; // Set as selected in-memory
       notifyListeners();
     }

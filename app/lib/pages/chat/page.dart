@@ -789,7 +789,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           onPressed: () async {
             HapticFeedback.selectionClick();
             FocusScope.of(context).unfocus();
-            final appId = context.read<AppProvider>().selectedChatAppId;
             // Load all sessions across all apps (no app selection required anymore)
             await context.read<ChatSessionProvider>().loadSessions(refresh: true);
             scaffoldKey.currentState?.openEndDrawer();
@@ -822,14 +821,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
           builder: (context, appProvider, sessions, messageProvider, _) {
             final appId = appProvider.selectedChatAppId;
-            if (appId.isEmpty || appId == 'no_selected') {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Select an app to manage threads', style: TextStyle(color: Colors.white70)),
-                ),
-              );
-            }
+            // Enable multi-threading for all apps including OMI (no_selected)
+            final effectiveAppId = (appId.isEmpty || appId == 'no_selected') ? 'omi' : appId;
 
             final selectedId = sessions.selectedSessionId;
 
@@ -851,7 +844,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
-                        final created = await sessions.createSession(appId: appId);
+                        final created = await sessions.createSession(appId: effectiveAppId);
                         if (created != null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('New thread created')),
@@ -884,8 +877,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
                       itemBuilder: (ctx, idx) {
                         final s = sessions.sessions[idx];
-                        // Only highlight threads that belong to the current app
-                        final isSelected = s.id == selectedId && s.appId == appId;
+                        // Only highlight threads that belong to the current app (including OMI)
+                        final isSelected = s.id == selectedId && s.appId == effectiveAppId;
                         final appName = _getAppNameById(s.appId);
                         return ListTile(
                           dense: true,
@@ -1003,7 +996,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  String _getAppNameById(String appId) {
+  String _getAppNameById(String? appId) {
+    if (appId == null || appId == 'omi') {
+      return 'Omi';
+    }
     final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
     return app?.name ?? 'Unknown App';
   }
