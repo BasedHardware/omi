@@ -112,42 +112,6 @@ def get_monthly_usage_for_subscription(uid: str) -> dict:
 
     return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
 
-
-def can_access_premium_features(uid: str) -> bool:
-    """
-    Checks if a user can access premium features (insights, memories, etc.)
-    by verifying their subscription and usage, ignoring transcription limits.
-    """
-    subscription = users_db.get_user_valid_subscription(uid)
-    if not subscription:
-        return False
-
-    usage = get_monthly_usage_for_subscription(uid)
-    limits = get_plan_limits(subscription.plan)
-
-    # Check transcription seconds (0 means unlimited)
-    if limits.transcription_seconds and limits.transcription_seconds > 0:
-        if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
-            return False
-
-    # Check insights gained
-    if limits.insights_gained and limits.insights_gained > 0:
-        if usage.get('insights_gained', 0) >= limits.insights_gained:
-            return False
-
-    # Check memories created
-    if limits.memories_created and limits.memories_created > 0:
-        if usage.get('memories_created', 0) >= limits.memories_created:
-            return False
-
-    # Check words transcribed (as a proxy for processing)
-    if limits.words_transcribed and limits.words_transcribed > 0:
-        if usage.get('words_transcribed', 0) >= limits.words_transcribed:
-            return False
-
-    return True
-
-
 def has_transcription_credits(uid: str) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.

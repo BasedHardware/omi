@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 import database.action_items as action_items_db
 from utils.other import endpoints as auth
 from pydantic import BaseModel, Field
-from utils.subscription import can_access_premium_features
 
 router = APIRouter()
 
@@ -38,12 +37,12 @@ class ActionItemResponse(BaseModel):
     is_locked: bool = False
 
 
-def _get_action_item_and_check_lock(uid: str, action_item_id: str) -> dict:
+def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
-    if action_item.get('is_locked', False) and not can_access_premium_features(uid):
+    if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="Payment Required to access this action item.")
 
     return action_item
@@ -94,12 +93,10 @@ def get_action_items(
         offset=offset,
     )
 
-    has_premium_access = can_access_premium_features(uid)
-    if not has_premium_access:
-        for item in action_items:
-            if item.get('is_locked', False):
-                description = item.get('description', '')
-                item['description'] = (description[:70] + '...') if len(description) > 70 else description
+    for item in action_items:
+        if item.get('is_locked', False):
+            description = item.get('description', '')
+            item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
     response_items = [ActionItemResponse(**item) for item in action_items]
 
@@ -122,7 +119,7 @@ def get_action_items(
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
 def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get a specific action item by ID."""
-    action_item = _get_action_item_and_check_lock(uid, action_item_id)
+    action_item = _get_valid_action_item(uid, action_item_id)
 
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
@@ -136,7 +133,7 @@ def update_action_item(
 ):
     """Update an action item."""
     # Check if action item exists
-    existing_item = _get_action_item_and_check_lock(uid, action_item_id)
+    existing_item = _get_valid_action_item(uid, action_item_id)
     if not existing_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
@@ -171,7 +168,7 @@ def toggle_action_item_completion(
 ):
     """Mark an action item as completed or uncompleted."""
     # Check if action item exists
-    existing_item = _get_action_item_and_check_lock(uid, action_item_id)
+    existing_item = _get_valid_action_item(uid, action_item_id)
     if not existing_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
@@ -188,7 +185,7 @@ def toggle_action_item_completion(
 @router.delete("/v1/action-items/{action_item_id}", status_code=204, tags=['action-items'])
 def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete an action item."""
-    _get_action_item_and_check_lock(uid, action_item_id)
+    _get_valid_action_item(uid, action_item_id)
     success = action_items_db.delete_action_item(uid, action_item_id)
     if not success:
         raise HTTPException(status_code=404, detail="Action item not found")

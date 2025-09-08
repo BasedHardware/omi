@@ -23,7 +23,6 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
-from utils.subscription import can_access_premium_features
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
@@ -278,12 +277,10 @@ async def get_memories_via_integration(
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
     memories = memory_db.get_memories(uid, limit=limit, offset=offset)
-    has_premium_access = can_access_premium_features(uid)
-    if not has_premium_access:
-        for memory in memories:
-            if memory.get('is_locked', False):
-                content = memory.get('content', '')
-                memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+    for memory in memories:
+        if memory.get('is_locked', False):
+            content = memory.get('content', '')
+            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
     memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
 
     return {"memories": memory_items}
@@ -384,13 +381,11 @@ async def get_conversations_via_integration(
         end_date=end_date,
     )
 
-    has_premium_access = can_access_premium_features(uid)
-
     # Convert database conversations
     conversation_items = []
     for conv in conversations_data:
         try:
-            if conv.get('is_locked', False) and not has_premium_access:
+            if conv.get('is_locked', False):
                 conv['structured']['action_items'] = []
                 conv['structured']['events'] = []
                 conv['transcript_segments'] = []
@@ -517,13 +512,11 @@ async def search_conversations_via_integration(
     if conversation_ids:
         full_conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
 
-    has_premium_access = can_access_premium_features(uid)
-
     # Convert database conversations to integration model
     conversation_items = []
     for conv in full_conversations:
         try:
-            if conv.get('is_locked', False) and not has_premium_access:
+            if conv.get('is_locked', False):
                 conv['structured']['action_items'] = []
                 conv['structured']['events'] = []
                 conv['transcript_segments'] = []

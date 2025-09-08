@@ -12,7 +12,6 @@ from models.conversation import SearchRequest
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
-from utils.subscription import can_access_premium_features
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -20,18 +19,13 @@ from utils.app_integrations import trigger_external_integrations
 router = APIRouter()
 
 
-def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
+def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        if not can_access_premium_features(uid):
-            raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
-        else:
-            # Unlock it
-            conversations_db.update_conversation(uid, conversation_id, {'is_locked': False})
-            conversation['is_locked'] = False
+        raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
 
     return conversation
 
@@ -65,7 +59,7 @@ def reprocess_conversation(
     :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
     :return: The updated conversation after reprocessing.
     """
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -97,29 +91,27 @@ def get_conversations(
         statuses=statuses.split(",") if len(statuses) > 0 else [],
     )
 
-    has_premium_access = can_access_premium_features(uid)
-    if not has_premium_access:
-        for conv in conversations:
-            if conv.get('is_locked', False):
-                # Keep overview for blurred UI, but clear other sensitive data
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-                conv['transcript_segments'] = []
-                conv['apps_results'] = []
-                conv['plugins_results'] = []
-                conv['suggested_summarization_apps'] = []
+    for conv in conversations:
+        if conv.get('is_locked', False):
+            # Keep overview for blurred UI, but clear other sensitive data
+            conv['structured']['action_items'] = []
+            conv['structured']['events'] = []
+            conv['transcript_segments'] = []
+            conv['apps_results'] = []
+            conv['plugins_results'] = []
+            conv['suggested_summarization_apps'] = []
     return conversations
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     print('get_conversation_by_id', uid, conversation_id)
-    return _get_conversation_by_id(uid, conversation_id)
+    return _get_valid_conversation_by_id(uid, conversation_id)
 
 
 @router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
-    _get_conversation_by_id(uid, conversation_id)
+    _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
 
@@ -128,7 +120,7 @@ def patch_conversation_title(conversation_id: str, title: str, uid: str = Depend
     "/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto], tags=['conversations']
 )
 def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    _get_conversation_by_id(uid, conversation_id)
+    _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
 
@@ -138,7 +130,7 @@ def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_cu
     tags=['conversations'],
 )
 def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    _get_conversation_by_id(uid, conversation_id)
+    _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
@@ -152,7 +144,7 @@ def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_curren
 
 @router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
 def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    _get_conversation_by_id(uid, conversation_id)
+    _get_valid_conversation_by_id(uid, conversation_id)
     return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
@@ -160,7 +152,7 @@ def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(au
 def set_conversation_events_state(
     conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     events = conversation.structured.events
     for i, event_idx in enumerate(data.events_idx):
@@ -176,7 +168,7 @@ def set_conversation_events_state(
 def set_action_item_status(
     data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
 ):
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
     for i, action_item_idx in enumerate(data.items_idx):
@@ -237,7 +229,7 @@ def set_action_item_status(
 def update_action_item_description(
     conversation_id: str, data: UpdateActionItemDescriptionRequest, uid=Depends(auth.get_current_user_uid)
 ):
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
 
@@ -268,7 +260,7 @@ def update_action_item_description(
 
 @router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
 def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
     updated_action_items = [item for item in action_items if not (item.description == data.description)]
@@ -327,7 +319,7 @@ def set_assignee_conversation_segment(
         use_for_speech_training,
         uid,
     )
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
 
     if value == 'null':
@@ -402,7 +394,7 @@ def set_assignee_conversation_segment(
         use_for_speech_training,
         uid,
     )
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
 
     if value == 'null':
@@ -460,7 +452,7 @@ def assign_segments_bulk(
     data: BulkAssignSegmentsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
 
     value = data.value
@@ -497,7 +489,7 @@ def set_conversation_visibility(
     conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('update_conversation_visibility', conversation_id, value, uid)
-    _get_conversation_by_id(uid, conversation_id)
+    _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_visibility(uid, conversation_id, value)
     if value == ConversationVisibility.private:
         redis_db.remove_conversation_to_uid(conversation_id)
@@ -517,7 +509,7 @@ def get_shared_conversation_by_id(conversation_id: str):
 
     # TODO: include speakers and people matched?
     # TODO: other fields that  shouldn't be included?
-    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
@@ -536,7 +528,7 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
     data = [[uid, conversation_id] for conversation_id, uid in conversation_uids.items() if uid]
     # TODO: sort in some way to have proper pagination
 
-    conversations = conversations_db.get_public_conversations(data[offset : offset + limit])
+    conversations = conversations_db.get_public_conversations(data[offset: offset + limit])
     for conversation in conversations:
         conversation['geolocation'] = None
     return conversations
@@ -570,7 +562,7 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
     from utils.apps import get_available_apps, get_available_app_by_id_with_reviews
     from models.app import App
 
-    conversation_data = _get_conversation_by_id(uid, conversation_id)
+    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation_data)
 
     # Get suggested app models with full data (similar to /v1/apps endpoint)
@@ -601,7 +593,7 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
 def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Depends(auth.get_current_user_uid)):
-    conversation_data = _get_conversation_by_id(uid, conversation_id)
+    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation_data)
 
     full_transcript = "\n".join([seg.text for seg in conversation.transcript_segments if seg.text])

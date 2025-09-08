@@ -56,7 +56,6 @@ from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
-from utils.subscription import can_access_premium_features
 from utils.webhooks import conversation_created_webhook
 
 

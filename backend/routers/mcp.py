@@ -13,12 +13,10 @@ import database.conversations as conversations_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation import CategoryEnum
 from utils.apps import update_personas_async
-from firebase_admin import auth
 
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 import database.mcp_api_key as mcp_api_key_db
-from utils.subscription import can_access_premium_features
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 
 router = APIRouter()
@@ -86,12 +84,10 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
-    has_premium_access = can_access_premium_features(uid)
-    if not has_premium_access:
-        for memory in memories:
-            if memory.get('is_locked', False):
-                content = memory.get('content', '')
-                memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+    for memory in memories:
+        if memory.get('is_locked', False):
+            content = memory.get('content', '')
+            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
     return memories
 
 
@@ -173,11 +169,6 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        if not can_access_premium_features(uid):
-            raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
-        else:
-            # Unlock it
-            conversations_db.update_conversation(uid, conversation_id, {'is_locked': False})
-            conversation['is_locked'] = False
+        raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
 
     return conversation
