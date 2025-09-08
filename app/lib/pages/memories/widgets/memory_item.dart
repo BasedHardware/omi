@@ -1,6 +1,11 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -26,7 +31,28 @@ class MemoryItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget memoryWidget = GestureDetector(
-      onTap: () => onTap(context, memory, provider),
+      onTap: () {
+        if (memory.isLocked) {
+          MixpanelManager().paywallOpened('Memory List Item');
+          showDialog<bool>(
+            context: context,
+            builder: (ctx) => ConfirmationDialog(
+              title: 'Upgrade to Unlock',
+              description: 'This memory is locked. Upgrade to the Unlimited plan to access all your memories.',
+              confirmText: 'Upgrade Now',
+              cancelText: 'Later',
+              onCancel: () => Navigator.of(ctx).pop(false),
+              onConfirm: () => Navigator.of(ctx).pop(true),
+            ),
+          ).then((confirmed) {
+            if (confirmed == true) {
+              routeToPage(context, const UsagePage(showUpgradeDialog: true));
+            }
+          });
+          return;
+        }
+        onTap(context, memory, provider);
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingL),
@@ -45,11 +71,26 @@ class MemoryItem extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: Text(
-                memory.content.decodeString,
-                style: AppStyles.body,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+              child: Stack(
+                children: [
+                  Text(
+                    memory.content.decodeString,
+                    style: AppStyles.body,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (memory.isLocked)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                          child: Container(
+                            color: Colors.transparent,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: AppStyles.spacingM),

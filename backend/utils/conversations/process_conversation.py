@@ -255,9 +255,12 @@ def _extract_memories(uid: str, conversation: Conversation):
         # For regular conversations with transcript segments
         new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
+    is_locked = conversation.is_locked
     parsed_memories = []
     for memory in new_memories:
-        parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
+        memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
+        memory_db_obj.is_locked = is_locked
+        parsed_memories.append(memory_db_obj)
         # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
@@ -299,6 +302,7 @@ def _save_action_items(uid: str, conversation: Conversation):
     if not conversation.structured or not conversation.structured.action_items:
         return
 
+    is_locked = conversation.is_locked
     action_items_data = []
     now = datetime.now(timezone.utc)
 
@@ -311,6 +315,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'due_at': action_item.due_at,
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
+            'is_locked': is_locked,
         }
         action_items_data.append(action_item_data)
 

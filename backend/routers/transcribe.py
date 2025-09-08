@@ -97,9 +97,6 @@ async def _listen(
         except Exception as e:
             print(f"Error sending credit limit notification: {e}")
 
-        await websocket.close(code=4002, reason="Usage limit exceeded")
-        return
-
     # Frame size, codec
     frame_size: int = 160
     if codec == "opus_fs320":
@@ -127,6 +124,7 @@ async def _listen(
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+    locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
     speech_profile_processed = False
@@ -165,10 +163,13 @@ async def _listen(
                 except Exception as e:
                     print(f"Error sending credit limit notification: {e}")
 
-                nonlocal websocket_close_code
-                websocket_close_code = 4002
-                websocket_active = False
-                break
+                # Lock the in-progress conversation if credit limit is reached
+                conversation = retrieve_in_progress_conversation(uid)
+                if conversation and conversation.get('id') and conversation['id'] not in locked_conversation_ids:
+                    conversation_id = conversation['id']
+                    print(f"Locking conversation {conversation_id} due to transcription limit.", uid)
+                    conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
+                    locked_conversation_ids.add(conversation_id)
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)

@@ -440,7 +440,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
-                          const OutOfCreditsWidget(),
                           Expanded(
                             child: PageView(
                               controller: _controller,
