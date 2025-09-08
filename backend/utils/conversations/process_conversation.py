@@ -256,12 +256,11 @@ def _extract_memories(uid: str, conversation: Conversation):
         # For regular conversations with transcript segments
         new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
-    has_premium_access = can_access_premium_features(uid)
+    is_locked = conversation.is_locked
     parsed_memories = []
     for memory in new_memories:
         memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
-        if not has_premium_access:
-            memory_db_obj.is_locked = True
+        memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
         # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
@@ -304,7 +303,7 @@ def _save_action_items(uid: str, conversation: Conversation):
     if not conversation.structured or not conversation.structured.action_items:
         return
 
-    has_premium_access = can_access_premium_features(uid)
+    is_locked = conversation.is_locked
     action_items_data = []
     now = datetime.now(timezone.utc)
 
@@ -317,7 +316,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'due_at': action_item.due_at,
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
-            'is_locked': not has_premium_access,
+            'is_locked': is_locked,
         }
         action_items_data.append(action_item_data)
 
@@ -438,11 +437,6 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
-
-    # Set lock status based on premium feature access for new conversations
-    # if not is_reprocess:
-    if not can_access_premium_features(uid):
-        conversation.is_locked = True
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())

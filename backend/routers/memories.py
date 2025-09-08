@@ -30,8 +30,6 @@ def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid))
     categories = [MemoryCategory.interesting.value, MemoryCategory.system.value]
     memory.category = identify_category_for_memory(memory.content, categories)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-    if not can_access_premium_features(uid):
-        memory_db.is_locked = True
     memories_db.create_memory(uid, memory_db.dict())
     threading.Thread(target=update_personas_async, args=(uid,)).start()
     return memory_db

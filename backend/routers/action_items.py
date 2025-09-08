@@ -62,7 +62,6 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
         'completed': request.completed,
         'due_at': request.due_at,
         'conversation_id': request.conversation_id,
-        'is_locked': not can_access_premium_features(uid),
     }
 
     action_item_id = action_items_db.create_action_item(uid, action_item_data)
