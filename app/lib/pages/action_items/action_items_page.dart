@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
@@ -119,7 +120,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: RefreshIndicator(
-            onRefresh: () => provider.forceRefreshActionItems(),
+            onRefresh: () async {
+              HapticFeedback.mediumImpact();
+              return provider.forceRefreshActionItems();
+            },
             color: Colors.deepPurpleAccent,
             backgroundColor: Colors.white,
             child: CustomScrollView(
