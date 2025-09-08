@@ -97,12 +97,6 @@ class WalListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
-        final isPlaying = syncProvider.isWalPlaying(wal.id);
-        final isProcessing = syncProvider.isProcessingAudio && syncProvider.currentPlayingWalId == wal.id;
-        final isSharingThisWal = syncProvider.isWalSharing(wal.id);
-        final isAnyWalSharing = syncProvider.isSharingAudio;
-        final canPlayOrShare = syncProvider.canPlayOrShareWal(wal);
-        final isSynced = wal.status == WalStatus.synced;
         final hasError = syncProvider.failedWal?.id == wal.id;
 
         return GestureDetector(

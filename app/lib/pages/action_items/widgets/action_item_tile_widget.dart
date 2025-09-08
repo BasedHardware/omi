@@ -1,6 +1,12 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -357,7 +363,29 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       clipBehavior: Clip.hardEdge,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _showEditSheet(context),
+        onTap: () {
+          if (widget.actionItem.isLocked) {
+            MixpanelManager().paywallOpened('Action Item');
+            showDialog<bool>(
+              context: context,
+              builder: (ctx) => ConfirmationDialog(
+                title: 'Upgrade to Unlock',
+                description:
+                    'This action item is locked. Upgrade to the Unlimited plan to access all your action items.',
+                confirmText: 'Upgrade Now',
+                cancelText: 'Later',
+                onCancel: () => Navigator.of(ctx).pop(false),
+                onConfirm: () => Navigator.of(ctx).pop(true),
+              ),
+            ).then((confirmed) {
+              if (confirmed == true) {
+                routeToPage(context, const UsagePage(showUpgradeDialog: true));
+              }
+            });
+            return;
+          }
+          _showEditSheet(context);
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -393,15 +421,39 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.actionItem.description,
-                      style: TextStyle(
-                        color: (widget.actionItem.completed || _isAnimating) ? Colors.grey.shade400 : Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                        decoration: (widget.actionItem.completed || _isAnimating) ? TextDecoration.lineThrough : null,
-                        decorationColor: Colors.grey.shade400,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              Text(
+                                widget.actionItem.description,
+                                style: TextStyle(
+                                  color: (widget.actionItem.completed || _isAnimating)
+                                      ? Colors.grey.shade400
+                                      : Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w400,
+                                  decoration:
+                                      (widget.actionItem.completed || _isAnimating) ? TextDecoration.lineThrough : null,
+                                  decorationColor: Colors.grey.shade400,
+                                ),
+                              ),
+                              if (widget.actionItem.isLocked)
+                                Positioned.fill(
+                                  child: ClipRRect(
+                                    child: BackdropFilter(
+                                      filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                                      child: Container(
+                                        color: Colors.transparent,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     if (widget.actionItem.dueAt != null) ...[
                       const SizedBox(height: 6),

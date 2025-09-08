@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/persona/twitter/verify_identity_screen.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
@@ -81,12 +81,12 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                         Text(
                           'We will pre-train your Omi clone\nbased on your account\'s activity',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.white.withOpacity(0.55),
+                            color: Colors.white.withValues(alpha: 0.55),
                             shadows: [
                               Shadow(
                                 offset: const Offset(0, 1),
                                 blurRadius: 3,
-                                color: Colors.white.withOpacity(0.25),
+                                color: Colors.white.withValues(alpha: 0.25),
                               ),
                             ],
                           ),
@@ -106,41 +106,41 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.24),
+                                color: Colors.white.withValues(alpha: 0.24),
                                 width: 1,
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.24),
+                                color: Colors.white.withValues(alpha: 0.24),
                                 width: 1,
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.4),
+                                color: Colors.white.withValues(alpha: 0.4),
                                 width: 1,
                               ),
                             ),
                             errorBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.24),
+                                color: Colors.white.withValues(alpha: 0.24),
                                 width: 1,
                               ),
                             ),
                             focusedErrorBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.4),
+                                color: Colors.white.withValues(alpha: 0.4),
                                 width: 1,
                               ),
                             ),
                             hintText: '@nikshevchenko',
                             hintStyle: TextStyle(
-                              color: Colors.white.withOpacity(0.38),
+                              color: Colors.white.withValues(alpha: 0.38),
                               fontWeight: FontWeight.bold,
                             ),
                             prefixIcon: Padding(
@@ -152,7 +152,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                               ),
                             ),
                             errorStyle: TextStyle(
-                              color: Colors.white.withOpacity(0.55),
+                              color: Colors.white.withValues(alpha: 0.55),
                               fontSize: 13,
                               height: 1,
                             ),
@@ -177,7 +177,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                               provider.setIsLoading(true);
                               if (FirebaseAuth.instance.currentUser == null) {
                                 debugPrint('User is not signed in, signing in anonymously');
-                                await signInAnonymously();
+                                await AuthService.instance.signInAnonymously();
                               }
                               var handle = _controller.text.trim();
                               SharedPreferencesUtil().hasOmiDevice = false;
@@ -189,7 +189,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             }
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.12),
+                              backgroundColor: Colors.white.withValues(alpha: 0.12),
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 56),
                             shape: RoundedRectangleBorder(
