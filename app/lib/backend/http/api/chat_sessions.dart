@@ -14,17 +14,30 @@ Uri _buildUri(String path, {Map<String, dynamic>? query}) {
   );
 }
 
-Future<List<ChatSession>> listChatSessions({required String uid, required String appId}) async {
-  final uri = _buildUri('/v2/chat-sessions', query: {'app_id': appId});
-  final response = await makeApiCall(url: uri.toString(), headers: {}, body: '', method: 'GET');
-  if (response == null) return [];
-  if (response.statusCode == 200) {
-    final body = utf8.decode(response.bodyBytes);
-    final data = jsonDecode(body) as List<dynamic>;
-    return ChatSession.fromJsonList(data);
+Future<List<ChatSession>> listChatSessions({required String uid, required List<String> appIds}) async {
+  // Fetch chat sessions from all provided apps and combine them
+  List<ChatSession> allSessions = [];
+
+  for (String appId in appIds) {
+    try {
+      final uri = _buildUri('/v2/chat-sessions', query: {'app_id': appId});
+      final response = await makeApiCall(url: uri.toString(), headers: {}, body: '', method: 'GET');
+
+      if (response != null && response.statusCode == 200) {
+        final body = utf8.decode(response.bodyBytes);
+        final data = jsonDecode(body) as List<dynamic>;
+        final sessions = ChatSession.fromJsonList(data);
+        allSessions.addAll(sessions);
+      }
+    } catch (e) {
+      debugPrint('listChatSessions error for app $appId: $e');
+      // Continue with other apps even if one fails
+    }
   }
-  debugPrint('listChatSessions error ${response.statusCode}: ${response.body}');
-  return [];
+
+  // Sort by creation date (newest first)
+  allSessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  return allSessions;
 }
 
 Future<ChatSession?> createChatSession({required String uid, required String appId, String? title}) async {

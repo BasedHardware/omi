@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -19,7 +20,6 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_welcome_screen.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -137,11 +137,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         provider.refreshMessages();
       }
 
-      // Load sessions for current app if available
-      final appId = context.read<AppProvider>().selectedChatAppId;
-      if (appId.isNotEmpty && appId != 'no_selected') {
-        await context.read<ChatSessionProvider>().loadSessions(appId: appId);
-      }
+      // Load all sessions across all apps
+      await context.read<ChatSessionProvider>().loadSessions();
 
       _fadeController.forward();
       _slideController.forward();
@@ -243,7 +240,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             );
           }
 
-          final selectedId = sessions.getSelectedSessionIdForApp(appId);
+          final selectedId = sessions.selectedSessionId;
 
           return Column(
             children: [
@@ -292,7 +289,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
                     itemBuilder: (ctx, idx) {
                       final s = sessions.sessions[idx];
-                      final isSelected = s.id == selectedId;
+                      // Only highlight threads that belong to the current app
+                      final isSelected = s.id == selectedId && s.appId == appId;
+                      final appName = _getAppNameById(s.appId);
                       return ListTile(
                         dense: true,
                         selected: isSelected,
@@ -304,9 +303,20 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           style: const TextStyle(
                               color: ResponsiveHelper.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
                         ),
-                        subtitle: Text(
-                          s.createdAt.toLocal().toString(),
-                          style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 11),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'App: $appName',
+                              style: const TextStyle(
+                                  color: ResponsiveHelper.textSecondary, fontSize: 10, fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              s.createdAt.toLocal().toString(),
+                              style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 10),
+                            ),
+                          ],
                         ),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, color: ResponsiveHelper.textSecondary, size: 18),
@@ -337,7 +347,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           },
                         ),
                         onTap: () async {
-                          await sessions.setSelectedSessionIdForApp(appId, s.id);
+                          // Select the thread and switch to its app context
+                          final appProvider = context.read<AppProvider>();
+                          await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
                           await messageProvider.refreshMessages(dropdownSelected: true);
                         },
                       );
@@ -1816,15 +1828,21 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     if (selectedAppId != currentAppId) {
       appProvider.setSelectedChatAppId(app?.id);
 
-      // Load sessions for the new app
+      // Load sessions for the new app and clear any selected threads to show welcome screen
       final chatSessionProvider = context.read<ChatSessionProvider>();
-      await chatSessionProvider.loadSessions(appId: selectedAppId);
+      await chatSessionProvider.switchToApp(selectedAppId);
+      await chatSessionProvider.loadSessions(refresh: true);
 
       final messageProvider = context.read<MessageProvider>();
       await messageProvider.refreshMessages(dropdownSelected: true);
 
       scrollToBottom();
     }
+  }
+
+  String _getAppNameById(String appId) {
+    final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
+    return app?.name ?? 'Unknown App';
   }
 
   void _showClearChatDialog(BuildContext context) {
