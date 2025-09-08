@@ -232,7 +232,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         builder: (context, appProvider, sessions, messageProvider, _) {
           final appId = appProvider.selectedChatAppId;
           // Enable multi-threading for all apps including OMI (no_selected)
-          final effectiveAppId = (appId.isEmpty || appId == 'no_selected') ? 'omi' : appId;
+          final effectiveAppId = appId.isEmpty ? 'omi' : appId;
 
           final selectedId = sessions.selectedSessionId;
 
@@ -393,9 +393,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildModernHeader(AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
-        ? null
-        : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId == 'omi' ? null : appProvider.getSelectedApp();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -1589,9 +1587,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   void _showAppSelectionSheet(BuildContext context, AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
-        ? null
-        : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId == 'omi' ? null : appProvider.getSelectedApp();
     final availableApps = appProvider.apps.where((app) => app.worksWithChat() && app.enabled).toList();
 
     showModalBottomSheet(
@@ -1816,8 +1812,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   void _handleAppSelection(BuildContext context, AppProvider appProvider, App? app) async {
     Navigator.pop(context);
 
-    final String selectedAppId = app?.id ?? 'no_selected';
-    final String currentAppId = appProvider.selectedChatAppId.isEmpty ? 'no_selected' : appProvider.selectedChatAppId;
+    final String selectedAppId = app?.id ?? 'omi';
+    final String currentAppId = appProvider.selectedChatAppId;
 
     if (selectedAppId != currentAppId) {
       appProvider.setSelectedChatAppId(app?.id);

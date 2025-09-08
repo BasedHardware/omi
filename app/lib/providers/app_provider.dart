@@ -21,7 +21,7 @@ class AppProvider extends BaseProvider {
 
   List<bool> appLoading = [];
 
-  String selectedChatAppId = "";
+  String selectedChatAppId = "omi"; // Default to OMI app
 
   bool isAppOwner = false;
   bool appPublicToggled = false;
@@ -35,7 +35,8 @@ class AppProvider extends BaseProvider {
 
   List<App> get userPrivateApps => apps.where((app) => app.private).toList();
 
-  List<App> get userPublicApps => apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
+  List<App> get userPublicApps =>
+      apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
 
   Future<App?> getAppFromId(String id) async {
     if (apps.isEmpty) {
@@ -227,9 +228,16 @@ class AppProvider extends BaseProvider {
   }
 
   void setSelectedChatAppId(String? appId) {
-    final newAppId = appId ?? "";
-    if (selectedChatAppId != newAppId) {
-      selectedChatAppId = newAppId;
+    // Normalize at source: null/empty/no_selected -> 'omi'
+    String normalizedAppId;
+    if (appId == null || appId.isEmpty || appId == 'no_selected') {
+      normalizedAppId = 'omi';
+    } else {
+      normalizedAppId = appId;
+    }
+
+    if (selectedChatAppId != normalizedAppId) {
+      selectedChatAppId = normalizedAppId;
       // Only notify if there are listeners specifically for chat app selection
       // Apps page doesn't need to rebuild for this change
       // notifyListeners(); // Commented out to prevent apps page rebuilds
@@ -237,6 +245,7 @@ class AppProvider extends BaseProvider {
   }
 
   App? getSelectedApp() {
+    if (selectedChatAppId == 'omi') return null; // OMI is default app, no App object
     return apps.firstWhereOrNull((p) => p.id == selectedChatAppId);
   }
 

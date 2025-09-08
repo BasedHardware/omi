@@ -27,8 +27,8 @@ class ChatSessionProvider extends ChangeNotifier {
     _selectedSessionId = sessionId;
 
     // Switch to the thread's app if different from current app
-    final currentSelectedAppId = appProvider?.selectedChatAppId ?? 'no_selected';
-    final targetAppId = appId ?? 'no_selected';
+    final currentSelectedAppId = appProvider?.selectedChatAppId ?? 'omi';
+    final targetAppId = appId ?? 'omi';
     if (appProvider != null && currentSelectedAppId != targetAppId) {
       appProvider.setSelectedChatAppId(targetAppId);
     }
@@ -38,8 +38,8 @@ class ChatSessionProvider extends ChangeNotifier {
 
   Future<void> switchToApp(String appId) async {
     // ALWAYS show welcome screen when switching apps - no exceptions
-    // Convert no_selected to 'omi' for OMI app
-    final effectiveAppId = (appId.isEmpty || appId == 'no_selected') ? 'omi' : appId;
+    // AppProvider now provides clean state, no conversion needed
+    final effectiveAppId = appId.isEmpty ? 'omi' : appId;
     _currentAppId = effectiveAppId;
     _selectedSessionId = null;
     notifyListeners();
