@@ -77,6 +77,7 @@ async def _listen(
     include_speech_profile: bool = True,
     stt_service: STTService = None,
     including_combined_segments: bool = False,
+    conversation_timeout: int = 120,
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
@@ -347,7 +348,7 @@ async def _listen(
     seconds_to_trim = None
     seconds_to_add = None
 
-    conversation_creation_timeout = 120
+    conversation_creation_timeout = conversation_timeout
 
     # Process existing conversations
     def _process_in_progess_memories():
@@ -1092,8 +1093,9 @@ async def listen_handler_v3(
     channels: int = 1,
     include_speech_profile: bool = True,
     stt_service: STTService = None,
+    conversation_timeout: int = 120,
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, False, conversation_timeout)
 
 
 @router.websocket("/v4/listen")
@@ -1106,6 +1108,7 @@ async def listen_handler(
     channels: int = 1,
     include_speech_profile: bool = True,
     stt_service: STTService = None,
+    conversation_timeout: int = 120,
 ):
     await _listen(
         websocket,
@@ -1117,4 +1120,5 @@ async def listen_handler(
         include_speech_profile,
         None,
         including_combined_segments=True,
+        conversation_timeout=conversation_timeout,
     )
