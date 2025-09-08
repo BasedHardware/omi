@@ -37,7 +37,7 @@ class OutOfCreditsWidget extends StatelessWidget {
               TextButton(
                 onPressed: () {
                   MixpanelManager().paywallOpened('Out of Credits Banner');
-                  routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                  routeToPage(context, const UsagePage());
                 },
                 child: const Text(
                   'Check Usage',

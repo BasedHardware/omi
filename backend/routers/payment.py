@@ -2,7 +2,13 @@ from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 from pydantic import BaseModel
 
-from database import users as users_db, notifications as notifications_db, conversations as conversations_db
+from database import (
+    users as users_db,
+    notifications as notifications_db,
+    conversations as conversations_db,
+    memories as memories_db,
+    action_items as action_items_db,
+)
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import Subscription, PlanType, SubscriptionStatus, PlanLimits
 from utils.subscription import get_basic_plan_limits, get_plan_type_from_price_id, get_plan_limits
@@ -140,6 +146,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             subscription = users_db.get_user_subscription(client_reference_id)
             if subscription and subscription.plan == PlanType.unlimited:
                 conversations_db.unlock_all_conversations(client_reference_id)
+                memories_db.unlock_all_memories(client_reference_id)
+                action_items_db.unlock_all_action_items(client_reference_id)
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
@@ -183,6 +191,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             if new_subscription:
                 if new_subscription.status == SubscriptionStatus.active and new_subscription.plan == PlanType.unlimited:
                     conversations_db.unlock_all_conversations(uid)
+                    memories_db.unlock_all_memories(uid)
+                    action_items_db.unlock_all_action_items(uid)
                 users_db.update_user_subscription(uid, new_subscription.dict())
                 print(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
 

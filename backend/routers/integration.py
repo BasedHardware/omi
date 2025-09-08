@@ -278,6 +278,12 @@ async def get_memories_via_integration(
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
     memories = memory_db.get_memories(uid, limit=limit, offset=offset)
+    has_premium_access = can_access_premium_features(uid)
+    if not has_premium_access:
+        for memory in memories:
+            if memory.get('is_locked', False):
+                content = memory.get('content', '')
+                memory['content'] = (content[:70] + '...') if len(content) > 70 else content
     memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
 
     return {"memories": memory_items}

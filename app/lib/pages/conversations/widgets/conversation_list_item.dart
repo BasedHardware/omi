@@ -72,7 +72,21 @@ class _ConversationListItemState extends State<ConversationListItem> {
         onTap: () async {
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
-            routeToPage(context, const UsagePage(showUpgradeDialog: true));
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => ConfirmationDialog(
+                title: 'Upgrade to Unlock',
+                description:
+                    'This conversation is locked. Upgrade to the Unlimited plan to access all your insights, summaries, and action items.',
+                confirmText: 'Upgrade Now',
+                cancelText: 'Later',
+                onCancel: () => Navigator.of(ctx).pop(false),
+                onConfirm: () => Navigator.of(ctx).pop(true),
+              ),
+            );
+            if (confirmed == true && mounted) {
+              routeToPage(context, const UsagePage(showUpgradeDialog: true));
+            }
             return;
           }
           MixpanelManager().conversationListItemClicked(widget.conversation, widget.conversationIdx);

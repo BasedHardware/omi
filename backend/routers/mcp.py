@@ -85,7 +85,14 @@ def get_memories(
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
-    return memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    has_premium_access = can_access_premium_features(uid)
+    if not has_premium_access:
+        for memory in memories:
+            if memory.get('is_locked', False):
+                content = memory.get('content', '')
+                memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+    return memories
 
 
 class SimpleStructured(BaseModel):

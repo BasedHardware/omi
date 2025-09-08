@@ -256,9 +256,13 @@ def _extract_memories(uid: str, conversation: Conversation):
         # For regular conversations with transcript segments
         new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
+    has_premium_access = can_access_premium_features(uid)
     parsed_memories = []
     for memory in new_memories:
-        parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
+        memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
+        if not has_premium_access:
+            memory_db_obj.is_locked = True
+        parsed_memories.append(memory_db_obj)
         # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
@@ -300,6 +304,7 @@ def _save_action_items(uid: str, conversation: Conversation):
     if not conversation.structured or not conversation.structured.action_items:
         return
 
+    has_premium_access = can_access_premium_features(uid)
     action_items_data = []
     now = datetime.now(timezone.utc)
 
@@ -312,6 +317,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'due_at': action_item.due_at,
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
+            'is_locked': not has_premium_access,
         }
         action_items_data.append(action_item_data)
 
@@ -434,9 +440,9 @@ def process_conversation(
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
 
     # Set lock status based on premium feature access for new conversations
-    if not is_reprocess:
-        if not can_access_premium_features(uid):
-            conversation.is_locked = True
+    # if not is_reprocess:
+    if not can_access_premium_features(uid):
+        conversation.is_locked = True
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
