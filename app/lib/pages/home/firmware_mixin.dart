@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/http/api/device.dart';
+import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/manifest/manifest.dart';

@@ -165,48 +165,6 @@ class CaptureProvider extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
-  // Audio level tracking for waveform visualization
-  final List<double> _audioLevels = List.generate(8, (_) => 0.15);
-  List<double> get audioLevels => List.from(_audioLevels);
-
-  void _processAudioBytesForVisualization(List<int> bytes) {
-    if (bytes.isEmpty) return;
-
-    double rms = 0;
-
-    // Process bytes as 16-bit samples (2 bytes per sample)
-    for (int i = 0; i < bytes.length - 1; i += 2) {
-      // Convert two bytes to a 16-bit signed integer
-      int sample = bytes[i] | (bytes[i + 1] << 8);
-
-      // Convert to signed value (if high bit is set)
-      if (sample > 32767) {
-        sample = sample - 65536;
-      }
-
-      // Square the sample and add to sum
-      rms += sample * sample;
-    }
-
-    // Calculate RMS and normalize to 0.0-1.0 range
-    int sampleCount = bytes.length ~/ 2;
-    if (sampleCount > 0) {
-      rms = math.sqrt(rms / sampleCount) / 32768.0;
-    } else {
-      rms = 0;
-    }
-
-    // Apply non-linear scaling for better dynamic range - quieter on silence, same on noise
-    final level = (math.pow(rms, 0.3).toDouble() * 2.1).clamp(0.15, 1.6);
-
-    // Shift all values left and add new level
-    for (int i = 0; i < _audioLevels.length - 1; i++) {
-      _audioLevels[i] = _audioLevels[i + 1];
-    }
-    _audioLevels[_audioLevels.length - 1] = level;
-
-    notifyListeners(); // Notify UI to update waveform
-  }
 
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
