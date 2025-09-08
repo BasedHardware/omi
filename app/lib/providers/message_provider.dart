@@ -339,13 +339,34 @@ class MessageProvider extends ChangeNotifier {
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer(
-      appId: appProvider?.selectedChatAppId,
-      chatSessionId: chatSessionProvider?.selectedSessionId,
-    );
-    messages = mes;
-    setClearingChat(false);
-    notifyListeners();
+    try {
+      final result = await clearChatServer(
+        appId: appProvider?.selectedChatAppId,
+        chatSessionId: chatSessionProvider?.selectedSessionId,
+      );
+
+      if (result != null && result['status'] == 'success') {
+        // Successfully cleared - reset messages to empty (will show welcome screen)
+        messages = [];
+        debugPrint('Chat cleared successfully: ${result['message']}');
+
+        // Optional: Track analytics for successful clear
+        final clearedInfo = result['cleared'] as Map<String, dynamic>?;
+        if (clearedInfo != null) {
+          debugPrint('Cleared session: ${clearedInfo['chat_session_id']} for app: ${clearedInfo['app_id']}');
+        }
+      } else {
+        // Failed to clear - keep existing messages
+        debugPrint('Failed to clear chat: ${result?['message'] ?? 'Unknown error'}');
+        // You could show an error snackbar here if needed
+      }
+    } catch (e) {
+      debugPrint('Error clearing chat: $e');
+      // Keep existing messages on error
+    } finally {
+      setClearingChat(false);
+      notifyListeners();
+    }
   }
 
   void addMessageLocally(String messageText) {
