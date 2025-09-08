@@ -21,6 +21,7 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -271,6 +272,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 selectedApp = await appProvider.getAppFromId(appId);
               }
               appProvider.setSelectedChatAppId(appId);
+              // Clear any selected threads to show welcome screen
+              await context.read<ChatSessionProvider>().switchToApp(appId);
               await messageProvider.refreshMessages();
             }
           } else {

@@ -15,6 +15,10 @@ import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+
+import 'package:omi/providers/chat_session_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -298,6 +302,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                         // Set the selected app
                         appProvider.setSelectedChatAppId(appId);
+
+                        // Clear any selected threads to show welcome screen
+                        await context.read<ChatSessionProvider>().switchToApp(appId);
 
                         // Refresh messages and get the selected app
                         await messageProvider.refreshMessages();

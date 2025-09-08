@@ -100,6 +100,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       if (provider.messages.isEmpty) {
         provider.refreshMessages();
       }
+
+      // Load all sessions across all apps on initialization
+      await context.read<ChatSessionProvider>().loadSessions();
+
       scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
@@ -739,6 +743,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);
 
+    // Clear any selected threads to show welcome screen
+    final chatSessionProvider = mounted ? context.read<ChatSessionProvider>() : null;
+    if (chatSessionProvider != null) {
+      await chatSessionProvider.switchToApp(appId);
+    }
+
     // Add a small delay to let the keyboard animation complete
     // This prevents the widget from being unmounted during the keyboard transition
     await Future.delayed(const Duration(milliseconds: 100));
@@ -747,9 +757,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     if (!mounted) return;
 
     // Load sessions for the new app
-    final chatSessionProvider = mounted ? context.read<ChatSessionProvider>() : null;
     if (chatSessionProvider != null) {
-      await chatSessionProvider.loadSessions(appId: appId);
+      await chatSessionProvider.loadSessions();
     }
 
     // Perform async operation
@@ -781,13 +790,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             HapticFeedback.selectionClick();
             FocusScope.of(context).unfocus();
             final appId = context.read<AppProvider>().selectedChatAppId;
-            if (appId.isEmpty || appId == 'no_selected') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Select an app to use chat threads'), duration: Duration(seconds: 2)),
-              );
-              return;
-            }
-            await context.read<ChatSessionProvider>().loadSessions(appId: appId, refresh: true);
+            // Load all sessions across all apps (no app selection required anymore)
+            await context.read<ChatSessionProvider>().loadSessions(refresh: true);
             scaffoldKey.currentState?.openEndDrawer();
           },
         ),
@@ -827,7 +831,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               );
             }
 
-            final selectedId = sessions.getSelectedSessionIdForApp(appId);
+            final selectedId = sessions.selectedSessionId;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -880,7 +884,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
                       itemBuilder: (ctx, idx) {
                         final s = sessions.sessions[idx];
-                        final isSelected = s.id == selectedId;
+                        // Only highlight threads that belong to the current app
+                        final isSelected = s.id == selectedId && s.appId == appId;
+                        final appName = _getAppNameById(s.appId);
                         return ListTile(
                           dense: true,
                           title: Text(
@@ -889,9 +895,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: Colors.white),
                           ),
-                          subtitle: Text(
-                            s.createdAt.toLocal().toString(),
-                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'App: $appName',
+                                style:
+                                    const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                              Text(
+                                s.createdAt.toLocal().toString(),
+                                style: const TextStyle(color: Colors.white54, fontSize: 10),
+                              ),
+                            ],
                           ),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.white70, size: 20),
@@ -924,7 +941,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           selected: isSelected,
                           selectedTileColor: Colors.white10,
                           onTap: () async {
-                            await sessions.setSelectedSessionIdForApp(appId, s.id);
+                            // Select the thread and switch to its app context
+                            final appProvider = context.read<AppProvider>();
+                            await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
                             await messageProvider.refreshMessages(dropdownSelected: true);
                             if (mounted) Navigator.of(context).maybePop();
                           },
@@ -982,6 +1001,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       },
       color: const Color(0xFF1F1F25),
     );
+  }
+
+  String _getAppNameById(String appId) {
+    final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
+    return app?.name ?? 'Unknown App';
   }
 
   Widget _getAppAvatar(App app) {
