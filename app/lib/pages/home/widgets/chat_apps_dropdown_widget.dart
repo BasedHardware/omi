@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -103,6 +104,8 @@ class ChatAppsDropdownWidget extends StatelessWidget {
 
                 // select app by id
                 provider.setSelectedChatAppId(val);
+                // Clear any selected threads to show welcome screen
+                await context.read<ChatSessionProvider>().switchToApp(val);
                 await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
               },
               itemBuilder: (BuildContext context) {
