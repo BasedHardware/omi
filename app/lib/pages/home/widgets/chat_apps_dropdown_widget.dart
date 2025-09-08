@@ -203,7 +203,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       // Add Omi option to the dropdown
       PopupMenuItem<String>(
         height: 40,
-        value: 'no_selected',
+        value: 'omi',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -330,7 +330,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       ),
       PopupMenuItem<String>(
         height: 40,
-        value: 'no_selected',
+        value: 'omi',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [

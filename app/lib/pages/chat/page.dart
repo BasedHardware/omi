@@ -821,8 +821,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
           builder: (context, appProvider, sessions, messageProvider, _) {
             final appId = appProvider.selectedChatAppId;
-            // Enable multi-threading for all apps including OMI (no_selected)
-            final effectiveAppId = (appId.isEmpty || appId == 'no_selected') ? 'omi' : appId;
+            // AppProvider provides clean state - no conversion needed
+            final effectiveAppId = appId;
 
             final selectedId = sessions.selectedSessionId;
 
@@ -1116,7 +1116,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       PopupMenuItem<String>(
         height: 40,
-        value: 'no_selected',
+        value: 'omi',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [

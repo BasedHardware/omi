@@ -99,7 +99,7 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 Stream<ServerMessageChunk> sendMessageStreamServer(String text,
     {String? appId, String? chatSessionId, List<String>? filesId}) async* {
   final uri = _buildApiUri('/v2/messages', query: {
-    if (appId != null && appId.isNotEmpty && appId != 'null' && appId != 'no_selected') 'app_id': appId,
+    'app_id': appId, // AppProvider provides clean state, backend handles normalization
     if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
   });
 
@@ -178,7 +178,7 @@ Future<ServerMessage> getInitialAppMessage(String? appId, {String? chatSessionId
 Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
     {String? appId, String? chatSessionId}) async* {
   final uri = _buildApiUri('/v2/voice-messages', query: {
-    if (appId != null && appId.isNotEmpty && appId != 'null' && appId != 'no_selected') 'app_id': appId,
+    'app_id': appId, // AppProvider provides clean state, backend handles normalization
     if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
   });
   var request = http.MultipartRequest(
@@ -239,7 +239,7 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
 
 Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId, String? chatSessionId}) async {
   final uri = _buildApiUri('/v2/files', query: {
-    if (appId != null && appId.isNotEmpty && appId != 'null' && appId != 'no_selected') 'app_id': appId,
+    'app_id': appId, // AppProvider provides clean state, backend handles normalization
     if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
   });
   var request = http.MultipartRequest(
