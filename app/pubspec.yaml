@@ -35,7 +35,6 @@ dependencies:
   dotted_border: ^2.1.0
   skeletonizer: 2.0.1
   shimmer: ^3.0.0
-  siri_wave: 2.3.0
   pull_down_button: ^0.10.2
 
   # Firebase
@@ -52,7 +51,6 @@ dependencies:
   # Analytics and Support
   intercom_flutter: 9.3.3
   mixpanel_flutter: ^2.4.4
-  posthog_flutter: ^5.0.0
   mixpanel_analytics:
     git:
       url: https://github.com/mdmohsin7/mixpanel_analytics.git
@@ -167,8 +165,6 @@ flutter:
     - assets/images/herologo.png
     - assets/fonts/
     - assets/images/
-    - assets/lottie_animations/
-    - assets/pdfs/
     - assets/silero_vad.onnx
     - assets/silero_vad.v5.onnx
     - shorebird.yaml

@@ -41,10 +41,6 @@ final class DevEnv implements EnvFields {
   final String? intercomAndroidApiKey = _DevEnv.intercomAndroidApiKey;
 
   @override
-  @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
-  final String? posthogApiKey = _DevEnv.posthogApiKey;
-
-  @override
   @EnviedField(varName: 'GOOGLE_CLIENT_ID', obfuscate: true)
   final String? googleClientId = _DevEnv.googleClientId;
 
