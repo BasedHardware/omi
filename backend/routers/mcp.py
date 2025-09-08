@@ -13,7 +13,6 @@ import database.conversations as conversations_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation import CategoryEnum
 from utils.apps import update_personas_async
-from firebase_admin import auth
 
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
@@ -84,7 +83,12 @@ def get_memories(
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
-    return memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    for memory in memories:
+        if memory.get('is_locked', False):
+            content = memory.get('content', '')
+            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+    return memories
 
 
 class SimpleStructured(BaseModel):
@@ -148,6 +152,8 @@ def get_conversations(
         end_date=end_date,
         categories=[c.value for c in category_list],
     )
+
+    # Paywall is enforced on the detail endpoint, list view can show basic data.
     return conversations
 
 
@@ -158,4 +164,11 @@ def get_conversations(
 )
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     print("get_conversation_by_id", uid, conversation_id)
-    return conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
+
+    return conversation
