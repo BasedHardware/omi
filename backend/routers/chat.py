@@ -70,10 +70,6 @@ def send_message(
     compat_app_id = app_id or plugin_id
     print('send_message', data.text, compat_app_id, uid)
 
-    # Handle null/empty app_id - use a consistent default instead of None
-    if compat_app_id in ['null', '', None]:
-        compat_app_id = 'default-chat'
-
     # get chat session - use specific session if provided, otherwise get default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
@@ -202,10 +198,6 @@ def clear_chat_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    # Handle null/empty app_id - use a consistent default instead of None
-    if compat_app_id in ['null', '', None]:
-        compat_app_id = 'default-chat'
-
     # get current chat session - use specific session if provided, otherwise get default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
@@ -313,10 +305,6 @@ def get_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    # Handle null/empty app_id - use a consistent default instead of None
-    if compat_app_id in ['null', '', None]:
-        compat_app_id = 'default-chat'
-
     # Use specific session if provided, otherwise get default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
@@ -559,10 +547,6 @@ def clear_chat_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    # Handle null/empty app_id - use a consistent default instead of None
-    if compat_app_id in ['null', '', None]:
-        compat_app_id = 'default-chat'
-
     # get current chat session - use specific session if provided, otherwise get default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)

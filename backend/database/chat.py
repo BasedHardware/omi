@@ -158,9 +158,6 @@ def get_messages(
     print('get_messages', uid, limit, offset, app_id, include_conversations)
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
-    # Handle app_id filtering - treat None and 'default-chat' as equivalent for legacy compatibility
-    if app_id is None:
-        app_id = 'default-chat'
     # if include_plugin_id_filter:
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
@@ -284,9 +281,6 @@ def batch_delete_messages(
 
 def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
     try:
-        # Handle app_id filtering - treat None and 'default-chat' as equivalent for legacy compatibility
-        if app_id is None:
-            app_id = 'default-chat'
         user_ref = db.collection('users').document(uid)
         print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
@@ -334,9 +328,6 @@ def add_chat_session(uid: str, chat_session_data: dict):
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None):
-    # Handle app_id filtering - treat None and 'default-chat' as equivalent for legacy compatibility
-    if app_id is None:
-        app_id = 'default-chat'
     session_ref = (
         db.collection('users')
         .document(uid)
@@ -354,9 +345,6 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
 
 def get_chat_sessions(uid: str, app_id: str):
     """Get all chat sessions for a specific app_id."""
-    # Handle app_id filtering - treat None and 'default-chat' as equivalent for legacy compatibility
-    if app_id is None:
-        app_id = 'default-chat'
     session_ref = (
         db.collection('users')
         .document(uid)
