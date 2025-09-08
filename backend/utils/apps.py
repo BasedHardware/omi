@@ -34,7 +34,7 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-import database.users as users_db
+from database.users import is_user_paid_app_db
 from database.memories import get_memories, get_user_public_memories
 from database.redis_db import (
     get_enabled_apps,
@@ -404,6 +404,12 @@ def upsert_app_payment_link(
 def get_is_user_paid_app(app_id: str, uid: str):
     if uid in MarketplaceAppReviewUIDs:
         return True
+    
+    # Check new database storage first
+    if is_user_paid_app_db(uid, app_id):
+        return True
+    
+    # Fallback to Redis for backward compatibility
     return get_user_paid_app(app_id, uid) is not None
 
 

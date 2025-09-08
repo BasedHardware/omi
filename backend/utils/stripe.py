@@ -146,6 +146,19 @@ def is_onboarding_complete(account_id: str):
     return account.charges_enabled and account.payouts_enabled and account.details_submitted
 
 
+def create_customer_portal_session(customer_id: str, return_url: str):
+    """Create a Stripe Customer Portal session for subscription management."""
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+        return session
+    except Exception as e:
+        print(f"Error creating customer portal session: {e}")
+        return None
+
+
 # Stripe does not have any official API to get a list of supported countries for connect
 def get_supported_countries():
     if countries := redis_db.get_generic_cache('stripe_supported_countries'):

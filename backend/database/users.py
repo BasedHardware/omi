@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
+import time
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
@@ -213,6 +214,11 @@ def set_stripe_customer_id(uid: str, customer_id: str):
     user_ref = db.collection('users').document(uid)
     user_ref.update({'stripe_customer_id': customer_id})
 
+def get_stripe_customer_id(uid: str):
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict()
+    return user_data.get('stripe_customer_id', None)
+
 
 def get_user_by_stripe_customer_id(customer_id: str):
     users_ref = db.collection('users')
@@ -223,6 +229,58 @@ def get_user_by_stripe_customer_id(customer_id: str):
         user_dict['uid'] = docs[0].id
         return user_dict
     return None
+
+
+def store_app_subscription(uid: str, app_id: str, subscription_id: str, customer_id: str):
+    """Store app subscription information for unified customer portal management."""
+    user_ref = db.collection('users').document(uid)
+    
+    # Get existing app subscriptions
+    user_doc = user_ref.get()
+    user_data = user_doc.to_dict() if user_doc.exists else {}
+    app_subscriptions = user_data.get('app_subscriptions', {})
+    
+    # Add new app subscription
+    app_subscriptions[app_id] = {
+        'subscription_id': subscription_id,
+        'customer_id': customer_id,
+        'created_at': int(time.time()),
+        'status': 'active'
+    }
+    
+    # Update user document
+    user_ref.update({'app_subscriptions': app_subscriptions})
+
+
+def get_app_subscriptions(uid: str):
+    """Get all app subscriptions for a user."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('app_subscriptions', {})
+    return {}
+
+
+def remove_app_subscription(uid: str, app_id: str):
+    """Remove app subscription from user's record."""
+    user_ref = db.collection('users').document(uid)
+    
+    # Get existing app subscriptions
+    user_doc = user_ref.get()
+    user_data = user_doc.to_dict() if user_doc.exists else {}
+    app_subscriptions = user_data.get('app_subscriptions', {})
+    
+    # Remove the app subscription
+    if app_id in app_subscriptions:
+        del app_subscriptions[app_id]
+        user_ref.update({'app_subscriptions': app_subscriptions})
+
+
+def is_user_paid_app_db(uid: str, app_id: str) -> bool:
+    """Check if user has paid for an app using the new database storage."""
+    app_subscriptions = get_app_subscriptions(uid)
+    return app_id in app_subscriptions and app_subscriptions[app_id].get('status') == 'active'
 
 
 def update_user_subscription(uid: str, subscription_data: dict):

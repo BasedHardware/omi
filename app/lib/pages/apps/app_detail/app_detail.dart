@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
@@ -15,7 +16,6 @@ import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -502,17 +502,45 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     )
                   : app.enabled
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: AnimatedLoadingButton(
-                              text: 'Uninstall App',
-                              width: MediaQuery.of(context).size.width * 0.9,
-                              onPressed: () => _toggleApp(app.id, false),
-                              color: Colors.red,
-                            ),
-                          ),
-                        )
+                      ? (app.isPaid && app.isUserPaid
+                          ? Column(
+                              children: [
+                                Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: AnimatedLoadingButton(
+                                      text: 'Uninstall App',
+                                      width: MediaQuery.of(context).size.width * 0.9,
+                                      onPressed: () => _toggleApp(app.id, false),
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: AnimatedLoadingButton(
+                                      text: 'Manage Subscription',
+                                      width: MediaQuery.of(context).size.width * 0.9,
+                                      onPressed: () => _openManageSubscription(),
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: AnimatedLoadingButton(
+                                  text: 'Uninstall App',
+                                  width: MediaQuery.of(context).size.width * 0.9,
+                                  onPressed: () => _toggleApp(app.id, false),
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ))
                       : (app.isPaid && !app.isUserPaid
                           ? Center(
                               child: Padding(
@@ -1003,6 +1031,51 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
     setState(() => app.enabled = isEnabled);
     setState(() => appLoading = false);
+  }
+
+  Future<void> _openManageSubscription() async {
+    try {
+      setState(() => appLoading = true);
+      
+      // Create customer portal session
+      final portalUrl = await createCustomerPortalSession();
+      
+      if (portalUrl != null) {
+        // Open the Stripe Customer Portal in the default browser
+        await launchUrl(Uri.parse(portalUrl));
+      } else {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.pop(context),
+              () => Navigator.pop(context),
+              'Error',
+              'Unable to open subscription management. Please try again later.',
+              singleButton: true,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error opening manage subscription: $e');
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.pop(context),
+            () => Navigator.pop(context),
+            'Error',
+            'Unable to open subscription management. Please try again later.',
+            singleButton: true,
+          ),
+        );
+      }
+    } finally {
+      setState(() => appLoading = false);
+    }
   }
 }
 

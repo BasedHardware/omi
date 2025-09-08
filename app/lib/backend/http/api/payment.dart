@@ -33,3 +33,18 @@ Future<bool> cancelSubscription() async {
   }
   return false;
 }
+
+Future<String?> createCustomerPortalSession() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/customer-portal',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response != null && response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    debugPrint('createCustomerPortalSession response: ${response.body}');
+    return jsonResponse['url'] as String;
+  }
+  return null;
+}

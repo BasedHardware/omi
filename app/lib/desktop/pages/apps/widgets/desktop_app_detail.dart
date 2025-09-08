@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
@@ -470,6 +471,72 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     }
 
     if (app.enabled) {
+      // If it's a paid app and user has paid, show both uninstall and manage subscription buttons
+      if (app.isPaid && app.isUserPaid) {
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _toggleApp(app.id, false),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: Text(
+                  'Uninstall App',
+                  style: responsive.labelLarge.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ResponsiveHelper.errorColor.withValues(alpha: 0.15),
+                  foregroundColor: ResponsiveHelper.errorColor,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(
+                    vertical: responsive.spacing(baseSpacing: 16),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: ResponsiveHelper.errorColor.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _openManageSubscription(),
+                icon: const Icon(Icons.settings, size: 18),
+                label: Text(
+                  'Manage Subscription',
+                  style: responsive.labelLarge.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ResponsiveHelper.infoColor.withValues(alpha: 0.15),
+                  foregroundColor: ResponsiveHelper.infoColor,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(
+                    vertical: responsive.spacing(baseSpacing: 16),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: ResponsiveHelper.infoColor.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }
+      
+      // Regular uninstall button for non-paid apps or paid apps where user hasn't paid
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
@@ -1322,5 +1389,50 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     // context.read<AppProvider>().setApps();
     setState(() => app.enabled = isEnabled);
     setState(() => appLoading = false);
+  }
+
+  Future<void> _openManageSubscription() async {
+    try {
+      setState(() => appLoading = true);
+      
+      // Create customer portal session
+      final portalUrl = await createCustomerPortalSession();
+      
+      if (portalUrl != null) {
+        // Open the Stripe Customer Portal in the default browser
+        await launchUrl(Uri.parse(portalUrl));
+      } else {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.pop(context),
+              () => Navigator.pop(context),
+              'Error',
+              'Unable to open subscription management. Please try again later.',
+              singleButton: true,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error opening manage subscription: $e');
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.pop(context),
+            () => Navigator.pop(context),
+            'Error',
+            'Unable to open subscription management. Please try again later.',
+            singleButton: true,
+          ),
+        );
+      }
+    } finally {
+      setState(() => appLoading = false);
+    }
   }
 }

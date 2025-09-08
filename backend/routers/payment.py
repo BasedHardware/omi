@@ -1,6 +1,8 @@
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
+import time
 from pydantic import BaseModel
+from urllib.parse import urljoin
 
 from database import (
     users as users_db,
@@ -19,6 +21,9 @@ from database.users import (
     get_default_payment_method,
     set_default_payment_method,
     get_paypal_payment_details,
+    store_app_subscription,
+    get_app_subscriptions,
+    remove_app_subscription,
 )
 from utils import stripe as stripe_utils
 from utils.apps import paid_app
@@ -135,9 +140,37 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 raise HTTPException(status_code=400, detail="Invalid client")
             uid = uid[4:]
 
+            # Get or create customer ID for this user
+            customer_id = session.get('customer')
+            if customer_id:
+                # Store the customer ID if not already stored
+                existing_customer_id = users_db.get_stripe_customer_id(uid)
+                if not existing_customer_id:
+                    users_db.set_stripe_customer_id(uid, customer_id)
+                elif existing_customer_id != customer_id:
+                    # If different customer ID, we'll use the existing customer ID and transfer the subscription
+                    print(f"Warning: Different customer ID for user {uid}. Existing: {existing_customer_id}, New: {customer_id}")
+                    # Transfer subscription to existing customer
+                    try:
+                        subscription_id = session.get("subscription")
+                        if subscription_id:
+                            stripe.Subscription.modify(subscription_id, customer=existing_customer_id)
+                            customer_id = existing_customer_id
+                    except Exception as e:
+                        print(f"Error transferring subscription: {e}")
+
             if session.get("subscription"):
                 subscription_id = session["subscription"]
-                stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
+                # Store app subscription with customer ID for unified management
+                stripe.Subscription.modify(subscription_id, metadata={
+                    "uid": uid, 
+                    "app_id": app_id,
+                    "subscription_type": "app_subscription"
+                })
+                
+                # Store app subscription info in database for unified customer portal
+                store_app_subscription(uid, app_id, subscription_id, customer_id)
+            
             paid_app(app_id, uid)
 
         # Regular user subscription
@@ -175,16 +208,37 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         'customer.subscription.created',
     ]:
         subscription_obj = event['data']['object']
-        uid = subscription_obj.get('metadata', {}).get('uid')
+        subscription_type = subscription_obj.get('metadata', {}).get('subscription_type')
+        
+        # Handle app subscriptions
+        if subscription_type == 'app_subscription':
+            app_id = subscription_obj.get('metadata', {}).get('app_id')
+            uid = subscription_obj.get('metadata', {}).get('uid')
+            
+            if uid and app_id:
+                if event['type'] == 'customer.subscription.deleted':
+                    # Remove app subscription from user's record
+                    remove_app_subscription(uid, app_id)
+                    print(f"App subscription removed for user {uid}, app {app_id}")
+                else:
+                    # Update app subscription status
+                    customer_id = subscription_obj.get('customer')
+                    subscription_id = subscription_obj['id']
+                    store_app_subscription(uid, app_id, subscription_id, customer_id)
+                    print(f"App subscription updated for user {uid}, app {app_id}")
+        
+        # Handle regular user subscriptions (Omi app subscription)
+        else:
+            uid = subscription_obj.get('metadata', {}).get('uid')
 
-        if not uid:
-            customer_id = subscription_obj.get('customer')
-            if not customer_id:
-                return {"status": "success", "message": "No customer ID or UID in subscription event."}
+            if not uid:
+                customer_id = subscription_obj.get('customer')
+                if not customer_id:
+                    return {"status": "success", "message": "No customer ID or UID in subscription event."}
 
-            user = users_db.get_user_by_stripe_customer_id(customer_id)
-            if user and user.get('uid'):
-                uid = user['uid']
+                user = users_db.get_user_by_stripe_customer_id(customer_id)
+                if user and user.get('uid'):
+                    uid = user['uid']
 
         if uid:
             new_subscription = _build_subscription_from_stripe_object(subscription_obj)
@@ -414,6 +468,21 @@ async def stripe_cancel():
     )
 
 
+@router.get("/v1/payments/portal-return", response_class=HTMLResponse)
+async def stripe_portal_return():
+    return HTMLResponse(
+        content="""
+        <html>
+            <head><title>Subscription Updated</title></head>
+            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
+                <h1>Subscription Updated</h1>
+                <p>Your subscription has been updated. You can close this window and return to the app.</p>
+            </body>
+        </html>
+    """
+    )
+
+
 @router.get("/v1/payment-methods/status")
 def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     """Get the statuses of the payment methods for the user"""
@@ -439,3 +508,44 @@ def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_
         raise HTTPException(status_code=400, detail="Invalid method")
     set_default_payment_method(uid, method)
     return {"status": "success"}
+
+
+@router.post('/v1/payments/customer-portal')
+def create_customer_portal_session_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Create a Stripe Customer Portal session for subscription management."""
+    # Get user's Stripe customer ID
+    customer_id = users_db.get_stripe_customer_id(uid)
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="No Stripe customer found. Please subscribe first.")
+    
+    # Create return URL - this should be your app's URL where users return after managing subscription
+    from utils.stripe import base_url
+    return_url = urljoin(base_url, 'v1/payments/portal-return')
+    
+    # Create the portal session
+    session = stripe_utils.create_customer_portal_session(customer_id, return_url)
+    if not session:
+        raise HTTPException(status_code=500, detail="Could not create customer portal session.")
+    
+    return {"url": session.url}
+
+
+@router.get('/v1/payments/subscriptions')
+def get_user_subscriptions_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Get all subscriptions (Omi app + individual apps) for a user."""
+    # Get main Omi app subscription
+    main_subscription = users_db.get_user_subscription(uid)
+    
+    # Get app subscriptions
+    app_subscriptions = get_app_subscriptions(uid)
+    
+    return {
+        "main_subscription": main_subscription.dict() if main_subscription else None,
+        "app_subscriptions": app_subscriptions
+    }
+
+
+@router.post('/v1/payments/migrate-app-subscriptions')
+def migrate_app_subscriptions_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Migrate existing app subscriptions from Redis to database for unified customer portal."""
+    # TODO: implement this
