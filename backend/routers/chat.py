@@ -211,9 +211,7 @@ def clear_chat_messages(
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
-    # clear session
-    if chat_session_id is not None:
-        chat_db.delete_chat_session(uid, chat_session_id)
+    # Note: Keep the session/thread alive - only messages are cleared
 
     # clean thread chat file in background to avoid blocking response
     import threading
@@ -560,9 +558,7 @@ def clear_chat_messages(
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
-    # clear session
-    if chat_session_id is not None:
-        chat_db.delete_chat_session(uid, chat_session_id)
+    # Note: Keep the session/thread alive - only messages are cleared
 
     # clean thread chat file in background to avoid blocking response
     import threading
