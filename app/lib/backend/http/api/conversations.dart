@@ -91,9 +91,8 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
   } else if (response.statusCode == 402) {
-    // Payment Required, specific handling can be done in the UI layer
-    debugPrint('Payment required for conversation: $conversationId');
-    throw Exception('Payment Required');
+    debugPrint('Unlimited Plan Required for conversation: $conversationId');
+    throw Exception('Unlimited Plan Required');
   }
   return null;
 }

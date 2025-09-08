@@ -25,7 +25,7 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
+        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
 
     return conversation
 
@@ -528,7 +528,7 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
     data = [[uid, conversation_id] for conversation_id, uid in conversation_uids.items() if uid]
     # TODO: sort in some way to have proper pagination
 
-    conversations = conversations_db.get_public_conversations(data[offset: offset + limit])
+    conversations = conversations_db.get_public_conversations(data[offset : offset + limit])
     for conversation in conversations:
         conversation['geolocation'] = None
     return conversations

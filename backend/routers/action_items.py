@@ -43,7 +43,7 @@ def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Action item not found")
 
     if action_item.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Payment Required to access this action item.")
+        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this action item.")
 
     return action_item
 

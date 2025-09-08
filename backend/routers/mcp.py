@@ -169,6 +169,6 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Payment Required to access this conversation.")
+        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
 
     return conversation

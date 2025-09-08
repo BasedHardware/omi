@@ -18,7 +18,7 @@ def _validate_memory(uid: str, memory_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Memory not found")
 
     if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="Payment Required to access this memory.")
+        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this memory.")
 
     return memory
 
