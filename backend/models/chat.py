@@ -147,7 +147,7 @@ class SendMessageRequest(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    app_id: str
+    app_id: Optional[str] = None
     title: Optional[str] = None
 
 

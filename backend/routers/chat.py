@@ -40,6 +40,17 @@ router = APIRouter()
 fc = FileChatTool()
 
 
+def normalize_app_id(app_id: Optional[str], plugin_id: Optional[str]) -> str:
+    """Normalize app_id/plugin_id, converting null/empty values to 'omi' for consistent data model."""
+    compat_app_id = app_id or plugin_id
+
+    # For OMI app, use consistent 'omi' identifier instead of null
+    if compat_app_id is None or compat_app_id in ['null', '', 'undefined']:
+        return 'omi'
+
+    return compat_app_id
+
+
 def filter_messages(messages, app_id):
     print('filter_messages', len(messages), app_id)
     collected = []
@@ -67,16 +78,16 @@ def send_message(
     chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    compat_app_id = app_id or plugin_id
+    compat_app_id = normalize_app_id(app_id, plugin_id)
     print('send_message', data.text, compat_app_id, uid)
 
-    # get chat session - use specific session if provided, otherwise get default for app
+    # get chat session - use specific session if provided, otherwise get/create default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
         if not chat_session:
             raise HTTPException(status_code=404, detail='Chat session not found')
     else:
-        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        chat_session = acquire_chat_session(uid, compat_app_id)
 
     chat_session = ChatSession(**chat_session) if chat_session else None
 
@@ -108,8 +119,12 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
 
-    app = get_available_app_by_id(compat_app_id, uid)
-    app = App(**app) if app else None
+    # For OMI app (compat_app_id is None), skip app lookup since OMI doesn't have an app record
+    if compat_app_id is not None:
+        app = get_available_app_by_id(compat_app_id, uid)
+        app = App(**app) if app else None
+    else:
+        app = None  # OMI app - no app record needed
 
     app_id_from_app = app.id if app else None
 
@@ -141,7 +156,7 @@ def send_message(
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
-            app_id=app_id_from_app,
+            app_id=compat_app_id,
             type='text',
             memories_id=memories_id,
         )
@@ -197,7 +212,7 @@ def clear_chat_messages(
     chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    compat_app_id = app_id or plugin_id
+    compat_app_id = normalize_app_id(app_id, plugin_id)
     # get current chat session - use specific session if provided, otherwise get default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
@@ -291,7 +306,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, target_chat_ses
 def create_initial_message(
     app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    compat_app_id = app_id or plugin_id
+    compat_app_id = normalize_app_id(app_id, plugin_id)
     return initial_message_util(uid, compat_app_id, None)
 
 
@@ -302,7 +317,7 @@ def get_messages(
     chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    compat_app_id = app_id or plugin_id
+    compat_app_id = normalize_app_id(app_id, plugin_id)
     # Use specific session if provided, otherwise get default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
@@ -326,8 +341,8 @@ def get_messages(
 
 
 @router.get('/v2/chat-sessions', response_model=List[ChatSession], tags=['chat'])
-def list_chat_sessions(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    """List all chat sessions for a specific app."""
+def list_chat_sessions(app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    """List all chat sessions for a specific app or all sessions if app_id is None."""
     sessions = chat_db.get_chat_sessions(uid, app_id)
     return [ChatSession(**session) for session in sessions]
 
@@ -544,7 +559,7 @@ def clear_chat_messages(
     chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    compat_app_id = app_id or plugin_id
+    compat_app_id = normalize_app_id(app_id, plugin_id)
     # get current chat session - use specific session if provided, otherwise get default for app
     if chat_session_id:
         chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
@@ -635,5 +650,5 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
 def create_initial_message(
     plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    compat_app_id = app_id or plugin_id
+    compat_app_id = normalize_app_id(app_id, plugin_id)
     return initial_message_util(uid, compat_app_id, None)

@@ -2,14 +2,14 @@ import 'package:collection/collection.dart';
 
 class ChatSession {
   final String id;
-  final String appId;
+  final String? appId; // Nullable for OMI app sessions
   final String? title;
   final DateTime createdAt;
 
   ChatSession({
     required this.id,
-    required this.appId,
     required this.createdAt,
+    this.appId,
     this.title,
   });
 
