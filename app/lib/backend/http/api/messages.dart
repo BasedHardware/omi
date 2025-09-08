@@ -24,9 +24,8 @@ Future<List<ServerMessage>> getMessagesServer({
   bool dropdownSelected = false,
   String? chatSessionId,
 }) async {
-  if (appId == 'no_selected') appId = null;
   final uri = _buildApiUri('/v2/messages', query: {
-    if (appId != null) 'app_id': appId,
+    'app_id': appId, // Send actual app_id ('omi' for OMI, actual ID for others)
     'dropdown_selected': dropdownSelected,
     if (chatSessionId != null) 'chat_session_id': chatSessionId,
   });
@@ -46,9 +45,8 @@ Future<List<ServerMessage>> getMessagesServer({
 }
 
 Future<Map<String, dynamic>?> clearChatServer({String? appId, String? chatSessionId}) async {
-  if (appId == 'no_selected') appId = null;
   final uri = _buildApiUri('/v2/messages', query: {
-    if (appId != null) 'app_id': appId,
+    'app_id': appId, // Send actual app_id ('omi' for OMI, actual ID for others)
     if (chatSessionId != null) 'chat_session_id': chatSessionId,
   });
   var response = await makeApiCall(url: uri.toString(), headers: {}, method: 'DELETE', body: '');

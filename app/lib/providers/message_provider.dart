@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -47,6 +46,12 @@ class MessageProvider extends ChangeNotifier {
 
   void updateChatSessionProvider(ChatSessionProvider p) {
     chatSessionProvider = p;
+  }
+
+  // Helper to convert AppProvider's OMI identifier to 'omi' for API calls
+  String _getApiAppId() {
+    final appId = appProvider?.selectedChatAppId;
+    return (appId == 'no_selected' || appId?.isEmpty == true) ? 'omi' : appId!;
   }
 
   void setNextMessageOriginIsVoice(bool isVoice) {
@@ -317,7 +322,7 @@ class MessageProvider extends ChangeNotifier {
     }
     setLoadingMessages(true);
     var mes = await getMessagesServer(
-      appId: appProvider?.selectedChatAppId,
+      appId: _getApiAppId(),
       dropdownSelected: dropdownSelected,
       chatSessionId: chatSessionProvider?.selectedSessionId,
     );
@@ -341,7 +346,7 @@ class MessageProvider extends ChangeNotifier {
     setClearingChat(true);
     try {
       final result = await clearChatServer(
-        appId: appProvider?.selectedChatAppId,
+        appId: _getApiAppId(),
         chatSessionId: chatSessionProvider?.selectedSessionId,
       );
 
@@ -371,10 +376,7 @@ class MessageProvider extends ChangeNotifier {
 
   void addMessageLocally(String messageText) {
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
-    var appId = appProvider?.selectedChatAppId;
-    if (appId == 'no_selected') {
-      appId = null;
-    }
+    var appId = _getApiAppId();
     var message = ServerMessage(
       const Uuid().v4(),
       DateTime.now(),
@@ -415,9 +417,9 @@ class MessageProvider extends ChangeNotifier {
       currentAppId = null;
     }
 
-    // Auto-create session if none selected and app is available
-    if (chatSessionProvider?.selectedSessionId == null && currentAppId != null && currentAppId != 'no_selected') {
-      await chatSessionProvider?.createSession(appId: currentAppId, title: 'New Chat');
+    // Auto-create session if none selected (for both regular apps and OMI)
+    if (chatSessionProvider?.selectedSessionId == null) {
+      await chatSessionProvider?.createSession(appId: _getApiAppId(), title: 'New Chat');
     }
 
     String chatTargetId = currentAppId ?? 'omi';
@@ -495,9 +497,9 @@ class MessageProvider extends ChangeNotifier {
       currentAppId = null;
     }
 
-    // Auto-create session if none selected and app is available
-    if (chatSessionProvider?.selectedSessionId == null && currentAppId != null && currentAppId != 'no_selected') {
-      await chatSessionProvider?.createSession(appId: currentAppId, title: 'New Chat');
+    // Auto-create session if none selected (for both regular apps and OMI)
+    if (chatSessionProvider?.selectedSessionId == null) {
+      await chatSessionProvider?.createSession(appId: _getApiAppId(), title: 'New Chat');
     }
 
     String chatTargetId = currentAppId ?? 'omi';

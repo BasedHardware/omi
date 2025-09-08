@@ -158,8 +158,9 @@ def get_messages(
     print('get_messages', uid, limit, offset, app_id, include_conversations)
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
-    # if include_plugin_id_filter:
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+    # Only filter by plugin_id if app_id is provided (enables multi-threading for default OMI app)
+    if app_id is not None:
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
 
@@ -332,7 +333,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
         db.collection('users')
         .document(uid)
         .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .where(filter=FieldFilter('plugin_id', '==', app_id))  # Always filter by plugin_id (including None for OMI)
         .limit(1)
     )
 
@@ -343,15 +344,15 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
     return None
 
 
-def get_chat_sessions(uid: str, app_id: str):
-    """Get all chat sessions for a specific app_id."""
-    session_ref = (
-        db.collection('users')
-        .document(uid)
-        .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-    )
+def get_chat_sessions(uid: str, app_id: Optional[str]):
+    """Get all chat sessions for a specific app_id or all sessions if app_id is None."""
+    session_ref = db.collection('users').document(uid).collection('chat_sessions')
+
+    # Only filter by plugin_id if app_id is provided (enables multi-threading for default OMI app)
+    if app_id is not None:
+        session_ref = session_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    session_ref = session_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     sessions = []
     for session in session_ref.stream():
@@ -372,7 +373,7 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
     return None
 
 
-def create_chat_session(uid: str, app_id: str, title: Optional[str] = None):
+def create_chat_session(uid: str, app_id: Optional[str], title: Optional[str] = None):
     """Create a new chat session for a specific app."""
     import uuid
     from datetime import datetime, timezone
