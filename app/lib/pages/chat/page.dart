@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/gen/fonts.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
@@ -783,16 +784,24 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       centerTitle: true,
       actions: [
-        IconButton(
-          icon: const Icon(Icons.forum_outlined, color: Colors.white),
-          tooltip: 'Chat Threads',
-          onPressed: () async {
-            HapticFeedback.selectionClick();
-            FocusScope.of(context).unfocus();
-            // Load all sessions across all apps (no app selection required anymore)
-            await context.read<ChatSessionProvider>().loadSessions(refresh: true);
-            scaffoldKey.currentState?.openEndDrawer();
-          },
+        Container(
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
+          ),
+          child: IconButton(
+            icon: const Icon(FontAwesomeIcons.comments, color: Colors.white, size: 18),
+            tooltip: 'Chat Threads',
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              FocusScope.of(context).unfocus();
+              // Open drawer immediately for better UX, then load sessions
+              scaffoldKey.currentState?.openEndDrawer();
+              // Load sessions in background without blocking UI
+              context.read<ChatSessionProvider>().loadSessions(refresh: true);
+            },
+          ),
         ),
       ],
       bottom: provider.isLoadingMessages
@@ -831,8 +840,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               children: [
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child:
-                      Text('Threads', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                  child: Text('Threads',
+                      style: TextStyle(
+                          fontFamily: FontFamily.sFProDisplay,
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600)),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -842,6 +855,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.white24),
                         foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       onPressed: () async {
                         final created = await sessions.createSession(appId: effectiveAppId);
@@ -872,74 +888,119 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   )
                 else
                   Expanded(
-                    child: ListView.separated(
+                    child: ListView.builder(
                       itemCount: sessions.sessions.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       itemBuilder: (ctx, idx) {
                         final s = sessions.sessions[idx];
                         // Only highlight threads that belong to the current app (including OMI)
                         final isSelected = s.id == selectedId && s.appId == effectiveAppId;
                         final appName = _getAppNameById(s.appId);
-                        return ListTile(
-                          dense: true,
-                          title: Text(
-                            s.title?.isNotEmpty == true ? s.title! : 'Thread ${sessions.sessions.length - idx}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white),
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color:
+                                isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border:
+                                isSelected ? Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1) : null,
                           ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'App: $appName',
-                                style:
-                                    const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                          child: ListTile(
+                            dense: true,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            title: Text(
+                              s.title?.isNotEmpty == true ? s.title! : 'Thread ${sessions.sessions.length - idx}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: FontFamily.sFProDisplay,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
                               ),
-                              Text(
-                                s.createdAt.toLocal().toString(),
-                                style: const TextStyle(color: Colors.white54, fontSize: 10),
-                              ),
-                            ],
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.white70, size: 20),
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (dCtx) => AlertDialog(
-                                  backgroundColor: const Color(0xFF1F1F25),
-                                  title: const Text('Delete thread?', style: TextStyle(color: Colors.white)),
-                                  content:
-                                      const Text('This cannot be undone.', style: TextStyle(color: Colors.white70)),
-                                  actions: [
-                                    TextButton(
-                                        onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
-                                    TextButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('Delete')),
-                                  ],
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  appName,
+                                  style: const TextStyle(
+                                      fontFamily: FontFamily.sFProDisplay,
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500),
                                 ),
-                              );
-                              if (confirmed == true) {
-                                final ok = await sessions.deleteSession(sessionId: s.id);
-                                if (ok) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Thread deleted')),
-                                  );
-                                  await messageProvider.refreshMessages(dropdownSelected: true);
+                              ],
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(FontAwesomeIcons.trash, color: Colors.white70, size: 16),
+                              onPressed: () async {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (dCtx) => AlertDialog(
+                                    backgroundColor: const Color(0xFF1F1F25),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    title: const Text(
+                                      'Delete thread?',
+                                      style: TextStyle(
+                                        fontFamily: FontFamily.sFProDisplay,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    content: const Text(
+                                      'This cannot be undone.',
+                                      style: TextStyle(
+                                        fontFamily: FontFamily.sFProDisplay,
+                                        color: Colors.white60,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(dCtx, false),
+                                        child: const Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                            fontFamily: FontFamily.sFProDisplay,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(dCtx, true),
+                                        child: const Text(
+                                          'Delete',
+                                          style: TextStyle(
+                                            fontFamily: FontFamily.sFProDisplay,
+                                            color: Colors.red,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed == true) {
+                                  final ok = await sessions.deleteSession(sessionId: s.id);
+                                  if (ok) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Thread deleted')),
+                                    );
+                                    await messageProvider.refreshMessages(dropdownSelected: true);
+                                  }
                                 }
-                              }
+                              },
+                            ),
+                            onTap: () async {
+                              // Select the thread and switch to its app context
+                              final appProvider = context.read<AppProvider>();
+                              await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
+                              await messageProvider.refreshMessages(dropdownSelected: true);
+                              if (mounted) Navigator.of(context).maybePop();
                             },
                           ),
-                          selected: isSelected,
-                          selectedTileColor: Colors.white10,
-                          onTap: () async {
-                            // Select the thread and switch to its app context
-                            final appProvider = context.read<AppProvider>();
-                            await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
-                            await messageProvider.refreshMessages(dropdownSelected: true);
-                            if (mounted) Navigator.of(context).maybePop();
-                          },
                         );
                       },
                     ),
