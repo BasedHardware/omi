@@ -61,6 +61,7 @@ class Message(BaseModel):
     files: List[FileChat] = []
     chat_session_id: Optional[str] = None
     data_protection_level: Optional[str] = None
+    web_search_citations: List['WebSearchCitation'] = []  # Web search citations
 
     @model_validator(mode='before')
     @classmethod
@@ -146,7 +147,6 @@ class WebSearchCitation(BaseModel):
 
 class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
-    web_search_citations: Optional[List[WebSearchCitation]] = []
 
 
 class SendMessageRequest(BaseModel):

@@ -1266,20 +1266,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          // Web search toggle
-          Row(
-            children: [
-              WebSearchToggle(
-                isEnabled: provider.webSearchEnabled,
-                onChanged: (enabled) {
-                  provider.setWebSearchEnabled(enabled);
-                },
-                isDesktop: true,
-              ),
-              const Spacer(),
-            ],
-          ),
-          const SizedBox(height: 8),
           // Main input row
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -1291,6 +1277,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               Expanded(
                 child: _showVoiceRecorder ? _buildEnhancedVoiceRecorder() : _buildModernTextInput(),
               ),
+
+              // Compact web search toggle next to voice button
+              if (!_showVoiceRecorder)
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  child: WebSearchToggle(
+                    isEnabled: provider.webSearchEnabled,
+                    onChanged: (enabled) {
+                      provider.setWebSearchEnabled(enabled);
+                    },
+                    isCompact: true,
+                  ),
+                ),
 
               // Enhanced voice button
               if (!_showVoiceRecorder) _buildModernVoiceButton(),

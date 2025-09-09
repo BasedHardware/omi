@@ -38,6 +38,11 @@ llm_title_generator = ChatOpenAI(
     temperature=0.3,
     max_tokens=20,
 )
+llm_web_search_filter = ChatOpenAI(
+    model='gpt-4o-mini',
+    temperature=0.1,  # Low temperature for consistent decision making
+    max_tokens=10,  # We only need a simple yes/no response
+)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 

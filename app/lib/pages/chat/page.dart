@@ -33,6 +33,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'widgets/message_action_menu.dart';
+import 'widgets/web_search_toggle.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -534,6 +535,19 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 ),
                                               ),
                                       ),
+                                      // Compact web search toggle next to voice button
+                                      if (shouldShowVoiceRecorderButton())
+                                        Consumer<MessageProvider>(
+                                          builder: (context, messageProvider, child) {
+                                            return WebSearchToggle(
+                                              isEnabled: messageProvider.webSearchEnabled,
+                                              onChanged: (enabled) {
+                                                messageProvider.setWebSearchEnabled(enabled);
+                                              },
+                                              isCompact: true,
+                                            );
+                                          },
+                                        ),
                                       if (shouldShowVoiceRecorderButton())
                                         textController.text.isNotEmpty
                                             ? GestureDetector(
@@ -784,6 +798,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       centerTitle: true,
       actions: [
+        // Chat threads button
         Container(
           margin: const EdgeInsets.only(right: 8),
           decoration: BoxDecoration(

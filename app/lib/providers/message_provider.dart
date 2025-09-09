@@ -40,6 +40,16 @@ class MessageProvider extends ChangeNotifier {
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
 
+  // Web search functionality
+  bool _webSearchEnabled = false;
+
+  bool get webSearchEnabled => _webSearchEnabled;
+
+  void setWebSearchEnabled(bool enabled) {
+    _webSearchEnabled = enabled;
+    notifyListeners();
+  }
+
   void updateAppProvider(AppProvider p) {
     appProvider = p;
   }
@@ -561,6 +571,7 @@ class MessageProvider extends ChangeNotifier {
         appId: currentAppId,
         chatSessionId: chatSessionProvider?.selectedSessionId,
         filesId: fileIds,
+        webSearchEnabled: _webSearchEnabled,
       )) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();

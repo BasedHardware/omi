@@ -8,6 +8,58 @@ except ImportError:
     TavilyClient = None
 
 
+def should_perform_web_search(query: str) -> bool:
+    """
+    Use GPT-4o-mini to intelligently determine if a query requires web search.
+
+    Args:
+        query: User's query/question
+
+    Returns:
+        bool: True if web search is needed, False otherwise
+    """
+    try:
+        from utils.llm.clients import llm_web_search_filter
+
+        system_prompt = """You are a web search filter. Determine if the user's query requires current web information to answer properly.
+
+Return "YES" if the query needs web search for:
+- Current events, news, or recent developments
+- Real-time information (stock prices, weather, sports scores)
+- Recent product releases or updates
+- Questions about "latest", "today", "recent", "current"
+- Information that changes frequently
+- Questions where you don't have sufficient knowledge
+
+Return "NO" if the query can be answered with general knowledge:
+- Basic greetings (hi, hello, thanks)
+- General knowledge questions
+- Personal opinions or advice
+- Math calculations
+- Code explanations
+- Historical facts (non-recent)
+- Simple conversational responses
+
+Respond with only "YES" or "NO"."""
+
+        user_message = f"Query: {query}"
+
+        response = llm_web_search_filter.invoke(
+            [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}]
+        )
+
+        decision = response.content.strip().upper()
+        needs_search = decision == "YES"
+
+        print(f"Web search filter decision for '{query}': {decision} (needs_search: {needs_search})")
+        return needs_search
+
+    except Exception as e:
+        print(f"Error in web search filter: {e}")
+        # Default to True (perform search) if filtering fails
+        return True
+
+
 class WebSearchResult:
     """Web search result structure for consistent handling."""
 
@@ -21,18 +73,24 @@ class WebSearchResult:
         return {'title': self.title, 'url': self.url, 'content': self.content, 'score': self.score}
 
 
-def perform_web_search(query: str, max_results: int = 5) -> List[WebSearchResult]:
+def perform_web_search(query: str, max_results: int = 5, force_search: bool = False) -> List[WebSearchResult]:
     """
-    Perform web search using Tavily API.
+    Perform web search using Tavily API with intelligent pre-filtering.
 
     Args:
         query: Search query string
         max_results: Maximum number of results to return
+        force_search: Skip pre-filtering and force search (for testing)
 
     Returns:
         List of WebSearchResult objects
     """
     try:
+        # Pre-filtering: Check if query actually needs web search
+        if not force_search and not should_perform_web_search(query):
+            print(f"Pre-filter: Skipping web search for query '{query}' - no web search needed")
+            return []
+
         # Check if Tavily is available
         if TavilyClient is None:
             print("Error: tavily-python not installed")
@@ -46,10 +104,11 @@ def perform_web_search(query: str, max_results: int = 5) -> List[WebSearchResult
 
         client = TavilyClient(api_key=api_key)
 
-        # Perform search with optimized parameters for v0.7.11
+        # Perform search with auto_parameters for intelligent relevance detection
         response = client.search(
             query=query,
             max_results=max_results,
+            auto_parameters=True,  # Let Tavily intelligently decide search parameters based on query relevance
             search_depth="basic",  # Fast search for chat responsiveness
             include_domains=None,  # No domain restrictions
             exclude_domains=["facebook.com", "twitter.com", "instagram.com"],  # Exclude social media noise
@@ -101,24 +160,19 @@ def format_web_search_context(results: List[WebSearchResult]) -> str:
 
 def extract_search_citations(response: str, results: List[WebSearchResult]) -> str:
     """
-    Add proper citations to response based on search results referenced.
+    Process response for citations. Citations are now handled via structured data
+    rather than appended text, so return response without modification.
 
     Args:
         response: LLM response text
         results: Web search results used
 
     Returns:
-        Response with formatted citations
+        Original response without text citations (handled via UI)
     """
-    if not results:
-        return response
-
-    # Add sources section at the end
-    sources_section = "\n\nSources:\n"
-    for i, result in enumerate(results, 1):
-        sources_section += f"[{i}] {result.title} - {result.url}\n"
-
-    return response + sources_section
+    # Citations are now displayed via structured UI components
+    # No need to append text citations since they're shown in the sources card
+    return response
 
 
 def create_structured_citations(web_results: List[WebSearchResult]) -> List[dict]:

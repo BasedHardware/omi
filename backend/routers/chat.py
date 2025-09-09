@@ -162,7 +162,7 @@ def send_message(
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
 
-        # Create base AI message
+        # Create base AI message with web search citations
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -171,6 +171,7 @@ def send_message(
             app_id=compat_app_id,
             type='text',
             memories_id=memories_id,
+            web_search_citations=[WebSearchCitation(**citation) for citation in web_citations] if web_citations else [],
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -185,7 +186,6 @@ def send_message(
         response_message = ResponseMessage(
             **ai_message.dict(),
             ask_for_nps=ask_for_nps,
-            web_search_citations=[WebSearchCitation(**citation) for citation in web_citations] if web_citations else [],
         )
 
         return response_message, ask_for_nps

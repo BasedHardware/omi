@@ -25,7 +25,7 @@ class WebSearchCitations extends StatelessWidget {
         right: isDesktop ? 16 : 12,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: const Color(0xFF1F1F25), // Match message background color
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.1),
@@ -33,22 +33,18 @@ class WebSearchCitations extends StatelessWidget {
         ),
       ),
       child: ExpansionTile(
-        leading: Icon(
-          FontAwesomeIcons.link,
-          size: isDesktop ? 16 : 14,
-          color: Colors.blue.shade400,
-        ),
+        leading: null,
         title: Text(
           'Sources (${citations.length})',
           style: TextStyle(
             fontFamily: FontFamily.sFProDisplay,
             fontSize: isDesktop ? 14 : 13,
             fontWeight: FontWeight.w600,
-            color: Colors.blue.shade400,
+            color: Colors.deepPurple.shade400, // Deep purple accent
           ),
         ),
-        iconColor: Colors.blue.shade400,
-        collapsedIconColor: Colors.blue.shade400,
+        iconColor: Colors.deepPurple.shade400, // Deep purple accent
+        collapsedIconColor: Colors.deepPurple.shade400, // Deep purple accent
         shape: const Border(),
         childrenPadding: EdgeInsets.fromLTRB(
           isDesktop ? 16 : 12,
@@ -85,7 +81,7 @@ class WebSearchCitations extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade400,
+                      color: Colors.deepPurple.shade400,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -115,7 +111,7 @@ class WebSearchCitations extends StatelessWidget {
                   Icon(
                     FontAwesomeIcons.arrowUpRightFromSquare,
                     size: isDesktop ? 12 : 10,
-                    color: Colors.blue.shade400,
+                    color: Colors.deepPurple.shade400,
                   ),
                 ],
               ),
