@@ -47,6 +47,27 @@ Future<List<ChatSession>> listChatSessions({required String uid, required List<S
   return deduplicatedSessions;
 }
 
+// PERFORMANCE FIX: Efficient function that makes ONE request instead of 4000+
+Future<List<ChatSession>> listAllUserChatSessions({required String uid}) async {
+  try {
+    // Call backend without app_id parameter to get ALL user sessions
+    final uri = _buildUri('/v2/chat-sessions'); // No query parameters = all sessions
+    final response = await makeApiCall(url: uri.toString(), headers: {}, body: '', method: 'GET');
+
+    if (response != null && response.statusCode == 200) {
+      final body = utf8.decode(response.bodyBytes);
+      final data = jsonDecode(body) as List<dynamic>;
+      final sessions = ChatSession.fromJsonList(data);
+
+      // Sessions are already sorted by created_at DESC from backend
+      return sessions;
+    }
+  } catch (e) {
+    debugPrint('listAllUserChatSessions error: $e');
+  }
+  return [];
+}
+
 Future<ChatSession?> createChatSession({required String uid, required String appId, String? title}) async {
   final uri = _buildUri('/v2/chat-sessions');
 
