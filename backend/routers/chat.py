@@ -138,7 +138,19 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    # Fetch messages from the specific chat session for proper thread context
+    session_id_for_query = chat_session.id if chat_session else None
+
+    messages = list(
+        reversed(
+            [
+                Message(**msg)
+                for msg in chat_db.get_messages(
+                    uid, limit=10, app_id=compat_app_id, chat_session_id=session_id_for_query
+                )
+            ]
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
