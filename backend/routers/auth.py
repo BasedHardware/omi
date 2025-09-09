@@ -163,12 +163,12 @@ async def _google_auth_redirect(session_id: str):
     Redirect to Google OAuth for authentication
     """
     client_id = os.getenv('GOOGLE_CLIENT_ID')
-    api_base_url = os.getenv('API_BASE_URL')
+    api_base_url = os.getenv('BASE_API_URL')
     
     if not client_id:
         raise HTTPException(status_code=500, detail="Google client ID not configured")
     if not api_base_url:
-        raise HTTPException(status_code=500, detail="API_BASE_URL not configured")
+        raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
     
     callback_url = f"{api_base_url}/v1/auth/callback/google"
     
@@ -188,12 +188,12 @@ async def _apple_auth_redirect(session_id: str):
     Redirect to Apple OAuth for authentication
     """
     client_id = os.getenv('APPLE_CLIENT_ID')
-    api_base_url = os.getenv('API_BASE_URL')
+    api_base_url = os.getenv('BASE_API_URL')
     
     if not client_id:
         raise HTTPException(status_code=500, detail="Apple client ID not configured")
     if not api_base_url:
-        raise HTTPException(status_code=500, detail="API_BASE_URL not configured")
+        raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
     
     callback_url = f"{api_base_url}/v1/auth/callback/apple"
     
@@ -226,7 +226,7 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
     """
     client_id = os.getenv('GOOGLE_CLIENT_ID')
     client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
-    api_base_url = os.getenv('API_BASE_URL')
+    api_base_url = os.getenv('BASE_API_URL')
     
     if not all([client_id, client_secret, api_base_url]):
         raise HTTPException(status_code=500, detail="Google OAuth not properly configured")
@@ -285,9 +285,9 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         client_secret = _generate_apple_client_secret(client_id, team_id, key_id, private_key_content)
         
         # Exchange authorization code for Apple tokens
-        api_base_url = os.getenv('API_BASE_URL')
+        api_base_url = os.getenv('BASE_API_URL')
         if not api_base_url:
-            raise HTTPException(status_code=500, detail="API_BASE_URL not configured")
+            raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
             
         callback_url = f"{api_base_url}/v1/auth/callback/apple"
         
