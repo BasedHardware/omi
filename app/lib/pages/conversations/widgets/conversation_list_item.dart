@@ -72,21 +72,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         onTap: () async {
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
-            final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => ConfirmationDialog(
-                title: 'Upgrade to Unlock',
-                description:
-                    'This conversation is locked. Upgrade to the Unlimited plan to access all your insights, summaries, and action items.',
-                confirmText: 'Upgrade Now',
-                cancelText: 'Later',
-                onCancel: () => Navigator.of(ctx).pop(false),
-                onConfirm: () => Navigator.of(ctx).pop(true),
-              ),
-            );
-            if (confirmed == true && mounted) {
-              routeToPage(context, const UsagePage(showUpgradeDialog: true));
-            }
+            routeToPage(context, const UsagePage(showUpgradeDialog: true));
             return;
           }
           MixpanelManager().conversationListItemClicked(widget.conversation, widget.conversationIdx);
@@ -192,7 +178,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                       child: BackdropFilter(
                                         filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
                                         child: Container(
-                                          color: Colors.transparent,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.01),
+                                            borderRadius: const BorderRadius.all(Radius.circular(8)),
+                                          ),
+                                          child: const Text(
+                                            'Upgrade to unlimited',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -301,7 +299,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                         maxLines: 1,
                       ),
-                      if (widget.conversation.transcriptSegments.isNotEmpty && _getConversationDuration().isNotEmpty)
+                      if (_getConversationDuration().isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Container(
@@ -326,9 +324,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   String _getConversationDuration() {
-    if (widget.conversation.transcriptSegments.isEmpty) return '';
-
-    // Get the total duration in seconds
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
