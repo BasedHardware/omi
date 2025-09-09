@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -23,6 +25,11 @@ class DeviceSettings extends StatefulWidget {
 }
 
 class _DeviceSettingsState extends State<DeviceSettings> {
+  double _dimRatio = 100.0;
+  bool _isDimRatioLoaded = false;
+  bool? _hasDimmingFeature;
+  Timer? _debounce;
+
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -36,8 +43,58 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<DeviceProvider>().getDeviceInfo();
+      _loadInitialDimRatio();
     });
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _loadInitialDimRatio() async {
+    final deviceProvider = context.read<DeviceProvider>();
+    if (deviceProvider.pairedDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+      if (connection != null) {
+        var features = await connection.getFeatures();
+        final hasDimming = (features & OmiFeatures.ledDimming) != 0;
+
+        if (!mounted) return;
+        setState(() {
+          _hasDimmingFeature = hasDimming;
+        });
+
+        if (!hasDimming) {
+          setState(() {
+            _isDimRatioLoaded = true;
+          });
+          return;
+        }
+
+        var ratio = await connection.getLedDimRatio();
+        if (ratio != null && mounted) {
+          setState(() {
+            _dimRatio = ratio.toDouble();
+            _isDimRatioLoaded = true;
+          });
+        } else if (mounted) {
+          setState(() {
+            _isDimRatioLoaded = true; // Loaded, but no value, use default
+          });
+        }
+      }
+    }
+  }
+
+  void _updateDimRatio(double value) async {
+    final deviceProvider = context.read<DeviceProvider>();
+    if (deviceProvider.pairedDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+      await connection?.setLedDimRatio(value.toInt());
+    }
   }
 
   @override
@@ -96,6 +153,20 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     ),
                 ],
               ),
+              if (provider.isConnected)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Text(
+                        'Customization',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    _buildDimmingControl(),
+                  ],
+                ),
               GestureDetector(
                 onTap: () async {
                   await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
@@ -154,6 +225,46 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             : const SizedBox(),
       );
     });
+  }
+
+  Widget _buildDimmingControl() {
+    if (!_isDimRatioLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_hasDimmingFeature == false) {
+      return const ListTile(
+        title: Text('Dimming'),
+        subtitle: Text('This feature is not available on your device.'),
+      );
+    }
+
+    return ListTile(
+      title: const Text('Dimming'),
+      subtitle: Slider(
+        value: _dimRatio,
+        min: 0,
+        max: 100,
+        divisions: 100,
+        activeColor: Colors.white,
+        inactiveColor: Colors.grey,
+        label: '${_dimRatio.round()}%',
+        onChanged: (double value) {
+          if (!(_debounce?.isActive ?? false)) {
+            _debounce = Timer(const Duration(milliseconds: 300), () {
+              _updateDimRatio(value);
+            });
+          }
+          setState(() {
+            _dimRatio = value;
+          });
+        },
+        onChangeEnd: (double value) {
+          _debounce?.cancel();
+          _updateDimRatio(value);
+        },
+      ),
+    );
   }
 }
 

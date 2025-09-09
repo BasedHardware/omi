@@ -440,77 +440,77 @@ def get_action_items(
 ):
     """Fetch action items directly from conversations collection"""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
-    
+
     # Only get completed conversations with action items
     conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', 'completed'))
-    
+
     # Apply date range filters if provided
     if start_date:
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
     if end_date:
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
-    
+
     # Sort by created_at descending
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    
+
     # Get all conversations with action items
     conversations = []
     for doc in conversations_ref.stream():
         conversation_data = doc.to_dict()
-        
+
         # Check if conversation has action items
         structured = conversation_data.get('structured', {})
         raw_action_items = structured.get('action_items', [])
-        
+
         if raw_action_items:
             # Decrypt conversation data for proper reading
             decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
             conversations.append(decrypted_data)
-    
+
     # Extract and flatten action items with metadata
     action_items = []
     for conversation in conversations:
         conversation_id = conversation['id']
         conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
         conversation_created_at = _ensure_timezone_aware(conversation['created_at'])
-        
+
         raw_items = conversation.get('structured', {}).get('action_items', [])
-        
+
         for idx, item in enumerate(raw_items):
             # Skip deleted items
             if isinstance(item, dict) and item.get('deleted', False):
                 continue
-                
+
             # Skip completed items if not requested
             is_completed = False
             if isinstance(item, dict):
                 is_completed = item.get('completed', False)
-            
+
             if not include_completed and is_completed:
                 continue
-                
+
             # Handle backwards compatibility for dates
             created_at = None
             completed_at = None
-            
+
             if isinstance(item, dict):
                 created_at = item.get('created_at')
                 completed_at = item.get('completed_at')
-            
+
             # Ensure timezone awareness for action item dates
             if created_at is not None:
                 created_at = _ensure_timezone_aware(created_at)
             if completed_at is not None:
                 completed_at = _ensure_timezone_aware(completed_at)
-            
+
             # Fallback to conversation created_at if dates are missing
             if created_at is None:
                 created_at = conversation_created_at
-            
+
             # If item is completed but no completed_at date, use conversation created_at
             if is_completed and completed_at is None:
                 completed_at = conversation_created_at
-            
+
             action_item_data = {
                 'id': f"{conversation_id}_{idx}",
                 'conversation_id': conversation_id,
@@ -524,14 +524,14 @@ def get_action_items(
                 'completed_at': completed_at,
             }
             action_items.append(action_item_data)
-    
+
     # Sort by newest first
     action_items.sort(key=lambda x: -x['conversation_created_at'].timestamp())
-    
+
     # Apply pagination
     start_idx = offset
     end_idx = offset + limit
-    
+
     return action_items[start_idx:end_idx]
 
 
@@ -567,6 +567,28 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'visibility': visibility})
+
+
+def unlock_all_conversations(uid: str):
+    """
+    Finds all conversations for a user with is_locked: True and updates them to is_locked = False.
+    """
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    locked_conversations_query = conversations_ref.where(filter=FieldFilter('is_locked', '==', True))
+
+    batch = db.batch()
+    docs = locked_conversations_query.stream()
+    count = 0
+    for doc in docs:
+        batch.update(doc.reference, {'is_locked': False})
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
+    print(f"Unlocked all conversations for user {uid}")
 
 
 def get_public_conversations(data: List[Tuple[str, str]]):

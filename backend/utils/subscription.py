@@ -170,7 +170,6 @@ def get_monthly_usage_for_subscription(uid: str) -> dict:
 
     return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
 
-
 def has_transcription_credits(uid: str) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.

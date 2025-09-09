@@ -41,6 +41,7 @@ abstract class DeviceConnection {
   BtDevice device;
   BluetoothDevice bleDevice;
   DateTime? _pongAt;
+  int? _features;
 
   DeviceConnectionState _connectionState = DeviceConnectionState.disconnected;
 
@@ -317,6 +318,37 @@ abstract class DeviceConnection {
   Future<StreamSubscription<List<int>>?> performGetAccelListener({
     void Function(int)? onAccelChange,
   });
+
+  Future<int> getFeatures() async {
+    if (_features != null) return _features!;
+    if (await isConnected()) {
+      _features = await performGetFeatures();
+      return _features!;
+    }
+    _showDeviceDisconnectedNotification();
+    return 0;
+  }
+
+  Future<int> performGetFeatures();
+
+  Future<void> setLedDimRatio(int ratio) async {
+    if (await isConnected()) {
+      return await performSetLedDimRatio(ratio);
+    }
+    _showDeviceDisconnectedNotification();
+  }
+
+  Future<void> performSetLedDimRatio(int ratio);
+
+  Future<int?> getLedDimRatio() async {
+    if (await isConnected()) {
+      return await performGetLedDimRatio();
+    }
+    _showDeviceDisconnectedNotification();
+    return null;
+  }
+
+  Future<int?> performGetLedDimRatio();
 
   void _showDeviceDisconnectedNotification() {
     NotificationService.instance.createNotification(

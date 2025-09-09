@@ -235,6 +235,7 @@ class Conversation(BaseModel):
     photos: List[ConversationPhoto] = []
 
     apps_results: List[AppResult] = []
+    suggested_summarization_apps: List[str] = []
 
     # TODO: plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
@@ -251,6 +252,7 @@ class Conversation(BaseModel):
     processing_conversation_id: Optional[str] = None
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
+    is_locked: bool = False
     data_protection_level: Optional[str] = None
 
     def __init__(self, **data):

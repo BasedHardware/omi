@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/utils/mutex.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 
 abstract class ISocketService {
@@ -28,7 +31,7 @@ class SocketServicePool extends ISocketService {
   }
 
   // Warn: Should use a better solution to prevent race conditions
-  bool mutex = false;
+  final Mutex _mutex = Mutex();
 
   Future<TranscriptSegmentSocketService?> socket({
     required BleAudioCodec codec,
@@ -36,11 +39,7 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
   }) async {
-    while (mutex) {
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-    mutex = true;
-
+    await _mutex.acquire();
     try {
       if (!force &&
           _socket?.codec == codec &&
@@ -62,7 +61,7 @@ class SocketServicePool extends ISocketService {
 
       return _socket;
     } finally {
-      mutex = false;
+      _mutex.release();
     }
 
     return null;

@@ -26,6 +26,10 @@ import wave
 
 
 def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
+    if not os.path.exists(opus_file_path):
+        print(f"File not found: {opus_file_path}")
+        return False
+
     decoder = Decoder(sample_rate, channels)
     with open(opus_file_path, 'rb') as f:
         pcm_data = []
@@ -60,8 +64,10 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                 wav_file.setframerate(sample_rate)
                 wav_file.writeframes(pcm_bytes)
             print(f"Decoded audio saved to {wav_file_path}")
+            return True
         else:
             print("No PCM data was decoded.")
+            return False
 
 
 def get_timestamp_from_path(path: str):
@@ -92,9 +98,14 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
         path = f"{directory}{filename}"
-        paths.append(path)
-        with open(path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        try:
+            with open(path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            paths.append(path)
+        except Exception as e:
+            if os.path.exists(path):
+                os.remove(path)
+            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}: {str(e)}")
     return paths
 
 
@@ -112,7 +123,10 @@ def decode_files_to_wav(files_path: List[str]):
             except ValueError:
                 print(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
-        decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+        success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+        if not success:
+            continue
+
         try:
             aseg = AudioSegment.from_wav(wav_path)
         except Exception as e:
@@ -123,7 +137,8 @@ def decode_files_to_wav(files_path: List[str]):
             os.remove(wav_path)
             continue
         wav_files.append(wav_path)
-        os.remove(path)
+        if os.path.exists(path):
+            os.remove(path)
     return wav_files
 
 

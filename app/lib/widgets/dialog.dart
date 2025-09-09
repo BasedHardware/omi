@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-//TODO: switch to required named parameters
 getDialog(
   BuildContext context,
   Function onCancel,

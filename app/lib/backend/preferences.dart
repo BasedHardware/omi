@@ -136,10 +136,6 @@ class SharedPreferencesUtil {
 
   bool get daySummaryToggled => getBool('daySummaryToggled') ?? false;
 
-  set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
-
-  bool get localSyncEnabled => getBool('localSyncEnabled') ?? true;
-
   bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation') ?? true;
 
   set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
@@ -155,6 +151,10 @@ class SharedPreferencesUtil {
   bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog') ?? true;
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
+
+  int get conversationSilenceDuration => getInt('conversationSilenceDuration') ?? 120;
+
+  set conversationSilenceDuration(int value) => saveInt('conversationSilenceDuration', value);
 
   String get transcriptionModel => getString('transcriptionModel3') ?? 'soniox';
 
@@ -188,6 +188,10 @@ class SharedPreferencesUtil {
   bool get permissionStoreRecordingsEnabled => getBool('permissionStoreRecordingsEnabled') ?? false;
 
   set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
+
+  bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled') ?? false;
+
+  set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
@@ -256,6 +260,10 @@ class SharedPreferencesUtil {
   String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
+
+  String get lastUsedSummarizationAppId => getString('lastUsedSummarizationAppId') ?? '';
+
+  set lastUsedSummarizationAppId(String value) => saveString('lastUsedSummarizationAppId', value);
 
   List<ServerConversation> get cachedConversations {
     if (getBool('migratedMemories') ?? false) {
@@ -379,12 +387,16 @@ class SharedPreferencesUtil {
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 
   //--------------------------------- Wals ------------------------------------//
+  // WAL persistence has been moved to WalFileManager for better performance
+  // These methods are kept for migration purposes only
 
+  @deprecated
   set wals(List<Wal> wals) {
     final List<String> value = wals.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('wals', value);
   }
 
+  @deprecated
   List<Wal> get wals {
     final List<String> value = getStringList('wals') ?? [];
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());

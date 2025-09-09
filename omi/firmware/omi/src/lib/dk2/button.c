@@ -226,6 +226,8 @@ void check_button_level(struct k_work *work_item)
         // // Enter the low power mode
         is_off = true;
         transport_off();
+        k_msleep(100);
+
         turnoff_all();
     }
 

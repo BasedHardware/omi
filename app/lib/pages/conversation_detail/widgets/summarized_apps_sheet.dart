@@ -1,9 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/apps/widgets/category_apps_page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -95,7 +99,7 @@ class _SheetHeader extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Summarized Apps',
+              'Conversation Analysis',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -122,26 +126,99 @@ class _AppsList extends StatelessWidget {
     required this.currentAppId,
   });
 
+  // Track app installation state
+  static final Map<String, bool> _installingApps = {};
+
   @override
   Widget build(BuildContext context) {
     final availableApps = provider.appsList.where((app) => app.worksWithMemories() && app.enabled).toList();
+    final suggestedAppIds = provider.getSuggestedApps();
+    final lastUsedApp = provider.getLastUsedSummarizationApp();
+
+    // Convert suggested app IDs to App objects
+    final suggestedApps = suggestedAppIds
+        .map((appId) => provider.appsList.firstWhereOrNull((app) => app.id == appId))
+        .where((app) => app != null)
+        .cast<App>()
+        .toList();
+
+    // Filter out suggested apps and last used app from other apps
+    final otherApps = availableApps
+        .where((app) => !provider.isAppSuggested(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
+        .toList();
 
     return ListView(
       children: [
         // Auto option
         _AppListItem(
           app: null,
-          isSelected: false,
+          isSelected: currentAppId == null,
           onTap: () => _handleAutoAppTap(context),
           trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
+          subtitle: 'Let Omi automatically choose the best app for this summary.',
+          provider: provider,
         ),
 
-        // List of installed apps
-        ...availableApps.map((app) => _AppListItem(
+        // Suggested Apps section
+        if (suggestedApps.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Suggested Apps',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ...suggestedApps.map((app) {
+            final isAvailable = provider.isSuggestedAppAvailable(app.id);
+            final isInstalling = _AppsList._installingApps[app.id] == true;
+            return _AppListItem(
               app: app,
               isSelected: app.id == currentAppId,
-              onTap: () => _handleAppTap(context, app),
-            )),
+              onTap: () => isAvailable ? _handleAppTap(context, app) : _handleUnavailableAppTap(context, app),
+              isSuggested: true,
+              isInstalling: isInstalling,
+              provider: provider,
+            );
+          }),
+        ],
+
+        // Other Apps section (includes last used app at top)
+        if (otherApps.isNotEmpty || lastUsedApp != null) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              suggestedApps.isNotEmpty ? 'Other Apps' : 'Available Apps',
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          // Show last used app first if available
+          if (lastUsedApp != null)
+            _AppListItem(
+              app: lastUsedApp,
+              isSelected: lastUsedApp.id == currentAppId,
+              onTap: () => _handleAppTap(context, lastUsedApp),
+              isLastUsed: true,
+              provider: provider,
+            ),
+          // Then show other apps
+          ...otherApps.map((app) => _AppListItem(
+                app: app,
+                isSelected: app.id == currentAppId,
+                onTap: () => _handleAppTap(context, app),
+                provider: provider,
+              )),
+        ],
+
+        // Create Template option
+        const _CreateTemplateListItem(),
 
         // Enable Apps option
         const _EnableAppsListItem(),
@@ -178,11 +255,78 @@ class _AppsList extends StatelessWidget {
       previousAppId: previousAppId,
     );
 
+    // Track the last used app
+    provider.trackLastUsedSummarizationApp(app.id);
+
     Navigator.pop(context);
     provider.setSelectedAppForReprocessing(app);
-    provider.setPreferredSummarizationApp(app.id);
     await provider.reprocessConversation(appId: app.id);
     return;
+  }
+
+  void _handleUnavailableAppTap(BuildContext context, App app) async {
+    // Check if app is already being installed
+    if (_AppsList._installingApps[app.id] == true) {
+      return;
+    }
+
+    // Set installing state
+    _AppsList._installingApps[app.id] = true;
+
+    try {
+      final appProvider = context.read<AppProvider>();
+      final conversationProvider = context.read<ConversationDetailProvider>();
+      final conversationId = conversationProvider.conversation.id;
+
+      // Find the app index in the apps list for toggleApp
+      final appIndex = appProvider.apps.indexWhere((a) => a.id == app.id);
+
+      // Install/enable the app
+      await appProvider.toggleApp(app.id, true, appIndex >= 0 ? appIndex : null);
+
+      // Check if installation was successful
+      final installedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id && a.enabled);
+
+      if (installedApp != null) {
+        // Track analytics
+        MixpanelManager().summarizedAppSelected(
+          conversationId: conversationId,
+          selectedAppId: app.id,
+          previousAppId: conversationProvider.getSummarizedApp()?.appId,
+        );
+
+        // Track the last used app
+        conversationProvider.trackLastUsedSummarizationApp(app.id);
+
+        // Close the bottom sheet
+        Navigator.pop(context);
+
+        // Set the app for reprocessing and reprocess the conversation
+        conversationProvider.setSelectedAppForReprocessing(installedApp);
+        await conversationProvider.reprocessConversation(appId: app.id);
+      } else {
+        // Installation failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to install ${app.name}. Please try again.'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Handle installation error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error installing ${app.name}: ${e.toString()}'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      // Clear installing state
+      _AppsList._installingApps[app.id] = false;
+    }
   }
 }
 
@@ -191,12 +335,22 @@ class _AppListItem extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final Widget? trailingIcon;
+  final String? subtitle;
+  final bool isSuggested;
+  final bool isLastUsed;
+  final bool isInstalling;
+  final ConversationDetailProvider? provider;
 
   const _AppListItem({
     required this.app,
     required this.isSelected,
     required this.onTap,
     this.trailingIcon,
+    this.subtitle,
+    this.isSuggested = false,
+    this.isLastUsed = false,
+    this.isInstalling = false,
+    this.provider,
   });
 
   @override
@@ -204,13 +358,36 @@ class _AppListItem extends StatelessWidget {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       leading: _buildLeadingIcon(),
-      title: Text(
-        app != null ? app!.name.decodeString : 'Auto',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-          fontSize: 16,
-        ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              app != null ? app!.name.decodeString : 'Auto',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          if (isLastUsed)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+              ),
+              child: const Text(
+                'Last Used',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
       ),
       subtitle: app != null
           ? Text(
@@ -219,11 +396,48 @@ class _AppListItem extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             )
-          : null,
-      trailing: isSelected ? const Icon(Icons.autorenew, color: Colors.white, size: 20) : trailingIcon,
+          : subtitle != null
+              ? Text(
+                  subtitle!,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                )
+              : null,
+      trailing: _buildTrailingWidget(),
       selected: isSelected,
       onTap: onTap,
     );
+  }
+
+  Widget _buildTrailingWidget() {
+    // Check if this app is currently being processed
+    final isProcessing = provider != null &&
+        provider!.loadingReprocessConversation &&
+        ((app != null && provider!.selectedAppForReprocessing?.id == app!.id) ||
+            (app == null && provider!.selectedAppForReprocessing == null));
+
+    if (isSelected) {
+      return const Icon(Icons.check, color: Colors.green, size: 20);
+    } else if (isInstalling) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    } else if (isProcessing) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    } else {
+      return trailingIcon ?? const SizedBox.shrink();
+    }
   }
 
   Widget _buildLeadingIcon() {
@@ -280,6 +494,84 @@ class _AppListItem extends StatelessWidget {
   }
 }
 
+class _CreateTemplateListItem extends StatelessWidget {
+  const _CreateTemplateListItem();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        Navigator.pop(context);
+        final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+        MixpanelManager().summarizedAppCreateTemplateClicked(conversationId: conversationId);
+
+        // Navigate to AddAppPage with preset values for template creation
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AddAppPage(presetForConversationAnalysis: true),
+          ),
+        );
+
+        MixpanelManager().pageOpened('Create Template from Conversation');
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F1F25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.auto_fix_high,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Create Custom Template',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Build a personalized analysis app for your conversations',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: Colors.black,
+              size: 24,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _EnableAppsListItem extends StatelessWidget {
   const _EnableAppsListItem();
 
@@ -289,7 +581,7 @@ class _EnableAppsListItem extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       leading: const Icon(Icons.apps, color: Colors.white, size: 24),
       title: const Text(
-        'Enable Apps',
+        'Explore',
         style: TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w500,
@@ -301,7 +593,25 @@ class _EnableAppsListItem extends StatelessWidget {
         Navigator.pop(context);
         final conversationId = context.read<ConversationDetailProvider>().conversation.id;
         MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
-        routeToPage(context, const AppsPage(showAppBar: true));
+
+        // Try to route to conversation-analysis category first
+        final appProvider = context.read<AppProvider>();
+        final conversationAnalysisCategory = appProvider.categories.firstWhereOrNull(
+          (category) => category.id == 'conversation-analysis',
+        );
+
+        if (conversationAnalysisCategory != null) {
+          final categoryApps = appProvider.apps.where((app) => app.category == 'conversation-analysis').toList();
+          routeToPage(
+              context,
+              CategoryAppsPage(
+                category: conversationAnalysisCategory,
+                apps: categoryApps,
+              ));
+        } else {
+          // Fallback to general apps page
+          routeToPage(context, const AppsPage(showAppBar: true));
+        }
         MixpanelManager().pageOpened('Detail Apps');
       },
     );

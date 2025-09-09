@@ -47,6 +47,7 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
+  DateTime? _keepAliveLastExecutedAt;
 
   // Method channel for system audio permissions
   static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
@@ -164,48 +165,6 @@ class CaptureProvider extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
-  // Audio level tracking for waveform visualization
-  final List<double> _audioLevels = List.generate(8, (_) => 0.15);
-  List<double> get audioLevels => List.from(_audioLevels);
-
-  void _processAudioBytesForVisualization(List<int> bytes) {
-    if (bytes.isEmpty) return;
-
-    double rms = 0;
-
-    // Process bytes as 16-bit samples (2 bytes per sample)
-    for (int i = 0; i < bytes.length - 1; i += 2) {
-      // Convert two bytes to a 16-bit signed integer
-      int sample = bytes[i] | (bytes[i + 1] << 8);
-
-      // Convert to signed value (if high bit is set)
-      if (sample > 32767) {
-        sample = sample - 65536;
-      }
-
-      // Square the sample and add to sum
-      rms += sample * sample;
-    }
-
-    // Calculate RMS and normalize to 0.0-1.0 range
-    int sampleCount = bytes.length ~/ 2;
-    if (sampleCount > 0) {
-      rms = math.sqrt(rms / sampleCount) / 32768.0;
-    } else {
-      rms = 0;
-    }
-
-    // Apply non-linear scaling for better dynamic range - quieter on silence, same on noise
-    final level = (math.pow(rms, 0.3).toDouble() * 2.1).clamp(0.15, 1.6);
-
-    // Shift all values left and add new level
-    for (int i = 0; i < _audioLevels.length - 1; i++) {
-      _audioLevels[i] = _audioLevels[i + 1];
-    }
-    _audioLevels[_audioLevels.length - 1] = level;
-
-    notifyListeners(); // Notify UI to update waveform
-  }
 
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
@@ -378,12 +337,10 @@ class CaptureProvider extends ChangeNotifier
         _commandBytes.add(snapshot.sublist(3));
       }
 
-      // Support: opus codec, 1m from the first device connects
-      var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
+      // Local sync
+      // Support: opus codec
       var checkWalSupported = codec.isOpusSupported() &&
-          (deviceFirstConnectedAt != null &&
-              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
-          SharedPreferencesUtil().localSyncEnabled;
+          (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
@@ -391,15 +348,12 @@ class CaptureProvider extends ChangeNotifier
         _wal.getSyncs().phone.onByteStream(snapshot);
       }
 
-      // send ws
+      // Send WS
       if (_socket?.state == SocketServiceState.connected) {
         final trimmedValue = value.sublist(3);
         _socket?.send(trimmedValue);
 
-        // Process audio bytes for waveform visualization
-        _processAudioBytesForVisualization(trimmedValue);
-
-        // synced
+        // Mark as synced
         if (_isWalSupported) {
           _wal.getSyncs().phone.onBytesSync(value);
         }
@@ -510,6 +464,13 @@ class CaptureProvider extends ChangeNotifier
     final deviceId = _recordingDevice!.id;
     BleAudioCodec codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+
+    // Set device info for WAL creation
+    var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+    var pd = await _recordingDevice!.getDeviceInfo(connection);
+    String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    _wal.getSyncs().phone.setDeviceInfo(_recordingDevice!.id, deviceModel);
+
     await streamButton(deviceId);
     await streamAudioToWs(deviceId, codec);
 
@@ -611,8 +572,6 @@ class CaptureProvider extends ChangeNotifier
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(bytes);
       }
-      // Process audio bytes for waveform visualization
-      _processAudioBytesForVisualization(bytes);
     }, onRecording: () {
       updateRecordingState(RecordingState.record);
     }, onStop: () {
@@ -854,11 +813,20 @@ class CaptureProvider extends ChangeNotifier
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-      debugPrint("[Provider] keep alive...");
+      debugPrint("[Provider] keep alive");
+      // rate 1/15s
+      if (_keepAliveLastExecutedAt != null &&
+          DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
+        debugPrint("[Provider] keep alive - hitting rate limits 1/15s");
+        return;
+      }
+
+      _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
         return;
       }
+
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
         await _initiateWebsocket(audioCodec: codec);

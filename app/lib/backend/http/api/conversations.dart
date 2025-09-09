@@ -90,6 +90,9 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   if (response == null) return null;
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
+  } else if (response.statusCode == 402) {
+    debugPrint('Unlimited Plan Required for conversation: $conversationId');
+    throw Exception('Unlimited Plan Required');
   }
   return null;
 }
@@ -410,23 +413,23 @@ Future<ActionItemsResponse> getActionItems({
   DateTime? endDate,
 }) async {
   String url = '${Env.apiBaseUrl}v1/action-items?limit=$limit&offset=$offset&include_completed=$includeCompleted';
-  
+
   if (startDate != null) {
     url += '&start_date=${startDate.toIso8601String()}';
   }
   if (endDate != null) {
     url += '&end_date=${endDate.toIso8601String()}';
   }
-  
+
   var response = await makeApiCall(
     url: url,
     headers: {},
     method: 'GET',
     body: '',
   );
-  
+
   if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemsResponse.fromJson(jsonDecode(body));
@@ -434,6 +437,23 @@ Future<ActionItemsResponse> getActionItems({
     debugPrint('getActionItems error ${response.statusCode}');
     return ActionItemsResponse(actionItems: [], hasMore: false);
   }
+}
+
+Future<List<App>> getConversationSuggestedApps(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/suggested-apps',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return [];
+  debugPrint('getConversationSuggestedApps: ${response.body}');
+  if (response.statusCode == 200) {
+    var data = jsonDecode(response.body);
+    return (data['suggested_apps'] as List<dynamic>).map((appData) => App.fromJson(appData)).toList();
+  }
+  return [];
 }
 
 Future<bool> updateActionItemStateByMetadata(
