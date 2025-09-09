@@ -11,7 +11,12 @@ from models.transcript_segment import TranscriptSegment
 from models.chat import Message, MessageSender
 import database.notifications as notification_db
 import database.users as users_db
-from utils.conversations.process_conversation import _extract_memories, _save_action_items, _extract_trends
+from utils.conversations.process_conversation import (
+    _extract_memories,
+    _save_action_items,
+    _extract_trends,
+    save_structured_vector,
+)
 from .clients import llm_medium_experiment, parser
 
 
@@ -177,6 +182,7 @@ def process_chat_message_for_insights(uid: str, message: Message, app_id: Option
 
         # Step 3: Process through existing pipelines (reuse 100% of existing code)
         # Run in parallel threads just like the conversation pipeline
+        threading.Thread(target=save_structured_vector, args=(uid, conversation)).start()
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
