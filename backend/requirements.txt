@@ -256,3 +256,4 @@ typesense==0.21.0
 pycountry==24.6.1
 google-cloud-translate==3.20.2
 langdetect==1.0.9
+tavily-python==0.7.11

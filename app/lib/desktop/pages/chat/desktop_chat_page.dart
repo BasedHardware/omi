@@ -19,6 +19,8 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_welcome_screen.dart';
+import 'package:omi/pages/chat/widgets/web_search_toggle.dart';
+import 'package:omi/pages/chat/widgets/web_search_citations.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
@@ -912,6 +914,15 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       ),
                     ),
                   ),
+                  // Web search citations for desktop AI messages
+                  if (message.webSearchCitations.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(left: 50, top: 8),
+                      child: WebSearchCitations(
+                        citations: message.webSearchCitations,
+                        isDesktop: true,
+                      ),
+                    ),
                 ],
               )
             : Column(
@@ -1253,28 +1264,47 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   ) {
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
         children: [
-          // Enhanced add button
-          if (!_showVoiceRecorder) _buildModernAddButton(provider),
-
-          // Modern text input or voice recorder
-          Expanded(
-            child: _showVoiceRecorder ? _buildEnhancedVoiceRecorder() : _buildModernTextInput(),
+          // Web search toggle
+          Row(
+            children: [
+              WebSearchToggle(
+                isEnabled: provider.webSearchEnabled,
+                onChanged: (enabled) {
+                  provider.setWebSearchEnabled(enabled);
+                },
+                isDesktop: true,
+              ),
+              const Spacer(),
+            ],
           ),
+          const SizedBox(height: 8),
+          // Main input row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Enhanced add button
+              if (!_showVoiceRecorder) _buildModernAddButton(provider),
 
-          // Enhanced voice button
-          if (!_showVoiceRecorder) _buildModernVoiceButton(),
+              // Modern text input or voice recorder
+              Expanded(
+                child: _showVoiceRecorder ? _buildEnhancedVoiceRecorder() : _buildModernTextInput(),
+              ),
 
-          // Modern send button with reactive state
-          if (!provider.sendingMessage && !_showVoiceRecorder)
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: textController,
-              builder: (context, value, child) {
-                return _buildModernSendButton(provider, connectivityProvider);
-              },
-            ),
+              // Enhanced voice button
+              if (!_showVoiceRecorder) _buildModernVoiceButton(),
+
+              // Modern send button with reactive state
+              if (!provider.sendingMessage && !_showVoiceRecorder)
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: textController,
+                  builder: (context, value, child) {
+                    return _buildModernSendButton(provider, connectivityProvider);
+                  },
+                ),
+            ],
+          ),
         ],
       ),
     );

@@ -97,7 +97,45 @@ class MessageFile {
       'thumb_name': thumbnailName,
     };
   }
+}
 
+class WebSearchCitation {
+  final String title;
+  final String url;
+  final String snippet;
+  final int index;
+
+  WebSearchCitation({
+    required this.title,
+    required this.url,
+    required this.snippet,
+    required this.index,
+  });
+
+  factory WebSearchCitation.fromJson(Map<String, dynamic> json) {
+    return WebSearchCitation(
+      title: json['title'] ?? '',
+      url: json['url'] ?? '',
+      snippet: json['snippet'] ?? '',
+      index: json['index'] ?? 0,
+    );
+  }
+
+  static List<WebSearchCitation> fromJsonList(List<dynamic> json) {
+    return json.map((e) => WebSearchCitation.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'url': url,
+      'snippet': snippet,
+      'index': index,
+    };
+  }
+}
+
+extension MessageFileExtensions on MessageFile {
   String mimeTypeToFileType() {
     if (mimeType.contains('image')) {
       return 'image';
@@ -122,6 +160,7 @@ class ServerMessage {
 
   List<MessageConversation> memories;
   bool askForNps;
+  List<WebSearchCitation> webSearchCitations;
 
   List<String> thinkings = [];
 
@@ -137,6 +176,7 @@ class ServerMessage {
     this.filesId,
     this.memories, {
     this.askForNps = true,
+    this.webSearchCitations = const [],
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -152,6 +192,9 @@ class ServerMessage {
       (json['files_id'] ?? []).map((m) => m.toString()).toList(),
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
       askForNps: json['ask_for_nps'] ?? true,
+      webSearchCitations: ((json['web_search_citations'] ?? []) as List<dynamic>)
+          .map((m) => WebSearchCitation.fromJson(m as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -167,6 +210,7 @@ class ServerMessage {
       'memories': memories.map((m) => m.toJson()).toList(),
       'files': files.map((m) => m.toJson()).toList(),
       'ask_for_nps': askForNps,
+      'web_search_citations': webSearchCitations.map((c) => c.toJson()).toList(),
     };
   }
 
@@ -191,6 +235,7 @@ class ServerMessage {
       [],
       [],
       [],
+      webSearchCitations: [],
     );
   }
 
@@ -206,6 +251,7 @@ class ServerMessage {
       [],
       [],
       [],
+      webSearchCitations: [],
     );
   }
 

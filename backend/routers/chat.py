@@ -21,6 +21,7 @@ from models.chat import (
     GenerateTitleRequest,
     MessageSender,
     ResponseMessage,
+    WebSearchCitation,
     MessageConversation,
     FileChat,
 )
@@ -142,6 +143,7 @@ def send_message(
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
+        web_citations = callback_data.get('web_search_citations', [])
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -160,6 +162,7 @@ def send_message(
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
 
+        # Create base AI message
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -178,12 +181,25 @@ def send_message(
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-        return ai_message, ask_for_nps
+        # Create ResponseMessage with structured citations
+        response_message = ResponseMessage(
+            **ai_message.dict(),
+            ask_for_nps=ask_for_nps,
+            web_search_citations=[WebSearchCitation(**citation) for citation in web_citations] if web_citations else [],
+        )
+
+        return response_message, ask_for_nps
 
     async def generate_stream():
         callback_data = {}
         async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
+            uid,
+            messages,
+            app,
+            cited=True,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            web_search_enabled=data.web_search_enabled,
         ):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
@@ -191,12 +207,10 @@ def send_message(
             else:
                 response = callback_data.get('answer')
                 if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
+                    response_message, ask_for_nps = process_message(response, callback_data)
+                    # response_message is already a ResponseMessage with citations included
+                    encoded_data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    yield f"done: {encoded_data}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 

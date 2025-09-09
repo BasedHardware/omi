@@ -1,7 +1,11 @@
 import json
 import os
 
+from dotenv import load_dotenv
 import firebase_admin
+
+# Load environment variables from .env file
+load_dotenv()
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret
