@@ -259,8 +259,15 @@ class ServerConversation {
     }
   }
 
-  /// Calculates the conversation duration in seconds based on transcript segments
   int getDurationInSeconds() {
+    if (finishedAt != null && startedAt != null) {
+      return finishedAt!.difference(startedAt!).inSeconds;
+    }
+    return _getDurationInSecondsByTranscripts();
+  }
+
+  /// Calculates the conversation duration in seconds based on transcript segments
+  int _getDurationInSecondsByTranscripts() {
     if (transcriptSegments.isEmpty) return 0;
 
     // Find the last segment's end time
