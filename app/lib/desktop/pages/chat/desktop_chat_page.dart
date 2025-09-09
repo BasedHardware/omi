@@ -308,7 +308,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           dense: true,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           title: Text(
-                            s.title?.isNotEmpty == true ? s.title! : 'Thread ${sessions.sessions.length - idx}',
+                            s.title?.isNotEmpty == true ? s.title! : 'New Chat',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

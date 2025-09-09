@@ -52,7 +52,7 @@ Future<ChatSession?> createChatSession({required String uid, required String app
 
   final Map<String, dynamic> body = {
     'app_id': appId, // Send actual app_id ('omi' for OMI, actual ID for others)
-    if (title != null && title.isNotEmpty) 'title': title,
+    'title': title ?? 'New Chat', // Always send title, default to 'New Chat'
   };
 
   final response = await makeApiCall(
@@ -77,4 +77,30 @@ Future<bool> deleteChatSession({required String uid, required String sessionId})
   if (response.statusCode == 200) return true;
   debugPrint('deleteChatSession error ${response.statusCode}: ${response.body}');
   return false;
+}
+
+Future<String?> generateChatSessionTitle(
+    {required String uid, required String sessionId, required String firstMessage}) async {
+  final uri = _buildUri('/v2/chat-sessions/$sessionId/generate-title');
+
+  final Map<String, dynamic> body = {
+    'first_message': firstMessage,
+  };
+
+  final response = await makeApiCall(
+    url: uri.toString(),
+    headers: {},
+    method: 'POST',
+    body: jsonEncode(body),
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    final responseBody = utf8.decode(response.bodyBytes);
+    final data = jsonDecode(responseBody) as Map<String, dynamic>;
+    return data['title'] as String?;
+  }
+  debugPrint('generateChatSessionTitle error ${response.statusCode}: ${response.body}');
+  return null;
 }
