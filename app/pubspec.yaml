@@ -1,7 +1,7 @@
 name: omi
 description: A new Flutter project.
 
-publish_to: "none" # Remove this line if you wish to publish to pub.dev
+publish_to: "none"
 
 version: 1.0.71+413
 
@@ -15,7 +15,6 @@ dependencies:
   # State Management
   provider: ^6.1.2
   flutter_provider_utilities: ^1.0.6
-
 
   # Desktop
   window_manager: 0.3.7
@@ -158,7 +157,8 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
-  disable-swift-package-manager: true
+  config:
+    enable-swift-package-manager: false
   assets:
     - assets/images/blob.png
     - assets/images/stars.png
@@ -200,6 +200,5 @@ flutter_native_splash:
   android_12:
     image: assets/images/splash_icon.png
     color: "#000000" # TODO: improve hero banner on android12
-
   android: true
-  ios: true
+  ios: true # (fixed: add comment after #, not inline text)

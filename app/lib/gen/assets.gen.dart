@@ -53,15 +53,15 @@ class $AssetsFontsGen {
 
   /// List of all assets
   List<String> get values => [
-        sfprodisplayblackitalic,
-        sfprodisplaybold,
-        sfprodisplayheavyitalic,
-        sfprodisplaylightitalic,
-        sfprodisplaymedium,
-        sfprodisplayregular,
-        sfprodisplaysemibolditalic,
-        sfprodisplaythinitalic
-      ];
+    sfprodisplayblackitalic,
+    sfprodisplaybold,
+    sfprodisplayheavyitalic,
+    sfprodisplaylightitalic,
+    sfprodisplaymedium,
+    sfprodisplayregular,
+    sfprodisplaysemibolditalic,
+    sfprodisplaythinitalic,
+  ];
 }
 
 class $AssetsImagesGen {
@@ -299,70 +299,70 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
-        a1,
-        a2,
-        a3,
-        a4,
-        a5,
-        logoTextWhite,
-        aiMagic,
-        appLauncherIcon,
-        appleRemindersLogo,
-        appleLogo,
-        background,
-        blob,
-        calendarLogo,
-        checkbox,
-        clone,
-        emailLogo,
-        emotionalFeedback1,
-        facebookLogo,
-        googleLogo,
-        gradientCard,
-        herologo,
-        icChart,
-        icCloneChat,
-        icClonePlus,
-        icDollar,
-        icPersonaProfile,
-        icSettingPersona,
-        imessageLogo,
-        instagramLogo,
-        instruction1,
-        instruction2,
-        instruction3,
-        linkIcon,
-        linkedinLogo,
-        logoTransparent,
-        logoTransparentV2,
-        newBackground,
-        notionLogo,
-        omiDevkitWithoutRope,
-        omiGlass,
-        omiWithoutRopeTurnedOff,
-        omiWithoutRope,
-        onboardingBg1,
-        onboardingBg2,
-        onboardingBg3,
-        onboardingBg4,
-        onboardingBg51,
-        onboardingBg52,
-        onboardingBg6,
-        onboarding,
-        recordingGreenCircleIcon,
-        slackLogo,
-        speaker0Icon,
-        speaker1Icon,
-        splash,
-        splashIcon,
-        stars,
-        stripeLogo,
-        telegramLogo,
-        whatsappLogo,
-        xLogo,
-        xLogoMini,
-        youtubeLogo
-      ];
+    a1,
+    a2,
+    a3,
+    a4,
+    a5,
+    logoTextWhite,
+    aiMagic,
+    appLauncherIcon,
+    appleRemindersLogo,
+    appleLogo,
+    background,
+    blob,
+    calendarLogo,
+    checkbox,
+    clone,
+    emailLogo,
+    emotionalFeedback1,
+    facebookLogo,
+    googleLogo,
+    gradientCard,
+    herologo,
+    icChart,
+    icCloneChat,
+    icClonePlus,
+    icDollar,
+    icPersonaProfile,
+    icSettingPersona,
+    imessageLogo,
+    instagramLogo,
+    instruction1,
+    instruction2,
+    instruction3,
+    linkIcon,
+    linkedinLogo,
+    logoTransparent,
+    logoTransparentV2,
+    newBackground,
+    notionLogo,
+    omiDevkitWithoutRope,
+    omiGlass,
+    omiWithoutRopeTurnedOff,
+    omiWithoutRope,
+    onboardingBg1,
+    onboardingBg2,
+    onboardingBg3,
+    onboardingBg4,
+    onboardingBg51,
+    onboardingBg52,
+    onboardingBg6,
+    onboarding,
+    recordingGreenCircleIcon,
+    slackLogo,
+    speaker0Icon,
+    speaker1Icon,
+    splash,
+    splashIcon,
+    stars,
+    stripeLogo,
+    telegramLogo,
+    whatsappLogo,
+    xLogo,
+    xLogoMini,
+    youtubeLogo,
+  ];
 }
 
 class Assets {
@@ -380,11 +380,7 @@ class Assets {
 }
 
 class AssetGenImage {
-  const AssetGenImage(
-    this._assetName, {
-    this.size,
-    this.flavors = const {},
-  });
+  const AssetGenImage(this._assetName, {this.size, this.flavors = const {}});
 
   final String _assetName;
 
@@ -444,15 +440,8 @@ class AssetGenImage {
     );
   }
 
-  ImageProvider provider({
-    AssetBundle? bundle,
-    String? package,
-  }) {
-    return AssetImage(
-      _assetName,
-      bundle: bundle,
-      package: package,
-    );
+  ImageProvider provider({AssetBundle? bundle, String? package}) {
+    return AssetImage(_assetName, bundle: bundle, package: package);
   }
 
   String get path => _assetName;
