@@ -40,6 +40,7 @@ from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
+from utils.llm.clients import generate_embedding
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -441,18 +442,28 @@ def query_vectors(state: GraphState):
 
     date_filters = state.get("date_filters")
     uid = state.get("uid")
-    # vector = (
-    #    generate_embedding(state.get("parsed_question", ""))
-    #    if state.get("parsed_question")
-    #    else [0] * 3072
-    # )
+    parsed_question = state.get("parsed_question", "")
 
-    # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
-    vector = [1] * 3072
-    print("query_vectors vector:", vector[:5])
+    # 🚀 HYBRID SEARCH: Combine semantic similarity with metadata filtering
+    if parsed_question and parsed_question.strip():
+        # Use real semantic embeddings for better relevance
+        try:
+            vector = generate_embedding(parsed_question)
+            print(f"🔍 Hybrid search for: '{parsed_question}' (semantic + metadata)")
+            print("query_vectors vector (semantic):", vector[:5])
+        except Exception as e:
+            print(f"❌ ERROR generating embedding: {e}")
+            print(f"🔄 Falling back to metadata-only search")
+            vector = [1] * 3072
+            print("query_vectors vector (fallback metadata-only):", vector[:5])
+    else:
+        # Fallback to metadata-only search for empty/generic queries
+        vector = [1] * 3072
+        print("query_vectors vector (metadata-only):", vector[:5])
 
     # TODO: enable it when the in-accurate topic filter get fixed
     is_topic_filter_enabled = date_filters.get("start") is None
+
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
