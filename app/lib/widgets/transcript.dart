@@ -138,8 +138,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         globalMatchCount++;
       }
     }
-
-    print('Rebuilt ${_matchKeys.length} match keys for query: "${widget.searchQuery}"');
   }
 
   @override
@@ -259,10 +257,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final context = matchKey.currentContext;
 
     if (context != null) {
-      print('Found exact match context, scrolling to it');
       _scrollToContext(context);
     } else {
-      print('Match context not found, using fallback');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final retryContext = matchKey.currentContext;
         if (retryContext != null) {
@@ -275,8 +271,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _scrollToContext(BuildContext context) {
-    print('_scrollToContext called');
-
     _isAutoScrolling = true;
     Scrollable.ensureVisible(
       context,
@@ -284,7 +278,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       curve: Curves.easeInOutCubic,
       alignment: 0.35,
     ).then((_) {
-      print('Scroll animation completed');
       _isAutoScrolling = false;
     });
   }
@@ -300,7 +293,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
       if (currentMatchIndex + matches.length > widget.currentResultIndex) {
         targetSegmentIndex = segmentIndex;
-        print('Found target segment $targetSegmentIndex for match ${widget.currentResultIndex}');
         break;
       }
       currentMatchIndex += matches.length;
@@ -311,7 +303,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
       final segmentContext = segmentKey.currentContext;
       if (segmentContext != null) {
-        print('Scrolling to segment context');
         _scrollToContext(segmentContext);
         return;
       }
@@ -320,7 +311,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       final headerHeight = widget.topMargin ? 32.0 : 0.0;
       final targetOffset = headerHeight + (targetSegmentIndex * itemHeight);
 
-      print('Scrolling to calculated offset: $targetOffset');
       _isAutoScrolling = true;
       _scrollController
           .animateTo(
