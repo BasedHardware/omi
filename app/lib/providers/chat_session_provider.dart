@@ -46,20 +46,15 @@ class ChatSessionProvider extends ChangeNotifier {
   }
 
   Future<void> loadSessions({bool refresh = false}) async {
-    // Load ALL sessions across all apps including OMI
+    // Load ALL user sessions efficiently in a single request
     if (!refresh && _sessions.isNotEmpty) return;
     _isLoading = true;
     notifyListeners();
     try {
       final uid = SharedPreferencesUtil().uid;
 
-      // Get all app IDs to fetch sessions from all apps
-      final allAppIds = _appProvider?.apps.map((app) => app.id).toList() ?? [];
-
-      // Add OMI app to the list
-      final appIdsWithOmi = ['omi', ...allAppIds]; // Use 'omi' for OMI app
-
-      final list = await api.listChatSessions(uid: uid, appIds: appIdsWithOmi);
+      // 🚀 PERFORMANCE FIX: Use efficient single API call instead of 4000+ requests
+      final list = await api.listAllUserChatSessions(uid: uid);
       _sessions = list;
     } catch (e) {
       debugPrint('loadSessions error: $e');
