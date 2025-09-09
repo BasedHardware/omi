@@ -26,6 +26,7 @@ class TranscriptWidget extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
+  final VoidCallback? onTapWhenSearchEmpty;
 
   const TranscriptWidget({
     super.key,
@@ -43,6 +44,7 @@ class TranscriptWidget extends StatefulWidget {
     this.searchQuery = '',
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
+    this.onTapWhenSearchEmpty,
   });
 
   @override
@@ -102,6 +104,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     super.initState();
     _previousSegmentCount = widget.segments.length;
     _initializeSegmentKeys();
+    _rebuildMatchKeys();
 
     // Add scroll listener to detect manual scrolling
     _scrollController.addListener(_onScroll);
@@ -125,13 +128,18 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (widget.searchQuery.isEmpty) return;
 
     final searchQuery = widget.searchQuery.toLowerCase();
+    int globalMatchCount = 0;
+
     for (var segment in widget.segments) {
       final text = _getDecodedText(segment.text).toLowerCase();
       final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
       for (final _ in matches) {
         _matchKeys.add(GlobalKey());
+        globalMatchCount++;
       }
     }
+
+    print('Rebuilt ${_matchKeys.length} match keys for query: "${widget.searchQuery}"');
   }
 
   @override
@@ -145,6 +153,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (widget.searchQuery != oldWidget.searchQuery) {
       _rebuildMatchKeys();
+      _previousSearchResultIndex = -1;
+
+      if (widget.searchQuery.isNotEmpty && widget.currentResultIndex >= 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToSearchResult();
+        });
+      }
     }
 
     // Check if new segments were added
@@ -184,7 +199,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (_scrollController.hasClients) {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.offset;
-      final threshold = 100.0; // pixels from bottom
+      final threshold = 100.0;
       final distanceFromBottom = maxScroll - currentScroll;
 
       if (distanceFromBottom > threshold) {
@@ -194,8 +209,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       }
     }
   }
-
-
 
   void _scrollToBottomGently() {
     if (!_scrollController.hasClients) {
@@ -245,33 +258,80 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final matchKey = _matchKeys[widget.currentResultIndex];
     final context = matchKey.currentContext;
 
-    if (context == null) {
+    if (context != null) {
+      print('Found exact match context, scrolling to it');
+      _scrollToContext(context);
+    } else {
+      print('Match context not found, using fallback');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final retryContext = matchKey.currentContext;
         if (retryContext != null) {
-          _isAutoScrolling = true;
-          Scrollable.ensureVisible(
-            retryContext,
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeInOutCubic,
-            alignment: 0.2,
-          ).then((_) {
-            _isAutoScrolling = false;
-          });
+          _scrollToContext(retryContext);
+        } else {
+          _scrollToSearchResultFallback();
         }
       });
-      return;
     }
+  }
+
+  void _scrollToContext(BuildContext context) {
+    print('_scrollToContext called');
 
     _isAutoScrolling = true;
     Scrollable.ensureVisible(
       context,
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOutCubic,
-      alignment: 0.40,
+      alignment: 0.35,
     ).then((_) {
+      print('Scroll animation completed');
       _isAutoScrolling = false;
     });
+  }
+
+  void _scrollToSearchResultFallback() {
+    final searchQuery = widget.searchQuery.toLowerCase();
+    int currentMatchIndex = 0;
+    int targetSegmentIndex = -1;
+
+    for (int segmentIndex = 0; segmentIndex < widget.segments.length; segmentIndex++) {
+      final text = _getDecodedText(widget.segments[segmentIndex].text).toLowerCase();
+      final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
+
+      if (currentMatchIndex + matches.length > widget.currentResultIndex) {
+        targetSegmentIndex = segmentIndex;
+        print('Found target segment $targetSegmentIndex for match ${widget.currentResultIndex}');
+        break;
+      }
+      currentMatchIndex += matches.length;
+    }
+
+    if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
+      final segmentKey = _segmentKeys[targetSegmentIndex];
+
+      final segmentContext = segmentKey.currentContext;
+      if (segmentContext != null) {
+        print('Scrolling to segment context');
+        _scrollToContext(segmentContext);
+        return;
+      }
+
+      final itemHeight = 80.0;
+      final headerHeight = widget.topMargin ? 32.0 : 0.0;
+      final targetOffset = headerHeight + (targetSegmentIndex * itemHeight);
+
+      print('Scrolling to calculated offset: $targetOffset');
+      _isAutoScrolling = true;
+      _scrollController
+          .animateTo(
+        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      )
+          .then((_) {
+        _isAutoScrolling = false;
+      });
+    }
   }
 
   String _getDecodedText(String text) {
@@ -303,22 +363,17 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
 
     int start = 0;
-    int localMatchCount = 0;
+    final matches = RegExp(RegExp.escape(lowerQuery), caseSensitive: false).allMatches(lowerText);
 
-    while (true) {
-      final index = lowerText.indexOf(lowerQuery, start);
-      if (index == -1) {
-        if (start < text.length) {
-          spans.add(TextSpan(text: text.substring(start)));
-        }
-        break;
+    for (final match in matches) {
+      final matchStart = match.start;
+      final matchEnd = match.end;
+
+      if (matchStart > start) {
+        spans.add(TextSpan(text: text.substring(start, matchStart)));
       }
 
-      if (index > start) {
-        spans.add(TextSpan(text: text.substring(start, index)));
-      }
-
-      final currentGlobalIndex = globalMatchIndex + localMatchCount;
+      final currentGlobalIndex = globalMatchIndex;
       final isCurrentResult = currentGlobalIndex == widget.currentResultIndex;
 
       final matchKey = currentGlobalIndex < _matchKeys.length ? _matchKeys[currentGlobalIndex] : null;
@@ -332,7 +387,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 1),
           child: Text(
-            text.substring(index, index + searchQuery.length),
+            text.substring(matchStart, matchEnd),
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -341,8 +396,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         ),
       ));
 
-      start = index + searchQuery.length;
-      localMatchCount++;
+      start = matchEnd;
+      globalMatchIndex++;
+    }
+
+    if (start < text.length) {
+      spans.add(TextSpan(text: text.substring(start)));
     }
 
     return spans;
@@ -358,29 +417,36 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Use ListView.builder instead of ListView.separated for better performance
-    return ListView.builder(
-      controller: _scrollController,
-      padding: EdgeInsets.zero,
-      itemCount: widget.segments.length + 2,
-      itemBuilder: (context, idx) {
-        // Handle header and footer items
-        if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
-        if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin + 120);
+    final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
 
-        // Add separator before the item (except for the first one)
-        if (widget.separator && idx > 1) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 4),
-              _buildSegmentItem(idx - 1),
-            ],
-          );
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+          widget.onTapWhenSearchEmpty!();
         }
-
-        return _buildSegmentItem(idx - 1);
       },
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: EdgeInsets.only(top: searchBarHeight),
+        itemCount: widget.segments.length + 2,
+        itemBuilder: (context, idx) {
+          if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
+          if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin + 120);
+
+          if (widget.separator && idx > 1) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 4),
+                _buildSegmentItem(idx - 1),
+              ],
+            );
+          }
+
+          return _buildSegmentItem(idx - 1);
+        },
+      ),
     );
   }
 
@@ -395,8 +461,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
         child: GestureDetector(
           onTap: () {
-            widget.editSegment?.call(data.id, data.speakerId);
-            MixpanelManager().tagSheetOpened();
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
+            } else {
+              widget.editSegment?.call(data.id, data.speakerId);
+              MixpanelManager().tagSheetOpened();
+            }
           },
           child: Padding(
             padding: EdgeInsetsDirectional.fromSTEB(

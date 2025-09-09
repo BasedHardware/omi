@@ -189,6 +189,7 @@ getTranscriptWidget(
   Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
   String searchQuery = '',
   int currentResultIndex = -1,
+  VoidCallback? onTapWhenSearchEmpty,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -220,6 +221,7 @@ getTranscriptWidget(
       onAcceptSuggestion: onAcceptSuggestion,
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
+      onTapWhenSearchEmpty: onTapWhenSearchEmpty,
     );
   }
 
