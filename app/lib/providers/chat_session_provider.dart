@@ -71,7 +71,7 @@ class ChatSessionProvider extends ChangeNotifier {
 
   Future<ChatSession?> createSession({required String appId, String? title}) async {
     final uid = SharedPreferencesUtil().uid;
-    final session = await api.createChatSession(uid: uid, appId: appId, title: title);
+    final session = await api.createChatSession(uid: uid, appId: appId, title: title ?? 'New Chat');
     if (session != null) {
       // Always add new sessions to the list (they're already filtered by current context)
       _sessions = [session, ..._sessions];
@@ -93,5 +93,30 @@ class ChatSessionProvider extends ChangeNotifier {
       notifyListeners();
     }
     return ok;
+  }
+
+  Future<void> generateTitleForSession({required String sessionId, required String firstMessage}) async {
+    final uid = SharedPreferencesUtil().uid;
+    try {
+      final generatedTitle =
+          await api.generateChatSessionTitle(uid: uid, sessionId: sessionId, firstMessage: firstMessage);
+
+      if (generatedTitle != null) {
+        // Update the session in our local list
+        final sessionIndex = _sessions.indexWhere((s) => s.id == sessionId);
+        if (sessionIndex != -1) {
+          final updatedSession = ChatSession(
+            id: _sessions[sessionIndex].id,
+            appId: _sessions[sessionIndex].appId,
+            title: generatedTitle,
+            createdAt: _sessions[sessionIndex].createdAt,
+          );
+          _sessions[sessionIndex] = updatedSession;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error generating title for session $sessionId: $e');
+    }
   }
 }

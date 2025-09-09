@@ -382,13 +382,33 @@ def create_chat_session(uid: str, app_id: Optional[str], title: Optional[str] = 
         'id': str(uuid.uuid4()),
         'app_id': app_id,
         'plugin_id': app_id,  # Legacy compatibility
-        'title': title or f"Chat {datetime.now().strftime('%m/%d %H:%M')}",
+        'title': title or "New Chat",
         'message_ids': [],
         'file_ids': [],
         'created_at': datetime.now(timezone.utc),
     }
 
     return add_chat_session(uid, session_data)
+
+
+def update_chat_session_title(uid: str, chat_session_id: str, title: str) -> bool:
+    """Update the title of a specific chat session."""
+    try:
+        user_ref = db.collection('users').document(uid)
+        session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+
+        # Check if session exists
+        session_doc = session_ref.get()
+        if not session_doc.exists:
+            return False
+
+        # Update the title
+        session_ref.update({'title': title})
+        return True
+
+    except Exception as e:
+        print(f"Error updating chat session title: {e}")
+        return False
 
 
 def delete_chat_session(uid, chat_session_id):

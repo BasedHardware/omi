@@ -412,8 +412,14 @@ class MessageProvider extends ChangeNotifier {
 
     // Auto-create session if none selected (for both regular apps and OMI)
     if (chatSessionProvider?.selectedSessionId == null) {
-      await chatSessionProvider?.createSession(appId: appProvider?.selectedChatAppId, title: 'New Chat');
+      await chatSessionProvider?.createSession(appId: appProvider?.selectedChatAppId ?? 'omi', title: 'New Chat');
     }
+
+    // Check if this is the first message by checking if session still has default title
+    final currentSession =
+        chatSessionProvider?.sessions.firstWhereOrNull((s) => s.id == chatSessionProvider?.selectedSessionId);
+    final currentTitle = currentSession?.title ?? '';
+    bool isFirstMessage = currentTitle == 'New Chat' || currentTitle.isEmpty;
 
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
@@ -481,6 +487,24 @@ class MessageProvider extends ChangeNotifier {
     }
 
     setShowTypingIndicator(false);
+
+    // Generate title for first message in new session (voice) - after successful completion
+    if (chatSessionProvider?.selectedSessionId != null && messages.isNotEmpty) {
+      final currentSession =
+          chatSessionProvider?.sessions.firstWhereOrNull((s) => s.id == chatSessionProvider?.selectedSessionId);
+      final currentTitle = currentSession?.title ?? '';
+      bool isFirstVoiceMessage = currentTitle == 'New Chat' || currentTitle.isEmpty;
+
+      if (isFirstVoiceMessage) {
+        final firstMessage = messages.first;
+        if (firstMessage.text.isNotEmpty) {
+          await chatSessionProvider?.generateTitleForSession(
+            sessionId: chatSessionProvider!.selectedSessionId!,
+            firstMessage: firstMessage.text,
+          );
+        }
+      }
+    }
   }
 
   Future sendMessageStreamToServer(String text) async {
@@ -489,8 +513,14 @@ class MessageProvider extends ChangeNotifier {
 
     // Auto-create session if none selected (for both regular apps and OMI)
     if (chatSessionProvider?.selectedSessionId == null) {
-      await chatSessionProvider?.createSession(appId: appProvider?.selectedChatAppId, title: 'New Chat');
+      await chatSessionProvider?.createSession(appId: appProvider?.selectedChatAppId ?? 'omi', title: 'New Chat');
     }
+
+    // Check if this is the first message by checking if session still has default title
+    final currentSession =
+        chatSessionProvider?.sessions.firstWhereOrNull((s) => s.id == chatSessionProvider?.selectedSessionId);
+    final currentTitle = currentSession?.title ?? '';
+    bool isFirstMessage = currentTitle == 'New Chat' || currentTitle.isEmpty;
 
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
@@ -571,6 +601,14 @@ class MessageProvider extends ChangeNotifier {
       timer?.cancel();
       flushBuffer();
       setShowTypingIndicator(false);
+
+      // Generate title for first message in new session
+      if (isFirstMessage && chatSessionProvider?.selectedSessionId != null) {
+        await chatSessionProvider?.generateTitleForSession(
+          sessionId: chatSessionProvider!.selectedSessionId!,
+          firstMessage: text,
+        );
+      }
     }
   }
 

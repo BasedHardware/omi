@@ -17,6 +17,7 @@ from models.chat import (
     Message,
     SendMessageRequest,
     CreateSessionRequest,
+    GenerateTitleRequest,
     MessageSender,
     ResponseMessage,
     MessageConversation,
@@ -32,6 +33,7 @@ from utils.chat import (
 )
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
+from utils.llm.title_generation import generate_thread_title
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
@@ -365,6 +367,32 @@ def delete_chat_session(session_id: str, uid: str = Depends(auth.get_current_use
     # Delete the session
     chat_db.delete_chat_session(uid, session_id)
     return {"status": "ok"}
+
+
+@router.post('/v2/chat-sessions/{session_id}/generate-title', tags=['chat'])
+def generate_chat_session_title(
+    session_id: str, data: GenerateTitleRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    """Generate a title for a chat session based on the first message."""
+    # Verify session exists and belongs to user
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+
+    # Generate title using LLM
+    try:
+        generated_title = generate_thread_title(data.first_message)
+
+        # Update the session with the new title
+        success = chat_db.update_chat_session_title(uid, session_id, generated_title)
+        if not success:
+            raise HTTPException(status_code=500, detail='Failed to update session title')
+
+        return {"title": generated_title, "status": "success"}
+
+    except Exception as e:
+        print(f"Error generating title: {e}")
+        raise HTTPException(status_code=500, detail='Failed to generate title')
 
 
 @router.post("/v2/voice-messages")
