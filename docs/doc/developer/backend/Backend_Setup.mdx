@@ -290,7 +290,7 @@ Before you start, make sure you have the following:
       ```
 
 4. **Connect the App to the Backend: 🔗**
-    - In your Omi app's environment variables, set the `API_BASE_URL` to the public URL provided by Ngrok (e.g., `https://example.ngrok-free.app/`) (don't forget the trailing / )
+    - In your Omi app's environment variables, set the `BASE_API_URL` to the public URL provided by Ngrok (e.g., `https://example.ngrok-free.app/`) (don't forget the trailing / )
     - Make sure your OAuth redirect URIs in Google Cloud Console and Apple Developer Console are updated to use your Ngrok URL for local development
 
 Now, your Omi app should be successfully connected to the locally running backend.
@@ -335,7 +335,7 @@ Here's a detailed explanation of each environment variable you need to define in
 - **`APPLE_TEAM_ID`:** Your Apple Developer Team ID, found in your Apple Developer account
 - **`APPLE_KEY_ID`:** The Key ID of your Apple private key for Sign In with Apple
 - **`APPLE_PRIVATE_KEY`:** The contents of your Apple private key (.p8 file) as a string, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines
-- **`API_BASE_URL`:** The base URL of your backend API (e.g., `https://your-domain.com/` or `https://your-ngrok-domain.ngrok-free.app/` for local development)
+- **`BASE_API_URL`:** The base URL of your backend API (e.g., `https://your-domain.com` or `https://your-ngrok-domain.ngrok-free.app` for local development)
 
 Make sure to replace the placeholders (`<api-key>`, `<bucket-name>`, etc.) with your actual values.
 
