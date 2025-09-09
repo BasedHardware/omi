@@ -968,104 +968,113 @@ class TranscriptWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () {
+    return Listener(
+        onPointerDown: (PointerDownEvent event) {
           FocusScope.of(context).unfocus();
           if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
             onTapWhenSearchEmpty!();
           }
         },
-        child: Consumer<ConversationDetailProvider>(
-          builder: (context, provider, child) {
-            final conversation = provider.conversation;
-            final segments = conversation.transcriptSegments;
-            final photos = conversation.photos;
-
-            if (segments.isEmpty && photos.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 32),
-                child: ExpandableTextWidget(
-                  text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
-                  maxLines: 1000,
-                  linkColor: Colors.grey.shade300,
-                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                  toggleExpand: () {
-                    provider.toggleIsTranscriptExpanded();
-                  },
-                  isExpanded: provider.isTranscriptExpanded,
-                ),
-              );
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
+              onTapWhenSearchEmpty!();
             }
-
-            return getTranscriptWidget(
-              false,
-              segments,
-              photos,
-              null,
-              horizontalMargin: false,
-              topMargin: false,
-              canDisplaySeconds: provider.canDisplaySeconds,
-              isConversationDetail: true,
-              bottomMargin: 150,
-              searchQuery: searchQuery,
-              currentResultIndex: currentResultIndex,
-              editSegment: (segmentId, speakerId) {
-                final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                if (!connectivityProvider.isConnected) {
-                  ConnectivityProvider.showNoInternetDialog(context);
-                  return;
-                }
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.black,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  builder: (context) {
-                    return Consumer<PeopleProvider>(builder: (context, peopleProvider, child) {
-                      return NameSpeakerBottomSheet(
-                        speakerId: speakerId,
-                        segmentId: segmentId,
-                        segments: provider.conversation.transcriptSegments,
-                        onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                          provider.toggleEditSegmentLoading(true);
-                          String finalPersonId = personId;
-                          if (personId.isEmpty) {
-                            Person? newPerson = await peopleProvider.createPersonProvider(personName);
-                            if (newPerson != null) {
-                              finalPersonId = newPerson.id;
-                            } else {
-                              provider.toggleEditSegmentLoading(false);
-                              return; // Failed to create person
-                            }
-                          }
-
-                          MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
-                          for (final segmentId in segmentIds) {
-                            final segmentIndex =
-                                provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
-                            if (segmentIndex == -1) continue;
-                            provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                            provider.conversation.transcriptSegments[segmentIndex].personId =
-                                finalPersonId == 'user' ? null : finalPersonId;
-                          }
-                          await assignBulkConversationTranscriptSegments(
-                            provider.conversation.id,
-                            segmentIds,
-                            isUser: finalPersonId == 'user',
-                            personId: finalPersonId == 'user' ? null : finalPersonId,
-                          );
-                          provider.toggleEditSegmentLoading(false);
-                        },
-                      );
-                    });
-                  },
-                );
-              },
-            );
           },
+          child: Consumer<ConversationDetailProvider>(
+            builder: (context, provider, child) {
+              final conversation = provider.conversation;
+              final segments = conversation.transcriptSegments;
+              final photos = conversation.photos;
+
+              if (segments.isEmpty && photos.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 32),
+                  child: ExpandableTextWidget(
+                    text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
+                    maxLines: 1000,
+                    linkColor: Colors.grey.shade300,
+                    style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                    toggleExpand: () {
+                      provider.toggleIsTranscriptExpanded();
+                    },
+                    isExpanded: provider.isTranscriptExpanded,
+                  ),
+                );
+              }
+
+              return getTranscriptWidget(
+                false,
+                segments,
+                photos,
+                null,
+                horizontalMargin: false,
+                topMargin: false,
+                canDisplaySeconds: provider.canDisplaySeconds,
+                isConversationDetail: true,
+                bottomMargin: 150,
+                searchQuery: searchQuery,
+                currentResultIndex: currentResultIndex,
+                onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+                editSegment: (segmentId, speakerId) {
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (!connectivityProvider.isConnected) {
+                    ConnectivityProvider.showNoInternetDialog(context);
+                    return;
+                  }
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.black,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                    builder: (context) {
+                      return Consumer<PeopleProvider>(builder: (context, peopleProvider, child) {
+                        return NameSpeakerBottomSheet(
+                          speakerId: speakerId,
+                          segmentId: segmentId,
+                          segments: provider.conversation.transcriptSegments,
+                          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                            provider.toggleEditSegmentLoading(true);
+                            String finalPersonId = personId;
+                            if (personId.isEmpty) {
+                              Person? newPerson = await peopleProvider.createPersonProvider(personName);
+                              if (newPerson != null) {
+                                finalPersonId = newPerson.id;
+                              } else {
+                                provider.toggleEditSegmentLoading(false);
+                                return; // Failed to create person
+                              }
+                            }
+
+                            MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+                            for (final segmentId in segmentIds) {
+                              final segmentIndex =
+                                  provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+                              if (segmentIndex == -1) continue;
+                              provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
+                              provider.conversation.transcriptSegments[segmentIndex].personId =
+                                  finalPersonId == 'user' ? null : finalPersonId;
+                            }
+                            await assignBulkConversationTranscriptSegments(
+                              provider.conversation.id,
+                              segmentIds,
+                              isUser: finalPersonId == 'user',
+                              personId: finalPersonId == 'user' ? null : finalPersonId,
+                            );
+                            provider.toggleEditSegmentLoading(false);
+                          },
+                        );
+                      });
+                    },
+                  );
+                },
+              );
+            },
+          ),
         ));
   }
 }
