@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -317,16 +318,16 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerAppsView() {
-    return CustomScrollView(
-      slivers: [
-        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+    return Column(
+      children: [
+        const SizedBox(height: 8),
         // Shimmer for Popular Apps
-        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
+        _buildShimmerCategorySection(),
         // Shimmer for other categories (show 3-4 category sections)
-        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
-        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
-        SliverToBoxAdapter(child: _buildShimmerCategorySection()),
-        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        _buildShimmerCategorySection(),
+        _buildShimmerCategorySection(),
+        _buildShimmerCategorySection(),
+        const SizedBox(height: 100),
       ],
     );
   }
@@ -335,61 +336,57 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     return Selector<AppProvider, List<App>>(
       selector: (context, provider) => provider.filteredApps,
       builder: (context, filteredApps, child) {
-        return CustomScrollView(
-          controller: widget.scrollController,
-          slivers: [
-            const SliverToBoxAdapter(child: SizedBox(height: 20)),
-            if (filteredApps.isEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.3),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.search_off,
-                        size: 64,
-                        color: Colors.grey.shade600,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No apps found',
-                        style: TextStyle(fontSize: 18, color: Colors.white70),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Try adjusting your search or filters',
-                        style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
+        if (filteredApps.isEmpty) {
+          return Padding(
+            padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.3),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.search_off,
+                  size: 64,
+                  color: Colors.grey.shade600,
                 ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20),
-                sliver: SliverList.separated(
-                  itemCount: filteredApps.length,
-                  itemBuilder: (context, index) {
-                    return Selector<AppProvider, List<App>>(
-                      selector: (context, provider) => provider.apps,
-                      builder: (context, allApps, child) {
-                        final originalIndex = allApps.indexWhere(
-                          (app) => app.id == filteredApps[index].id,
-                        );
-                        return AppListItem(
-                          app: filteredApps[index],
-                          index: originalIndex,
-                        );
-                      },
+                const SizedBox(height: 16),
+                const Text(
+                  'No apps found',
+                  style: TextStyle(fontSize: 18, color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Try adjusting your search or filters',
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        } else {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
+            child: Column(
+              children: filteredApps.asMap().entries.map((entry) {
+                final index = entry.key;
+                final app = entry.value;
+                return Selector<AppProvider, List<App>>(
+                  selector: (context, provider) => provider.apps,
+                  builder: (context, allApps, child) {
+                    final originalIndex = allApps.indexWhere(
+                      (appItem) => appItem.id == app.id,
+                    );
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: index < filteredApps.length - 1 ? 8 : 0),
+                      child: AppListItem(
+                        app: app,
+                        index: originalIndex,
+                      ),
                     );
                   },
-                  separatorBuilder: (context, index) => const SizedBox(height: 8),
-                ),
-              ),
-          ],
-        );
+                );
+              }).toList(),
+            ),
+          );
+        }
       },
     );
   }
@@ -405,20 +402,17 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         allApps.sort((a, b) => b.installs.compareTo(a.installs));
         final mostDownloadedApps = allApps.take(20).toList(); // Get top 20 most downloaded
 
-        return CustomScrollView(
-          controller: widget.scrollController,
-          slivers: [
-            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        return Column(
+          children: [
+            const SizedBox(height: 8),
 
             // Popular Apps Section - First category, no view all
             if (mostDownloadedApps.isNotEmpty)
-              SliverToBoxAdapter(
-                child: CategorySection(
-                  categoryName: 'Popular Apps',
-                  apps: mostDownloadedApps,
-                  showViewAll: false,
-                  onViewAll: () {}, // Not used since showViewAll is false
-                ),
+              CategorySection(
+                categoryName: 'Popular Apps',
+                apps: mostDownloadedApps,
+                showViewAll: false,
+                onViewAll: () {},
               ),
 
             // Other categories sections - sorted alphabetically
@@ -450,29 +444,27 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               final categoryName = entry.key;
               final categoryApps = entry.value;
 
-              return SliverToBoxAdapter(
-                child: CategorySection(
-                  categoryName: categoryName,
-                  apps: categoryApps,
-                  onViewAll: () {
-                    final category = context.read<AddAppProvider>().categories.firstWhere(
-                          (cat) => cat.title == categoryName,
-                          orElse: () =>
-                              Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
-                        );
-                    routeToPage(
-                      context,
-                      CategoryAppsPage(
-                        category: category,
-                        apps: categoryApps,
-                      ),
-                    );
-                  },
-                ),
+              return CategorySection(
+                categoryName: categoryName,
+                apps: categoryApps,
+                onViewAll: () {
+                  final category = context.read<AddAppProvider>().categories.firstWhere(
+                        (cat) => cat.title == categoryName,
+                        orElse: () =>
+                            Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
+                      );
+                  routeToPage(
+                    context,
+                    CategoryAppsPage(
+                      category: category,
+                      apps: categoryApps,
+                    ),
+                  );
+                },
               );
             }),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            const SizedBox(height: 100),
           ],
         );
       },
@@ -494,9 +486,17 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             filterCount: provider.filters.length
           ),
           builder: (context, state, child) {
-            return CustomScrollView(
-              controller: widget.scrollController,
-              slivers: [
+            return RefreshIndicator(
+              onRefresh: () async {
+                HapticFeedback.mediumImpact();
+                await context.read<AppProvider>().forceRefreshApps();
+              },
+              color: Colors.deepPurpleAccent,
+              backgroundColor: Colors.white,
+              child: CustomScrollView(
+                controller: widget.scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 SliverToBoxAdapter(
                   child: state.isLoading
@@ -716,10 +716,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 const SliverToBoxAdapter(child: SizedBox(height: 0)),
 
                 // Main content - show shimmer when loading
-                SliverFillRemaining(
+                SliverToBoxAdapter(
                   child: state.isLoading ? _buildShimmerAppsView() : _buildAppsView(),
                 ),
               ],
+              ),
             );
           },
         ));

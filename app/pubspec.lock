@@ -366,8 +366,16 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.11"
-  device_info_plus:
+  desktop_webview_window:
     dependency: transitive
+    description:
+      name: desktop_webview_window
+      sha256: "57cf20d81689d5cbb1adfd0017e96b669398a669d927906073b0e42fc64111c0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.3"
+  device_info_plus:
+    dependency: "direct main"
     description:
       name: device_info_plus
       sha256: "98f28b42168cc509abc92f88518882fd58061ea372d7999aecc424345c7bff6a"
@@ -438,14 +446,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
-  extension_google_sign_in_as_googleapis_auth:
-    dependency: transitive
-    description:
-      name: extension_google_sign_in_as_googleapis_auth
-      sha256: "0dcb17e399f62e897ac78f0a402a3cb6ab9313ced8b2bf131f684d317e05c9ab"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.13"
   fake_async:
     dependency: transitive
     description:
@@ -835,6 +835,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.1"
+  flutter_web_auth_2:
+    dependency: "direct main"
+    description:
+      name: flutter_web_auth_2
+      sha256: "2483d1fd3c45fe1262446e8d5f5490f01b864f2e7868ffe05b4727e263cc0182"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.0-alpha.3"
+  flutter_web_auth_2_platform_interface:
+    dependency: transitive
+    description:
+      name: flutter_web_auth_2_platform_interface
+      sha256: "45927587ebb2364cd273675ec95f6f67b81725754b416cef2b65cdc63fd3e853"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.0-alpha.0"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -941,38 +957,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.2.2"
-  google_sign_in_all_platforms:
-    dependency: "direct main"
-    description:
-      name: google_sign_in_all_platforms
-      sha256: "361d4d69605136a401a95c1101e2e532615b3ff68ffd5dbbc80de28980c235e2"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.2.0"
-  google_sign_in_all_platforms_desktop:
-    dependency: transitive
-    description:
-      name: google_sign_in_all_platforms_desktop
-      sha256: "89804d39d215e70e3f69ccc2ad7f6a4dce1287fd9d4c8f6f1397b52a36d42cb3"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.2"
-  google_sign_in_all_platforms_interface:
-    dependency: transitive
-    description:
-      name: google_sign_in_all_platforms_interface
-      sha256: "7970f9ea565c0d145ef6dfaf0b6108b4ee1b95918885bf5f78c5a91e1d9bccaf"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.6"
-  google_sign_in_all_platforms_mobile:
-    dependency: transitive
-    description:
-      name: google_sign_in_all_platforms_mobile
-      sha256: "9505801e27f74ada2bfeda5cc1255b2307c688a321773c20fa2248f23d93f044"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.2"
   google_sign_in_android:
     dependency: transitive
     description:
@@ -982,7 +966,7 @@ packages:
     source: hosted
     version: "6.2.1"
   google_sign_in_ios:
-    dependency: "direct overridden"
+    dependency: "direct dev"
     description:
       name: google_sign_in_ios
       sha256: "1e0d4fde6cc07a8ff423f6bc931e83a74163d6af702004bacaee752649fdd2e7"
@@ -1077,14 +1061,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
-  http_methods:
-    dependency: transitive
-    description:
-      name: http_methods
-      sha256: "6bccce8f1ec7b5d701e7921dca35e202d425b57e317ba1a37f2638590e29e566"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.1"
   http_multi_server:
     dependency: transitive
     description:
@@ -1278,10 +1254,10 @@ packages:
     dependency: "direct main"
     description:
       name: json_serializable
-      sha256: ea1432d167339ea9b5bb153f0571d0039607a873d6e04e0117af043f14a1fd4b
+      sha256: c50ef5fc083d5b5e12eef489503ba3bf5ccc899e487d691584699b4bdefeea8c
       url: "https://pub.dev"
     source: hosted
-    version: "6.8.0"
+    version: "6.9.5"
   just_audio:
     dependency: "direct main"
     description:
@@ -1741,14 +1717,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.1"
-  posthog_flutter:
-    dependency: "direct main"
-    description:
-      name: posthog_flutter
-      sha256: c0ce2896b546b835aa1c2a928e90159aae3d6ced843c9cc85c726b9d7e9a1f8b
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.0"
   process:
     dependency: transitive
     description:
@@ -1909,14 +1877,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.2"
-  shelf_router:
-    dependency: transitive
-    description:
-      name: shelf_router
-      sha256: f5e5d492440a7fb165fe1e2e1a623f31f734d3370900070b2b1e0d0428d59864
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.4"
   shelf_web_socket:
     dependency: transitive
     description:
@@ -1957,14 +1917,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.1"
-  siri_wave:
-    dependency: "direct main"
-    description:
-      name: siri_wave
-      sha256: "0b92945d37f46e58ae3d5c1adb69879a0db12d656ba68537925d0a3ec759937c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.0"
   skeletonizer:
     dependency: "direct main"
     description:
@@ -1982,10 +1934,10 @@ packages:
     dependency: transitive
     description:
       name: source_gen
-      sha256: "14658ba5f669685cd3d63701d01b31ea748310f7ab854e471962670abcf57832"
+      sha256: "35c8150ece9e8c8d263337a265153c3329667640850b9304861faea59fc98f6b"
       url: "https://pub.dev"
     source: hosted
-    version: "1.5.0"
+    version: "2.0.0"
   source_helper:
     dependency: transitive
     description:
@@ -2490,6 +2442,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.7"
+  window_to_front:
+    dependency: transitive
+    description:
+      name: window_to_front
+      sha256: "7aef379752b7190c10479e12b5fd7c0b9d92adc96817d9e96c59937929512aee"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.3"
   xdg_directories:
     dependency: transitive
     description:

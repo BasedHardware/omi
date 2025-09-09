@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
@@ -36,8 +35,10 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
@@ -47,7 +48,6 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -76,7 +76,7 @@ Future<bool> _init() async {
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
-  bool isAuth = (await getIdToken()) != null;
+  bool isAuth = (await AuthService.instance.getIdToken()) != null;
   if (isAuth) PlatformManager.instance.mixpanel.identify();
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
@@ -85,14 +85,6 @@ Future<bool> _init() async {
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
   return isAuth;
-}
-
-Future<void> initPostHog() async {
-  final config = PostHogConfig(Env.posthogApiKey!);
-  config.debug = true;
-  config.captureApplicationLifecycleEvents = true;
-  config.host = 'https://us.i.posthog.com';
-  await Posthog().setup(config);
 }
 
 void main() async {
@@ -122,9 +114,7 @@ void main() async {
   }
 
   FlutterForegroundTask.initCommunicationPort();
-  if (Env.posthogApiKey != null && !PlatformService.isDesktop) {
-    await initPostHog();
-  }
+
   // _setupAudioSession();
 
   bool isAuth = await _init();
@@ -198,7 +188,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
-          ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
@@ -242,15 +231,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
           ChangeNotifierProvider(create: (context) => UserProvider()),
-          ChangeNotifierProvider(create: (context) => UsageProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
+          ChangeNotifierProvider(create: (context) => SyncProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
             child: MaterialApp(
-              navigatorObservers: [
-                if (Env.posthogApiKey != null) PosthogObserver(),
-              ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,
               navigatorKey: MyApp.navigatorKey,
@@ -310,15 +296,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     return LoggerSnackbar(exception: data);
                   },
                 ),
-                child: const AppShell(), // Use AppShell instead of DeciderWidget
+                child: const AppShell(),
               ),
             ),
           );
         });
   }
 }
-
-
 
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;

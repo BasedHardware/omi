@@ -132,16 +132,44 @@ workflows:
     publishing:
       scripts:
         - name: Upload debug symbols to Firebase Crashlytics
-          script: | 
-            echo "Find build artifacts"
-            dsymPath=$(find $CM_BUILD_DIR/build/ios/archive/Runner.xcarchive -name "*.dSYM" | head -1)
-            if [[ -z ${dsymPath} ]]
+          script: |
+            echo "Finding all debug symbol files..."
+
+            # Find all dSYM files in the derived data directory
+            dsymFiles=$(find $HOME/Library/Developer/Xcode/DerivedData -name "*.dSYM" -type d 2>/dev/null)
+
+            if [[ -z "$dsymFiles" ]]
+            then
               echo "No debug symbols were found, skip publishing to Firebase Crashlytics"
             else
-              echo "Publishing debug symbols from $dsymPath to Firebase Crashlytics"
-              ls -d -- ios/Pods/*
-              $CM_BUILD_DIR/ios/Pods/FirebaseCrashlytics/upload-symbols \
-                -gsp ios/Runner/GoogleService-Info.plist -p ios $dsymPath
+              echo "Found dSYM files:"
+              echo "$dsymFiles"
+              echo ""
+
+              # Find the upload-symbols script in the Pods directory
+              uploadScriptPath=$(find ios/Pods/FirebaseCrashlytics -name "upload-symbols" -type f 2>/dev/null | head -1)
+
+              if [[ -n ${uploadScriptPath} ]]
+              then
+                echo "Found upload-symbols script at: $uploadScriptPath"
+                # Make sure it's executable
+                chmod +x "$uploadScriptPath"
+
+                # Upload each dSYM file
+                echo "$dsymFiles" | while IFS= read -r dsymPath; do
+                  if [[ -n "$dsymPath" ]]; then
+                    echo "Uploading dSYM: $dsymPath"
+                    "$uploadScriptPath" \
+                      -gsp ios/Runner/GoogleService-Info.plist -p ios "$dsymPath"
+                    echo "Completed upload for: $dsymPath"
+                    echo ""
+                  fi
+                done
+
+                echo "All dSYM files uploaded successfully"
+              else
+                echo "upload-symbols script not found. Skipping Firebase Crashlytics upload."
+              fi
             fi
       email:
         recipients:

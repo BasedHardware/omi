@@ -14,7 +14,9 @@ class CreateActionItemRequest(BaseModel):
     description: str = Field(description="The action item description")
     completed: bool = Field(default=False, description="Whether the action item is completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
-    conversation_id: Optional[str] = Field(default=None, description="ID of the conversation this action item came from")
+    conversation_id: Optional[str] = Field(
+        default=None, description="ID of the conversation this action item came from"
+    )
 
 
 class UpdateActionItemRequest(BaseModel):
@@ -32,17 +34,27 @@ class ActionItemResponse(BaseModel):
     due_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     conversation_id: Optional[str] = None
+    is_locked: bool = False
+
+
+def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
+    action_item = action_items_db.get_action_item(uid, action_item_id)
+    if not action_item:
+        raise HTTPException(status_code=404, detail="Action item not found")
+
+    if action_item.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this action item.")
+
+    return action_item
 
 
 # *****************************
 # ******** CRUD ROUTES ********
 # *****************************
 
+
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
-def create_action_item(
-    request: CreateActionItemRequest,
-    uid: str = Depends(auth.get_current_user_uid)
-):
+def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new action item."""
     action_item_data = {
         'description': request.description,
@@ -50,13 +62,13 @@ def create_action_item(
         'due_at': request.due_at,
         'conversation_id': request.conversation_id,
     }
-    
+
     action_item_id = action_items_db.create_action_item(uid, action_item_data)
     action_item = action_items_db.get_action_item(uid, action_item_id)
-    
+
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
-    
+
     return ActionItemResponse(**action_item)
 
 
@@ -78,11 +90,16 @@ def get_action_items(
         start_date=start_date,
         end_date=end_date,
         limit=limit,
-        offset=offset
+        offset=offset,
     )
-    
+
+    for item in action_items:
+        if item.get('is_locked', False):
+            description = item.get('description', '')
+            item['description'] = (description[:70] + '...') if len(description) > 70 else description
+
     response_items = [ActionItemResponse(**item) for item in action_items]
-    
+
     has_more = len(action_items) == limit
     if has_more:
         next_batch = action_items_db.get_action_items(
@@ -92,42 +109,34 @@ def get_action_items(
             start_date=start_date,
             end_date=end_date,
             limit=1,
-            offset=offset + limit
+            offset=offset + limit,
         )
         has_more = len(next_batch) > 0
-    
-    return {
-        "action_items": response_items,
-        "has_more": has_more
-    }
+
+    return {"action_items": response_items, "has_more": has_more}
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
-def get_action_item(
-    action_item_id: str,
-    uid: str = Depends(auth.get_current_user_uid)
-):
+def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get a specific action item by ID."""
-    action_item = action_items_db.get_action_item(uid, action_item_id)
-    
+    action_item = _get_valid_action_item(uid, action_item_id)
+
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
-    
+
     return ActionItemResponse(**action_item)
 
 
 @router.patch("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
 def update_action_item(
-    action_item_id: str,
-    request: UpdateActionItemRequest,
-    uid: str = Depends(auth.get_current_user_uid)
+    action_item_id: str, request: UpdateActionItemRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Update an action item."""
     # Check if action item exists
-    existing_item = action_items_db.get_action_item(uid, action_item_id)
+    existing_item = _get_valid_action_item(uid, action_item_id)
     if not existing_item:
         raise HTTPException(status_code=404, detail="Action item not found")
-    
+
     # Prepare update data
     update_data = {}
     if request.description is not None:
@@ -140,12 +149,12 @@ def update_action_item(
             update_data['completed_at'] = None
     if request.due_at is not None:
         update_data['due_at'] = request.due_at
-    
+
     # Update the action item
     success = action_items_db.update_action_item(uid, action_item_id, update_data)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
-    
+
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     return ActionItemResponse(**updated_item)
@@ -155,34 +164,32 @@ def update_action_item(
 def toggle_action_item_completion(
     action_item_id: str,
     completed: bool = Query(description="Whether to mark as completed or not"),
-    uid: str = Depends(auth.get_current_user_uid)
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Mark an action item as completed or uncompleted."""
     # Check if action item exists
-    existing_item = action_items_db.get_action_item(uid, action_item_id)
+    existing_item = _get_valid_action_item(uid, action_item_id)
     if not existing_item:
         raise HTTPException(status_code=404, detail="Action item not found")
-    
+
     # Update completion status
     success = action_items_db.mark_action_item_completed(uid, action_item_id, completed)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
-    
+
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     return ActionItemResponse(**updated_item)
 
 
 @router.delete("/v1/action-items/{action_item_id}", status_code=204, tags=['action-items'])
-def delete_action_item(
-    action_item_id: str,
-    uid: str = Depends(auth.get_current_user_uid)
-):
+def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete an action item."""
+    _get_valid_action_item(uid, action_item_id)
     success = action_items_db.delete_action_item(uid, action_item_id)
     if not success:
         raise HTTPException(status_code=404, detail="Action item not found")
-    
+
     return {"status": "Ok"}
 
 
@@ -190,48 +197,37 @@ def delete_action_item(
 # *** CONVERSATION-SPECIFIC ***
 # *****************************
 
+
 @router.get("/v1/conversations/{conversation_id}/action-items", tags=['action-items'])
-def get_conversation_action_items(
-    conversation_id: str,
-    uid: str = Depends(auth.get_current_user_uid)
-):
+def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get all action items for a specific conversation."""
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
     response_items = [ActionItemResponse(**item) for item in action_items]
-    
-    return {
-        "action_items": response_items,
-        "conversation_id": conversation_id
-    }
+
+    return {"action_items": response_items, "conversation_id": conversation_id}
 
 
 @router.delete("/v1/conversations/{conversation_id}/action-items", status_code=204, tags=['action-items'])
-def delete_conversation_action_items(
-    conversation_id: str,
-    uid: str = Depends(auth.get_current_user_uid)
-):
+def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
     deleted_count = action_items_db.delete_action_items_for_conversation(uid, conversation_id)
-    
-    return {
-        "status": "Ok",
-        "deleted_count": deleted_count
-    }
+
+    return {"status": "Ok", "deleted_count": deleted_count}
 
 
 # *****************************
 # ******* BATCH OPERATIONS ****
 # *****************************
 
+
 @router.post("/v1/action-items/batch", tags=['action-items'])
 def create_action_items_batch(
-    action_items: List[CreateActionItemRequest],
-    uid: str = Depends(auth.get_current_user_uid)
+    action_items: List[CreateActionItemRequest], uid: str = Depends(auth.get_current_user_uid)
 ):
     """Create multiple action items in a batch."""
     if not action_items:
         return {"action_items": [], "created_count": 0}
-    
+
     # Prepare action items data
     action_items_data = []
     for item in action_items:
@@ -242,19 +238,15 @@ def create_action_items_batch(
             'conversation_id': item.conversation_id,
         }
         action_items_data.append(action_item_data)
-    
+
     # Create batch
     created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
-    
+
     # Fetch created items
     created_items = []
     for item_id in created_ids:
         item = action_items_db.get_action_item(uid, item_id)
         if item:
             created_items.append(ActionItemResponse(**item))
-    
-    return {
-        "action_items": created_items,
-        "created_count": len(created_items)
-    }
 
+    return {"action_items": created_items, "created_count": len(created_items)}

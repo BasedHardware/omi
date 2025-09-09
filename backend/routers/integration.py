@@ -277,6 +277,10 @@ async def get_memories_via_integration(
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
     memories = memory_db.get_memories(uid, limit=limit, offset=offset)
+    for memory in memories:
+        if memory.get('is_locked', False):
+            content = memory.get('content', '')
+            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
     memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
 
     return {"memories": memory_items}
@@ -381,6 +385,14 @@ async def get_conversations_via_integration(
     conversation_items = []
     for conv in conversations_data:
         try:
+            if conv.get('is_locked', False):
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+                conv['transcript_segments'] = []
+                conv['apps_results'] = []
+                conv['plugins_results'] = []
+                conv['suggested_summarization_apps'] = []
+
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments
@@ -504,6 +516,14 @@ async def search_conversations_via_integration(
     conversation_items = []
     for conv in full_conversations:
         try:
+            if conv.get('is_locked', False):
+                conv['structured']['action_items'] = []
+                conv['structured']['events'] = []
+                conv['transcript_segments'] = []
+                conv['apps_results'] = []
+                conv['plugins_results'] = []
+                conv['suggested_summarization_apps'] = []
+
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments

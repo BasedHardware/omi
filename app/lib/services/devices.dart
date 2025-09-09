@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:omi/utils/mutex.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/device_connection.dart';
@@ -33,6 +34,17 @@ enum DeviceServiceStatus {
 enum DeviceConnectionState {
   connected,
   disconnected,
+}
+
+class OmiFeatures {
+  static const int speaker = 1 << 0;
+  static const int accelerometer = 1 << 1;
+  static const int button = 1 << 2;
+  static const int battery = 1 << 3;
+  static const int usb = 1 << 4;
+  static const int haptic = 1 << 5;
+  static const int offlineStorage = 1 << 6;
+  static const int ledDimming = 1 << 7;
 }
 
 abstract class IDeviceServiceSubsciption {
@@ -194,52 +206,29 @@ class DeviceService implements IDeviceService {
   }
 
   // Warn: Should use a better solution to prevent race conditions
-  bool mutex = false;
+  final Mutex _mutex = Mutex();
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
-    while (mutex) {
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-    mutex = true;
-
-    debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+    await _mutex.acquire();
     try {
+      debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+
       // Not force
       if (!force && _connection != null) {
         if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
           return null;
         }
 
-        // connected
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
+        // Connected
         return _connection;
       }
 
       // Force
       if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 10))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
         return _connection;
       }
 
-      // connect
+      // Connect
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {
@@ -250,7 +239,7 @@ class DeviceService implements IDeviceService {
       _firstConnectedAt ??= DateTime.now();
       return _connection;
     } finally {
-      mutex = false;
+      _mutex.release();
     }
   }
 

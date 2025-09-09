@@ -29,7 +29,10 @@ class AppListItem extends StatelessWidget {
         );
 
         // Check if this specific app is loading
-        final isLoading = index != -1 && provider.appLoading.isNotEmpty && index < provider.appLoading.length && provider.appLoading[index];
+        final isLoading = index != -1 &&
+            provider.appLoading.isNotEmpty &&
+            index < provider.appLoading.length &&
+            provider.appLoading[index];
 
         return (enabled: currentApp.enabled, isLoading: isLoading);
       },
@@ -62,7 +65,8 @@ class AppListItem extends StatelessWidget {
                     child: CachedNetworkImage(
                       imageUrl: app.getImageUrl(),
                       httpHeaders: const {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                        "User-Agent":
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                       },
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Center(
@@ -135,7 +139,15 @@ class AppListItem extends StatelessWidget {
                       )
                     : GestureDetector(
                         onTap: () {
-                          if (app.worksExternally() && !state.enabled) {
+                          if (state.enabled) {
+                            // App is enabled, open app detail
+                            MixpanelManager().pageOpened('App Detail');
+                            routeToPage(context, AppDetailPage(app: app));
+                            return;
+                          }
+
+                          // App is not enabled, toggle it on
+                          if (app.worksExternally()) {
                             showDialog(
                               context: context,
                               builder: (c) => getDialog(
@@ -143,8 +155,7 @@ class AppListItem extends StatelessWidget {
                                 () => Navigator.pop(context),
                                 () async {
                                   Navigator.pop(context);
-                                  await routeToPage(context, AppDetailPage(app: app));
-                                  context.read<AppProvider>().filterApps();
+                                  context.read<AppProvider>().toggleApp(app.id.toString(), true, index);
                                 },
                                 'Authorize External App',
                                 'Do you allow this app to access your memories, transcripts, and recordings? Your data will be sent to the app\'s server for processing.',
@@ -152,7 +163,7 @@ class AppListItem extends StatelessWidget {
                               ),
                             );
                           } else {
-                            context.read<AppProvider>().toggleApp(app.id.toString(), !state.enabled, index);
+                            context.read<AppProvider>().toggleApp(app.id.toString(), true, index);
                           }
                         },
                         child: Container(

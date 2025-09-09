@@ -303,6 +303,9 @@ def query_vectors(state: GraphState):
     )
     memories = conversations_db.get_conversations_by_id(uid, memories_id)
 
+    # Filter out locked conversations if user doesn't have premium access
+    memories = [m for m in memories if not m.get('is_locked', False)]
+
     # stream
     # if state.get('streaming', False):
     #    if len(memories) == 0:

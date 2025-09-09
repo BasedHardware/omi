@@ -6,6 +6,8 @@ import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:provider/provider.dart';
 
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
@@ -46,6 +48,13 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       }
     });
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+    deviceProvider.resetFirmwareUpdateState();
+    super.dispose();
   }
 
   Future<void> _selectLocalFirmwareFile() async {
@@ -222,6 +231,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                     ),
                   ),
                   onPressed: () async {
+                    // Reset firmware update state before navigating
+                    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                    deviceProvider.resetFirmwareUpdateState();
                     routeToPage(context, const HomePageWrapper(), replace: true);
                   },
                   child: const Text(
@@ -439,6 +451,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                       ),
                     ),
                     onPressed: () async {
+                      // Set firmware update in progress when starting update
+                      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                      deviceProvider.setFirmwareUpdateInProgress(true);
+                      
                       if (otaUpdateSteps.isEmpty) {
                         await downloadFirmware();
                         await startDfu(widget.device!);

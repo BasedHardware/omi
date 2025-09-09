@@ -18,7 +18,6 @@ import database.tasks as tasks_db
 import database.trends as trends_db
 import database.action_items as action_items_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
-from database.redis_db import get_user_preferred_app
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
@@ -39,6 +38,7 @@ from utils.llm.conversation_processing import (
     get_app_result,
     should_discard_conversation,
     select_best_app_for_conversation,
+    get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
 )
 from utils.analytics import record_usage
@@ -185,39 +185,39 @@ def _trigger_apps(
 ):
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
-    filtered_apps = []
 
-    # If app_id is provided, only use that specific app
+    # Create a unique list of apps by combining user's and default apps
+    all_apps_dict = {app.id: app for app in conversation_apps}
+    for app in get_default_conversation_summarized_apps():
+        if app.id not in all_apps_dict:
+            all_apps_dict[app.id] = app
+
+    all_available_apps = list(all_apps_dict.values())
+
+    app_to_run = None
+
+    # If a specific app_id is provided (for reprocessing), find and use it.
     if app_id:
-        filtered_apps = [app for app in conversation_apps if app.id == app_id]
+        app_to_run = all_apps_dict.get(app_id)
     else:
-        filtered_apps = conversation_apps
+        # Auto-selection logic
+        suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_available_apps)
+        conversation.suggested_summarization_apps = suggested_apps
+        print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
 
-        # Extend with default apps
-        default_apps = get_default_conversation_summarized_apps()
-        filtered_apps.extend(default_apps)
-
-        # Select the best app for this conversation
-        if filtered_apps and len(filtered_apps) > 0:
-            # Check if the user has a preferred app
-            preferred_app_id = get_user_preferred_app(uid)
-            if preferred_app_id is None:
-                best_app = select_best_app_for_conversation(conversation, filtered_apps)
+        # Use the first suggested app if available
+        if conversation.suggested_summarization_apps:
+            first_suggested_app_id = conversation.suggested_summarization_apps[0]
+            app_to_run = all_apps_dict.get(first_suggested_app_id)
+            if app_to_run:
+                print(f"Using first suggested app: {app_to_run.name}")
             else:
-                best_app = next((app for app in filtered_apps if app.id == preferred_app_id), None)
+                print(f"First suggested app '{first_suggested_app_id}' not found in available apps.")
 
-            if best_app:
-                print(f"Selected best app for conversation: {best_app.name}")
+    filtered_apps = [app_to_run] if app_to_run else []
 
-                # enabled
-                user_enabled = set(redis_db.get_enabled_apps(uid))
-                if best_app.id not in user_enabled:
-                    redis_db.enable_app(uid, best_app.id)
-
-                filtered_apps = [best_app]
-
-    if len(filtered_apps) == 0:
-        print("All apps had got filtered out", uid)
+    if not filtered_apps:
+        print(f"No summarization app selected for conversation {conversation.id}", uid)
 
     # Clear existing app results
     conversation.apps_results = []
@@ -255,9 +255,12 @@ def _extract_memories(uid: str, conversation: Conversation):
         # For regular conversations with transcript segments
         new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
+    is_locked = conversation.is_locked
     parsed_memories = []
     for memory in new_memories:
-        parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
+        memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
+        memory_db_obj.is_locked = is_locked
+        parsed_memories.append(memory_db_obj)
         # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
@@ -299,6 +302,7 @@ def _save_action_items(uid: str, conversation: Conversation):
     if not conversation.structured or not conversation.structured.action_items:
         return
 
+    is_locked = conversation.is_locked
     action_items_data = []
     now = datetime.now(timezone.utc)
 
@@ -311,6 +315,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'due_at': action_item.due_at,
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
+            'is_locked': is_locked,
         }
         action_items_data.append(action_item_data)
 

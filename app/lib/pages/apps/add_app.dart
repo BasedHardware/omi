@@ -24,7 +24,12 @@ import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/prompt_text_field.dart';
 
 class AddAppPage extends StatefulWidget {
-  const AddAppPage({super.key});
+  final bool presetForConversationAnalysis;
+
+  const AddAppPage({
+    super.key,
+    this.presetForConversationAnalysis = false,
+  });
 
   @override
   State<AddAppPage> createState() => _AddAppPageState();
@@ -37,7 +42,9 @@ class _AddAppPageState extends State<AddAppPage> {
   void initState() {
     showSubmitAppConfirmation = SharedPreferencesUtil().showSubmitAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-      await Provider.of<AddAppProvider>(context, listen: false).init();
+      await Provider.of<AddAppProvider>(context, listen: false).init(
+        presetForConversationAnalysis: widget.presetForConversationAnalysis,
+      );
     });
     super.initState();
   }
@@ -289,7 +296,8 @@ class _AddAppPageState extends State<AddAppPage> {
                               ],
                             ),
                           ),
-                          if (provider.isCapabilitySelectedById('chat') || provider.isCapabilitySelectedById('memories'))
+                          if (provider.isCapabilitySelectedById('chat') ||
+                              provider.isCapabilitySelectedById('memories'))
                             Column(
                               children: [
                                 const SizedBox(
@@ -316,9 +324,11 @@ class _AddAppPageState extends State<AddAppPage> {
                                             PromptTextField(
                                               controller: provider.chatPromptController,
                                               label: 'Chat Prompt',
-                                              hint: 'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                              hint:
+                                                  'You are an awesome app, your job is to respond to the user queries and make them feel good...',
                                             ),
-                                          if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat'))
+                                          if (provider.isCapabilitySelectedById('memories') &&
+                                              provider.isCapabilitySelectedById('chat'))
                                             const SizedBox(
                                               height: 20,
                                             ),
@@ -326,7 +336,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                             PromptTextField(
                                               controller: provider.conversationPromptController,
                                               label: 'Conversation Prompt',
-                                              hint: 'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                              hint:
+                                                  'You are an awesome app, you will be given transcript and summary of a conversation...',
                                             ),
                                         ],
                                       ),
@@ -405,7 +416,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                 shape: const CircleBorder(),
                               ),
                               const Expanded(
-                                child: Text("By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
+                                child: Text(
+                                    "By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
                               ),
                             ],
                           ),
@@ -442,8 +454,9 @@ class _AddAppPageState extends State<AddAppPage> {
                               builder: (ctx) {
                                 return ConfirmationDialog(
                                   title: 'Submit App?',
-                                  description:
-                                      provider.makeAppPublic ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!' : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
+                                  description: provider.makeAppPublic
+                                      ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
+                                      : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
                                   checkboxText: "Don't show it again",
                                   checkboxValue: !showSubmitAppConfirmation,
                                   onCheckboxChanged: (value) {

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -282,7 +283,9 @@ class _PlansSheetState extends State<PlansSheet> {
         return;
       }
     }
-    
+
+    MixpanelManager().upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
+
     await _handleUpgrade(priceId);
   }
 
@@ -356,7 +359,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
           if (checkoutResult == true) {
             AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
+            MixpanelManager().upgradeSucceeded();
           } else {
+            MixpanelManager().upgradeCancelled();
             // Optional: handle cancellation or failure
           }
         } else {

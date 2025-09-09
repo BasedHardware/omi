@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -11,8 +10,7 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
-import 'package:omi/pages/onboarding/permissions/permissions_mobile_widget.dart';
-import 'package:omi/pages/onboarding/permissions/permissions_desktop_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
@@ -20,11 +18,11 @@ import 'package:omi/pages/onboarding/welcome/page.dart';
 import 'package:omi/pages/onboarding/device_onboarding/device_onboarding_wrapper.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
 
@@ -89,7 +87,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       //   context.read<OnboardingProvider>().updatePermissions();
       // }
 
-      if (isSignedIn()) {
+      if (AuthService.instance.isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -223,14 +221,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _goNext(); // Go to Permissions page
         MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
-      PlatformService.isDesktop
-          ? PermissionsDesktopWidget(
-              goNext: () {
-                _goNext(); // Go to User Review page
-                MixpanelManager().onboardingStepCompleted('Permissions');
-              },
-            )
-          : PermissionsMobileWidget(
+   PermissionsWidget(
               goNext: () {
                 _goNext(); // Go to User Review page
                 MixpanelManager().onboardingStepCompleted('Permissions');
@@ -270,7 +261,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
           } else {
             var codec = await _getAudioCodec(provider.deviceId);
-            if (codec.isOpusSupported() && !PlatformService.isDesktop) {
+            if (codec.isOpusSupported()) {
               _goNext(); // Go to Speech Profile page
             } else {
               // Device selected, but not Opus, skip speech profile and go to device onboarding
