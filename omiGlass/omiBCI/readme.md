@@ -1,5 +1,7 @@
 # Omi AI's EMG Electromyography (Silent Talk) Project
 
+How to run: `python train.py` after going to OpenBCI GUI and enabling LSL stream
+
 ## Channel Assignments (OpenBCI Ganglion)
 
 Each channel has two pins:
@@ -45,4 +47,4 @@ REF and BIAS are separate pins.
 on macOS
 make sure you install `brew install labstreaminglayer/tap/lsl
 `
-Also enable lsl stream on openbci gui for time series
+Also enable lsl stream on openbci gui for time series RAW
