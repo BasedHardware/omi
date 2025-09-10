@@ -15,7 +15,7 @@ REF and BIAS are separate pins.
 | **CH1** | Cheekbone side of **masseter**                 | Jaw angle side of **masseter**               | Side of jaw muscle |
 | **CH3** | Just below lower lip (**chin center**)         | 2–3 cm further down along midline of chin    | Mentalis muscle |
 | **REF** | Forehead (center, bony area)                   | —                                            | Reference electrode |
-| **BIAS**| Mastoid (behind ear) or shoulder               | —                                            | Ground electrode |
+| **D__G (BIAS)**| Mastoid (behind ear) or shoulder               | —                                            | Ground electrode |
 
 ---
 

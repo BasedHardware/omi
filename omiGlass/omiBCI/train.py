@@ -119,7 +119,7 @@ class MajoritySmoother:
 # -------------------------------
 def main():
     # ------- Parameters -------
-    classes = ["snap", "play", "pause", "rest"]  # all facial EMG classes
+    classes = ["snap", "play", "change", "rest"]  # all facial EMG classes
     windows_per_class = 40                       # 200ms windows per class
     win_sec = 0.2                                # 200 ms analysis window
     confidence_threshold = 0.8
@@ -173,7 +173,7 @@ def main():
 
         # ------- Real-time loop -------
         print("\n=== Real-time Classification (facial) ===")
-        print("Mouth/whisper 'snap', 'play', or 'pause'. Keep neutral face for 'rest'.")
+        print("Mouth/whisper 'snap', 'play', or 'change'. Keep neutral face for 'rest'.")
         print("Press Ctrl+C to exit.\n")
 
         win_size = int(win_sec * fs)
