@@ -1,7 +1,5 @@
 # Omi AI's EMG Electromyography (Silent Talk) Project
 
----
-
 ## Channel Assignments (OpenBCI Ganglion)
 
 Each channel has two pins:
