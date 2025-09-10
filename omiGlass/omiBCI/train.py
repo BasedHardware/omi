@@ -133,6 +133,9 @@ def main():
         fs = BoardShim.get_sampling_rate(BoardIds.GANGLION_BOARD.value)
         emg_channels = BoardShim.get_emg_channels(BoardIds.GANGLION_BOARD.value)
 
+          # Only use channels 0, 1, 2
+        emg_channels = emg_channels[:3]   # keep first three
+
         print("\nPlace ALL electrodes on FACE/JAW.")
         print("Suggested: CH1–CH2 masseter, CH3–CH4 chin/lips; REF=forehead; BIAS=shoulder/mastoid.\n")
 
