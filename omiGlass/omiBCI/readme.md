@@ -52,7 +52,7 @@ CH4: 2–3 cm further down along the midline of the chin.
 
 Alternative: if you prefer lip edge signals, move slightly lateral under the corners of the mouth — but chin midline is cleaner.
 
-🔹 Overall
+🔹 Overall Locations
 
 CH1/CH2: vertically stacked on the masseter, side of jaw.
 
