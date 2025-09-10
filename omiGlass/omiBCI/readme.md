@@ -22,7 +22,6 @@ Connect bias electrode to BIAS pin.
 
 ---
 ```
-ChatGPT Generated
 Here’s how to place them more precisely:
 
 🔹 Masseter (for CH1 & CH2)
