@@ -1,4 +1,24 @@
-# emg_gui_lsl.py
+# emg_gui_lsl_with_probs.py
+"""
+GUI for OpenBCI (via LSL) that:
+- Connects to an EEG/EMG LSL stream (e.g., OpenBCI_EEG)
+- Plots up to 4 channels with a unified y-scale
+- Collects per-class EMG windows using only selected feature channels (default 0,1,2)
+- Trains an SVC classifier
+- Runs real-time inference
+- Shows a LIVE Matplotlib bar chart of class probabilities
+
+Prereqs:
+    pip install pylsl numpy scipy scikit-learn matplotlib
+
+Start LSL streamer (separate terminal, example):
+    python user.py -p /dev/tty.usbmodem11 --add streamer_lsl
+    /start
+
+Run GUI:
+    python emg_gui_lsl_with_probs.py
+"""
+
 import os
 import threading
 import time
@@ -13,6 +33,7 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.gridspec import GridSpec
 
 from pylsl import StreamInlet, resolve_byprop
 from scipy.signal import butter, filtfilt
@@ -39,12 +60,11 @@ def butter_bandpass(low, high, fs, order=4, safety=0.95):
     b, a = butter(order, Wn, btype='band')
     return b, a
 
-def bandpass(x, fs, low=20, high=None, ba=None):
-    if ba is None:
-        b, a = butter_bandpass(low, high, fs)
-    else:
-        b, a = ba
+
+def filtfilt_bandpass(x, ba):
+    b, a = ba
     return filtfilt(b, a, x)
+
 
 def emg_features(win, zc_thresh=0.01):
     feats = []
@@ -62,6 +82,7 @@ def emg_features(win, zc_thresh=0.01):
 # -------------------------------
 # LSL helpers
 # -------------------------------
+
 def connect_lsl_stream(name_hint="OpenBCI_EEG", timeout=10):
     streams = resolve_byprop('name', name_hint, timeout=timeout)
     if not streams:
@@ -73,6 +94,7 @@ def connect_lsl_stream(name_hint="OpenBCI_EEG", timeout=10):
     fs = int(round(info.nominal_srate())) if info.nominal_srate() > 0 else 200
     n_channels = info.channel_count()
     return inlet, fs, n_channels, info.name()
+
 
 class LSLReader(threading.Thread):
     def __init__(self, inlet, n_channels, fs, buffer_secs=10):
@@ -102,6 +124,7 @@ class LSLReader(threading.Thread):
     def stop(self):
         self.running.clear()
 
+
 def pull_window(inlet, fs, n_channels, win_sec=0.2, use_channels=(0,1,2), timeout=5.0):
     win_size = int(win_sec * fs)
     buf = []
@@ -117,9 +140,7 @@ def pull_window(inlet, fs, n_channels, win_sec=0.2, use_channels=(0,1,2), timeou
     sel = np.array(use_channels, dtype=int)
     return arr[sel, :]
 
-# -------------------------------
-# Smoother
-# -------------------------------
+
 class MajoritySmoother:
     def __init__(self, k=3):
         self.k = k
@@ -134,14 +155,15 @@ class MajoritySmoother:
         vals, counts = np.unique(self.buf, return_counts=True)
         return vals[np.argmax(counts)]
 
+
 # -------------------------------
 # GUI App
 # -------------------------------
 class EMGApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("EMG via LSL – Train & Infer")
-        self.geometry("1100x750")
+        self.title("EMG via LSL – Train & Infer (with Probability Bars)")
+        self.geometry("1200x820")
 
         # State
         self.inlet = None
@@ -153,9 +175,9 @@ class EMGApp(tk.Tk):
         self.dataset_dir = "emg_datasets"
         os.makedirs(self.dataset_dir, exist_ok=True)
 
-        self.bpf_ba = None  # (b,a) designed after connect
+        self.bpf_ba = None
         self.use_channels = (0,1,2)  # for features
-        self.show_channels = None    # for plotting (set on connect)
+        self.show_channels = None     # for plotting
 
         self.X = None
         self.y = None
@@ -163,6 +185,11 @@ class EMGApp(tk.Tk):
         self.smoother = MajoritySmoother(k=3)
         self.conf_threshold = 0.8
         self.stop_infer = threading.Event()
+
+        # Shared state for bar chart (set from infer thread, read by animator)
+        self.bar_classes = ["snap","play","change","rest"]
+        self.bar_probs = np.zeros(len(self.bar_classes), dtype=float)
+        self._bar_lock = threading.Lock()
 
         self._build_ui()
         self._build_plot()
@@ -172,10 +199,9 @@ class EMGApp(tk.Tk):
         frm = ttk.Frame(self)
         frm.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
-        # Connection settings
         ttk.Label(frm, text="LSL stream name:").grid(row=0, column=0, sticky="w")
         self.stream_entry = ttk.Entry(frm, width=24)
-        self.stream_entry.insert(0, "OpenBCI_EEG")  # name hint; raw vs filt still OK
+        self.stream_entry.insert(0, "OpenBCI_EEG")
         self.stream_entry.grid(row=0, column=1, sticky="w", pady=2)
 
         ttk.Label(frm, text="Feature channels (comma):").grid(row=1, column=0, sticky="w")
@@ -191,7 +217,6 @@ class EMGApp(tk.Tk):
 
         ttk.Separator(frm).grid(row=4, column=0, columnspan=2, sticky="we", pady=8)
 
-        # Collection settings
         ttk.Label(frm, text="Classes (comma):").grid(row=5, column=0, sticky="w")
         self.classes_entry = ttk.Entry(frm, width=24)
         self.classes_entry.insert(0, "snap,play,change,rest")
@@ -220,7 +245,6 @@ class EMGApp(tk.Tk):
 
         ttk.Separator(frm).grid(row=11, column=0, columnspan=2, sticky="we", pady=8)
 
-        # Train / Infer
         self.train_btn = ttk.Button(frm, text="Train Model", command=self.on_train, state="disabled")
         self.train_btn.grid(row=12, column=0, columnspan=2, sticky="we", pady=6)
 
@@ -237,13 +261,11 @@ class EMGApp(tk.Tk):
 
         ttk.Separator(frm).grid(row=16, column=0, columnspan=2, sticky="we", pady=8)
 
-        # Prediction display
         self.pred_var = tk.StringVar(value="—")
         ttk.Label(frm, text="Prediction:").grid(row=17, column=0, sticky="w")
         self.pred_lbl = ttk.Label(frm, textvariable=self.pred_var, font=("Helvetica", 16, "bold"))
         self.pred_lbl.grid(row=17, column=1, sticky="w")
 
-        # Log
         ttk.Label(frm, text="Log:").grid(row=18, column=0, sticky="w", pady=(10,0))
         self.log = tk.Text(frm, height=10, width=38)
         self.log.grid(row=19, column=0, columnspan=2, sticky="we")
@@ -253,24 +275,45 @@ class EMGApp(tk.Tk):
             frm.grid_columnconfigure(i, weight=0)
 
     def _build_plot(self):
-        # Right side: 4 stacked subplots sharing x with unified y-scale
         right = ttk.Frame(self)
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.fig, self.axes = plt.subplots(4, 1, sharex=True, figsize=(8.5, 6.2))
-        self.lines = [ax.plot([], [], linewidth=1.0)[0] for ax in self.axes]
-        for i, ax in enumerate(self.axes):
+        # One figure with GridSpec: 4 rows for signals, 1 row for probability bars
+        self.fig = plt.figure(figsize=(9.5, 7.2))
+        gs = GridSpec(nrows=5, ncols=1, height_ratios=[1,1,1,1,0.9], hspace=0.35)
+
+        self.sig_axes = [self.fig.add_subplot(gs[i, 0]) for i in range(4)]
+        self.lines = [ax.plot([], [], linewidth=1.0)[0] for ax in self.sig_axes]
+        for i, ax in enumerate(self.sig_axes):
             ax.set_ylabel(f"Ch {i}")
             ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
-        self.axes[-1].set_xlabel("Time (s)")
-        self.fig.suptitle("LSL Stream – Live Plot (Unified Y-Scale)")
+        self.sig_axes[-1].set_xlabel("Time (s)")
+
+        # Probability bar chart axis
+        self.prob_ax = self.fig.add_subplot(gs[4, 0])
+        self._init_prob_bars(self.bar_classes)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=right)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+        # Precompute x
         self.window_secs = 10.0
-        self.fs_plot = 200  # will update on connect
+        self.fs_plot = 200
         self.x = np.linspace(-self.window_secs, 0, int(self.window_secs * self.fs_plot))
+
+    def _init_prob_bars(self, class_names):
+        self.prob_ax.cla()
+        self.bar_classes = list(class_names)
+        self.bar_probs = np.zeros(len(self.bar_classes), dtype=float)
+        self.prob_bars = self.prob_ax.bar(self.bar_classes, self.bar_probs)
+        self.prob_texts = []
+        for bar in self.prob_bars:
+            x = bar.get_x() + bar.get_width()/2
+            self.prob_texts.append(self.prob_ax.text(x, 0.01, "0.00", ha="center", va="bottom", fontsize=9))
+        self.prob_ax.set_ylim(0, 1.0)
+        self.prob_ax.set_ylabel("P(class)")
+        self.prob_ax.set_title("Classifier Probabilities")
+        self.prob_ax.grid(True, axis='y', linestyle='--', linewidth=0.5, alpha=0.5)
 
     def log_line(self, s):
         self.log.configure(state="normal")
@@ -299,23 +342,19 @@ class EMGApp(tk.Tk):
             self.reader = LSLReader(self.inlet, n_channels=self.n_channels, fs=self.fs, buffer_secs=self.window_secs)
             self.reader.start()
             self.fs_plot = self.fs
-            self.window_secs = 10.0
             self.x = np.linspace(-self.window_secs, 0, int(self.window_secs * self.fs_plot))
-            # Which channels to show: first 4 (or fewer)
             n_show = min(4, self.n_channels)
             self.show_channels = list(range(n_show))
 
             def init():
                 for i, line in enumerate(self.lines):
                     line.set_data(self.x, np.zeros_like(self.x))
-                    if i >= n_show:
-                        self.axes[i].set_visible(False)
-                    else:
-                        self.axes[i].set_visible(True)
-                for ax in self.axes:
+                    self.sig_axes[i].set_visible(i < n_show)
+                for ax in self.sig_axes:
                     ax.set_xlim(-self.window_secs, 0)
                     ax.set_ylim(-50, 50)
-                return self.lines
+                # init prob bars already done
+                return self.lines + list(self.prob_bars)
 
             def update(_):
                 if self.reader is None:
@@ -324,29 +363,41 @@ class EMGApp(tk.Tk):
                 n = data.shape[1]
                 _x = self.x if self.x.size == n else np.linspace(-self.window_secs, 0, n)
 
-                # set data for visible channels
+                # Signals
                 for i, ch in enumerate(self.show_channels):
                     y = data[ch, :]
                     self.lines[i].set_data(_x, y)
-
-                # unified y-scale across visible channels
                 if self.show_channels:
                     y_all = data[self.show_channels, :].reshape(-1)
                     ymin, ymax = np.percentile(y_all, [1, 99])
                     pad = 0.1 * (ymax - ymin + 1e-9)
                     ylo, yhi = (ymin - pad, ymax + pad) if np.isfinite(ymin) and np.isfinite(ymax) else (-1.0, 1.0)
-                    for i, ax in enumerate(self.axes):
+                    for i, ax in enumerate(self.sig_axes):
                         if i < len(self.show_channels):
                             ax.set_ylim(ylo, yhi)
-                return self.lines
 
-            # Start animation
+                # Probabilities (read shared state)
+                with self._bar_lock:
+                    probs = self.bar_probs.copy()
+                    names = list(self.bar_classes)
+                # If bars don't match current names, reinit
+                if len(names) != len(self.prob_bars) or any(lbl.get_text() != n for lbl, n in zip(self.prob_ax.get_xticklabels(), names)):
+                    self._init_prob_bars(names)
+                # Update heights & labels
+                top = max(1.0, float(np.max(probs)) + 0.05)
+                self.prob_ax.set_ylim(0, top)
+                for bar, txt, p in zip(self.prob_bars, self.prob_texts, probs):
+                    bar.set_height(float(p))
+                    txt.set_text(f"{float(p):.2f}")
+                    txt.set_y(float(p) + 0.01 * top)
+
+                return self.lines + list(self.prob_bars)
+
             if self.anim:
                 self.anim.event_source.stop()
             self.anim = FuncAnimation(self.fig, update, init_func=init, interval=33, blit=False)
             self.canvas.draw()
 
-            # Enable next actions
             self.collect_btn.configure(state="normal")
             self.train_btn.configure(state="normal")
         except Exception as e:
@@ -389,7 +440,7 @@ class EMGApp(tk.Tk):
                         win = pull_window(self.inlet, self.fs, self.n_channels, win_sec=win_sec, use_channels=self.use_channels)
                         # Filter per channel using predesigned bpf
                         for ch in range(win.shape[0]):
-                            win[ch] = bandpass(win[ch], self.fs, ba=self.bpf_ba)
+                            win[ch] = filtfilt_bandpass(win[ch], self.bpf_ba)
                         feats = emg_features(win)
                         X_list.append(feats)
                         y_list.append(label)
@@ -430,6 +481,11 @@ class EMGApp(tk.Tk):
                 clf.fit(self.X, self.y)
                 self.clf = clf
 
+                # Update probability bar categories to match the trained model
+                classes = list(self.clf.classes_)
+                self._init_prob_bars(classes)
+                self.canvas.draw_idle()
+
                 model_path = "emg_face_lsl_3ch_model.pkl"
                 joblib.dump(clf, model_path)
                 self.log_line(f"Model saved: {model_path}")
@@ -463,23 +519,33 @@ class EMGApp(tk.Tk):
                 while not self.stop_infer.is_set():
                     win = pull_window(self.inlet, self.fs, self.n_channels, win_sec=0.2, use_channels=self.use_channels, timeout=2.0)
                     for ch in range(win.shape[0]):
-                        win[ch] = bandpass(win[ch], self.fs, ba=self.bpf_ba)
+                        win[ch] = filtfilt_bandpass(win[ch], self.bpf_ba)
                     feats = emg_features(win)
 
                     probs = self.clf.predict_proba([feats])[0]
-                    classes = self.clf.classes_
+                    classes = list(self.clf.classes_)
                     pred_idx = int(np.argmax(probs))
                     pred, conf = classes[pred_idx], float(probs[pred_idx])
 
+                    # Update smoother & label if above threshold
                     if conf > self.conf_threshold:
                         self.smoother.push(pred)
                         voted = self.smoother.vote()
                         if voted is not None:
                             self.pred_var.set(f"{voted} ({conf:.2f})")
-                    else:
-                        # below threshold; don't change display
-                        pass
-                    time.sleep(0.1)
+
+                    # Update shared probability bars (main thread will render)
+                    with self._bar_lock:
+                        # Ensure order matches current bar classes
+                        bar_probs = np.zeros(len(self.bar_classes), dtype=float)
+                        for i, cname in enumerate(self.bar_classes):
+                            if cname in classes:
+                                bar_probs[i] = float(probs[classes.index(cname)])
+                            else:
+                                bar_probs[i] = 0.0
+                        self.bar_probs = bar_probs
+
+                    time.sleep(0.05)
             except Exception as e:
                 self.log_line(f"[ERROR] infer: {e}")
                 messagebox.showerror("Inference error", str(e))
@@ -502,6 +568,7 @@ class EMGApp(tk.Tk):
                 time.sleep(0.2)
         finally:
             super().destroy()
+
 
 if __name__ == "__main__":
     app = EMGApp()
