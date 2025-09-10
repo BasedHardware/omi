@@ -41,6 +41,14 @@ def emg_features(win, zc_thresh=0.01):
         feats.extend([rms, mav, wl, zc, ssc])
     return np.array(feats, dtype=float)
 
+def butter_bandpass(low, high, fs, order=4):
+    b, a = butter(order, [low/(fs/2), high/(fs/2)], btype='band')
+    return b, a
+
+def bandpass(x, fs, low=20, high=450):
+    b, a = butter_bandpass(low, high, fs)
+    return filtfilt(b, a, x)
+
 # --- Real-time prediction loop ---
 print("Starting real-time prediction. Use your own cueing system to mouth words.")      
 
