@@ -1,63 +1,52 @@
 # Omi AI's EMG Electromyography (Silent Talk) Project
 
-Diagram of where to attach the electrodes:
-
-<img width="300" alt="icon-2" src="./assets/diagram.png">
-
-### Masseter (jaw):
-
-Electrode near cheekbone → CH1 upper (+).
-
-Electrode nearer the jaw angle → CH1 lower (–).
-
-### Reference (REF):
-
-Connect REF electrode to REF pin (separate on Ganglion header).
-
-Place on neutral bony spot (forehead).
-
-### Bias (GND):
-
-Connect bias electrode to BIAS pin.
+## Electrode Placement Diagram
+<img width="400" alt="Electrode placement" src="./assets/diagram.png">
 
 ---
 
-Here’s how to place them more precisely:
+## Channel Assignments (OpenBCI Ganglion)
 
-🔹 Masseter (for CH1 & CH2)
+Each channel has two pins:
+- **Upper pin = positive (+)**
+- **Lower pin = negative (–)**
 
-Location: side of the face, between the cheekbone and the angle of the jaw.
+REF and BIAS are separate pins.
 
-How to find: put your fingers on the side of your jaw and clench your teeth — you’ll feel the masseter bulge.
+| Channel | Upper (+) Electrode Placement                  | Lower (–) Electrode Placement                | Notes |
+|---------|------------------------------------------------|----------------------------------------------|-------|
+| **CH1** | Cheekbone side of **masseter**                 | Jaw angle side of **masseter**               | Side of jaw muscle |
+| **CH2** | Masseter bulge (slightly higher on muscle)     | Masseter lower (closer to jaw angle)         | Optional second jaw channel |
+| **CH3** | Just below lower lip (**chin center**)         | 2–3 cm further down along midline of chin    | Mentalis muscle |
+| **CH4** | Under lip corner / alt. chin spot              | 2–3 cm further down                          | Chin / lip articulation |
+| **REF** | Forehead (center, bony area)                   | —                                            | Reference electrode |
+| **BIAS**| Mastoid (behind ear) or shoulder               | —                                            | Ground electrode |
 
-Placement:
+---
 
-CH1: just above the bulge (closer to cheekbone).
+## Placement Guide
 
-CH2: 2–3 cm below, along the same vertical line toward the jaw angle.
+### Masseter (Jaw) – CH1 & CH2
+- Location: Side of the face, between cheekbone and jaw angle.  
+- How to find: Place fingers on jaw and **clench teeth** → feel the bulge.  
+- Placement:  
+  - **CH1+:** just above bulge (closer to cheekbone)  
+  - **CH1–:** near jaw angle  
+  - **CH2+:** higher on bulge  
+  - **CH2–:** 2–3 cm lower  
 
-Tip: keep both on the thickest part of the muscle, aligned top-to-bottom.
+### Chin / Lips (Mentalis) – CH3 & CH4
+- Location: Center of chin under lower lip (mentalis).  
+- Placement:  
+  - **CH3+:** just below lower lip (chin center)  
+  - **CH3–:** 2–3 cm further down along chin midline  
+  - **CH4+:** under lip corner (optional alt.)  
+  - **CH4–:** 2–3 cm lower  
 
-🔹 Chin/Lips (for CH3 & CH4)
+### Reference (REF)
+- Pin: `REF`  
+- Placement: Center forehead (bony area).  
 
-You want to capture articulation when you mouth words:
-
-Best target: mentalis muscle (center of chin, under lower lip). It activates when you press/purse lips.
-
-Placement:
-
-CH3: just below the lower lip, center of chin.
-
-CH4: 2–3 cm further down along the midline of the chin.
-
-Alternative: if you prefer lip edge signals, move slightly lateral under the corners of the mouth — but chin midline is cleaner.
-
-🔹 Overall Locations
-
-CH1/CH2: vertically stacked on the masseter, side of jaw.
-
-CH3/CH4: vertically stacked on the chin (mentalis), below the lower lip.
-
-REF: forehead (bony).
-
-BIAS: mastoid (behind ear) or shoulder.
+### Bias / Ground (BIAS)
+- Pin: `BIAS`  
+- Placement: Mastoid (behind ear) or shoulder.  
