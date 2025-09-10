@@ -4,8 +4,10 @@ import asyncio
 from typing import List, Optional, Tuple, AsyncGenerator
 
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, ToolMessage
+from utils.llm.clients import should_use_tools_for_question
 from langchain_openai import ChatOpenAI
+from langchain.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
@@ -41,6 +43,8 @@ from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
 from utils.llm.clients import generate_embedding
+from utils.tools.custom_tools import get_memories_tool, get_conversations_tool, get_action_items_tool
+from pydantic import BaseModel
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -143,11 +147,7 @@ def determine_conversation_type(
     # First, check if web search is enabled - if so, route through web search enhancer
     web_search_enabled = state.get("web_search_enabled", False)
     if web_search_enabled:
-        print("Web search enabled - routing through web_search_enhancer")
         return "web_search_enhancer"
-
-    # Normal routing logic (unchanged)
-    print("determine_conversation_type")
     messages = state.get("messages", [])
     if len(messages) > 0 and len(messages[-1].files_id) > 0:
         return "file_chat_question"
@@ -174,6 +174,21 @@ def determine_conversation_type(
     if is_file_question:
         return "file_chat_question"
 
+    # Use LLM to intelligently decide if tools are needed (more reliable than keywords)
+    try:
+        tool_decision = should_use_tools_for_question(question)
+
+        if tool_decision.needs_tools:
+            print(
+                f"LLM decision: Tools needed - {tool_decision.reasoning} (suggested: {tool_decision.suggested_tool_type})"
+            )
+            print(f"Question needs tools, routing to context_dependent_conversation: '{question}'")
+            return "context_dependent_conversation"
+        else:
+            print(f"LLM decision: No tools needed - {tool_decision.reasoning}")
+    except Exception as e:
+        print(f"Tool decision LLM failed: {e}, falling back to context check")
+
     is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
         return "omi_question"
@@ -185,7 +200,6 @@ def determine_conversation_type(
 
 
 def no_context_conversation(state: GraphState):
-    print("no_context_conversation node")
 
     # Check for web search results to enhance response
     web_results = state.get("web_search_results", [])
@@ -236,7 +250,6 @@ def no_context_conversation(state: GraphState):
 
 
 def omi_question(state: GraphState):
-    print("no_context_omi_question node")
 
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
@@ -284,7 +297,6 @@ def omi_question(state: GraphState):
 
 
 def persona_question(state: GraphState):
-    print("persona_question node")
 
     # Check for web search results to enhance persona response
     web_results = state.get("web_search_results", [])
@@ -398,6 +410,7 @@ def context_dependent_conversation_v1(state: GraphState):
 
 
 def context_dependent_conversation(state: GraphState):
+    """Restored original function - just passes state to continue RAG pipeline"""
     return state
 
 
@@ -449,11 +462,11 @@ def query_vectors(state: GraphState):
         # Use real semantic embeddings for better relevance
         try:
             vector = generate_embedding(parsed_question)
-            print(f"🔍 Hybrid search for: '{parsed_question}' (semantic + metadata)")
+            # Hybrid search for semantic + metadata
             print("query_vectors vector (semantic):", vector[:5])
         except Exception as e:
-            print(f"❌ ERROR generating embedding: {e}")
-            print(f"🔄 Falling back to metadata-only search")
+            print(f"ERROR generating embedding: {e}")
+            print("Falling back to metadata-only search")
             vector = [1] * 3072
             print("query_vectors vector (fallback metadata-only):", vector[:5])
     else:
@@ -488,79 +501,7 @@ def query_vectors(state: GraphState):
     return {"memories_found": memories}
 
 
-def qa_handler(state: GraphState):
-    uid = state.get("uid")
-    memories = state.get("memories_found", [])
-    web_results = state.get("web_search_results", [])
-
-    all_person_ids = []
-    for m in memories:
-        # m is a dict
-        segments = m.get('transcript_segments', [])
-        all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
-
-    people = []
-    if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-        people = [Person(**p) for p in people_data]
-
-    # Combine memory context with web search results if available
-    memory_context = Conversation.conversations_to_string(memories, False, people=people)
-
-    if web_results:
-        print(f"Enhancing context_dependent response with {len(web_results)} web search results")
-        from utils.other.web_search import format_web_search_context, extract_search_citations
-
-        web_context = format_web_search_context(web_results)
-
-        # Combine memory context with web context
-        combined_context = f"{memory_context}\n\n--- Current Web Information ---\n{web_context}"
-    else:
-        combined_context = memory_context
-
-    # streaming
-    streaming = state.get("streaming")
-    if streaming:
-        # state['callback'].put_thought_nowait("Reasoning")
-        response: str = qa_rag_stream(
-            uid,
-            state.get("parsed_question"),
-            combined_context,  # Enhanced with web search if available
-            state.get("plugin_selected"),
-            cited=state.get("cited"),
-            messages=state.get("messages"),
-            tz=state.get("tz"),
-            callbacks=[state.get('callback')],
-        )
-
-        # Add web citations if web results were used
-        if web_results:
-            response = extract_search_citations(response, web_results)
-
-        return {"answer": response, "ask_for_nps": True, "web_search_citations": state.get("web_search_citations", [])}
-
-    # no streaming
-    response: str = qa_rag(
-        uid,
-        state.get("parsed_question"),
-        combined_context,  # Enhanced with web search if available
-        state.get("plugin_selected"),
-        cited=state.get("cited"),
-        messages=state.get("messages"),
-        tz=state.get("tz"),
-    )
-
-    # Add web citations if web results were used
-    if web_results:
-        from utils.other.web_search import extract_search_citations
-
-        response = extract_search_citations(response, web_results)
-
-    return {"answer": response, "ask_for_nps": True, "web_search_citations": state.get("web_search_citations", [])}
-
-
 def file_chat_question(state: GraphState):
-    print("chat_with_file_question node")
 
     fc_tool = FileChatTool()
 
@@ -589,6 +530,273 @@ def file_chat_question(state: GraphState):
 
     answer = fc_tool.process_chat_with_file(uid, question, file_ids)
     return {'answer': answer, 'ask_for_nps': True, 'web_search_citations': state.get("web_search_citations", [])}
+
+
+# === UNIFIED AGENT WITH TOOLS ===
+
+
+def create_user_tools(uid: str):
+    """Create tools with uid pre-populated using closures - eliminates parameter confusion"""
+
+    @tool
+    def get_user_memories(date_query: str = None) -> dict:
+        """Retrieve user memories filtered by date.
+
+        Args:
+            date_query: Natural language date like 'yesterday', 'september 6th', 'today'
+        """
+        return get_memories_tool(uid, date_query)
+
+    @tool
+    def get_user_conversations(date_query: str = None) -> dict:
+        """Retrieve user conversations filtered by date.
+
+        Args:
+            date_query: Natural language date like 'yesterday', 'september 6th', 'today'
+        """
+        return get_conversations_tool(uid, date_query)
+
+    @tool
+    def get_user_action_items(date_query: str = None) -> dict:
+        """Retrieve user action items filtered by date.
+
+        Args:
+            date_query: Natural language date like 'yesterday', 'september 6th', 'today'
+        """
+        return get_action_items_tool(uid, date_query)
+
+    return [get_user_memories, get_user_conversations, get_user_action_items]
+
+
+def unified_agent_qa_handler(state: GraphState):
+    """UNIFIED node that handles both RAG and tools in a single streaming response"""
+
+    uid = state.get("uid")
+    memories = state.get("memories_found", [])
+    web_results = state.get("web_search_results", [])
+    question = state.get("parsed_question", "")
+    streaming = state.get("streaming")
+    callback = state.get("callback")
+
+    # Build RAG context (existing logic from qa_handler)
+    all_person_ids = []
+    for m in memories:
+        segments = m.get('transcript_segments', [])
+        all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    # Combine memory context with web search results if available
+    memory_context = Conversation.conversations_to_string(memories, False, people=people)
+
+    if web_results:
+        from utils.other.web_search import format_web_search_context, extract_search_citations
+
+        web_context = format_web_search_context(web_results)
+        combined_context = f"{memory_context}\n\n--- Current Web Information ---\n{web_context}"
+    else:
+        combined_context = memory_context
+
+    try:
+        # Create user-specific tools (uid pre-populated)
+        tools = create_user_tools(uid)
+
+        # Create LLM with tools
+        if streaming:
+            llm_with_tools = ChatOpenAI(model="gpt-4o", streaming=True).bind_tools(tools)
+        else:
+            llm_with_tools = ChatOpenAI(model="gpt-4o").bind_tools(tools)
+
+        # Enhanced system prompt that combines RAG context with tool availability
+        system_prompt = f"""You are an AI assistant with access to the user's personal data through specialized tools.
+
+CURRENT CONTEXT (from vector search):
+{combined_context[:2000] if combined_context else "No relevant memories found in vector search."}
+
+AVAILABLE TOOLS:
+- get_user_memories(date_query): Get user's memories. Use date_query for specific dates like "September 1st", "yesterday", or leave empty for all memories.
+- get_user_conversations(date_query): Get user's conversations. Use date_query for specific dates or leave empty for all.
+- get_user_action_items(date_query): Get user's action items/tasks. Use date_query for specific dates or leave empty for all.
+
+TOOL USAGE RULES:
+1. If user asks for "memories from September 6th" → use get_user_memories(date_query="September 6th")
+2. If user asks for "all my action items" → use get_user_action_items() with no date_query
+3. If user asks for "conversations from yesterday" → use get_user_conversations(date_query="yesterday")
+4. ALWAYS use tools when user asks for memories, conversations, or action items
+5. Use the context above only for general questions
+
+IMPORTANT:
+- date_query parameter is OPTIONAL - omit it if no specific date is mentioned
+- When user specifies dates, always pass them in the date_query parameter
+- Provide natural, helpful responses combining tool results with context
+
+User's timezone: {state.get('tz', 'UTC')}"""
+
+        messages = [SystemMessage(content=system_prompt), HumanMessage(content=question)]
+
+        # SIMPLIFIED APPROACH: Use invoke for tool calls, then stream the final response
+        # This avoids complex streaming + tool call coordination issues
+
+        if streaming and callback:
+            # First, get the complete response with tool calls (non-streaming)
+            print("Using intelligent agent mode with tools")
+            print("Getting response with tool calls...")
+            full_response = llm_with_tools.invoke(messages)
+
+            # Debug: Log the full response structure
+            print(f"Response type: {type(full_response)}")
+            print(f"Has content: {hasattr(full_response, 'content')}")
+            print(f"Has tool_calls: {hasattr(full_response, 'tool_calls')}")
+
+            if hasattr(full_response, 'content'):
+                content_length = len(full_response.content) if full_response.content else 0
+                print(f"Content: '{full_response.content[:100]}...' (length: {content_length})")
+            if hasattr(full_response, 'tool_calls'):
+                tool_calls_count = len(full_response.tool_calls) if full_response.tool_calls else 0
+                print(f"Tool calls count: {tool_calls_count}")
+                for i, tc in enumerate(full_response.tool_calls or []):
+                    print(f"Tool call {i+1}: {tc.get('name', 'UNKNOWN')} with args: {tc.get('args', {})}")
+
+            # Check if this response contains tool calls that need execution
+            if hasattr(full_response, 'tool_calls') and full_response.tool_calls:
+                print(f"Found {len(full_response.tool_calls)} tool calls to execute")
+                tool_messages = []
+
+                # Execute each tool call
+                for i, tool_call in enumerate(full_response.tool_calls):
+                    print(f"Executing tool call {i+1}: {tool_call.get('name', 'UNKNOWN')}")
+
+                    try:
+                        tool_name = tool_call['name']
+                        tool_args = tool_call['args']
+                        tool_call_id = tool_call.get('id', f"call_{i}")
+
+                        print(f"Calling {tool_name} with args: {tool_args}")
+
+                        # Find and execute the tool
+                        tool_result = None
+                        for tool in tools:
+                            if tool.name == tool_name:
+                                tool_result = tool.invoke(tool_args)
+                                result_preview = (
+                                    str(tool_result)[:200] + "..." if len(str(tool_result)) > 200 else str(tool_result)
+                                )
+                                print(f"Tool {tool_name} result: {result_preview}")
+                                break
+
+                        if tool_result is not None:
+                            tool_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call_id))
+                        else:
+                            print(f"No matching tool found for: {tool_name}")
+                            tool_messages.append(
+                                ToolMessage(
+                                    content=f"Error: No tool found with name {tool_name}", tool_call_id=tool_call_id
+                                )
+                            )
+
+                    except Exception as e:
+                        print(f"Tool execution error for {tool_call.get('name', 'UNKNOWN')}: {e}")
+                        tool_messages.append(
+                            ToolMessage(content=f"Error: {str(e)}", tool_call_id=tool_call.get('id', f"error_{i}"))
+                        )
+
+                # Now get the final response with tool results
+                print(f"Getting final response with {len(tool_messages)} tool results...")
+                final_messages = messages + [full_response] + tool_messages
+
+                final_response = llm_with_tools.invoke(final_messages)
+                print(f"Final response type: {type(final_response)}")
+                print(f"Final response has content: {hasattr(final_response, 'content')}")
+
+                if hasattr(final_response, 'content') and final_response.content:
+                    final_answer = final_response.content
+                    print(f"Final answer length: {len(final_answer)} chars")
+                    print(f"Final answer preview: {final_answer[:100]}...")
+                else:
+                    print(f"Final response has no content: {final_response}")
+                    final_answer = "I apologize, but I couldn't process the tool results properly."
+
+            elif hasattr(full_response, 'content') and full_response.content:
+                # Direct response without tool calls
+                final_answer = full_response.content
+                print(f"Direct response (no tools): {len(final_answer)} chars")
+                print(f"Direct response preview: {final_answer[:100]}...")
+            else:
+                print("Response has no content and no tool calls")
+                print(f"Full response debug: {full_response}")
+                final_answer = "I apologize, but I couldn't generate a proper response."
+
+            # Stream the final answer in chunks
+            if final_answer and final_answer.strip():
+                print(f"Streaming answer: '{final_answer[:50]}...'")
+                words = final_answer.split()
+                current_chunk = ""
+
+                for word in words:
+                    current_chunk += word + " "
+                    # Stream every 3-4 words or when chunk gets long enough
+                    if len(current_chunk.split()) >= 3 or len(current_chunk) > 50:
+                        callback.put_data_nowait(current_chunk)
+                        current_chunk = ""
+
+                # Stream any remaining content
+                if current_chunk.strip():
+                    callback.put_data_nowait(current_chunk)
+
+                enhanced_response = final_answer
+            else:
+                print("No final answer to stream")
+                enhanced_response = "I apologize, but I couldn't generate a proper response."
+                callback.put_data_nowait(enhanced_response)
+
+        else:
+            # Non-streaming mode - let LangGraph handle tool calls automatically
+            response = llm_with_tools.invoke(messages)
+            enhanced_response = response.content if hasattr(response, 'content') else str(response)
+
+        # Add web citations if needed
+        if web_results:
+            enhanced_response = extract_search_citations(enhanced_response, web_results)
+
+        print("Unified agent response generated successfully")
+        return {
+            "answer": enhanced_response,
+            "ask_for_nps": True,
+            "web_search_citations": state.get("web_search_citations", []),
+        }
+
+    except Exception as e:
+        print(f"Agent mode failed, falling back to RAG: {e}")
+        # Graceful fallback to standard RAG
+        if streaming:
+            response = qa_rag_stream(
+                uid,
+                question,
+                combined_context,
+                state.get("plugin_selected"),
+                cited=state.get("cited"),
+                messages=state.get("messages"),
+                tz=state.get("tz"),
+                callbacks=[callback],
+            )
+        else:
+            response = qa_rag(
+                uid,
+                question,
+                combined_context,
+                state.get("plugin_selected"),
+                cited=state.get("cited"),
+                messages=state.get("messages"),
+                tz=state.get("tz"),
+            )
+
+        if web_results:
+            response = extract_search_citations(response, web_results)
+
+        return {"answer": response, "ask_for_nps": True, "web_search_citations": state.get("web_search_citations", [])}
 
 
 workflow = StateGraph(GraphState)
@@ -624,11 +832,11 @@ workflow.add_edge("retrieve_date_filters", "query_vectors")
 
 workflow.add_node("query_vectors", query_vectors)
 
-workflow.add_edge("query_vectors", "qa_handler")
+workflow.add_edge("query_vectors", "unified_agent_qa_handler")
 
-workflow.add_node("qa_handler", qa_handler)
+workflow.add_node("unified_agent_qa_handler", unified_agent_qa_handler)
 
-workflow.add_edge("qa_handler", END)
+workflow.add_edge("unified_agent_qa_handler", END)
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
