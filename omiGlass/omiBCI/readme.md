@@ -1,8 +1,5 @@
 # Omi AI's EMG Electromyography (Silent Talk) Project
 
-## Electrode Placement Diagram
-<img width="400" alt="Electrode placement" src="./assets/diagram.png">
-
 ---
 
 ## Channel Assignments (OpenBCI Ganglion)
