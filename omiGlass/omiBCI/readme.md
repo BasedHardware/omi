@@ -45,3 +45,4 @@ REF and BIAS are separate pins.
 on macOS
 make sure you install `brew install labstreaminglayer/tap/lsl
 `
+Also enable lsl stream
