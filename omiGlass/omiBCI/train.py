@@ -1,4 +1,3 @@
-# emg_face_snap_play_pause.py
 import os, time
 import numpy as np
 import joblib
