@@ -18,7 +18,8 @@
           "fetch",
           "remote-notification",
           "bluetooth-central"
-        ]
+        ],
+        "NSBluetoothAlwaysUsageDescription": "This app needs Bluetooth to connect to OMI Glass devices"
       }
     },
     "android": {
@@ -26,12 +27,34 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.basedhardware.find"
+      "package": "com.basedhardware.find",
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["react-native-ble-plx"],
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"],
+          "bluetoothAlwaysPermission": "Allow this device to connect to OMI Glass devices"
+        }
+      ]
+    ],
+    "developmentClient": {
+      "silentLaunch": false
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "experiments": {
       "baseUrl": "/llama3-hackaton"
     }

@@ -64,6 +64,19 @@ You'll need the following components to build your own omiGlass:
    yarn install
    ```
 
+-  Precompile the omi app (Only native platforms)
+
+   ```bash
+   npx expo prebuild
+   ```
+  
+- To start the app on native platforms:
+  
+   ```bash
+   npx expo run:ios
+   npx expo run:android
+   ```
+
 2. Set up your API keys:
 
    - Copy the `.env.example` file to create a new `.env` file:

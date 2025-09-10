@@ -1,12 +1,13 @@
 import * as React from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View, Platform } from 'react-native';
 import { rotateImage } from '../modules/imaging';
 import { toBase64Image } from '../utils/base64';
 import { Agent } from '../agent/Agent';
 import { InvalidateSync } from '../utils/invalidateSync';
 import { textToSpeech } from '../modules/openai';
+import { OmiDevice, OMI_UUIDS } from '../types/device';
 
-function usePhotos(device: BluetoothRemoteGATTServer) {
+function usePhotos(device: OmiDevice) {
 
     // Subscribe to device
     const [photos, setPhotos] = React.useState<Array<{ data: Uint8Array; timestamp: number }>>([]);
@@ -52,32 +53,74 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
                 buffer = new Uint8Array([...buffer, ...data]);
             }
 
-            // Subscribe for photo updates
-            const service = await device.getPrimaryService('19B10000-E8F2-537E-4F6C-D104768A1214'.toLowerCase());
-            const photoCharacteristic = await service.getCharacteristic('19b10005-e8f2-537e-4f6c-d104768a1214');
-            await photoCharacteristic.startNotifications();
-            setSubscribed(true);
-            photoCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
-                let value = (e.target as BluetoothRemoteGATTCharacteristic).value!;
-                let array = new Uint8Array(value.buffer);
-                if (array[0] == 0xff && array[1] == 0xff) {
-                    onChunk(null, new Uint8Array());
-                } else {
-                    let packetId = array[0] + (array[1] << 8);
-                    let packet = array.slice(2);
-                    onChunk(packetId, packet);
+            // Platform-specific subscription logic
+            if (Platform.OS === 'web' && device.gatt) {
+                // Web Bluetooth implementation
+                const service = await device.gatt.getPrimaryService(OMI_UUIDS.SERVICE.toLowerCase());
+                const photoCharacteristic = await service.getCharacteristic(OMI_UUIDS.PHOTO_DATA);
+                await photoCharacteristic.startNotifications();
+                setSubscribed(true);
+                photoCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
+                    let value = (e.target as BluetoothRemoteGATTCharacteristic).value!;
+                    let array = new Uint8Array(value.buffer);
+                    if (array[0] == 0xff && array[1] == 0xff) {
+                        onChunk(null, new Uint8Array());
+                    } else {
+                        let packetId = array[0] + (array[1] << 8);
+                        let packet = array.slice(2);
+                        onChunk(packetId, packet);
+                    }
+                });
+                // Start automatic photo capture every 5s
+                const photoControlCharacteristic = await service.getCharacteristic(OMI_UUIDS.PHOTO_CONTROL);
+                await photoControlCharacteristic.writeValue(new Uint8Array([0x05]));
+            } else if (device.nativeDevice) {
+                // React Native BLE implementation
+                try {
+                    // Subscribe to photo characteristic
+                    device.nativeDevice.monitorCharacteristicForService(
+                        OMI_UUIDS.SERVICE,
+                        OMI_UUIDS.PHOTO_DATA,
+                        (error: any, characteristic: any) => {
+                            if (error) {
+                                console.error('Photo subscription error:', error);
+                                return;
+                            }
+                            
+                            if (characteristic?.value) {
+                                const buffer = Buffer.from(characteristic.value, 'base64');
+                                const array = new Uint8Array(buffer);
+                                
+                                if (array[0] == 0xff && array[1] == 0xff) {
+                                    onChunk(null, new Uint8Array());
+                                } else {
+                                    let packetId = array[0] + (array[1] << 8);
+                                    let packet = array.slice(2);
+                                    onChunk(packetId, packet);
+                                }
+                            }
+                        }
+                    );
+
+                    // Start automatic photo capture every 5s
+                    await device.nativeDevice.writeCharacteristicWithResponseForService(
+                        OMI_UUIDS.SERVICE,
+                        OMI_UUIDS.PHOTO_CONTROL,
+                        Buffer.from([0x05]).toString('base64')
+                    );
+
+                    setSubscribed(true);
+                } catch (error) {
+                    console.error('Native photo subscription error:', error);
                 }
-            });
-            // Start automatic photo capture every 5s
-            const photoControlCharacteristic = await service.getCharacteristic('19b10006-e8f2-537e-4f6c-d104768a1214');
-            await photoControlCharacteristic.writeValue(new Uint8Array([0x05]));
+            }
         })();
-    }, []);
+    }, [device]);
 
     return [subscribed, photos] as const;
 }
 
-export const DeviceView = React.memo((props: { device: BluetoothRemoteGATTServer }) => {
+export const DeviceView = React.memo((props: { device: OmiDevice }) => {
     const [subscribed, photos] = usePhotos(props.device);
     const agent = React.useMemo(() => new Agent(), []);
     const agentState = agent.use();
