@@ -105,9 +105,18 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         builder: (context) {
           return StatefulBuilder(
             builder: (context, setState) {
+              final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
+              String timeoutText;
+              if (timeoutDuration == -1) {
+                timeoutText = "Conversation will only end manually.";
+              } else {
+                final minutes = timeoutDuration ~/ 60;
+                timeoutText = "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech.";
+              }
+              
               return ConfirmationDialog(
                 title: "Finished Conversation?",
-                description: "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: Conversation is summarized after 2 minutes of no speech.",
+                description: "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: $timeoutText",
                 checkboxValue: !showSummarizeConfirmation,
                 checkboxText: "Don't ask me again",
                 onCheckboxChanged: (value) {
@@ -228,7 +237,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
                             child: Text(
-                              provider.segments.isEmpty && provider.photos.isEmpty ? "No summary yet" : "Conversation is summarized after 2 minutes of no speech 🤫",
+                              provider.segments.isEmpty && provider.photos.isEmpty ? "No summary yet" : _getTimeoutDisplayText(),
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
                             ),
@@ -272,6 +281,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         );
       },
     );
+  }
+
+  String _getTimeoutDisplayText() {
+    final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
+    if (timeoutDuration == -1) {
+      return "Conversation will only end manually 🤫";
+    } else {
+      final minutes = timeoutDuration ~/ 60;
+      return "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech 🤫";
+    }
   }
 }
 

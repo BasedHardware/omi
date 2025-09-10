@@ -14,11 +14,8 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-
-import 'package:omi/widgets/gradient_waveform.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
@@ -85,8 +82,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
+    return Consumer<CaptureProvider>(
+        builder: (context, provider, child) {
       var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
           ? provider.conversationProvider!.conversations.first.id
           : null;
@@ -235,7 +232,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
-              color: Color(0xFF35343B),
+              color: const Color(0xFF35343B),
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -255,7 +252,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
-              color: Color(0xFF35343B),
+              color: const Color(0xFF35343B),
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -744,9 +741,7 @@ class ProcessingConversationWidget extends StatefulWidget {
 class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      return GestureDetector(
+    return  GestureDetector(
           onTap: () async {
             routeToPage(
               context,
@@ -785,8 +780,8 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                 ],
               ),
             ),
-          ));
-    });
+          ),
+        );
   }
 
   _getConversationHeader(BuildContext context) {
@@ -807,7 +802,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
               const SizedBox(width: 20),
               Container(
                 decoration: BoxDecoration(
-                  color: Color(0xFF35343B),
+                  color: const Color(0xFF35343B),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

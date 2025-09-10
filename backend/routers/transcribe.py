@@ -77,6 +77,7 @@ async def _listen(
     include_speech_profile: bool = True,
     stt_service: STTService = None,
     including_combined_segments: bool = False,
+    conversation_timeout: int = 120,
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
@@ -96,9 +97,6 @@ async def _listen(
             await send_credit_limit_notification(uid)
         except Exception as e:
             print(f"Error sending credit limit notification: {e}")
-
-        await websocket.close(code=4002, reason="Usage limit exceeded")
-        return
 
     # Frame size, codec
     frame_size: int = 160
@@ -127,6 +125,7 @@ async def _listen(
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+    locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
     speech_profile_processed = False
@@ -165,10 +164,13 @@ async def _listen(
                 except Exception as e:
                     print(f"Error sending credit limit notification: {e}")
 
-                nonlocal websocket_close_code
-                websocket_close_code = 4002
-                websocket_active = False
-                break
+                # Lock the in-progress conversation if credit limit is reached
+                conversation = retrieve_in_progress_conversation(uid)
+                if conversation and conversation.get('id') and conversation['id'] not in locked_conversation_ids:
+                    conversation_id = conversation['id']
+                    print(f"Locking conversation {conversation_id} due to transcription limit.", uid)
+                    conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
+                    locked_conversation_ids.add(conversation_id)
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)
@@ -346,7 +348,7 @@ async def _listen(
     seconds_to_trim = None
     seconds_to_add = None
 
-    conversation_creation_timeout = 120
+    conversation_creation_timeout = conversation_timeout
 
     # Process existing conversations
     def _process_in_progess_memories():
@@ -1091,8 +1093,9 @@ async def listen_handler_v3(
     channels: int = 1,
     include_speech_profile: bool = True,
     stt_service: STTService = None,
+    conversation_timeout: int = 120,
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, False, conversation_timeout)
 
 
 @router.websocket("/v4/listen")
@@ -1105,6 +1108,7 @@ async def listen_handler(
     channels: int = 1,
     include_speech_profile: bool = True,
     stt_service: STTService = None,
+    conversation_timeout: int = 120,
 ):
     await _listen(
         websocket,
@@ -1116,4 +1120,5 @@ async def listen_handler(
         include_speech_profile,
         None,
         including_combined_segments=True,
+        conversation_timeout=conversation_timeout,
     )

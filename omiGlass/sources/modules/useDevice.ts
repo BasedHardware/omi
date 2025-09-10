@@ -39,7 +39,7 @@ export function useDevice(): [BluetoothRemoteGATTServer | null, () => Promise<vo
             // Connect to device
             console.log('Requesting device connection...');
             let connected = await navigator.bluetooth.requestDevice({
-                filters: [{ name: 'OpenGlass' }],
+                filters: [{ name: 'OMI Glass' }],
                 optionalServices: ['19B10000-E8F2-537E-4F6C-D104768A1214'.toLowerCase()],
             });
 

@@ -274,31 +274,6 @@ class DateTimeListItem extends StatelessWidget {
   }
 }
 
-class SyncWalGroupWidget extends StatelessWidget {
-  final List<Wal> wals;
-  final DateTime date;
-  final bool isFirst;
-  const SyncWalGroupWidget({super.key, required this.wals, required this.date, required this.isFirst});
-
-  @override
-  Widget build(BuildContext context) {
-    if (wals.isNotEmpty) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DateTimeListItem(date: date, isFirst: isFirst),
-          ...wals.map((wal) {
-            return WalListItem(wal: wal, walIdx: wals.indexOf(wal), date: date);
-          }),
-          const SizedBox(height: 16),
-        ],
-      );
-    } else {
-      return const SizedBox.shrink();
-    }
-  }
-}
-
 class SyncPage extends StatefulWidget {
   const SyncPage({super.key});
 
@@ -1291,15 +1266,4 @@ class WalItem extends ListItem {
   final int index;
   final DateTime date;
   WalItem(this.wal, this.index, this.date);
-}
-
-// Keep the original WalsListWidget for backward compatibility if needed
-class WalsListWidget extends StatelessWidget {
-  final List<Wal> wals;
-  const WalsListWidget({super.key, required this.wals});
-
-  @override
-  Widget build(BuildContext context) {
-    return OptimizedWalsListWidget(wals: wals);
-  }
 }

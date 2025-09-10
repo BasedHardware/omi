@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/core/app_shell.dart';
@@ -11,9 +10,9 @@ import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/pages/persona/twitter/social_profile.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -264,9 +263,6 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: TextButton(
                                 onPressed: () async {
-                                  await Posthog().capture(eventName: 'share_persona_clicked', properties: {
-                                    'persona_username': persona.username ?? '',
-                                  });
                                   MixpanelManager()
                                       .personaShared(personaId: persona.id, personaUsername: persona.username);
                                   Share.share(
@@ -558,7 +554,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 Navigator.of(context).pop();
                 await SharedPreferencesUtil().clearUserPreferences();
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
-                await signOut();
+                await AuthService.instance.signOut();
                 Navigator.of(context).pop();
                 routeToPage(context, const AppShell(), replace: true);
               },
@@ -630,7 +626,6 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                     children: [
                       ElevatedButton(
                         onPressed: () async {
-                          await Posthog().capture(eventName: 'i_dont_have_device_clicked');
                           await launchUrl(Uri.parse('https://www.omi.me/?_ref=omi_persona_flow'));
                         },
                         style: ElevatedButton.styleFrom(

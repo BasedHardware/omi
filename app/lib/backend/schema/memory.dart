@@ -16,6 +16,7 @@ class Memory {
   bool edited;
   bool deleted;
   MemoryVisibility visibility;
+  bool isLocked;
 
   Memory({
     required this.id,
@@ -31,6 +32,7 @@ class Memory {
     this.edited = false,
     this.deleted = false,
     required this.visibility,
+    this.isLocked = false,
   });
 
   factory Memory.fromJson(Map<String, dynamic> json) {
@@ -53,6 +55,7 @@ class Memory {
       visibility: json['visibility'] != null
           ? (MemoryVisibility.values.asNameMap()[json['visibility']] ?? MemoryVisibility.public)
           : MemoryVisibility.public,
+      isLocked: json['is_locked'] ?? false,
     );
   }
 
@@ -71,6 +74,7 @@ class Memory {
       'edited': edited,
       'deleted': deleted,
       'visibility': visibility,
+      'is_locked': isLocked,
     };
   }
 }

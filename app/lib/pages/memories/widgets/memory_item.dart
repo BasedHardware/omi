@@ -1,11 +1,15 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/pages/memories/page.dart';
 
 import 'delete_confirmation.dart';
 
@@ -26,7 +30,9 @@ class MemoryItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget memoryWidget = GestureDetector(
-      onTap: () => onTap(context, memory, provider),
+      onTap: () {
+        onTap(context, memory, provider);
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingL),
@@ -35,25 +41,63 @@ class MemoryItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
           ],
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Stack(
           children: [
-            Expanded(
-              child: Text(
-                memory.content.decodeString,
-                style: AppStyles.body,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Text(
+                        memory.content.decodeString,
+                        style: AppStyles.body,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppStyles.spacingM),
+                _buildVisibilityButton(context),
+              ],
             ),
-            const SizedBox(width: AppStyles.spacingM),
-            _buildVisibilityButton(context),
+            if (memory.isLocked)
+              Positioned.fill(
+                child: ClipRRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        MixpanelManager().paywallOpened('Action Item');
+                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                        return;
+                      },
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.01),
+                          borderRadius: const BorderRadius.all(Radius.circular(8)),
+                        ),
+                        child: const Text(
+                          'Upgrade to unlimited',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -109,7 +153,7 @@ class MemoryItem extends StatelessWidget {
         height: 36,
         width: 56,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
         child: Row(

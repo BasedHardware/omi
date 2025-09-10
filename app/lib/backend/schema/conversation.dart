@@ -129,6 +129,7 @@ class ServerConversation {
   ConversationStatus status;
   bool discarded;
   final bool deleted;
+  final bool isLocked;
 
   // local label
   bool isNew = false;
@@ -150,6 +151,7 @@ class ServerConversation {
     this.language,
     this.externalIntegration,
     this.status = ConversationStatus.completed,
+    this.isLocked = false,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -179,6 +181,7 @@ class ServerConversation {
       status: json['status'] != null
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
+      isLocked: json['is_locked'] ?? false,
     );
   }
 
@@ -200,6 +203,7 @@ class ServerConversation {
       'language': language,
       'external_data': externalIntegration?.toJson(),
       'status': status.toString().split('.').last,
+      'is_locked': isLocked,
     };
   }
 
@@ -255,8 +259,15 @@ class ServerConversation {
     }
   }
 
-  /// Calculates the conversation duration in seconds based on transcript segments
   int getDurationInSeconds() {
+    if (finishedAt != null && startedAt != null) {
+      return finishedAt!.difference(startedAt!).inSeconds;
+    }
+    return _getDurationInSecondsByTranscripts();
+  }
+
+  /// Calculates the conversation duration in seconds based on transcript segments
+  int _getDurationInSecondsByTranscripts() {
     if (transcriptSegments.isEmpty) return 0;
 
     // Find the last segment's end time
