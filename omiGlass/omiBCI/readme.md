@@ -2,7 +2,7 @@
 
 Diagram of where to attach the electrodes:
 
-<img width="400" alt="icon-2" src="./assets/diagram.png">
+<img width="300" alt="icon-2" src="./assets/diagram.png">
 
 ### Masseter (jaw):
 
