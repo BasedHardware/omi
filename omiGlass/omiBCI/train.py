@@ -207,7 +207,7 @@ def final_visualization(prob_history, class_names, pred_history):
 # -------------------------------
 def main():
     # ------- Parameters -------
-    classes = ["snap", "play", "change", "rest"]
+    classes = ["cat", "rest"]
     windows_per_class = 40
     win_sec = 0.2
     confidence_threshold = 0.8
@@ -255,7 +255,7 @@ def main():
 
     # ------- Real-time inference (with live probability bars) -------
     print("\n=== Real-time Classification (LSL, facial EMG) ===")
-    print("Say/whisper 'snap', 'play', or 'change'. Neutral for 'rest'. Ctrl+C to stop.\n")
+    print("Say/whisper 'cat'. Neutral for 'rest'. Ctrl+C to stop.\n")
 
     # Live bar setup using the trained class order
     class_names = list(clf.classes_)
