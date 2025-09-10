@@ -99,7 +99,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 17. Now try running the server again: `uvicorn main:app --reload --env-file .env`
 
-18. In your Omi app's environment, set `API_BASE_URL` to the URL provided by ngrok (e.g., `https://example.ngrok-free.app`)
+18. In your Omi app's environment, set `BASE_API_URL` to the URL provided by ngrok (e.g., `https://example.ngrok-free.app`)
 
 19. Your app should now be using your local backend
 

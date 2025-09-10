@@ -1,9 +1,15 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+
 import 'action_item_form_sheet.dart';
 
 class ActionItemTileWidget extends StatefulWidget {
@@ -357,64 +363,114 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       clipBehavior: Clip.hardEdge,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _showEditSheet(context),
+        onTap: () {
+          _showEditSheet(context);
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
+          child: Stack(
             children: [
-              // Custom checkbox with better styling
-              GestureDetector(
-                onTap: _handleToggle,
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: (widget.actionItem.completed || _isAnimating)
-                          ? Colors.deepPurpleAccent
-                          : Colors.grey.shade600,
-                      width: 2,
+              Row(
+                children: [
+                  // Custom checkbox with better styling
+                  GestureDetector(
+                    onTap: _handleToggle,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: (widget.actionItem.completed || _isAnimating)
+                              ? Colors.deepPurpleAccent
+                              : Colors.grey.shade600,
+                          width: 2,
+                        ),
+                        color: (widget.actionItem.completed || _isAnimating)
+                            ? Colors.deepPurpleAccent
+                            : Colors.transparent,
+                      ),
+                      child: (widget.actionItem.completed || _isAnimating)
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 16,
+                            )
+                          : null,
                     ),
-                    color: (widget.actionItem.completed || _isAnimating) ? Colors.deepPurpleAccent : Colors.transparent,
                   ),
-                  child: (widget.actionItem.completed || _isAnimating)
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 16,
-                        )
-                      : null,
-                ),
+                  const SizedBox(width: 16),
+                  // Action item text and due date
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Stack(
+                                children: [
+                                  Text(
+                                    widget.actionItem.description,
+                                    style: TextStyle(
+                                      color: (widget.actionItem.completed || _isAnimating)
+                                          ? Colors.grey.shade400
+                                          : Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
+                                      decoration: (widget.actionItem.completed || _isAnimating)
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                      decorationColor: Colors.grey.shade400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (widget.actionItem.dueAt != null) ...[
+                          const SizedBox(height: 6),
+                          _buildDueDateChip(),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Apple Reminders icon (only show on Apple platforms)
+                  if (PlatformService.isApple) ...[
+                    const SizedBox(width: 12),
+                    _buildAppleRemindersIcon(context),
+                  ],
+                ],
               ),
-              const SizedBox(width: 16),
-              // Action item text and due date
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.actionItem.description,
-                      style: TextStyle(
-                        color: (widget.actionItem.completed || _isAnimating) ? Colors.grey.shade400 : Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                        decoration: (widget.actionItem.completed || _isAnimating) ? TextDecoration.lineThrough : null,
-                        decorationColor: Colors.grey.shade400,
+              if (widget.actionItem.isLocked)
+                Positioned.fill(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        MixpanelManager().paywallOpened('Action Item');
+                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                        return;
+                      },
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.01),
+                          borderRadius: const BorderRadius.all(Radius.circular(8)),
+                        ),
+                        child: const Text(
+                          'Upgrade to unlimited',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
-                    if (widget.actionItem.dueAt != null) ...[
-                      const SizedBox(height: 6),
-                      _buildDueDateChip(),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-              // Apple Reminders icon (only show on Apple platforms)
-              if (PlatformService.isApple) ...[
-                const SizedBox(width: 12),
-                _buildAppleRemindersIcon(context),
-              ],
             ],
           ),
         ),

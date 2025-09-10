@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -63,6 +64,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   // Filter options for the dropdown
   // Default will be set in initState based on current date
   late FilterOption _currentFilter;
+  bool _isInitialLoad = true;
 
   @override
   void dispose() {
@@ -81,7 +83,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   void showDeleteNotification(String memoryContent, Memory? memory) {
     _removeDeleteNotification();
 
-    final provider = Provider.of<MemoriesProvider>(this.context, listen: false);
+    final provider = Provider.of<MemoriesProvider>(context, listen: false);
 
     _deleteNotificationOverlay = OverlayEntry(
       builder: (_) => Positioned(
@@ -92,7 +94,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           child: Material(
             color: Colors.transparent,
             child: Container(
-              width: MediaQuery.of(this.context).size.width * 0.9,
+              width: MediaQuery.of(context).size.width * 0.9,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.black87,
@@ -107,10 +109,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               ),
               child: Row(
                 children: [
-                  Expanded(
+                  const Expanded(
                     child: Text(
                       'Memory Deleted.',
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ),
                   TextButton(
@@ -121,10 +123,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                       }
                     },
                     style: TextButton.styleFrom(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size(0, 36),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 36),
                     ),
-                    child: Text(
+                    child: const Text(
                       'Undo',
                       style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
                     ),
@@ -133,9 +135,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                     onPressed: () {
                       _removeDeleteNotification();
                     },
-                    icon: Icon(Icons.close, color: Colors.white70, size: 20),
+                    icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                     padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(),
+                    constraints: const BoxConstraints(),
                     splashRadius: 20,
                   ),
                 ],
@@ -146,7 +148,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       ),
     );
 
-    Overlay.of(this.context).insert(_deleteNotificationOverlay!);
+    Overlay.of(context).insert(_deleteNotificationOverlay!);
 
     Future.delayed(const Duration(seconds: 10), () {
       _removeDeleteNotification();
@@ -173,6 +175,13 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       // Apply the date-based default filter
       _applyFilter(_currentFilter);
 
+      // Mark initial load as complete
+      if (mounted) {
+        setState(() {
+          _isInitialLoad = false;
+        });
+      }
+
       if (!mounted) return;
       final unreviewedMemories = provider.unreviewed;
       final home = context.read<HomeProvider>();
@@ -183,7 +192,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   void _applyFilter(FilterOption option) {
-    final provider = context.read<MemoriesProvider>();
     setState(() {
       _currentFilter = option;
 
@@ -211,6 +219,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     context.read<MemoriesProvider>().setCategoryFilter(category);
   }
 
+  // ignore: unused_element
   Map<MemoryCategory, int> _getCategoryCounts(List<Memory> memories) {
     var counts = <MemoryCategory, int>{};
     for (var memory in memories) {
@@ -228,10 +237,17 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            body: provider.loading
-                ? NestedScrollView(
-                    headerSliverBuilder: (context, innerBoxIsScrolled) {
-                      return [
+            body: RefreshIndicator(
+              onRefresh: () async {
+                HapticFeedback.mediumImpact();
+                await provider.init();
+              },
+              color: Colors.deepPurpleAccent,
+              backgroundColor: Colors.white,
+              child: provider.loading && _isInitialLoad
+                  ? CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
@@ -255,7 +271,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         TextStyle(color: AppStyles.textTertiary, fontSize: 14),
                                       ),
                                       textStyle: WidgetStateProperty.all(
-                                        TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                        const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
                                       ),
                                       shape: WidgetStateProperty.all(
                                         RoundedRectangleBorder(
@@ -287,14 +303,15 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                             ),
                           ),
                         ),
-                      ];
-                    },
-                    body: _buildShimmerMemoryList(),
-                  )
-                : NestedScrollView(
-                    controller: _scrollController,
-                    headerSliverBuilder: (context, innerBoxIsScrolled) {
-                      return [
+                        SliverFillRemaining(
+                          child: _buildShimmerMemoryList(),
+                        ),
+                      ],
+                    )
+                  : CustomScrollView(
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
@@ -339,7 +356,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           TextStyle(color: AppStyles.textTertiary, fontSize: 14),
                                         ),
                                         textStyle: WidgetStateProperty.all(
-                                          TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                          const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
                                         ),
                                         shape: WidgetStateProperty.all(
                                           RoundedRectangleBorder(
@@ -520,66 +537,64 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                               ),
                             ),
                           ),
-                        SliverPersistentHeader(
-                          pinned: true,
-                          floating: true,
-                          delegate: _SliverSearchBarDelegate(
-                            minHeight: 0,
-                            maxHeight: 0,
-                            child: Container(),
-                          ),
-                        ),
-                      ];
-                    },
-                    body: provider.filteredMemories.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
-                                const SizedBox(height: 16),
-                                Text(
-                                  provider.searchQuery.isEmpty && _selectedCategory == null
-                                      ? 'No memories yet'
-                                      : _selectedCategory != null
-                                          ? _selectedCategory == MemoryCategory.interesting
-                                              ? 'No interesting memories yet'
-                                              : _selectedCategory == MemoryCategory.system
-                                                  ? 'No system memories yet'
-                                                  : 'No memories in this category'
-                                          : 'No memories found',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade400,
-                                    fontSize: 18,
+                        if (provider.filteredMemories.isEmpty)
+                          SliverFillRemaining(
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    provider.searchQuery.isEmpty && _selectedCategory == null
+                                        ? 'No memories yet'
+                                        : _selectedCategory != null
+                                            ? _selectedCategory == MemoryCategory.interesting
+                                                ? 'No interesting memories yet'
+                                                : _selectedCategory == MemoryCategory.system
+                                                    ? 'No system memories yet'
+                                                    : 'No memories in this category'
+                                            : 'No memories found',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade400,
+                                      fontSize: 18,
+                                    ),
                                   ),
-                                ),
-                                if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
-                                  const SizedBox(height: 8),
-                                  TextButton(
-                                    onPressed: () => showMemoryDialog(context, provider),
-                                    child: const Text('Add your first memory'),
-                                  ),
+                                  if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
+                                    const SizedBox(height: 8),
+                                    TextButton(
+                                      onPressed: () => showMemoryDialog(context, provider),
+                                      child: const Text('Add your first memory'),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           )
-                        : ListView.builder(
-                            // Add significant bottom padding to prevent content from being covered by floating action bar
+                        else
+                          SliverPadding(
                             padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
-                            itemCount: provider.filteredMemories.length,
-                            itemBuilder: (context, index) {
-                              final memory = provider.filteredMemories[index];
-                              return MemoryItem(
-                                memory: memory,
-                                provider: provider,
-                                onTap: (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
-                                  MixpanelManager().memoryListItemClicked(tappedMemory);
-                                  _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                            sliver: SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final memory = provider.filteredMemories[index];
+                                  return MemoryItem(
+                                    memory: memory,
+                                    provider: provider,
+                                    onTap:
+                                        (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
+                                      MixpanelManager().memoryListItemClicked(tappedMemory);
+                                      _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                    },
+                                  );
                                 },
-                              );
-                            },
+                                childCount: provider.filteredMemories.length,
+                              ),
+                            ),
                           ),
-                  ),
+                      ],
+                    ),
+            ),
           ),
         );
       },
@@ -655,6 +670,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     );
   }
 
+  // ignore: unused_element
   void _showDeleteAllConfirmation(BuildContext context, MemoriesProvider provider) {
     if (provider.memories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -728,6 +744,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 }
 
+// ignore: unused_element
 class _SliverSearchBarDelegate extends SliverPersistentHeaderDelegate {
   final double minHeight;
   final double maxHeight;
