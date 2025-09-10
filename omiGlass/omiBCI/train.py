@@ -41,13 +41,17 @@ def emg_features(win, zc_thresh=0.01):
 # -------------------------------
 # Ganglion setup
 # -------------------------------
-def setup_board():
+def setup_board(serial_port=None):
     print("BrainFlow version:", BoardShim.get_version())
     params = BrainFlowInputParams()
-    board = BoardShim(BoardIds.GANGLION_BOARD.value, params)  # BLE; serial_port usually blank
+    if serial_port:
+        params.serial_port = serial_port  # required for BLED112 on macOS / Windows (COMx)
+    # params.timeout = 15  # optional, default 15s
+    board = BoardShim(BoardIds.GANGLION_BOARD.value, params)
     board.prepare_session()
     board.start_stream()
     return board
+
 
 def teardown_board(board):
     try:
@@ -128,7 +132,8 @@ def main():
     os.makedirs(dataset_dir, exist_ok=True)
 
     # ------- Setup board -------
-    board = setup_board()
+    board = setup_board(serial_port="/dev/tty.usbmodem1101") # adjust for your system. on macOS, run terminal and then run the following command: ls /dev/tty.*
+
     try:
         fs = BoardShim.get_sampling_rate(BoardIds.GANGLION_BOARD.value)
         emg_channels = BoardShim.get_emg_channels(BoardIds.GANGLION_BOARD.value)
