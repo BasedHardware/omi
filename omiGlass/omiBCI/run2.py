@@ -22,8 +22,6 @@ emg_channels = BoardShim.get_emg_channels(BoardIds.GANGLION_BOARD.value)
 labels = []
 X = []
 
-clf = joblib.load("emg_word_model.pkl")
-
 # --- Feature extraction on a window: RMS, MAV, WL, ZC, SSC ---
 def emg_features(win, zc_thresh=0.01):
     feats = []
@@ -46,16 +44,22 @@ def emg_features(win, zc_thresh=0.01):
 # --- Real-time prediction loop ---
 print("Starting real-time prediction. Use your own cueing system to mouth words.")      
 
+clf = joblib.load("emg_snap_play_model.pkl")
+
 while True:
     data = board.get_board_data()
     if data.shape[1] == 0:
         continue
-    emg_data = data[emg_channels, :]
 
-    # Filter + window as before
-    win = emg_data[:, -int(0.2*fs):]  # last 200 ms
-    feats = emg_features(win)
-    pred = clf.predict([feats])[0]
-    conf = np.max(clf.predict_proba([feats]))
-    if conf > 0.8:  # confidence threshold
-        print("Recognized:", pred)
+    emg_data = data[emg_channels, :]
+    for ch in range(emg_data.shape[0]):
+        emg_data[ch] = bandpass(emg_data[ch], fs)
+
+    win_size = int(0.2 * fs)
+    if emg_data.shape[1] >= win_size:
+        win = emg_data[:, -win_size:]
+        feats = emg_features(win)
+        pred = clf.predict([feats])[0]
+        conf = np.max(clf.predict_proba([feats]))
+        if conf > 0.8:   # threshold
+            print("Recognized:", pred)
