@@ -6,6 +6,8 @@ from sklearn.svm import SVC
 from sklearn.model_selection import cross_val_score
 from scipy.signal import butter, filtfilt
 
+print("BrainFlow version:", BoardShim.get_version())
+
 # --- Configure board (Ganglion) ---
 params = BrainFlowInputParams()
 params.serial_port = ''  # usually not needed for Ganglion BLE
