@@ -21,7 +21,7 @@ Place on neutral bony spot (forehead).
 Connect bias electrode to BIAS pin.
 
 ---
-
+```
 Here’s how to place them more precisely:
 
 🔹 Masseter (for CH1 & CH2)
@@ -61,3 +61,4 @@ CH3/CH4: vertically stacked on the chin (mentalis), below the lower lip.
 REF: forehead (bony).
 
 BIAS: mastoid (behind ear) or shoulder.
+```
