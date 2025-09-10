@@ -19,14 +19,14 @@ REF and BIAS are separate pins.
 
 ## Placement Guide
 
-### Masseter (Jaw) – CH1 & CH2
+### Masseter (Jaw) – CH1
 - Location: Side of the face, between cheekbone and jaw angle.  
 - How to find: Place fingers on jaw and **clench teeth** → feel the bulge.  
 - Placement:  
   - **CH1+:** just above bulge (closer to cheekbone)  
   - **CH1–:** near jaw angle  
 
-### Chin / Lips (Mentalis) – CH3 & CH4
+### Chin / Lips (Mentalis) – CH3
 - Location: Center of chin under lower lip (mentalis).  
 - Placement:  
   - **CH3+:** just below lower lip (chin center)  
