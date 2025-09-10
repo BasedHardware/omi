@@ -50,3 +50,7 @@ REF and BIAS are separate pins.
 ### Bias / Ground (BIAS)
 - Pin: `BIAS`  
 - Placement: Mastoid (behind ear) or shoulder.  
+
+---
+
+Check https://docs.openbci.com/GettingStarted/Biosensing-Setups/EEGSetup/?_gl=1*1k7t9el*_gcl_aw*R0NMLjE3NTc0Nzc0MjMuQ2owS0NRandvUF9GQmhERkFSSXNBTlBHMjRNSHVQQTdPdm13d2JvdHZDNTlaZmNoNnZZS2ZYOHF3V0NNdnhvNXhLWWd2SER2Q0ZFMllNd2FBdFN3RUFMd193Y0I.*_gcl_au*NzYwNjY2Nzk1LjE3NTc0NzE1MDI.*_ga*MTUyOTc0OTM2MS4xNzU3NDcxNTAy*_ga_HVMLC0ZWWS*czE3NTc0NzY0MzckbzIkZzEkdDE3NTc0Nzc0MjMkajYwJGwwJGgw#what-you-will-need to learn how to connnect gold cup electrodes
