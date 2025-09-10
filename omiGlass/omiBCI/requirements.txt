@@ -18,6 +18,7 @@ packaging==25.0
 pillow==11.3.0
 platformdirs==4.4.0
 pooch==1.8.2
+pylsl==1.17.6
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 requests==2.32.5

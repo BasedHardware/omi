@@ -39,3 +39,9 @@ REF and BIAS are separate pins.
 ### Bias / D__G
 - Pin: `BIAS/D__G`  
 - Placement: Mastoid (behind ear) or shoulder.  
+
+---
+
+on macOS
+make sure you install `brew install labstreaminglayer/tap/lsl
+`

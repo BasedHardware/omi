@@ -2,8 +2,7 @@ import os, time
 import numpy as np
 import joblib
 from datetime import datetime
-
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+from pylsl import StreamInlet, resolve_byprop
 from scipy.signal import butter, filtfilt
 from sklearn.svm import SVC
 from sklearn.model_selection import cross_val_score
@@ -39,34 +38,49 @@ def emg_features(win, zc_thresh=0.01):
     return np.array(feats, dtype=float)
 
 # -------------------------------
-# Ganglion setup
+# LSL setup
 # -------------------------------
-def setup_board(serial_port=None):
-    print("BrainFlow version:", BoardShim.get_version())
-    params = BrainFlowInputParams()
-    if serial_port:
-        params.serial_port = serial_port  # required for BLED112 on macOS / Windows (COMx)
-    # params.timeout = 15  # optional, default 15s
-    board = BoardShim(BoardIds.GANGLION_BOARD.value, params)
-    board.prepare_session()
-    board.start_stream()
-    return board
-
-
-def teardown_board(board):
-    try:
-        board.stop_stream()
-    finally:
-        board.release_session()
+def connect_lsl_stream(name_hint="OpenBCI_EEG", timeout=10):
+    # Prefer exact name if present, else fall back to type='EEG'
+    streams = resolve_byprop('name', name_hint, timeout=timeout)
+    if not streams:
+        streams = resolve_byprop('type', 'EEG', timeout=timeout)
+        if not streams:
+            raise RuntimeError("No LSL EEG streams found. Is user.py running with --add streamer_lsl and /start?")
+    info = streams[0]
+    inlet = StreamInlet(info, max_buflen=60)
+    fs = int(round(info.nominal_srate())) if info.nominal_srate() > 0 else 200  # Ganglion ~200 Hz
+    n_channels = info.channel_count()
+    return inlet, fs, n_channels, info.name()
 
 # -------------------------------
-# Data collection
+# Data collection from LSL
 # -------------------------------
-def collect_class_windows(board, fs, emg_channels, label, n_windows=40, win_sec=0.2, settle_sec=2.5):
+def pull_window(inlet, fs, n_channels, win_sec=0.2, use_channels=(0,1,2), timeout=5.0):
     """
-    Collect n_windows windows for a single label.
-    User mouths/whispers the word (or remains neutral for 'rest').
+    Pulls enough samples from LSL to fill a window of win_sec, returns [n_channels, n_samples]
+    Only keeps channels in use_channels (order preserved).
     """
+    win_size = int(win_sec * fs)
+    buf = []
+
+    start = time.time()
+    # accumulate until we have at least win_size
+    while len(buf) < win_size:
+        chunk, ts = inlet.pull_chunk(timeout=0.5)
+        if chunk:
+            # chunk: list of [samples][channels]
+            buf.extend(chunk)
+        if time.time() - start > timeout:
+            raise TimeoutError("Timed out while waiting for LSL samples")
+    # Take the last win_size samples
+    arr = np.array(buf[-win_size:])  # shape [win_size, n_channels_total]
+    arr = arr.T  # [n_channels_total, win_size]
+    sel = np.array(use_channels, dtype=int)
+    arr = arr[sel, :]
+    return arr
+
+def collect_class_windows_lsl(inlet, fs, n_channels, label, n_windows=40, win_sec=0.2, settle_sec=2.5, use_channels=(0,1,2)):
     print(f"\n=== Prepare for: {label.upper()} ===")
     if label == "rest":
         print("Keep your face/jaw relaxed. Mouth closed. Breathe normally.")
@@ -76,28 +90,17 @@ def collect_class_windows(board, fs, emg_channels, label, n_windows=40, win_sec=
     time.sleep(settle_sec)
 
     X, y = [], []
-    win_size = int(win_sec * fs)
-    count = 0
-    while count < n_windows:
-        data = board.get_board_data()
-        if data.shape[1] < win_size:
-            time.sleep(0.05)
-            continue
-
-        emg = data[emg_channels, :]
-        for ch in range(emg.shape[0]):
-            emg[ch] = bandpass(emg[ch], fs)
-
-        win = emg[:, -win_size:]
+    for i in range(n_windows):
+        # pull raw window
+        win = pull_window(inlet, fs, n_channels, win_sec=win_sec, use_channels=use_channels)
+        # filter per channel
+        for ch in range(win.shape[0]):
+            win[ch] = bandpass(win[ch], fs)
         feats = emg_features(win)
         X.append(feats)
         y.append(label)
-        count += 1
-        print(f"{label}: {count}/{n_windows}")
-
-        # brief pause so each window reflects a fresh articulation / rest
-        time.sleep(0.15)
-
+        print(f"{label}: {i+1}/{n_windows}")
+        time.sleep(0.15)  # brief pause between windows
     return np.vstack(X), np.array(y)
 
 # -------------------------------
@@ -107,12 +110,10 @@ class MajoritySmoother:
     def __init__(self, k=3):
         self.k = k
         self.buf = []
-
     def push(self, label):
         self.buf.append(label)
         if len(self.buf) > self.k:
             self.buf.pop(0)
-
     def vote(self):
         if not self.buf: return None
         vals, counts = np.unique(self.buf, return_counts=True)
@@ -123,81 +124,63 @@ class MajoritySmoother:
 # -------------------------------
 def main():
     # ------- Parameters -------
-    classes = ["snap", "play", "change", "rest"]  # all facial EMG classes
-    windows_per_class = 40                       # 200ms windows per class
-    win_sec = 0.2                                # 200 ms analysis window
+    classes = ["snap", "play", "change", "rest"]
+    windows_per_class = 40
+    win_sec = 0.2
     confidence_threshold = 0.8
-    smooth_k = 3                                 # majority vote over last k predictions
+    smooth_k = 3
     dataset_dir = "emg_datasets"
     os.makedirs(dataset_dir, exist_ok=True)
 
-    # ------- Setup board -------
-    board = setup_board(serial_port="/dev/tty.usbmodem11") # adjust for your system. on macOS, run terminal and then run the following command: ls /dev/tty.*
+    # ------- Connect to LSL -------
+    inlet, fs, n_channels, stream_name = connect_lsl_stream()
+    print(f"Connected to LSL stream: {stream_name} | fs={fs} Hz | channels={n_channels}")
+    use_channels = (0, 1, 2)  # << only use channels 0,1,2
 
+    # ------- Collect dataset -------
+    X_list, y_list = [], []
+    for label in classes:
+        Xc, yc = collect_class_windows_lsl(
+            inlet, fs, n_channels,
+            label=label,
+            n_windows=windows_per_class,
+            win_sec=win_sec,
+            settle_sec=3.0,
+            use_channels=use_channels
+        )
+        X_list.append(Xc)
+        y_list.append(yc)
+
+    X = np.vstack(X_list)
+    y = np.concatenate(y_list)
+
+    # Save dataset
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    npz_path = os.path.join(dataset_dir, f"face_emg_lsl_3ch_{ts}.npz")
+    np.savez(npz_path, X=X, y=y, classes=np.array(classes))
+    print(f"\nSaved dataset: {npz_path}")
+
+    # ------- Train classifier -------
+    clf = make_pipeline(StandardScaler(), SVC(kernel='linear', probability=True))
+    scores = cross_val_score(clf, X, y, cv=5)
+    print("Cross-validated accuracy:", np.mean(scores))
+    clf.fit(X, y)
+
+    model_path = "emg_face_lsl_3ch_model.pkl"
+    joblib.dump(clf, model_path)
+    print(f"Model saved: {model_path}")
+
+    # ------- Real-time inference -------
+    print("\n=== Real-time Classification (LSL, facial EMG) ===")
+    print("Say/whisper 'snap', 'play', or 'change'. Neutral for 'rest'. Ctrl+C to stop.\n")
+
+    smoother = MajoritySmoother(k=smooth_k)
     try:
-        fs = BoardShim.get_sampling_rate(BoardIds.GANGLION_BOARD.value)
-        emg_channels = BoardShim.get_emg_channels(BoardIds.GANGLION_BOARD.value)
-
-          # Only use channels 0, 1, 2
-        emg_channels = emg_channels[:3]   # keep first three
-
-        print("\nPlace ALL electrodes on FACE/JAW.")
-        print("Suggested: CH1–CH2 masseter, CH3–CH4 chin/lips; REF=forehead; BIAS=shoulder/mastoid.\n")
-
-        print("Stabilizing stream for 3s...")
-        time.sleep(3.0)
-
-        # ------- Collect dataset -------
-        X_list, y_list = [], []
-        for label in classes:
-            Xc, yc = collect_class_windows(
-                board, fs, emg_channels,
-                label=label,
-                n_windows=windows_per_class,
-                win_sec=win_sec,
-                settle_sec=3.0
-            )
-            X_list.append(Xc)
-            y_list.append(yc)
-
-        X = np.vstack(X_list)
-        y = np.concatenate(y_list)
-
-        # Save dataset
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        npz_path = os.path.join(dataset_dir, f"face_emg_snap_play_pause_{ts}.npz")
-        np.savez(npz_path, X=X, y=y, classes=np.array(classes))
-        print(f"\nSaved dataset: {npz_path}")
-
-        # ------- Train classifier -------
-        clf = make_pipeline(StandardScaler(), SVC(kernel='linear', probability=True))
-        scores = cross_val_score(clf, X, y, cv=5)
-        print("Cross-validated accuracy:", np.mean(scores))
-        clf.fit(X, y)
-
-        model_path = "emg_face_snap_play_pause_model.pkl"
-        joblib.dump(clf, model_path)
-        print(f"Model saved: {model_path}")
-
-        # ------- Real-time loop -------
-        print("\n=== Real-time Classification (facial) ===")
-        print("Mouth/whisper 'snap', 'play', or 'change'. Keep neutral face for 'rest'.")
-        print("Press Ctrl+C to exit.\n")
-
-        win_size = int(win_sec * fs)
-        smoother = MajoritySmoother(k=smooth_k)
-
         while True:
-            data = board.get_board_data()
-            if data.shape[1] < win_size:
-                time.sleep(0.03)
-                continue
-
-            emg = data[emg_channels, :]
-            for ch in range(emg.shape[0]):
-                emg[ch] = bandpass(emg[ch], fs)
-
-            win = emg[:, -win_size:]
+            # get latest window
+            win = pull_window(inlet, fs, n_channels, win_sec=win_sec, use_channels=use_channels, timeout=2.0)
+            for ch in range(win.shape[0]):
+                win[ch] = bandpass(win[ch], fs)
             feats = emg_features(win)
 
             probs = clf.predict_proba([feats])[0]
@@ -209,15 +192,9 @@ def main():
                 voted = smoother.vote()
                 if voted is not None:
                     print(f"Recognized: {voted} ({conf:.2f})")
-            # else: low confidence → ignore / implicit rest
-
             time.sleep(0.1)
-
     except KeyboardInterrupt:
-        print("\nStopping real-time loop...")
-    finally:
-        teardown_board(board)
-        print("Board session closed.")
+        print("\nStopping…")
 
 if __name__ == "__main__":
     main()
