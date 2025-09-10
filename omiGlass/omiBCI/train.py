@@ -132,7 +132,7 @@ def main():
     os.makedirs(dataset_dir, exist_ok=True)
 
     # ------- Setup board -------
-    board = setup_board(serial_port="/dev/tty.usbmodem1101") # adjust for your system. on macOS, run terminal and then run the following command: ls /dev/tty.*
+    board = setup_board(serial_port="/dev/tty.usbmodem11") # adjust for your system. on macOS, run terminal and then run the following command: ls /dev/tty.*
 
     try:
         fs = BoardShim.get_sampling_rate(BoardIds.GANGLION_BOARD.value)
