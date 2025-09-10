@@ -21,8 +21,7 @@ Place on neutral bony spot (forehead).
 Connect bias electrode to BIAS pin.
 
 ---
-```
-ChatGPT Generated
+
 Here’s how to place them more precisely:
 
 🔹 Masseter (for CH1 & CH2)
@@ -53,7 +52,7 @@ CH4: 2–3 cm further down along the midline of the chin.
 
 Alternative: if you prefer lip edge signals, move slightly lateral under the corners of the mouth — but chin midline is cleaner.
 
-🔹 Recap
+🔹 Overall
 
 CH1/CH2: vertically stacked on the masseter, side of jaw.
 
@@ -62,4 +61,3 @@ CH3/CH4: vertically stacked on the chin (mentalis), below the lower lip.
 REF: forehead (bony).
 
 BIAS: mastoid (behind ear) or shoulder.
-```
