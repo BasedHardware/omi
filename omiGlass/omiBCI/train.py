@@ -12,13 +12,33 @@ from sklearn.pipeline import make_pipeline
 # -------------------------------
 # Filtering & Features
 # -------------------------------
-def butter_bandpass(low, high, fs, order=4):
-    b, a = butter(order, [low/(fs/2), high/(fs/2)], btype='band')
+from scipy.signal import butter, filtfilt
+
+def butter_bandpass(low, high, fs, order=4, safety=0.95):
+    """
+    Designs a stable bandpass for given fs.
+    - If high is None, default to min(90 Hz, 0.45*fs) (good for EMG at fs≈200)
+    - Clamps cutoffs to (0, Nyquist) and ensures low < high
+    """
+    nyq = fs / 2.0
+    if high is None:
+        high = min(90.0, nyq * 0.9)  # default top cutoff
+    # clamp to valid range
+    low = max(1e-3, float(low))
+    high = min(float(high), nyq * safety)  # keep some headroom to avoid 1.0
+    if high <= low:
+        # fall back to a reasonable band near the top
+        high = min(max(low + 1.0, nyq * 0.45), nyq * safety)
+    Wn = [low / nyq, high / nyq]
+    if not (0.0 < Wn[0] < Wn[1] < 1.0):
+        raise ValueError(f"Invalid normalized band: {Wn} at fs={fs}")
+    b, a = butter(order, Wn, btype='band')
     return b, a
 
-def bandpass(x, fs, low=20, high=450):
+def bandpass(x, fs, low=20, high=None):
     b, a = butter_bandpass(low, high, fs)
     return filtfilt(b, a, x)
+
 
 def emg_features(win, zc_thresh=0.01):
     """
