@@ -60,7 +60,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
-    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v4/listen$params';
+    String url = uri.toString();
 
     _socket = PureSocket(url);
     _socket.setListener(this);
