@@ -33,11 +33,6 @@ llm_persona_medium_stream = ChatOpenAI(
     default_headers={"X-Title": "Omi Chat"},
     streaming=True,
 )
-llm_title_generator = ChatOpenAI(
-    model='gpt-4o-mini',
-    temperature=0.3,
-    max_tokens=20,
-)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
