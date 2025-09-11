@@ -437,39 +437,22 @@ def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> 
         Dictionary representation of the subscription or None if not found
     """
     try:
-
-        cached_customer_id = get_user_app_subscription_customer_id(app_id, uid)
         
+        cached_customer_id = get_user_app_subscription_customer_id(app_id, uid)
         latest_subscription = None
         
         if cached_customer_id:
-
-            try:
-                subscriptions = stripe.Subscription.list(
-                    customer=cached_customer_id, 
-                    status=status_filter, 
-                    limit=5
-                )
-                for sub in subscriptions.data:
-                    sub_dict = sub.to_dict()
-                    if (sub_dict.get('metadata', {}).get('app_id') == app_id and
-                        sub_dict.get('metadata', {}).get('uid') == uid):
-                        if (latest_subscription is None or
-                            sub_dict.get('created', 0) > latest_subscription.get('created', 0)):
-                            latest_subscription = sub_dict
-            except Exception as e:
-                print(f"Error using cached customer ID {cached_customer_id}: {e}")
+            latest_subscription = stripe.find_app_subscription_by_customer_id(
+                cached_customer_id, app_id, uid, status_filter
+            )
+            
+            if latest_subscription is None:
                 cached_customer_id = None
 
         if not latest_subscription and not cached_customer_id:
-            subscriptions = stripe.Subscription.list(limit=100, status=status_filter)
-            for sub in subscriptions.data:
-                sub_dict = sub.to_dict()
-                if (sub_dict.get('metadata', {}).get('app_id') == app_id and
-                    sub_dict.get('metadata', {}).get('uid') == uid):
-                    if (latest_subscription is None or
-                        sub_dict.get('created', 0) > latest_subscription.get('created', 0)):
-                        latest_subscription = sub_dict
+            latest_subscription = stripe.find_app_subscription_by_metadata(
+                app_id, uid, status_filter
+            )
             
             # Cache the customer ID for future lookups
             if latest_subscription and latest_subscription.get('customer'):

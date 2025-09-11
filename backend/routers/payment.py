@@ -137,7 +137,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
             if session.get("subscription"):
                 subscription_id = session["subscription"]
-                stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
+                stripe_utils.modify_subscription(subscription_id, metadata={"uid": uid, "app_id": app_id})
                 # Store the customer ID for app subscription so that it is easy to cancel the subscription
                 customer_id = session.get("customer")
                 if customer_id:
@@ -493,7 +493,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             raise HTTPException(status_code=404, detail="Invalid subscription data")
 
         # Cancel the subscription at period end
-        updated_sub = stripe.Subscription.modify(
+        updated_sub = stripe_utils.modify_subscription(
             target_subscription_id,
             cancel_at_period_end=True,
         )
