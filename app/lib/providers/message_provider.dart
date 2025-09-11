@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -18,11 +19,9 @@ import 'package:omi/utils/file.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:uuid/uuid.dart';
-import 'chat_session_provider.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
-  ChatSessionProvider? chatSessionProvider;
   List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
 
@@ -43,12 +42,6 @@ class MessageProvider extends ChangeNotifier {
   void updateAppProvider(AppProvider p) {
     appProvider = p;
   }
-
-  void updateChatSessionProvider(ChatSessionProvider p) {
-    chatSessionProvider = p;
-  }
-
-  // Removed appProvider?.selectedChatAppId - AppProvider now provides clean state directly
 
   void setNextMessageOriginIsVoice(bool isVoice) {
     _isNextMessageFromVoice = isVoice;
@@ -257,11 +250,7 @@ class MessageProvider extends ChangeNotifier {
   Future<void> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
-      var res = await uploadFilesServer(
-        files,
-        appId: appId,
-        chatSessionId: chatSessionProvider?.selectedSessionId,
-      );
+      var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
         uploadedFiles.addAll(res);
       } else {
@@ -279,39 +268,30 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future refreshMessages({bool dropdownSelected = false}) async {
-    // If no session is selected, show empty messages (blank chat)
-    if (chatSessionProvider?.selectedSessionId == null) {
-      messages = [];
-      setLoadingMessages(false);
-      notifyListeners();
-      return;
-    }
-
     setLoadingMessages(true);
+    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
+      setHasCachedMessages(true);
+    }
     messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
-
-    // Don't fall back to cached messages - each session should show only its own messages
-    // Empty sessions should remain empty and show the welcome screen
+    if (messages.isEmpty) {
+      messages = SharedPreferencesUtil().cachedMessages;
+    } else {
+      SharedPreferencesUtil().cachedMessages = messages;
+      setHasCachedMessages(true);
+    }
     setLoadingMessages(false);
     notifyListeners();
   }
 
   void setMessagesFromCache() {
-    // In multi-chat context, don't load global cached messages
-    // Let each session load its own messages via refreshMessages()
-    // This prevents showing wrong messages from other sessions
+    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
+      setHasCachedMessages(true);
+      messages = SharedPreferencesUtil().cachedMessages;
+    }
     notifyListeners();
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
-    // If no session is selected, return empty messages (blank chat)
-    if (chatSessionProvider?.selectedSessionId == null) {
-      messages = [];
-      setLoadingMessages(false);
-      notifyListeners();
-      return messages;
-    }
-
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
@@ -320,7 +300,6 @@ class MessageProvider extends ChangeNotifier {
     var mes = await getMessagesServer(
       appId: appProvider?.selectedChatAppId,
       dropdownSelected: dropdownSelected,
-      chatSessionId: chatSessionProvider?.selectedSessionId,
     );
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Learning from your memories...';
@@ -340,39 +319,18 @@ class MessageProvider extends ChangeNotifier {
 
   Future clearChat() async {
     setClearingChat(true);
-    try {
-      final result = await clearChatServer(
-        appId: appProvider?.selectedChatAppId,
-        chatSessionId: chatSessionProvider?.selectedSessionId,
-      );
-
-      if (result != null && result['status'] == 'success') {
-        // Successfully cleared - reset messages to empty (will show welcome screen)
-        messages = [];
-        debugPrint('Chat cleared successfully: ${result['message']}');
-
-        // Optional: Track analytics for successful clear
-        final clearedInfo = result['cleared'] as Map<String, dynamic>?;
-        if (clearedInfo != null) {
-          debugPrint('Cleared session: ${clearedInfo['chat_session_id']} for app: ${clearedInfo['app_id']}');
-        }
-      } else {
-        // Failed to clear - keep existing messages
-        debugPrint('Failed to clear chat: ${result?['message'] ?? 'Unknown error'}');
-        // You could show an error snackbar here if needed
-      }
-    } catch (e) {
-      debugPrint('Error clearing chat: $e');
-      // Keep existing messages on error
-    } finally {
-      setClearingChat(false);
-      notifyListeners();
-    }
+    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
+    messages = mes;
+    setClearingChat(false);
+    notifyListeners();
   }
 
   void addMessageLocally(String messageText) {
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     var appId = appProvider?.selectedChatAppId;
+    if (appId == 'no_selected') {
+      appId = null;
+    }
     var message = ServerMessage(
       const Uuid().v4(),
       DateTime.now(),
@@ -409,18 +367,9 @@ class MessageProvider extends ChangeNotifier {
     );
 
     var currentAppId = appProvider?.selectedChatAppId;
-
-    // Auto-create session if none selected (for both regular apps and OMI)
-    if (chatSessionProvider?.selectedSessionId == null) {
-      await chatSessionProvider?.createSession(appId: appProvider?.selectedChatAppId ?? 'omi', title: 'New Chat');
+    if (currentAppId == 'no_selected') {
+      currentAppId = null;
     }
-
-    // Check if this is the first message by checking if session still has default title
-    final currentSession =
-        chatSessionProvider?.sessions.firstWhereOrNull((s) => s.id == chatSessionProvider?.selectedSessionId);
-    final currentTitle = currentSession?.title ?? '';
-    bool isFirstMessage = currentTitle == 'New Chat' || currentTitle.isEmpty;
-
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
@@ -428,7 +377,6 @@ class MessageProvider extends ChangeNotifier {
     MixpanelManager().chatVoiceInputUsed(
       chatTargetId: chatTargetId,
       isPersonaChat: isPersonaChat,
-      chatSessionId: chatSessionProvider?.selectedSessionId,
     );
 
     setShowTypingIndicator(true);
@@ -438,11 +386,7 @@ class MessageProvider extends ChangeNotifier {
 
     try {
       bool firstChunkRecieved = false;
-      await for (var chunk in sendVoiceMessageStreamServer(
-        [file],
-        appId: currentAppId,
-        chatSessionId: chatSessionProvider?.selectedSessionId,
-      )) {
+      await for (var chunk in sendVoiceMessageStreamServer([file])) {
         if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
@@ -487,40 +431,14 @@ class MessageProvider extends ChangeNotifier {
     }
 
     setShowTypingIndicator(false);
-
-    // Generate title for first message in new session (voice) - after successful completion
-    if (chatSessionProvider?.selectedSessionId != null && messages.isNotEmpty) {
-      final currentSession =
-          chatSessionProvider?.sessions.firstWhereOrNull((s) => s.id == chatSessionProvider?.selectedSessionId);
-      final currentTitle = currentSession?.title ?? '';
-      bool isFirstVoiceMessage = currentTitle == 'New Chat' || currentTitle.isEmpty;
-
-      if (isFirstVoiceMessage) {
-        final firstMessage = messages.first;
-        if (firstMessage.text.isNotEmpty) {
-          await chatSessionProvider?.generateTitleForSession(
-            sessionId: chatSessionProvider!.selectedSessionId!,
-            firstMessage: firstMessage.text,
-          );
-        }
-      }
-    }
   }
 
   Future sendMessageStreamToServer(String text) async {
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
-
-    // Auto-create session if none selected (for both regular apps and OMI)
-    if (chatSessionProvider?.selectedSessionId == null) {
-      await chatSessionProvider?.createSession(appId: appProvider?.selectedChatAppId ?? 'omi', title: 'New Chat');
+    if (currentAppId == 'no_selected') {
+      currentAppId = null;
     }
-
-    // Check if this is the first message by checking if session still has default title
-    final currentSession =
-        chatSessionProvider?.sessions.firstWhereOrNull((s) => s.id == chatSessionProvider?.selectedSessionId);
-    final currentTitle = currentSession?.title ?? '';
-    bool isFirstMessage = currentTitle == 'New Chat' || currentTitle.isEmpty;
 
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
@@ -533,7 +451,6 @@ class MessageProvider extends ChangeNotifier {
       chatTargetId: chatTargetId,
       isPersonaChat: isPersonaChat,
       isVoiceInput: _isNextMessageFromVoice,
-      chatSessionId: chatSessionProvider?.selectedSessionId,
     );
     _isNextMessageFromVoice = false;
 
@@ -556,12 +473,7 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(
-        text,
-        appId: currentAppId,
-        chatSessionId: chatSessionProvider?.selectedSessionId,
-        filesId: fileIds,
-      )) {
+      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);
@@ -601,23 +513,12 @@ class MessageProvider extends ChangeNotifier {
       timer?.cancel();
       flushBuffer();
       setShowTypingIndicator(false);
-
-      // Generate title for first message in new session
-      if (isFirstMessage && chatSessionProvider?.selectedSessionId != null) {
-        await chatSessionProvider?.generateTitleForSession(
-          sessionId: chatSessionProvider!.selectedSessionId!,
-          firstMessage: text,
-        );
-      }
     }
   }
 
   Future sendInitialAppMessage(App? app) async {
     setSendingMessage(true);
-    ServerMessage message = await getInitialAppMessage(
-      app?.id,
-      chatSessionId: chatSessionProvider?.selectedSessionId,
-    );
+    ServerMessage message = await getInitialAppMessage(app?.id);
     addMessage(message);
     setSendingMessage(false);
     notifyListeners();

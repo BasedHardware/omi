@@ -107,23 +107,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
-    data['uid'] = uid
-    # Ensure we have valid author and email
-    user = get_user_from_uid(uid) if uid else None
-
-    # Set author if not provided or invalid
-    if not data.get('author') or not data.get('author').strip():
-        if user and user.get('display_name') and user.get('display_name').strip():
-            data['author'] = user['display_name'].strip()
-        else:
-            data['author'] = f"User {uid[:8]}" if uid else "Anonymous User"
-
-    # Set email if not provided
-    if not data.get('email'):
-        if user and user.get('email'):
-            data['email'] = user['email']
-        else:
-            data['email'] = f"{uid}@example.com" if uid else "anonymous@example.com"
+    if not data.get('author') and not data.get('email'):
+        user = get_user_from_uid(uid)
+        data['author'] = user.get('display_name', '')
+        data['email'] = user['email']
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -850,25 +837,6 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
     if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
         increase_app_installs_count(app_id)
     return {'status': 'ok'}
-
-
-@router.post('/v1/apps/clear-cache', tags=['v1'])
-def clear_app_cache_endpoint(secret_key: str = Header(...)):
-    """Clear all app-related cache to fix potential cache corruption issues."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-
-    try:
-        # Clear generic app caches
-        delete_generic_cache('get_public_approved_apps_data')
-        delete_generic_cache('get_popular_apps_data')
-
-        # Clear all individual app caches (this would require Redis access)
-        # For now, we'll let them expire naturally (10 minutes)
-
-        return {'status': 'ok', 'message': 'App cache cleared successfully'}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Failed to clear cache: {str(e)}')
 
 
 @router.post('/v1/apps/disable')

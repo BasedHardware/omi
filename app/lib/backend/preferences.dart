@@ -257,7 +257,7 @@ class SharedPreferencesUtil {
     appsList = apps;
   }
 
-  String get selectedChatAppId => getString('selectedChatAppId2') ?? 'omi';
+  String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
