@@ -43,7 +43,7 @@ For detailed instructions, see [docker-build.md](./scripts/docker-build.md).
 
 ## Flashing the Firmware
 
-Follow the instructions at https://docs.omi.me/docs/get_started/Flash_device
+Follow the instructions at https://docs.omi.me/doc/get_started/Flash_device
 
 For Docker builds, the output files will be in `build/docker_build/`.
 For nRF Connect builds, locate the `zephyr.uf2` file in your build output directory.
