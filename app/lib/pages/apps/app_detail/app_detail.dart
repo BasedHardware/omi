@@ -379,27 +379,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   },
                 ),
           // Cancel subscription
-          !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !context.watch<AppProvider>().isAppOwner
-              ? GestureDetector(
-                  child: const Icon(Icons.cancel, color: Colors.red, size: 20),
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.pop(context),
-                        () async {
-                          Navigator.pop(context);
-                          await _cancelSubscription();
-                        },
-                        'Cancel Subscription?',
-                        'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.',
-                        okButtonText: 'Cancel Subscription',
-                      ),
-                    );
-                  },
-                )
-              : const SizedBox.shrink(),
           !context.watch<AppProvider>().isAppOwner
               ? const SizedBox(
                   width: 24,
@@ -586,7 +565,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           text: '',
                           width: MediaQuery.of(context).size.width * 0.9,
                           onPressed: () async {},
-                          color: Color(0xFF35343B),
+                          color: const Color(0xFF35343B),
                         ),
                       ),
                     )
@@ -656,6 +635,70 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 ),
                               ),
                             )),
+
+              // Cancel Subscription
+              !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !context.watch<AppProvider>().isAppOwner
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: InkWell(
+                        onTap: _isCancelingSubscription
+                            ? null
+                            : () {
+                                showDialog(
+                                  context: context,
+                                  builder: (c) => getDialog(
+                                    context,
+                                    () => Navigator.pop(context),
+                                    () async {
+                                      Navigator.pop(context);
+                                      await _cancelSubscription();
+                                    },
+                                    'Cancel Subscription?',
+                                    'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.',
+                                    okButtonText: 'Cancel Subscription',
+                                  ),
+                                );
+                              },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.only(top: 12),
+                          child: _isCancelingSubscription
+                              ? const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Cancelling...',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Text(
+                                  'Cancel Subscription',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
 
               (app.isUnderReview() || app.private) && !app.isOwner(SharedPreferencesUtil().uid)
                   ? Column(
