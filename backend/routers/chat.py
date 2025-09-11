@@ -21,7 +21,6 @@ from models.chat import (
     GenerateTitleRequest,
     MessageSender,
     ResponseMessage,
-    WebSearchCitation,
     MessageConversation,
     FileChat,
 )
@@ -155,7 +154,6 @@ def send_message(
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
-        web_citations = callback_data.get('web_search_citations', [])
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -174,7 +172,7 @@ def send_message(
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
 
-        # Create base AI message with web search citations
+        # Create AI message
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -183,7 +181,6 @@ def send_message(
             app_id=compat_app_id,
             type='text',
             memories_id=memories_id,
-            web_search_citations=[WebSearchCitation(**citation) for citation in web_citations] if web_citations else [],
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -211,7 +208,6 @@ def send_message(
             cited=True,
             callback_data=callback_data,
             chat_session=chat_session,
-            web_search_enabled=data.web_search_enabled,
         ):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")

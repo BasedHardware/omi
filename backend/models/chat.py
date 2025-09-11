@@ -61,7 +61,6 @@ class Message(BaseModel):
     files: List[FileChat] = []
     chat_session_id: Optional[str] = None
     data_protection_level: Optional[str] = None
-    web_search_citations: List['WebSearchCitation'] = []  # Web search citations
 
     @model_validator(mode='before')
     @classmethod
@@ -138,13 +137,6 @@ class Message(BaseModel):
         return '\n'.join(formatted_messages)
 
 
-class WebSearchCitation(BaseModel):
-    title: str
-    url: str
-    snippet: str
-    index: int  # For [1], [2] reference numbering
-
-
 class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
 
@@ -152,7 +144,6 @@ class ResponseMessage(Message):
 class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
-    web_search_enabled: Optional[bool] = False
 
 
 class CreateSessionRequest(BaseModel):

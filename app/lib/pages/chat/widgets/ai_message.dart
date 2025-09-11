@@ -26,7 +26,6 @@ import 'package:shimmer/shimmer.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'markdown_message_widget.dart';
-import 'web_search_citations.dart';
 
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
@@ -75,12 +74,6 @@ class _AIMessageState extends State<AIMessage> {
           widget.updateConversation,
           widget.setMessageNps,
         ),
-        // Web search citations
-        if (widget.message.webSearchCitations.isNotEmpty)
-          WebSearchCitations(
-            citations: widget.message.webSearchCitations,
-            isDesktop: false,
-          ),
       ],
     );
   }

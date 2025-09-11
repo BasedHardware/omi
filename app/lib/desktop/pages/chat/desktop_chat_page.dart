@@ -19,8 +19,6 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_welcome_screen.dart';
-import 'package:omi/pages/chat/widgets/web_search_toggle.dart';
-import 'package:omi/pages/chat/widgets/web_search_citations.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
@@ -915,14 +913,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     ),
                   ),
                   // Web search citations for desktop AI messages
-                  if (message.webSearchCitations.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(left: 50, top: 8),
-                      child: WebSearchCitations(
-                        citations: message.webSearchCitations,
-                        isDesktop: true,
-                      ),
-                    ),
                 ],
               )
             : Column(
@@ -1277,19 +1267,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               Expanded(
                 child: _showVoiceRecorder ? _buildEnhancedVoiceRecorder() : _buildModernTextInput(),
               ),
-
-              // Compact web search toggle next to voice button
-              if (!_showVoiceRecorder)
-                Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  child: WebSearchToggle(
-                    isEnabled: provider.webSearchEnabled,
-                    onChanged: (enabled) {
-                      provider.setWebSearchEnabled(enabled);
-                    },
-                    isCompact: true,
-                  ),
-                ),
 
               // Enhanced voice button
               if (!_showVoiceRecorder) _buildModernVoiceButton(),

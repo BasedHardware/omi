@@ -39,11 +39,6 @@ llm_title_generator = ChatOpenAI(
     temperature=0.3,
     max_tokens=20,
 )
-llm_web_search_filter = ChatOpenAI(
-    model='gpt-4o-mini',
-    temperature=0.1,  # Low temperature for consistent decision making
-    max_tokens=10,  # We only need a simple yes/no response
-)
 llm_date_parser = ChatOpenAI(
     model='gpt-4o-mini',
     temperature=0.1,  # Low temperature for consistent date parsing

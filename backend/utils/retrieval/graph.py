@@ -116,11 +116,6 @@ class GraphState(TypedDict):
 
     chat_session: Optional[ChatSession]
 
-    # Web search functionality
-    web_search_enabled: Optional[bool] = False
-    web_search_results: Optional[List] = None
-    web_search_citations: Optional[List] = None
-
 
 def determine_conversation(state: GraphState):
     print("determine_conversation")
@@ -137,17 +132,12 @@ def determine_conversation(state: GraphState):
 def determine_conversation_type(
     state: GraphState,
 ) -> Literal[
-    "web_search_enhancer",
     "no_context_conversation",
     "context_dependent_conversation",
     "omi_question",
     "file_chat_question",
     "persona_question",
 ]:
-    # First, check if web search is enabled - if so, route through web search enhancer
-    web_search_enabled = state.get("web_search_enabled", False)
-    if web_search_enabled:
-        return "web_search_enhancer"
     messages = state.get("messages", [])
     if len(messages) > 0 and len(messages[-1].files_id) > 0:
         return "file_chat_question"
@@ -201,44 +191,13 @@ def determine_conversation_type(
 
 def no_context_conversation(state: GraphState):
 
-    # Check for web search results to enhance response
-    web_results = state.get("web_search_results", [])
-
-    if web_results:
-        print(f"Enhancing no_context response with {len(web_results)} web search results")
-        from utils.other.web_search import format_web_search_context, extract_search_citations
-
-        web_context = format_web_search_context(web_results)
-
-        # Create enhanced system message
-        enhanced_messages = state.get("messages", []).copy()
-        # Insert web context into the conversation flow
-        question = state.get("parsed_question", "")
-
-        # streaming with web enhancement
-        streaming = state.get("streaming")
-        if streaming:
-            answer: str = answer_simple_message_stream(
-                state.get("uid"), enhanced_messages, state.get("plugin_selected"), callbacks=[state.get('callback')]
-            )
-        else:
-            answer: str = answer_simple_message(state.get("uid"), enhanced_messages, state.get("plugin_selected"))
-
-        # Add citations to response
-        answer_with_citations = extract_search_citations(answer, web_results)
-        return {
-            "answer": answer_with_citations,
-            "ask_for_nps": True,
-            "web_search_citations": state.get("web_search_citations", []),
-        }
-
-    # Normal flow without web search
+    # Normal flow
     streaming = state.get("streaming")
     if streaming:
         answer: str = answer_simple_message_stream(
             state.get("uid"), state.get("messages"), state.get("plugin_selected"), callbacks=[state.get('callback')]
         )
-        return {"answer": answer, "ask_for_nps": False, "web_search_citations": []}
+        return {"answer": answer, "ask_for_nps": False}
 
     # no streaming
     answer: str = answer_simple_message(
@@ -246,7 +205,7 @@ def no_context_conversation(state: GraphState):
         state.get("messages"),
         state.get("plugin_selected"),
     )
-    return {"answer": answer, "ask_for_nps": False, "web_search_citations": []}
+    return {"answer": answer, "ask_for_nps": False}
 
 
 def omi_question(state: GraphState):
@@ -254,57 +213,21 @@ def omi_question(state: GraphState):
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
 
-    # Check for web search results to enhance response
-    web_results = state.get("web_search_results", [])
-
-    if web_results:
-        print(f"Enhancing omi_question response with {len(web_results)} web search results")
-        from utils.other.web_search import format_web_search_context, extract_search_citations
-
-        web_context = format_web_search_context(web_results)
-
-        # Combine omi documentation with web context
-        enhanced_context = f"{context_str}\n\n--- Current Web Information ---\n{web_context}"
-    else:
-        enhanced_context = context_str
-
     # streaming
     streaming = state.get("streaming")
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
         answer: str = answer_omi_question_stream(
-            state.get("messages", []), enhanced_context, callbacks=[state.get('callback')]
+            state.get("messages", []), context_str, callbacks=[state.get('callback')]
         )
-
-        # Add web citations if web results were used
-        if web_results:
-            from utils.other.web_search import extract_search_citations
-
-            answer = extract_search_citations(answer, web_results)
-
-        return {'answer': answer, 'ask_for_nps': True, 'web_search_citations': state.get("web_search_citations", [])}
+        return {'answer': answer, 'ask_for_nps': True}
 
     # no streaming
-    answer = answer_omi_question(state.get("messages", []), enhanced_context)
-
-    # Add web citations if web results were used
-    if web_results:
-        from utils.other.web_search import extract_search_citations
-
-        answer = extract_search_citations(answer, web_results)
-
-    return {'answer': answer, 'ask_for_nps': True, 'web_search_citations': state.get("web_search_citations", [])}
+    answer = answer_omi_question(state.get("messages", []), context_str)
+    return {'answer': answer, 'ask_for_nps': True}
 
 
 def persona_question(state: GraphState):
-
-    # Check for web search results to enhance persona response
-    web_results = state.get("web_search_results", [])
-
-    if web_results:
-        print(f"Enhancing persona_question response with {len(web_results)} web search results")
-        # For persona + web search, we could enhance the persona's knowledge
-        # For now, we'll maintain the same response but add citations
 
     # streaming
     streaming = state.get("streaming")
@@ -313,94 +236,10 @@ def persona_question(state: GraphState):
         answer: str = answer_persona_question_stream(
             state.get("plugin_selected"), state.get("messages", []), callbacks=[state.get('callback')]
         )
-
-        # Add web citations if web results were used
-        if web_results:
-            from utils.other.web_search import extract_search_citations
-
-            answer = extract_search_citations(answer, web_results)
-
-        return {'answer': answer, 'ask_for_nps': True, 'web_search_citations': state.get("web_search_citations", [])}
+        return {'answer': answer, 'ask_for_nps': True}
 
     # no streaming
-    return {'answer': "Oops", 'ask_for_nps': True, 'web_search_citations': state.get("web_search_citations", [])}
-
-
-def web_search_enhancer(state: GraphState):
-    """Enhance conversation with web search results, then route to normal conversation flow."""
-    print("web_search_enhancer node - adding web context")
-    from utils.other.web_search import perform_web_search
-
-    question = state.get("parsed_question", "")
-    if not question:
-        # If no specific question, use the last message as search query
-        messages = state.get("messages", [])
-        question = messages[-1].text if messages else ""
-
-    print(f"Web search query: '{question}'")
-
-    # Perform web search and add results to state
-    web_results = perform_web_search(question, max_results=5)
-    print(f"Web search found {len(web_results)} results")
-
-    # Create structured citations for frontend
-    from utils.other.web_search import create_structured_citations
-
-    citations = create_structured_citations(web_results)
-
-    # Add both web results and structured citations to state
-    updated_state = state.copy()
-    updated_state["web_search_results"] = web_results
-    updated_state["web_search_citations"] = citations
-
-    return updated_state
-
-
-def determine_normal_conversation_type(
-    state: GraphState,
-) -> Literal[
-    "no_context_conversation",
-    "context_dependent_conversation",
-    "omi_question",
-    "file_chat_question",
-    "persona_question",
-]:
-    """Determine normal conversation type (used after web search enhancement)."""
-    print("determine_normal_conversation_type")
-    messages = state.get("messages", [])
-    if len(messages) > 0 and len(messages[-1].files_id) > 0:
-        return "file_chat_question"
-
-    # persona
-    app: App = state.get("plugin_selected")
-    if app and app.is_a_persona():
-        # file
-        question = state.get("parsed_question", "")
-        is_file_question = retrieve_is_file_question(question)
-        if is_file_question:
-            return "file_chat_question"
-
-        return "persona_question"
-
-    # chat
-    # no context
-    question = state.get("parsed_question", "")
-    if not question or len(question) == 0:
-        return "no_context_conversation"
-
-    # determine the follow-up question is chatting with files or not
-    is_file_question = retrieve_is_file_question(question)
-    if is_file_question:
-        return "file_chat_question"
-
-    is_omi_question = retrieve_is_an_omi_question(question)
-    if is_omi_question:
-        return "omi_question"
-
-    requires = requires_context(question)
-    if requires:
-        return "context_dependent_conversation"
-    return "no_context_conversation"
+    return {'answer': "Oops", 'ask_for_nps': True}
 
 
 def context_dependent_conversation_v1(state: GraphState):
@@ -526,10 +365,10 @@ def file_chat_question(state: GraphState):
     streaming = state.get("streaming")
     if streaming:
         answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback=state.get('callback'))
-        return {'answer': answer, 'ask_for_nps': True, 'web_search_citations': state.get("web_search_citations", [])}
+        return {'answer': answer, 'ask_for_nps': True}
 
     answer = fc_tool.process_chat_with_file(uid, question, file_ids)
-    return {'answer': answer, 'ask_for_nps': True, 'web_search_citations': state.get("web_search_citations", [])}
+    return {'answer': answer, 'ask_for_nps': True}
 
 
 # === UNIFIED AGENT WITH TOOLS ===
@@ -573,7 +412,6 @@ def unified_agent_qa_handler(state: GraphState):
 
     uid = state.get("uid")
     memories = state.get("memories_found", [])
-    web_results = state.get("web_search_results", [])
     question = state.get("parsed_question", "")
     streaming = state.get("streaming")
     callback = state.get("callback")
@@ -589,16 +427,8 @@ def unified_agent_qa_handler(state: GraphState):
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    # Combine memory context with web search results if available
-    memory_context = Conversation.conversations_to_string(memories, False, people=people)
-
-    if web_results:
-        from utils.other.web_search import format_web_search_context, extract_search_citations
-
-        web_context = format_web_search_context(web_results)
-        combined_context = f"{memory_context}\n\n--- Current Web Information ---\n{web_context}"
-    else:
-        combined_context = memory_context
+    # Use memory context
+    combined_context = Conversation.conversations_to_string(memories, False, people=people)
 
     try:
         # Create user-specific tools (uid pre-populated)
@@ -746,26 +576,25 @@ User's timezone: {state.get('tz', 'UTC')}"""
                 if current_chunk.strip():
                     callback.put_data_nowait(current_chunk)
 
+                # Signal end of streaming
+                callback.put_data_nowait(None)
                 enhanced_response = final_answer
             else:
                 print("No final answer to stream")
                 enhanced_response = "I apologize, but I couldn't generate a proper response."
                 callback.put_data_nowait(enhanced_response)
+                # Signal end of streaming
+                callback.put_data_nowait(None)
 
         else:
             # Non-streaming mode - let LangGraph handle tool calls automatically
             response = llm_with_tools.invoke(messages)
             enhanced_response = response.content if hasattr(response, 'content') else str(response)
 
-        # Add web citations if needed
-        if web_results:
-            enhanced_response = extract_search_citations(enhanced_response, web_results)
-
         print("Unified agent response generated successfully")
         return {
             "answer": enhanced_response,
             "ask_for_nps": True,
-            "web_search_citations": state.get("web_search_citations", []),
         }
 
     except Exception as e:
@@ -793,10 +622,7 @@ User's timezone: {state.get('tz', 'UTC')}"""
                 tz=state.get("tz"),
             )
 
-        if web_results:
-            response = extract_search_citations(response, web_results)
-
-        return {"answer": response, "ask_for_nps": True, "web_search_citations": state.get("web_search_citations", [])}
+        return {"answer": response, "ask_for_nps": True}
 
 
 workflow = StateGraph(GraphState)
@@ -807,9 +633,6 @@ workflow.add_node("determine_conversation", determine_conversation)
 
 workflow.add_conditional_edges("determine_conversation", determine_conversation_type)
 
-# Web search enhancer - runs first if web search enabled
-workflow.add_node("web_search_enhancer", web_search_enhancer)
-workflow.add_conditional_edges("web_search_enhancer", determine_normal_conversation_type)
 
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
@@ -850,7 +673,6 @@ def execute_graph_chat(
     messages: List[Message],
     app: Optional[App] = None,
     cited: Optional[bool] = False,
-    web_search_enabled: Optional[bool] = False,
 ) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat app    :', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -861,7 +683,6 @@ def execute_graph_chat(
             "cited": cited,
             "messages": messages,
             "plugin_selected": app,
-            "web_search_enabled": web_search_enabled,
         },
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
@@ -875,7 +696,6 @@ async def execute_graph_chat_stream(
     cited: Optional[bool] = False,
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
-    web_search_enabled: Optional[bool] = False,
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -892,7 +712,6 @@ async def execute_graph_chat_stream(
                 "streaming": True,
                 "callback": callback,
                 "chat_session": chat_session,
-                "web_search_enabled": web_search_enabled,
             },
             {"configurable": {"thread_id": str(uuid.uuid4())}},
         )
@@ -912,7 +731,6 @@ async def execute_graph_chat_stream(
     callback_data['answer'] = result.get("answer")
     callback_data['memories_found'] = result.get("memories_found", [])
     callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
-    callback_data['web_search_citations'] = result.get('web_search_citations', [])
 
     yield None
     return

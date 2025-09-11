@@ -97,7 +97,7 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 }
 
 Stream<ServerMessageChunk> sendMessageStreamServer(String text,
-    {String? appId, String? chatSessionId, List<String>? filesId, bool webSearchEnabled = false}) async* {
+    {String? appId, String? chatSessionId, List<String>? filesId}) async* {
   final uri = _buildApiUri('/v2/messages', query: {
     'app_id': appId, // AppProvider provides clean state, backend handles normalization
     if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
@@ -110,7 +110,6 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text,
     request.write(jsonEncode({
       'text': text,
       'file_ids': filesId,
-      'web_search_enabled': webSearchEnabled,
     }));
 
     final response = await request.close();
