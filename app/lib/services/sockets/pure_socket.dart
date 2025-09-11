@@ -3,11 +3,11 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
@@ -28,7 +28,7 @@ abstract class IPureSocket {
   Future disconnect();
   void send(dynamic message);
 
-  void onInternetSatusChanged(InternetStatus status);
+  void onConnectionStateChanged(bool isConnected);
 
   void onMessage(dynamic message);
   void onConnected();
@@ -40,42 +40,9 @@ class PureSocketMessage {
   String? raw;
 }
 
-class PureCore {
-  late InternetConnection internetConnection;
-
-  factory PureCore() => _instance;
-
-  /// The singleton instance of [PureCore].
-  static final _instance = PureCore.createInstance();
-
-  PureCore.createInstance() {
-    internetConnection = InternetConnection.createInstance(
-      useDefaultOptions: false,
-      customCheckOptions: [
-        InternetCheckOption(
-          uri: Uri.parse('https://one.one.one.one'),
-          timeout: const Duration(seconds: 12),
-        ),
-        InternetCheckOption(
-          uri: Uri.parse('https://icanhazip.com/'),
-          timeout: const Duration(seconds: 12),
-        ),
-        InternetCheckOption(
-          uri: Uri.parse('https://jsonplaceholder.typicode.com/todos/1'),
-          timeout: const Duration(seconds: 12),
-        ),
-        InternetCheckOption(
-          uri: Uri.parse('https://reqres.in/api/users/1'),
-          timeout: const Duration(seconds: 12),
-        ),
-      ],
-    );
-  }
-}
-
 class PureSocket implements IPureSocket {
-  StreamSubscription<InternetStatus>? _internetStatusListener;
-  InternetStatus? _internetStatus;
+  StreamSubscription<bool>? _connectionStateListener;
+  bool _isConnected = ConnectivityService().isConnected;
   Timer? _internetLostDelayTimer;
 
   WebSocketChannel? _channel;
@@ -96,8 +63,8 @@ class PureSocket implements IPureSocket {
   String url;
 
   PureSocket(this.url) {
-    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
-      onInternetSatusChanged(status);
+    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
+      onConnectionStateChanged(isConnected);
     });
   }
 
@@ -186,7 +153,7 @@ class PureSocket implements IPureSocket {
 
   Future _cleanUp() async {
     _internetLostDelayTimer?.cancel();
-    _internetStatusListener?.cancel();
+    _connectionStateListener?.cancel();
   }
 
   Future stop() async {
@@ -258,29 +225,25 @@ class PureSocket implements IPureSocket {
   }
 
   @override
-  void onInternetSatusChanged(InternetStatus status) {
-    debugPrint("[Socket] Internet connection changed $status socket $_status");
-    _internetStatus = status;
-    switch (status) {
-      case InternetStatus.connected:
-        if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
+  void onConnectionStateChanged(bool isConnected) {
+    debugPrint("[Socket] Internet connection changed $isConnected socket $_status");
+    _isConnected = isConnected;
+    if (isConnected) {
+      if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
+        return;
+      }
+      _reconnect();
+    } else {
+      var that = this;
+      _internetLostDelayTimer?.cancel();
+      _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
+        if (_isConnected) {
           return;
         }
-        _reconnect();
-        break;
-      case InternetStatus.disconnected:
-        var that = this;
-        _internetLostDelayTimer?.cancel();
-        _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
-          if (_internetStatus != InternetStatus.disconnected) {
-            return;
-          }
 
-          await that.disconnect();
-          _listener?.onInternetConnectionFailed();
-        });
-
-        break;
+        await that.disconnect();
+        _listener?.onInternetConnectionFailed();
+      });
     }
   }
 }

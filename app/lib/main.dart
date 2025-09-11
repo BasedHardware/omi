@@ -40,6 +40,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
@@ -57,7 +58,7 @@ import 'package:window_manager/window_manager.dart';
 
 Future<bool> _init() async {
   // Service manager
-  ServiceManager.init();
+  await ServiceManager.init();
 
   if (PlatformService.isWindows) {
     // Windows does not support flavors
