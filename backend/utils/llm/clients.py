@@ -145,29 +145,47 @@ def should_use_tools_for_question(question: str) -> ToolDecision:
         ToolDecision with needs_tools boolean and reasoning
     """
 
-    prompt = f"""You are analyzing whether a user question requires personal data tools.
+    prompt = f"""You are analyzing whether a user question requires personal data tools with specific capabilities.
 
 USER QUESTION: "{question}"
 
-AVAILABLE TOOLS:
-- get_user_memories: Retrieve user's personal memories/insights by date
-- get_user_conversations: Retrieve user's conversation history by date  
-- get_user_action_items: Retrieve user's tasks/action items by date
+AVAILABLE TOOLS AND THEIR EXACT CAPABILITIES:
 
-DECISION RULES:
-✅ NEEDS TOOLS if question asks for:
-- Personal memories ("my memories from yesterday", "what did I learn about X")
-- Conversation history ("my conversations", "what did we discuss on Monday")
-- Action items/tasks ("my tasks", "what do I need to do", "my pending items")
-- Date-specific personal data ("September 6th conversations", "yesterday's memories")
+1. get_user_memories(date_query=optional):
+   - FETCHES: User's processed memories and insights from conversations
+   - CONTAINS: Memory titles, overviews, key takeaways, structured insights
+   - DATE SCOPE: Can filter by any date ("yesterday", "September 6th", "this week")
+   - USE WHEN: User asks for memories, insights, learnings, key takeaways
+
+2. get_user_conversations(date_query=optional):
+   - FETCHES: Raw conversation transcripts and summaries 
+   - CONTAINS: Conversation titles, overviews, full transcript content
+   - DATE SCOPE: Can filter by any date ("yesterday", "September 6th", "this week")
+   - USE WHEN: User asks for conversation history, what was discussed, meeting content
+
+3. get_user_action_items(date_query=optional):
+   - FETCHES: User's tasks, todos, and action items extracted from conversations
+   - CONTAINS: Task descriptions, due dates, priorities, completion status
+   - DATE SCOPE: Can filter by any date ("yesterday", "September 6th", "this week")
+   - USE WHEN: User asks for tasks, todos, action items, priorities, what to do
+
+TOOL SELECTION RULES:
+✅ NEEDS TOOLS (and specify which) if question asks for:
+- "my memories/insights/learnings from X date" → memories
+- "my conversations/discussions from X date" → conversations  
+- "my tasks/todos/priorities from X date" → action_items
+- "what did I learn about X" → memories
+- "what did we discuss about X" → conversations
+- "what do I need to do" → action_items
 
 ❌ NO TOOLS NEEDED for:
-- General knowledge questions ("how does AI work", "explain quantum physics")
-- Casual conversation ("hello", "thanks", "how are you")
-- External information requests ("weather today", "latest news")
+- General knowledge questions ("how does AI work")
+- Casual conversation ("hello", "thanks")
+- External information ("weather today", "latest news")
+- Hypothetical questions ("what would happen if...")
 - Abstract discussions not requiring personal data
 
-Analyze the question and decide if personal data tools are needed."""
+IMPORTANT: If tools are needed, specify the most appropriate tool type: "memories", "conversations", or "action_items"."""
 
     structured_llm = llm_tool_decision.with_structured_output(ToolDecision)
     result = structured_llm.invoke(prompt)
