@@ -79,7 +79,7 @@ def get_conversations_tool(uid: str, date_query: str = None) -> Dict[str, Any]:
             limit=10,  # Hardcoded as requested
             start_date=start_date,
             end_date=end_date,
-            statuses=["completed"],
+            statuses=["completed", "in_progress"],  # Include real-time in-progress conversations
             include_discarded=False,
         )
 
