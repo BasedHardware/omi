@@ -21,6 +21,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -59,10 +60,10 @@ class CaptureProvider extends ChangeNotifier
 
   bool get isWalSupported => _isWalSupported;
 
-  StreamSubscription<InternetStatus>? _internetStatusListener;
-  InternetStatus? _internetStatus;
+  StreamSubscription<bool>? _connectionStateListener;
+  bool _isConnected = ConnectivityService().isConnected;
 
-  get internetStatus => _internetStatus;
+  get isConnected => _isConnected;
 
   String? microphoneName;
   double microphoneLevel = 0.0;
@@ -85,8 +86,8 @@ class CaptureProvider extends ChangeNotifier
   bool _systemAudioCaching = true;
 
   CaptureProvider() {
-    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
-      onInternetSatusChanged(status);
+    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
+      onConnectionStateChanged(isConnected);
     });
 
     // Add app lifecycle listener to detect sleep/wake cycles
@@ -165,8 +166,7 @@ class CaptureProvider extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
-
-  bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
+  bool get transcriptServiceReady => _transcriptServiceReady && _isConnected;
 
   // having a connected device or using the phone's mic for recording
   bool get recordingDeviceServiceReady =>
@@ -545,7 +545,7 @@ class CaptureProvider extends ChangeNotifier
     _blePhotoStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
-    _internetStatusListener?.cancel();
+    _connectionStateListener?.cancel();
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
@@ -1111,9 +1111,9 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void onInternetSatusChanged(InternetStatus status) {
-    debugPrint("[SocketService] Internet connection changed $status");
-    _internetStatus = status;
+  void onConnectionStateChanged(bool isConnected) {
+    debugPrint("[CaptureProvider] Internet connection changed $isConnected");
+    _isConnected = isConnected;
     notifyListeners();
   }
 
