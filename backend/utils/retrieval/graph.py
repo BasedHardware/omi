@@ -44,7 +44,10 @@ from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
 from utils.llm.clients import generate_embedding
 from utils.tools.custom_tools import get_memories_tool, get_conversations_tool, get_action_items_tool
+from langchain.tools import tool
+from langchain_core.messages import ToolMessage
 from pydantic import BaseModel
+from utils.llm.clients import should_use_tools_for_question
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -407,18 +410,15 @@ def create_user_tools(uid: str):
     return [get_user_memories, get_user_conversations, get_user_action_items]
 
 
-def unified_agent_qa_handler(state: GraphState):
-    """UNIFIED node that handles both RAG and tools in a single streaming response"""
-
+def qa_handler(state: GraphState):
     uid = state.get("uid")
     memories = state.get("memories_found", [])
     question = state.get("parsed_question", "")
-    streaming = state.get("streaming")
-    callback = state.get("callback")
 
-    # Build RAG context (existing logic from qa_handler)
+    # Build RAG context
     all_person_ids = []
     for m in memories:
+        # m is a dict
         segments = m.get('transcript_segments', [])
         all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
 
@@ -427,201 +427,118 @@ def unified_agent_qa_handler(state: GraphState):
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    # Use memory context
     combined_context = Conversation.conversations_to_string(memories, False, people=people)
 
+    # Check if question needs tools using LLM decision
     try:
-        # Create user-specific tools (uid pre-populated)
-        tools = create_user_tools(uid)
-
-        # Create LLM with tools
-        if streaming:
-            llm_with_tools = ChatOpenAI(model="gpt-4o", streaming=True).bind_tools(tools)
-        else:
-            llm_with_tools = ChatOpenAI(model="gpt-4o").bind_tools(tools)
-
-        # Enhanced system prompt that combines RAG context with tool availability
-        system_prompt = f"""You are an AI assistant with access to the user's personal data through specialized tools.
-
-CURRENT CONTEXT (from vector search):
-{combined_context[:2000] if combined_context else "No relevant memories found in vector search."}
-
-AVAILABLE TOOLS:
-- get_user_memories(date_query): Get user's memories. Use date_query for specific dates like "September 1st", "yesterday", or leave empty for all memories.
-- get_user_conversations(date_query): Get user's conversations. Use date_query for specific dates or leave empty for all.
-- get_user_action_items(date_query): Get user's action items/tasks. Use date_query for specific dates or leave empty for all.
-
-TOOL USAGE RULES:
-1. If user asks for "memories from September 6th" → use get_user_memories(date_query="September 6th")
-2. If user asks for "all my action items" → use get_user_action_items() with no date_query
-3. If user asks for "conversations from yesterday" → use get_user_conversations(date_query="yesterday")
-4. ALWAYS use tools when user asks for memories, conversations, or action items
-5. Use the context above only for general questions
-
-IMPORTANT:
-- date_query parameter is OPTIONAL - omit it if no specific date is mentioned
-- When user specifies dates, always pass them in the date_query parameter
-- Provide natural, helpful responses combining tool results with context
-
-User's timezone: {state.get('tz', 'UTC')}"""
-
-        messages = [SystemMessage(content=system_prompt), HumanMessage(content=question)]
-
-        # SIMPLIFIED APPROACH: Use invoke for tool calls, then stream the final response
-        # This avoids complex streaming + tool call coordination issues
-
-        if streaming and callback:
-            # First, get the complete response with tool calls (non-streaming)
-            print("Using intelligent agent mode with tools")
-            print("Getting response with tool calls...")
-            full_response = llm_with_tools.invoke(messages)
-
-            # Debug: Log the full response structure
-            print(f"Response type: {type(full_response)}")
-            print(f"Has content: {hasattr(full_response, 'content')}")
-            print(f"Has tool_calls: {hasattr(full_response, 'tool_calls')}")
-
-            if hasattr(full_response, 'content'):
-                content_length = len(full_response.content) if full_response.content else 0
-                print(f"Content: '{full_response.content[:100]}...' (length: {content_length})")
-            if hasattr(full_response, 'tool_calls'):
-                tool_calls_count = len(full_response.tool_calls) if full_response.tool_calls else 0
-                print(f"Tool calls count: {tool_calls_count}")
-                for i, tc in enumerate(full_response.tool_calls or []):
-                    print(f"Tool call {i+1}: {tc.get('name', 'UNKNOWN')} with args: {tc.get('args', {})}")
-
-            # Check if this response contains tool calls that need execution
-            if hasattr(full_response, 'tool_calls') and full_response.tool_calls:
-                print(f"Found {len(full_response.tool_calls)} tool calls to execute")
-                tool_messages = []
-
-                # Execute each tool call
-                for i, tool_call in enumerate(full_response.tool_calls):
-                    print(f"Executing tool call {i+1}: {tool_call.get('name', 'UNKNOWN')}")
-
-                    try:
-                        tool_name = tool_call['name']
-                        tool_args = tool_call['args']
-                        tool_call_id = tool_call.get('id', f"call_{i}")
-
-                        print(f"Calling {tool_name} with args: {tool_args}")
-
-                        # Find and execute the tool
-                        tool_result = None
-                        for tool in tools:
-                            if tool.name == tool_name:
-                                tool_result = tool.invoke(tool_args)
-                                result_preview = (
-                                    str(tool_result)[:200] + "..." if len(str(tool_result)) > 200 else str(tool_result)
-                                )
-                                print(f"Tool {tool_name} result: {result_preview}")
-                                break
-
-                        if tool_result is not None:
-                            tool_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call_id))
-                        else:
-                            print(f"No matching tool found for: {tool_name}")
-                            tool_messages.append(
-                                ToolMessage(
-                                    content=f"Error: No tool found with name {tool_name}", tool_call_id=tool_call_id
-                                )
-                            )
-
-                    except Exception as e:
-                        print(f"Tool execution error for {tool_call.get('name', 'UNKNOWN')}: {e}")
-                        tool_messages.append(
-                            ToolMessage(content=f"Error: {str(e)}", tool_call_id=tool_call.get('id', f"error_{i}"))
-                        )
-
-                # Now get the final response with tool results
-                print(f"Getting final response with {len(tool_messages)} tool results...")
-                final_messages = messages + [full_response] + tool_messages
-
-                final_response = llm_with_tools.invoke(final_messages)
-                print(f"Final response type: {type(final_response)}")
-                print(f"Final response has content: {hasattr(final_response, 'content')}")
-
-                if hasattr(final_response, 'content') and final_response.content:
-                    final_answer = final_response.content
-                    print(f"Final answer length: {len(final_answer)} chars")
-                    print(f"Final answer preview: {final_answer[:100]}...")
-                else:
-                    print(f"Final response has no content: {final_response}")
-                    final_answer = "I apologize, but I couldn't process the tool results properly."
-
-            elif hasattr(full_response, 'content') and full_response.content:
-                # Direct response without tool calls
-                final_answer = full_response.content
-                print(f"Direct response (no tools): {len(final_answer)} chars")
-                print(f"Direct response preview: {final_answer[:100]}...")
-            else:
-                print("Response has no content and no tool calls")
-                print(f"Full response debug: {full_response}")
-                final_answer = "I apologize, but I couldn't generate a proper response."
-
-            # Stream the final answer in chunks
-            if final_answer and final_answer.strip():
-                print(f"Streaming answer: '{final_answer[:50]}...'")
-                words = final_answer.split()
-                current_chunk = ""
-
-                for word in words:
-                    current_chunk += word + " "
-                    # Stream every 3-4 words or when chunk gets long enough
-                    if len(current_chunk.split()) >= 3 or len(current_chunk) > 50:
-                        callback.put_data_nowait(current_chunk)
-                        current_chunk = ""
-
-                # Stream any remaining content
-                if current_chunk.strip():
-                    callback.put_data_nowait(current_chunk)
-
-                # Signal end of streaming
-                callback.put_data_nowait(None)
-                enhanced_response = final_answer
-            else:
-                print("No final answer to stream")
-                enhanced_response = "I apologize, but I couldn't generate a proper response."
-                callback.put_data_nowait(enhanced_response)
-                # Signal end of streaming
-                callback.put_data_nowait(None)
-
-        else:
-            # Non-streaming mode - let LangGraph handle tool calls automatically
-            response = llm_with_tools.invoke(messages)
-            enhanced_response = response.content if hasattr(response, 'content') else str(response)
-
-        print("Unified agent response generated successfully")
-        return {
-            "answer": enhanced_response,
-            "ask_for_nps": True,
-        }
-
+        tool_decision = should_use_tools_for_question(question)
+        needs_tools = tool_decision.needs_tools
+        print(f"Tool decision for '{question}': {needs_tools} - {tool_decision.reasoning}")
     except Exception as e:
-        print(f"Agent mode failed, falling back to RAG: {e}")
-        # Graceful fallback to standard RAG
-        if streaming:
-            response = qa_rag_stream(
-                uid,
-                question,
-                combined_context,
-                state.get("plugin_selected"),
-                cited=state.get("cited"),
-                messages=state.get("messages"),
-                tz=state.get("tz"),
-                callbacks=[callback],
-            )
-        else:
-            response = qa_rag(
-                uid,
-                question,
-                combined_context,
-                state.get("plugin_selected"),
-                cited=state.get("cited"),
-                messages=state.get("messages"),
-                tz=state.get("tz"),
-            )
+        print(f"Tool decision failed: {e}, defaulting to False")
+        needs_tools = False
 
+    streaming = state.get("streaming")
+
+    if needs_tools:
+        # Tool-enhanced response - use LLM decision to determine which tool to call
+        tool_results = ""
+        date_query = question
+
+        if tool_decision.suggested_tool_type == "conversations":
+            result = get_conversations_tool(uid, date_query)
+            conversations = result.get("conversations", [])
+            print(f"Tool executed: get_conversations returned {len(conversations)} conversations")
+            if conversations:
+                tool_results += f"\n\nYour conversations from the specified time:\n"
+                for i, conv in enumerate(conversations[:5], 1):
+                    tool_results += f"{i}. {conv.get('structured', {}).get('title', 'Untitled')} - {conv.get('created_at', 'No date')}\n"
+                    if conv.get('structured', {}).get('overview'):
+                        tool_results += f"   Overview: {conv['structured']['overview']}\n"
+            else:
+                tool_results += f"\n\nNo conversations found for the specified time."
+
+        elif tool_decision.suggested_tool_type == "action_items":
+            result = get_action_items_tool(uid, date_query)
+            action_items = result.get("action_items", [])
+            print(f"Tool executed: get_action_items returned {len(action_items)} action items")
+            if action_items:
+                tool_results += f"\n\nYour action items/priorities:\n"
+                for i, item in enumerate(action_items[:5], 1):
+                    tool_results += f"{i}. {item.get('description', 'No description')}\n"
+                    if item.get('due_at'):
+                        tool_results += f"   Due: {item['due_at']}\n"
+            else:
+                tool_results += f"\n\nNo action items found for the specified time."
+
+        elif tool_decision.suggested_tool_type == "memories":
+            result = get_memories_tool(uid, date_query)
+            memories = result.get("memories", [])
+            print(f"Tool executed: get_memories returned {len(memories)} memories")
+            if memories:
+                tool_results += f"\n\nYour memories from the specified time:\n"
+                for i, mem in enumerate(memories[:3], 1):
+                    tool_results += f"{i}. {mem.get('structured', {}).get('title', 'Untitled')}\n"
+                    if mem.get('structured', {}).get('overview'):
+                        tool_results += f"   {mem['structured']['overview']}\n"
+            else:
+                tool_results += f"\n\nNo memories found for the specified time."
+
+        # Step 2: Combine tool results with existing context
+        enhanced_context = combined_context + tool_results
+
+        # Step 3: Use proven qa_rag_stream pattern with enhanced context
+        if streaming:
+            response: str = qa_rag_stream(
+                uid,
+                question,
+                enhanced_context,
+                state.get("plugin_selected"),
+                cited=state.get("cited"),
+                messages=state.get("messages"),
+                tz=state.get("tz"),
+                callbacks=[state.get('callback')],
+            )
+            return {"answer": response, "ask_for_nps": True}
+
+        # no streaming
+        response: str = qa_rag(
+            uid,
+            question,
+            enhanced_context,
+            state.get("plugin_selected"),
+            cited=state.get("cited"),
+            messages=state.get("messages"),
+            tz=state.get("tz"),
+        )
+        return {"answer": response, "ask_for_nps": True}
+
+    else:
+        # Regular RAG response (no tools needed)
+        print("Using regular RAG response")
+        if streaming:
+            response: str = qa_rag_stream(
+                uid,
+                question,
+                combined_context,
+                state.get("plugin_selected"),
+                cited=state.get("cited"),
+                messages=state.get("messages"),
+                tz=state.get("tz"),
+                callbacks=[state.get('callback')],
+            )
+            return {"answer": response, "ask_for_nps": True}
+
+        # no streaming
+        response: str = qa_rag(
+            uid,
+            question,
+            combined_context,
+            state.get("plugin_selected"),
+            cited=state.get("cited"),
+            messages=state.get("messages"),
+            tz=state.get("tz"),
+        )
         return {"answer": response, "ask_for_nps": True}
 
 
@@ -655,11 +572,11 @@ workflow.add_edge("retrieve_date_filters", "query_vectors")
 
 workflow.add_node("query_vectors", query_vectors)
 
-workflow.add_edge("query_vectors", "unified_agent_qa_handler")
+workflow.add_edge("query_vectors", "qa_handler")
 
-workflow.add_node("unified_agent_qa_handler", unified_agent_qa_handler)
+workflow.add_node("qa_handler", qa_handler)
 
-workflow.add_edge("unified_agent_qa_handler", END)
+workflow.add_edge("qa_handler", END)
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
