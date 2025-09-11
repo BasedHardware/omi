@@ -14,6 +14,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/fonts.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/pages/chat/widgets/suggestion_chips.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/home/page.dart';
@@ -137,6 +138,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
           endDrawer: _buildSessionsDrawer(context),
+          resizeToAvoidBottomInset: true,
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -335,6 +337,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   },
                                 ),
                 ),
+                // Suggestion chips - only show when chat is empty
+                if (provider.messages.isEmpty && connectivityProvider.isConnected)
+                  SuggestionChips(sendMessage: _sendMessageUtil),
                 // Send message area - fixed at bottom
                 Container(
                   margin: const EdgeInsets.only(top: 10),
@@ -447,6 +452,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             return const SizedBox.shrink();
                           }
                         }),
+
                         // Send bar
                         Padding(
                           padding: EdgeInsets.only(
@@ -785,13 +791,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       centerTitle: true,
       actions: [
         Container(
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
+          width: 36,
+          height: 36,
+          margin: const EdgeInsets.only(right: 12),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1F1F25),
+            shape: BoxShape.circle,
           ),
           child: IconButton(
-            icon: const Icon(FontAwesomeIcons.comments, color: Colors.white, size: 18),
+            padding: EdgeInsets.zero,
+            icon: const Icon(FontAwesomeIcons.clockRotateLeft, color: Colors.white70, size: 16),
             tooltip: 'Chat Threads',
             onPressed: () {
               HapticFeedback.selectionClick();
