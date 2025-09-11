@@ -97,7 +97,9 @@ class MessageFile {
       'thumb_name': thumbnailName,
     };
   }
+}
 
+extension MessageFileExtensions on MessageFile {
   String mimeTypeToFileType() {
     if (mimeType.contains('image')) {
       return 'image';

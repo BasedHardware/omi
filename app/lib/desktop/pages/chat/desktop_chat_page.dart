@@ -912,6 +912,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       ),
                     ),
                   ),
+                  // Web search citations for desktop AI messages
                 ],
               )
             : Column(
@@ -1253,28 +1254,33 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   ) {
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
         children: [
-          // Enhanced add button
-          if (!_showVoiceRecorder) _buildModernAddButton(provider),
+          // Main input row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Enhanced add button
+              if (!_showVoiceRecorder) _buildModernAddButton(provider),
 
-          // Modern text input or voice recorder
-          Expanded(
-            child: _showVoiceRecorder ? _buildEnhancedVoiceRecorder() : _buildModernTextInput(),
+              // Modern text input or voice recorder
+              Expanded(
+                child: _showVoiceRecorder ? _buildEnhancedVoiceRecorder() : _buildModernTextInput(),
+              ),
+
+              // Enhanced voice button
+              if (!_showVoiceRecorder) _buildModernVoiceButton(),
+
+              // Modern send button with reactive state
+              if (!provider.sendingMessage && !_showVoiceRecorder)
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: textController,
+                  builder: (context, value, child) {
+                    return _buildModernSendButton(provider, connectivityProvider);
+                  },
+                ),
+            ],
           ),
-
-          // Enhanced voice button
-          if (!_showVoiceRecorder) _buildModernVoiceButton(),
-
-          // Modern send button with reactive state
-          if (!provider.sendingMessage && !_showVoiceRecorder)
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: textController,
-              builder: (context, value, child) {
-                return _buildModernSendButton(provider, connectivityProvider);
-              },
-            ),
         ],
       ),
     );

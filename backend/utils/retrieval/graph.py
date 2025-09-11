@@ -4,8 +4,10 @@ import asyncio
 from typing import List, Optional, Tuple, AsyncGenerator
 
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, ToolMessage
+from utils.llm.clients import should_use_tools_for_question
 from langchain_openai import ChatOpenAI
+from langchain.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
@@ -40,6 +42,12 @@ from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
+from utils.llm.clients import generate_embedding
+from utils.tools.custom_tools import get_memories_tool, get_conversations_tool, get_action_items_tool
+from langchain.tools import tool
+from langchain_core.messages import ToolMessage
+from pydantic import BaseModel
+from utils.llm.clients import should_use_tools_for_question
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -133,8 +141,6 @@ def determine_conversation_type(
     "file_chat_question",
     "persona_question",
 ]:
-    # chat with files by attachments on the last message
-    print("determine_conversation_type")
     messages = state.get("messages", [])
     if len(messages) > 0 and len(messages[-1].files_id) > 0:
         return "file_chat_question"
@@ -161,6 +167,21 @@ def determine_conversation_type(
     if is_file_question:
         return "file_chat_question"
 
+    # Use LLM to intelligently decide if tools are needed (more reliable than keywords)
+    try:
+        tool_decision = should_use_tools_for_question(question)
+
+        if tool_decision.needs_tools:
+            print(
+                f"LLM decision: Tools needed - {tool_decision.reasoning} (suggested: {tool_decision.suggested_tool_type})"
+            )
+            print(f"Question needs tools, routing to context_dependent_conversation: '{question}'")
+            return "context_dependent_conversation"
+        else:
+            print(f"LLM decision: No tools needed - {tool_decision.reasoning}")
+    except Exception as e:
+        print(f"Tool decision LLM failed: {e}, falling back to context check")
+
     is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
         return "omi_question"
@@ -172,12 +193,10 @@ def determine_conversation_type(
 
 
 def no_context_conversation(state: GraphState):
-    print("no_context_conversation node")
 
-    # streaming
+    # Normal flow
     streaming = state.get("streaming")
     if streaming:
-        # state['callback'].put_thought_nowait("Reasoning")
         answer: str = answer_simple_message_stream(
             state.get("uid"), state.get("messages"), state.get("plugin_selected"), callbacks=[state.get('callback')]
         )
@@ -193,7 +212,6 @@ def no_context_conversation(state: GraphState):
 
 
 def omi_question(state: GraphState):
-    print("no_context_omi_question node")
 
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
@@ -213,7 +231,6 @@ def omi_question(state: GraphState):
 
 
 def persona_question(state: GraphState):
-    print("persona_question node")
 
     # streaming
     streaming = state.get("streaming")
@@ -235,6 +252,7 @@ def context_dependent_conversation_v1(state: GraphState):
 
 
 def context_dependent_conversation(state: GraphState):
+    """Restored original function - just passes state to continue RAG pipeline"""
     return state
 
 
@@ -279,18 +297,28 @@ def query_vectors(state: GraphState):
 
     date_filters = state.get("date_filters")
     uid = state.get("uid")
-    # vector = (
-    #    generate_embedding(state.get("parsed_question", ""))
-    #    if state.get("parsed_question")
-    #    else [0] * 3072
-    # )
+    parsed_question = state.get("parsed_question", "")
 
-    # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
-    vector = [1] * 3072
-    print("query_vectors vector:", vector[:5])
+    # 🚀 HYBRID SEARCH: Combine semantic similarity with metadata filtering
+    if parsed_question and parsed_question.strip():
+        # Use real semantic embeddings for better relevance
+        try:
+            vector = generate_embedding(parsed_question)
+            # Hybrid search for semantic + metadata
+            print("query_vectors vector (semantic):", vector[:5])
+        except Exception as e:
+            print(f"ERROR generating embedding: {e}")
+            print("Falling back to metadata-only search")
+            vector = [1] * 3072
+            print("query_vectors vector (fallback metadata-only):", vector[:5])
+    else:
+        # Fallback to metadata-only search for empty/generic queries
+        vector = [1] * 3072
+        print("query_vectors vector (metadata-only):", vector[:5])
 
     # TODO: enable it when the in-accurate topic filter get fixed
     is_topic_filter_enabled = date_filters.get("start") is None
+
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
@@ -318,52 +346,7 @@ def query_vectors(state: GraphState):
     return {"memories_found": memories}
 
 
-def qa_handler(state: GraphState):
-    uid = state.get("uid")
-    memories = state.get("memories_found", [])
-
-    all_person_ids = []
-    for m in memories:
-        # m is a dict
-        segments = m.get('transcript_segments', [])
-        all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
-
-    people = []
-    if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-        people = [Person(**p) for p in people_data]
-
-    # streaming
-    streaming = state.get("streaming")
-    if streaming:
-        # state['callback'].put_thought_nowait("Reasoning")
-        response: str = qa_rag_stream(
-            uid,
-            state.get("parsed_question"),
-            Conversation.conversations_to_string(memories, False, people=people),
-            state.get("plugin_selected"),
-            cited=state.get("cited"),
-            messages=state.get("messages"),
-            tz=state.get("tz"),
-            callbacks=[state.get('callback')],
-        )
-        return {"answer": response, "ask_for_nps": True}
-
-    # no streaming
-    response: str = qa_rag(
-        uid,
-        state.get("parsed_question"),
-        Conversation.conversations_to_string(memories, False, people=people),
-        state.get("plugin_selected"),
-        cited=state.get("cited"),
-        messages=state.get("messages"),
-        tz=state.get("tz"),
-    )
-    return {"answer": response, "ask_for_nps": True}
-
-
 def file_chat_question(state: GraphState):
-    print("chat_with_file_question node")
 
     fc_tool = FileChatTool()
 
@@ -394,6 +377,174 @@ def file_chat_question(state: GraphState):
     return {'answer': answer, 'ask_for_nps': True}
 
 
+# === UNIFIED AGENT WITH TOOLS ===
+
+
+def create_user_tools(uid: str):
+    """Create tools with uid pre-populated using closures - eliminates parameter confusion"""
+
+    @tool
+    def get_user_memories(date_query: str = None) -> dict:
+        """Retrieve user memories filtered by date.
+
+        Args:
+            date_query: Natural language date like 'yesterday', 'september 6th', 'today'
+        """
+        return get_memories_tool(uid, date_query)
+
+    @tool
+    def get_user_conversations(date_query: str = None) -> dict:
+        """Retrieve user conversations filtered by date.
+
+        Args:
+            date_query: Natural language date like 'yesterday', 'september 6th', 'today'
+        """
+        return get_conversations_tool(uid, date_query)
+
+    @tool
+    def get_user_action_items(date_query: str = None) -> dict:
+        """Retrieve user action items filtered by date.
+
+        Args:
+            date_query: Natural language date like 'yesterday', 'september 6th', 'today'
+        """
+        return get_action_items_tool(uid, date_query)
+
+    return [get_user_memories, get_user_conversations, get_user_action_items]
+
+
+def qa_handler(state: GraphState):
+    uid = state.get("uid")
+    memories = state.get("memories_found", [])
+    question = state.get("parsed_question", "")
+
+    # Build RAG context
+    all_person_ids = []
+    for m in memories:
+        # m is a dict
+        segments = m.get('transcript_segments', [])
+        all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
+
+    people = []
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        people = [Person(**p) for p in people_data]
+
+    combined_context = Conversation.conversations_to_string(memories, False, people=people)
+
+    # Check if question needs tools using LLM decision
+    try:
+        tool_decision = should_use_tools_for_question(question)
+        needs_tools = tool_decision.needs_tools
+        print(f"Tool decision for '{question}': {needs_tools} - {tool_decision.reasoning}")
+    except Exception as e:
+        print(f"Tool decision failed: {e}, defaulting to False")
+        needs_tools = False
+
+    streaming = state.get("streaming")
+
+    if needs_tools:
+        # Tool-enhanced response - use LLM decision to determine which tool to call
+        tool_results = ""
+        date_query = question
+
+        if tool_decision.suggested_tool_type == "conversations":
+            result = get_conversations_tool(uid, date_query)
+            conversations = result.get("conversations", [])
+            print(f"Tool executed: get_conversations returned {len(conversations)} conversations")
+            if conversations:
+                tool_results += f"\n\nYour conversations from the specified time:\n"
+                for i, conv in enumerate(conversations[:5], 1):
+                    tool_results += f"{i}. {conv.get('structured', {}).get('title', 'Untitled')} - {conv.get('created_at', 'No date')}\n"
+                    if conv.get('structured', {}).get('overview'):
+                        tool_results += f"   Overview: {conv['structured']['overview']}\n"
+            else:
+                tool_results += f"\n\nNo conversations found for the specified time."
+
+        elif tool_decision.suggested_tool_type == "action_items":
+            result = get_action_items_tool(uid, date_query)
+            action_items = result.get("action_items", [])
+            print(f"Tool executed: get_action_items returned {len(action_items)} action items")
+            if action_items:
+                tool_results += f"\n\nYour action items/priorities:\n"
+                for i, item in enumerate(action_items[:5], 1):
+                    tool_results += f"{i}. {item.get('description', 'No description')}\n"
+                    if item.get('due_at'):
+                        tool_results += f"   Due: {item['due_at']}\n"
+            else:
+                tool_results += f"\n\nNo action items found for the specified time."
+
+        elif tool_decision.suggested_tool_type == "memories":
+            result = get_memories_tool(uid, date_query)
+            memories = result.get("memories", [])
+            print(f"Tool executed: get_memories returned {len(memories)} memories")
+            if memories:
+                tool_results += f"\n\nYour memories from the specified time:\n"
+                for i, mem in enumerate(memories[:3], 1):
+                    tool_results += f"{i}. {mem.get('structured', {}).get('title', 'Untitled')}\n"
+                    if mem.get('structured', {}).get('overview'):
+                        tool_results += f"   {mem['structured']['overview']}\n"
+            else:
+                tool_results += f"\n\nNo memories found for the specified time."
+
+        # Step 2: Combine tool results with existing context
+        enhanced_context = combined_context + tool_results
+
+        # Step 3: Use proven qa_rag_stream pattern with enhanced context
+        if streaming:
+            response: str = qa_rag_stream(
+                uid,
+                question,
+                enhanced_context,
+                state.get("plugin_selected"),
+                cited=state.get("cited"),
+                messages=state.get("messages"),
+                tz=state.get("tz"),
+                callbacks=[state.get('callback')],
+            )
+            return {"answer": response, "ask_for_nps": True}
+
+        # no streaming
+        response: str = qa_rag(
+            uid,
+            question,
+            enhanced_context,
+            state.get("plugin_selected"),
+            cited=state.get("cited"),
+            messages=state.get("messages"),
+            tz=state.get("tz"),
+        )
+        return {"answer": response, "ask_for_nps": True}
+
+    else:
+        # Regular RAG response (no tools needed)
+        print("Using regular RAG response")
+        if streaming:
+            response: str = qa_rag_stream(
+                uid,
+                question,
+                combined_context,
+                state.get("plugin_selected"),
+                cited=state.get("cited"),
+                messages=state.get("messages"),
+                tz=state.get("tz"),
+                callbacks=[state.get('callback')],
+            )
+            return {"answer": response, "ask_for_nps": True}
+
+        # no streaming
+        response: str = qa_rag(
+            uid,
+            question,
+            combined_context,
+            state.get("plugin_selected"),
+            cited=state.get("cited"),
+            messages=state.get("messages"),
+            tz=state.get("tz"),
+        )
+        return {"answer": response, "ask_for_nps": True}
+
+
 workflow = StateGraph(GraphState)
 
 workflow.add_edge(START, "determine_conversation")
@@ -401,6 +552,7 @@ workflow.add_edge(START, "determine_conversation")
 workflow.add_node("determine_conversation", determine_conversation)
 
 workflow.add_conditional_edges("determine_conversation", determine_conversation_type)
+
 
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
@@ -437,12 +589,21 @@ graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-    uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False
+    uid: str,
+    messages: List[Message],
+    app: Optional[App] = None,
+    cited: Optional[bool] = False,
 ) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat app    :', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": app},
+        {
+            "uid": uid,
+            "tz": tz,
+            "cited": cited,
+            "messages": messages,
+            "plugin_selected": app,
+        },
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])

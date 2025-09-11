@@ -1,6 +1,7 @@
 import uuid
 import re
 import base64
+import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
@@ -34,6 +35,7 @@ from utils.chat import (
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
 from utils.llm.title_generation import generate_thread_title
+from utils.llm.chat_processing import process_chat_message_for_insights
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
@@ -121,6 +123,11 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
 
+    # Process human message for insights (memories/todos) - non-blocking
+    if message.sender == MessageSender.human:
+        print(f"🧠 Starting insights processing for human message: {message.id}")
+        threading.Thread(target=process_chat_message_for_insights, args=(uid, message, compat_app_id)).start()
+
     # For OMI app (compat_app_id is None), skip app lookup since OMI doesn't have an app record
     if compat_app_id is not None:
         app = get_available_app_by_id(compat_app_id, uid)
@@ -130,7 +137,19 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    # Fetch messages from the specific chat session for proper thread context
+    session_id_for_query = chat_session.id if chat_session else None
+
+    messages = list(
+        reversed(
+            [
+                Message(**msg)
+                for msg in chat_db.get_messages(
+                    uid, limit=10, app_id=compat_app_id, chat_session_id=session_id_for_query
+                )
+            ]
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -153,6 +172,7 @@ def send_message(
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
 
+        # Create AI message
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -171,12 +191,23 @@ def send_message(
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-        return ai_message, ask_for_nps
+        # Create ResponseMessage with structured citations
+        response_message = ResponseMessage(
+            **ai_message.dict(),
+            ask_for_nps=ask_for_nps,
+        )
+
+        return response_message, ask_for_nps
 
     async def generate_stream():
         callback_data = {}
         async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
+            uid,
+            messages,
+            app,
+            cited=True,
+            callback_data=callback_data,
+            chat_session=chat_session,
         ):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
@@ -184,12 +215,10 @@ def send_message(
             else:
                 response = callback_data.get('answer')
                 if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
+                    response_message, ask_for_nps = process_message(response, callback_data)
+                    # response_message is already a ResponseMessage with citations included
+                    encoded_data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    yield f"done: {encoded_data}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
@@ -393,6 +422,32 @@ def generate_chat_session_title(
     except Exception as e:
         print(f"Error generating title: {e}")
         raise HTTPException(status_code=500, detail='Failed to generate title')
+
+
+@router.post('/v2/messages/{message_id}/process-insights', tags=['chat'])
+def process_message_for_insights(
+    message_id: str, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Process a chat message through memories/todos/trends extraction pipeline.
+    Only processes human messages for insights generation.
+    """
+    try:
+        # Get the message from database
+        result = chat_db.get_message(uid, message_id)
+        if not result:
+            raise HTTPException(status_code=404, detail='Message not found')
+
+        message_obj, doc_id = result
+
+        # Process through insights pipeline (async - doesn't block response)
+        threading.Thread(target=process_chat_message_for_insights, args=(uid, message_obj, app_id)).start()
+
+        return {"status": "processing", "message": "Insights extraction started"}
+
+    except Exception as e:
+        print(f"Error starting message insights processing: {e}")
+        raise HTTPException(status_code=500, detail='Failed to start insights processing')
 
 
 @router.post("/v2/voice-messages")

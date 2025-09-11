@@ -107,7 +107,10 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text,
     final request = await HttpClient().postUrl(uri);
     request.headers.set('Authorization', await getAuthHeader());
     request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'text': text, 'file_ids': filesId}));
+    request.write(jsonEncode({
+      'text': text,
+      'file_ids': filesId,
+    }));
 
     final response = await request.close();
 

@@ -784,6 +784,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       centerTitle: true,
       actions: [
+        // Chat threads button
         Container(
           margin: const EdgeInsets.only(right: 8),
           decoration: BoxDecoration(

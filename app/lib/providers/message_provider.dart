@@ -40,6 +40,8 @@ class MessageProvider extends ChangeNotifier {
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
 
+  // Web search functionality
+
   void updateAppProvider(AppProvider p) {
     appProvider = p;
   }

@@ -61,11 +61,25 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
 
 
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
-def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[str] = []):
-    print('get_memories db', uid, limit, offset, categories)
+def get_memories(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    categories: List[str] = [],
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+):
+    print('get_memories db', uid, limit, offset, categories, 'start_date:', start_date, 'end_date:', end_date)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+
     if categories:
         memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
+
+    # Apply date range filters if provided (same pattern as conversations)
+    if start_date:
+        memories_ref = memories_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
 
     memories_ref = (
         memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
