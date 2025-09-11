@@ -776,15 +776,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.1"
-  flutter_silero_vad:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: HEAD
-      resolved-ref: d4fcc2a287933c0d29f8bec568b3f6fffbf117ee
-      url: "https://github.com/char5742/flutter_silero_vad.git"
-    source: git
-    version: "0.0.1"
   flutter_sound:
     dependency: "direct main"
     description:
