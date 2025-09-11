@@ -15,7 +15,6 @@ import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -30,6 +29,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 
 import '../../../backend/schema/app.dart';
+import '../../../backend/http/api/payment.dart';
 import '../widgets/show_app_options_sheet.dart';
 import 'widgets/info_card_widget.dart';
 
@@ -51,6 +51,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool appLoading = false;
   bool isLoading = false;
   bool chatButtonLoading = false;
+  Map<String, dynamic>? _subscriptionData;
+  bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
   late App app;
 
@@ -67,6 +69,68 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (mounted && isLoading != value) {
       setState(() => isLoading = value);
     }
+  }
+
+  Future<void> _loadSubscriptionData() async {
+    if (widget.app.isPaid) {
+        final subscriptionResponse = await getAppSubscription(widget.app.id);
+        if (mounted) {
+          setState(() {
+            _subscriptionData = subscriptionResponse;
+          });
+        }
+    }
+  }
+
+  Future<void> _cancelSubscription() async {
+    setState(() => _isCancelingSubscription = true);
+
+    try {
+      final result = await cancelAppSubscription(widget.app.id);
+      if (result != null && result['status'] == 'success') {
+
+        await _loadSubscriptionData();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Subscription cancelled successfully. It will remain active until the end of the current billing period.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to cancel subscription. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCancelingSubscription = false);
+      }
+    }
+  }
+
+  bool _hasActiveSubscription() {
+    if (_subscriptionData == null || _subscriptionData!['subscription'] == null) {
+      return false;
+    }
+    final subscription = _subscriptionData!['subscription'];
+    return subscription['status'] == 'active' && subscription['cancel_at_period_end'] == false;
   }
 
   @override
@@ -97,6 +161,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (mounted) {
         context.read<AppProvider>().checkIsAppOwner(app.uid);
         context.read<AppProvider>().setIsAppPublicToggled(!app.private);
+        if (app.isPaid) {
+          _loadSubscriptionData();
+        }
       }
     });
     if (app.worksExternally()) {
@@ -213,21 +280,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
         actions: [
           if (app.enabled && app.worksWithChat()) ...[
             GestureDetector(
-              child: chatButtonLoading
-                  ? Container(
-                      width: 16,
-                      height: 16,
-                      alignment: Alignment.center,
-                      child: const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      ),
-                    )
-                  : const Icon(FontAwesomeIcons.solidComments),
               onTap: chatButtonLoading
                   ? null
                   : () async {
@@ -271,6 +323,21 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         }
                       }
                     },
+              child: chatButtonLoading
+                  ? Container(
+                      width: 16,
+                      height: 16,
+                      alignment: Alignment.center,
+                      child: const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                    )
+                  : const Icon(FontAwesomeIcons.solidComments),
             ),
             const SizedBox(width: 24),
           ],
@@ -311,6 +378,28 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     }
                   },
                 ),
+          // Cancel subscription
+          !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !context.watch<AppProvider>().isAppOwner
+              ? GestureDetector(
+                  child: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.pop(context),
+                        () async {
+                          Navigator.pop(context);
+                          await _cancelSubscription();
+                        },
+                        'Cancel Subscription?',
+                        'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.',
+                        okButtonText: 'Cancel Subscription',
+                      ),
+                    );
+                  },
+                )
+              : const SizedBox.shrink(),
           !context.watch<AppProvider>().isAppOwner
               ? const SizedBox(
                   width: 24,
