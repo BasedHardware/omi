@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
 import { OmiDevice, OMI_UUIDS } from '../types/device';
 
@@ -34,6 +34,72 @@ export function useDevice(): [OmiDevice | null, () => Promise<void>, boolean] {
             localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
         }
         // For React Native, we'll use a simple in-memory approach for now (Use async storage in prod)
+    };
+
+    // Request Bluetooth permissions for Android
+    const requestBluetoothPermissions = async (): Promise<boolean> => {
+        if (Platform.OS === 'android') {
+            try {
+                const apiLevel = Platform.Version;
+                
+                if (apiLevel >= 31) {
+                    // Android 12+ permissions
+                    const permissions = [
+                        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+                        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                    ];
+
+                    console.log('Requesting Bluetooth permissions for Android 12+');
+                    
+                    const granted = await PermissionsAndroid.requestMultiple(permissions);
+                    
+                    const allPermissionsGranted = permissions.every(
+                        permission => granted[permission] === PermissionsAndroid.RESULTS.GRANTED
+                    );
+
+                    if (!allPermissionsGranted) {
+                        Alert.alert(
+                            'Permissions Required',
+                            'Bluetooth permissions are required to connect to OMI Glass devices. Please grant permissions in settings.',
+                            [{ text: 'OK' }]
+                        );
+                        return false;
+                    }
+                } else {
+                    // Pre-Android 12 permissions
+                    const permissions = [
+                        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                    ];
+
+                    console.log('Requesting Bluetooth permissions for Android < 12');
+                    
+                    const granted = await PermissionsAndroid.requestMultiple(permissions);
+                    
+                    const allPermissionsGranted = permissions.every(
+                        permission => granted[permission] === PermissionsAndroid.RESULTS.GRANTED
+                    );
+
+                    if (!allPermissionsGranted) {
+                        Alert.alert(
+                            'Permissions Required',
+                            'Location permission is required for Bluetooth scanning. Please grant permission in settings.',
+                            [{ text: 'OK' }]
+                        );
+                        return false;
+                    }
+                }
+
+                console.log('All Bluetooth permissions granted');
+                return true;
+            } catch (error) {
+                console.error('Permission request error:', error);
+                return false;
+            }
+        }
+        
+        // iOS permissions are handled by the system and declared in Info.plist
+        return true;
     };
 
     // Setup disconnect handler for web
@@ -118,6 +184,12 @@ export function useDevice(): [OmiDevice | null, () => Promise<void>, boolean] {
         }
 
         try {
+            // Request permissions first
+            const permissionsGranted = await requestBluetoothPermissions();
+            if (!permissionsGranted) {
+                throw new Error('Bluetooth permissions not granted');
+            }
+
             // Check if Bluetooth is enabled
             const state = await bleManager.state();
             if (state !== 'PoweredOn') {
