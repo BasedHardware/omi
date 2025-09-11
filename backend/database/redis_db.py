@@ -10,7 +10,6 @@ r = redis.Redis(
     port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
     username='default',
     password=os.getenv('REDIS_DB_PASSWORD'),
-    ssl=os.getenv('REDIS_DB_SSL', 'false').lower() == 'true',
     health_check_interval=30,
 )
 
@@ -566,7 +565,6 @@ def clear_migration_status(uid: str):
 # ******************************************************
 # ******************* AUTH SESSION *********************
 # ******************************************************
-
 
 @try_catch_decorator
 def set_auth_session(session_id: str, session_data: dict, ttl: int = 600):

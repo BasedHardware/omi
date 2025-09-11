@@ -177,7 +177,7 @@ deepgram_nova3_multi_languages = [
 ]
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
-stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-2').split(',')
+stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
 def get_stt_service_for_language(language: str):
@@ -194,7 +194,7 @@ def get_stt_service_for_language(language: str):
         # DeepGram Nova-2
         elif m == 'dg-nova-2':
             if language in deepgram_nova2_multi_languages:
-                return STTService.deepgram, 'en', 'nova-2-general'
+                return STTService.deepgram, 'multi', 'nova-2-general'
             if language in deepgram_supported_languages:
                 return STTService.deepgram, language, 'nova-2-general'
 
@@ -483,8 +483,7 @@ async def process_audio_soniox(
                         for token in tokens:
                             token_text = token['text']
                             if token_text.startswith('spk:'):
-                                parts = token_text.split(':')
-                                new_speaker_id = parts[1] if len(parts) > 1 and parts[1] else "1"
+                                new_speaker_id = token_text.split(':')[1] if ':' in token_text else "1"
                                 speaker_change_detected = (
                                     current_speaker_id is not None and current_speaker_id != new_speaker_id
                                 )

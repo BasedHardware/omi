@@ -491,7 +491,7 @@ SPEC CHECKSUMS:
   FirebaseMessaging: 2b9f56aa4ed286e1f0ce2ee1d413aabb8f9f5cb9
   FirebaseRemoteConfigInterop: 1c6135e8a094cc6368949f5faeeca7ee8948b8aa
   FirebaseSessions: 9b3b30947b97a15370e0902ee7a90f50ef60ead6
-  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   flutter_archive: ad8edfd7f7d1bb12058d05424ba93e27d9930efe
   flutter_background_service_ios: 00d31bdff7b4bfe06d32375df358abe0329cf87e
   flutter_blue_plus: e5808fc4e5ebc58bb911635f8fdaf5e2b4da2754
