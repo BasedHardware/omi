@@ -21,7 +21,7 @@ from database.users import (
     get_paypal_payment_details,
 )
 from utils import stripe as stripe_utils
-from utils.apps import paid_app
+from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
 
@@ -138,6 +138,10 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             if session.get("subscription"):
                 subscription_id = session["subscription"]
                 stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "app_id": app_id})
+                # Store the customer ID for app subscription so that it is easy to cancel the subscription
+                customer_id = session.get("customer")
+                if customer_id:
+                    set_user_app_sub_customer_id(app_id, uid, customer_id)
             paid_app(app_id, uid)
 
         # Regular user subscription
@@ -439,3 +443,72 @@ def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_
         raise HTTPException(status_code=400, detail="Invalid method")
     set_default_payment_method(uid, method)
     return {"status": "success"}
+
+
+@router.get("/v1/apps/{app_id}/subscription")
+def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get user's subscription for a specific app"""
+    try:
+
+        paid_app_check = get_is_user_paid_app(app_id, uid)
+        if not paid_app_check:
+            return {"subscription": None}
+
+        latest_subscription = find_app_subscription(app_id, uid, status_filter='all')
+
+        if latest_subscription:
+            return {
+                "subscription": {
+                    "id": latest_subscription.get('id'),
+                    "status": latest_subscription.get('status'),
+                    "current_period_end": latest_subscription.get('current_period_end'),
+                    "cancel_at_period_end": latest_subscription.get('cancel_at_period_end'),
+                    "price_id": latest_subscription.get('items', {}).get('data', [{}])[0].get('price', {}).get('id') if latest_subscription.get('items', {}).get('data') else None,
+                    "customer_id": latest_subscription.get('customer'),
+                }
+            }
+
+        return {"subscription": None}
+    except Exception as e:
+        print(f"Error getting app subscription: {e}")
+        raise HTTPException(status_code=500, detail="Could not retrieve subscription information")
+
+
+@router.delete("/v1/apps/{app_id}/subscription")
+def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Cancel user's subscription for a specific app"""
+    try:
+
+        paid_app_check = get_is_user_paid_app(app_id, uid)
+        if not paid_app_check:
+            raise HTTPException(status_code=404, detail="No active subscription found for this app")
+
+        target_subscription = find_app_subscription(app_id, uid, status_filter='active')
+        
+        if not target_subscription:
+            raise HTTPException(status_code=404, detail="Active subscription not found for this app")
+
+        target_subscription_id = target_subscription.get('id')
+        if not target_subscription_id:
+            raise HTTPException(status_code=404, detail="Invalid subscription data")
+
+        # Cancel the subscription at period end
+        updated_sub = stripe.Subscription.modify(
+            target_subscription_id,
+            cancel_at_period_end=True,
+        )
+        
+        updated_sub_dict = updated_sub.to_dict()
+
+        return {
+            "status": "success",
+            "message": "Subscription scheduled for cancellation at the end of the current billing period",
+            "cancel_at_period_end": updated_sub_dict.get('cancel_at_period_end'),
+            "current_period_end": updated_sub_dict.get('current_period_end')
+        }
+    except stripe.error.StripeError as e:
+        print(f"Stripe error canceling app subscription: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error canceling app subscription: {e}")
+        raise HTTPException(status_code=500, detail="Could not cancel subscription")
