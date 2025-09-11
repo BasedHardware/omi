@@ -74,13 +74,16 @@ class SdCardSocketService {
     String? btConnectedTime,
   }) async {
     debugPrint('Websocket Opening sd card');
-    final recordingsLanguage = SharedPreferencesUtil().userPrimaryLanguage;
-    // var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
-    //     '&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch&stt_service=${SharedPreferencesUtil().transcriptionModel}';
-    var params = '?uid=${SharedPreferencesUtil().uid}&bt_connected_time=$btConnectedTime';
     debugPrint('btConnectedTime: $btConnectedTime');
+    final base = Env.apiBaseUrl!;
+    final uri = Uri.parse(base).replace(
+      scheme: 'wss',
+      path: '/sdcard_stream',
+      queryParameters: {'uid': SharedPreferencesUtil().uid, 'bt_connected_time': btConnectedTime},
+    );
+
     IOWebSocketChannel channel = IOWebSocketChannel.connect(
-      Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}sdcard_stream$params'),
+      uri,
       // headers: {'Authorization': await getAuthHeader()},
     );
 
