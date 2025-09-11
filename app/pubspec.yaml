@@ -158,8 +158,7 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
-  config:
-    enable-swift-package-manager: false
+  disable-swift-package-manager: true
   assets:
     - assets/images/blob.png
     - assets/images/stars.png
