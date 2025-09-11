@@ -349,6 +349,8 @@ async def _listen(
     seconds_to_add = None
 
     conversation_creation_timeout = conversation_timeout
+    if conversation_timeout < 120:
+        conversation_creation_timeout = 120
 
     # Process existing conversations
     def _process_in_progess_memories():
@@ -1095,7 +1097,18 @@ async def listen_handler_v3(
     stt_service: STTService = None,
     conversation_timeout: int = 120,
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, False, conversation_timeout)
+    await _listen(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        None,
+        False,
+        conversation_timeout,
+    )
 
 
 @router.websocket("/v4/listen")
