@@ -390,9 +390,8 @@ class ActionItemsProvider extends ChangeNotifier {
     if (_selectedItems.isEmpty) return false;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
-    final success = await Future.wait(
-      itemsToDelete.map((item) => deleteActionItem(item))
-    ).then((results) => results.every((success) => success));
+    final success = await Future.wait(itemsToDelete.map((item) => deleteActionItem(item)))
+        .then((results) => results.every((success) => success));
 
     if (success) {
       _selectedItems.clear();

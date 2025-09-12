@@ -360,9 +360,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
-      color: widget.isSelected
-          ? Colors.deepPurpleAccent.withOpacity(0.1)
-          : const Color(0xFF1F1F25),
+      color: widget.isSelected ? Colors.deepPurpleAccent.withOpacity(0.1) : const Color(0xFF1F1F25),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -375,9 +373,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       clipBehavior: Clip.hardEdge,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: widget.isSelectionMode
-            ? widget.onSelectionToggle
-            : () => _showEditSheet(context),
+        onTap: widget.isSelectionMode ? widget.onSelectionToggle : () => _showEditSheet(context),
         onLongPress: widget.onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -395,14 +391,10 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: widget.isSelected
-                                ? Colors.deepPurpleAccent
-                                : Colors.grey.shade600,
+                            color: widget.isSelected ? Colors.deepPurpleAccent : Colors.grey.shade600,
                             width: 2,
                           ),
-                          color: widget.isSelected
-                              ? Colors.deepPurpleAccent
-                              : Colors.transparent,
+                          color: widget.isSelected ? Colors.deepPurpleAccent : Colors.transparent,
                         ),
                         child: widget.isSelected
                             ? const Icon(

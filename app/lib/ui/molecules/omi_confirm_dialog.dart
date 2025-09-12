@@ -119,20 +119,24 @@ class OmiConfirmDialog {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, ConfirmationResult(
-                confirmed: false,
-                skipFutureConfirmations: skipFutureConfirmations,
-              )),
+              onPressed: () => Navigator.pop(
+                  ctx,
+                  ConfirmationResult(
+                    confirmed: false,
+                    skipFutureConfirmations: skipFutureConfirmations,
+                  )),
               child: Text(
                 cancelLabel,
                 style: const TextStyle(color: ResponsiveHelper.textSecondary),
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(ctx, ConfirmationResult(
-                confirmed: true,
-                skipFutureConfirmations: skipFutureConfirmations,
-              )),
+              onPressed: () => Navigator.pop(
+                  ctx,
+                  ConfirmationResult(
+                    confirmed: true,
+                    skipFutureConfirmations: skipFutureConfirmations,
+                  )),
               child: Text(
                 confirmLabel,
                 style: TextStyle(color: confirmColor),

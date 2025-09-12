@@ -421,35 +421,39 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return Dismissible(
       key: Key(item.id),
       // Swipe right background - Mark as completed
-      background: provider.isSelectionMode ? null : Container(
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        decoration: BoxDecoration(
-          color: item.completed ? Colors.orange : Colors.green,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        child: Icon(
-          item.completed ? Icons.undo : Icons.check,
-          color: Colors.white,
-          size: 24,
-        ),
-      ),
+      background: provider.isSelectionMode
+          ? null
+          : Container(
+              margin: const EdgeInsets.symmetric(vertical: 2),
+              decoration: BoxDecoration(
+                color: item.completed ? Colors.orange : Colors.green,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.only(left: 20),
+              child: Icon(
+                item.completed ? Icons.undo : Icons.check,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
       // Swipe left background - Delete
-      secondaryBackground: provider.isSelectionMode ? null : Container(
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
-          size: 24,
-        ),
-      ),
+      secondaryBackground: provider.isSelectionMode
+          ? null
+          : Container(
+              margin: const EdgeInsets.symmetric(vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20),
+              child: const Icon(
+                Icons.delete,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
       confirmDismiss: (direction) async {
         // Disable swipe gestures when in selection mode
         if (provider.isSelectionMode) {
@@ -493,14 +497,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         },
         exportedToAppleReminders: _exportedToAppleReminders,
         onExportedToAppleReminders: _checkExistingAppleReminders,
-          isSelectionMode: provider.isSelectionMode,
-          isSelected: provider.isItemSelected(item.id),
-          onLongPress: () => _handleItemLongPress(item, provider),
-          onSelectionToggle: () => provider.toggleItemSelection(item.id),
+        isSelectionMode: provider.isSelectionMode,
+        isSelected: provider.isItemSelected(item.id),
+        onLongPress: () => _handleItemLongPress(item, provider),
+        onSelectionToggle: () => provider.toggleItemSelection(item.id),
       ),
     );
   }
-
 
   void _handleItemLongPress(ActionItemWithMetadata item, ActionItemsProvider provider) {
     if (!provider.isSelectionMode) {

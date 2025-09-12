@@ -1,5 +1,5 @@
 PODS:
-  - app_links (0.0.2):
+  - app_links (6.4.1):
     - Flutter
   - AppAuth (1.7.6):
     - AppAuth/Core (= 1.7.6)
@@ -142,9 +142,6 @@ PODS:
     - Flutter
   - flutter_native_splash (2.4.3):
     - Flutter
-  - flutter_silero_vad (0.0.1):
-    - Flutter
-    - onnxruntime-objc (= 1.15.0)
   - flutter_sound (9.28.0):
     - Flutter
     - flutter_sound_core (= 9.28.0)
@@ -235,11 +232,6 @@ PODS:
   - nordic_dfu (1.0.0):
     - Flutter
     - iOSDFULibrary (~> 4.15.3)
-  - onnxruntime-c (1.15.0)
-  - onnxruntime-objc (1.15.0):
-    - onnxruntime-objc/Core (= 1.15.0)
-  - onnxruntime-objc/Core (1.15.0):
-    - onnxruntime-c (= 1.15.0)
   - opus_flutter_ios (1.4.0):
     - Flutter
   - package_info_plus (0.4.5):
@@ -297,7 +289,6 @@ DEPENDENCIES:
   - flutter_blue_plus (from `.symlinks/plugins/flutter_blue_plus/ios`)
   - flutter_foreground_task (from `.symlinks/plugins/flutter_foreground_task/ios`)
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
-  - flutter_silero_vad (from `.symlinks/plugins/flutter_silero_vad/ios`)
   - flutter_sound (from `.symlinks/plugins/flutter_sound/ios`)
   - flutter_timezone (from `.symlinks/plugins/flutter_timezone/ios`)
   - flutter_web_auth_2 (from `.symlinks/plugins/flutter_web_auth_2/ios`)
@@ -354,8 +345,6 @@ SPEC REPOS:
     - iOSMcuManagerLibrary
     - Mixpanel-swift
     - nanopb
-    - onnxruntime-c
-    - onnxruntime-objc
     - PromisesObjC
     - PromisesSwift
     - RecaptchaInterop
@@ -400,8 +389,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_foreground_task/ios"
   flutter_native_splash:
     :path: ".symlinks/plugins/flutter_native_splash/ios"
-  flutter_silero_vad:
-    :path: ".symlinks/plugins/flutter_silero_vad/ios"
   flutter_sound:
     :path: ".symlinks/plugins/flutter_sound/ios"
   flutter_timezone:
@@ -456,7 +443,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/webview_flutter_wkwebview/darwin"
 
 SPEC CHECKSUMS:
-  app_links: 76b66b60cc809390ca1ad69bfd66b998d2387ac7
+  app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   audio_session: 9bb7f6c970f21241b19f5a3658097ae459681ba0
   awesome_notifications: 0f432b28098d193920b11a44cfa9d2d9313a3888
@@ -482,13 +469,12 @@ SPEC CHECKSUMS:
   FirebaseMessaging: 2b9f56aa4ed286e1f0ce2ee1d413aabb8f9f5cb9
   FirebaseRemoteConfigInterop: 1c6135e8a094cc6368949f5faeeca7ee8948b8aa
   FirebaseSessions: 9b3b30947b97a15370e0902ee7a90f50ef60ead6
-  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_archive: ad8edfd7f7d1bb12058d05424ba93e27d9930efe
   flutter_background_service_ios: 00d31bdff7b4bfe06d32375df358abe0329cf87e
   flutter_blue_plus: e5808fc4e5ebc58bb911635f8fdaf5e2b4da2754
   flutter_foreground_task: a159d2c2173b33699ddb3e6c2a067045d7cebb89
   flutter_native_splash: 6cad9122ea0fad137d23137dd14b937f3e90b145
-  flutter_silero_vad: 623c22e30420ae174857926385670b9f6e52e4b9
   flutter_sound: b9236a5875299aaa4cef1690afd2f01d52a3f890
   flutter_sound_core: 427465f72d07ab8c3edbe8ffdde709ddacd3763c
   flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
@@ -502,7 +488,7 @@ SPEC CHECKSUMS:
   GTMAppAuth: 99fb010047ba3973b7026e45393f51f27ab965ae
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
-  in_app_review: 5596fe56fab799e8edb3561c03d053363ab13457
+  in_app_review: 7dd1ea365263f834b8464673f9df72c80c17c937
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   Intercom: b636b0e27ab832827abdf6573c57a80cf090ff5a
   intercom_flutter: b9237a96bc29945d2f1e57d2b702d4a5a1952c70
@@ -516,8 +502,6 @@ SPEC CHECKSUMS:
   mixpanel_flutter: a0b6b937035899cd01951735ad5f87718b2ffee5
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   nordic_dfu: e4fb6f461f4a290b28ea4b1dfb69071665cdfa3e
-  onnxruntime-c: e87399683ec19e3b812e13c6692882609a802b86
-  onnxruntime-objc: 57ae8f83779a4c32731065d50d02d042af581114
   opus_flutter_ios: f16ed3599997ced564ad44509e87003159a86def
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
