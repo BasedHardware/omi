@@ -1,8 +1,8 @@
 #ifndef LED_H
 #define LED_H
 
-#include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/kernel.h>
 
 /**
  * @brief Initialize the LEDs

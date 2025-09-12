@@ -1,8 +1,10 @@
-#include <zephyr/logging/log.h>
-#include <zephyr/drivers/pwm.h>
 #include "lib/dk2/led.h"
-#include "lib/dk2/utils.h"
+
+#include <zephyr/drivers/pwm.h>
+#include <zephyr/logging/log.h>
+
 #include "lib/dk2/settings.h"
+#include "lib/dk2/utils.h"
 
 LOG_MODULE_REGISTER(led, CONFIG_LOG_DEFAULT_LEVEL);
 

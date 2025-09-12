@@ -16,11 +16,11 @@
 
 #include "battery.h"
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
-#include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/adc.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(battery, LOG_LEVEL_INF);
 
@@ -44,13 +44,12 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES];
 #define ADC_REFERENCE ADC_REF_INTERNAL             // 0.6V
 #define ADC_GAIN ADC_GAIN_1_6                      // ADC REFERENCE * 6 = 3.6V
 
-struct adc_channel_cfg channel_7_cfg = {
-    .gain = ADC_GAIN,
-    .reference = ADC_REFERENCE,
-    .acquisition_time = ADC_ACQ_TIME_DEFAULT,
-    .channel_id = ADC_CHANNEL,
+struct adc_channel_cfg channel_7_cfg = {.gain = ADC_GAIN,
+                                        .reference = ADC_REFERENCE,
+                                        .acquisition_time = ADC_ACQ_TIME_DEFAULT,
+                                        .channel_id = ADC_CHANNEL,
 #ifdef CONFIG_ADC_NRFX_SAADC
-    .input_positive = ADC_PORT
+                                        .input_positive = ADC_PORT
 #endif
 };
 
@@ -67,8 +66,7 @@ struct adc_sequence sequence = {
     .resolution = ADC_RESOLUTION,
 };
 
-typedef struct
-{
+typedef struct {
     uint16_t voltage;
     uint8_t percentage;
 } BatteryState;
@@ -91,7 +89,7 @@ BatteryState battery_states[BATTERY_STATES_COUNT] = {
     {3346, 5},
     {3255, 2},
     {3164, 1},
-    {3000, 0}  // Below safe level
+    {3000, 0} // Below safe level
 };
 
 static uint8_t is_initialized = false;
@@ -103,8 +101,7 @@ static int battery_enable_read()
 
 int battery_set_fast_charge()
 {
-    if (!is_initialized)
-    {
+    if (!is_initialized) {
         return -ECANCELED;
     }
 
@@ -113,8 +110,7 @@ int battery_set_fast_charge()
 
 int battery_set_slow_charge()
 {
-    if (!is_initialized)
-    {
+    if (!is_initialized) {
         return -ECANCELED;
     }
 
@@ -125,8 +121,7 @@ int battery_charge_start()
 {
     int ret = 0;
 
-    if (!is_initialized)
-    {
+    if (!is_initialized) {
         return -ECANCELED;
     }
     ret |= battery_enable_read();
@@ -136,8 +131,7 @@ int battery_charge_start()
 
 int battery_charge_stop()
 {
-    if (!is_initialized)
-    {
+    if (!is_initialized) {
         return -ECANCELED;
     }
 
@@ -150,7 +144,8 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     int ret = 0;
 
     // Voltage divider circuit (Should tune R1 in software if possible)
-    const uint16_t R1 = 1037; // Originally 1M ohm, calibrated after measuring actual voltage values. Can happen due to resistor tolerances, temperature ect..
+    const uint16_t R1 = 1037; // Originally 1M ohm, calibrated after measuring actual voltage values. Can happen due to
+                              // resistor tolerances, temperature ect..
     const uint16_t R2 = 510;  // 510K ohm
 
     // ADC measure
@@ -160,14 +155,12 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     k_mutex_lock(&battery_mut, K_FOREVER);
     ret |= adc_read(adc_battery_dev, &sequence);
 
-    if (ret)
-    {
+    if (ret) {
         LOG_WRN("ADC read failed (error %d)", ret);
     }
 
     // Get average sample value.
-    for (uint8_t sample = 0; sample < ADC_TOTAL_SAMPLES; sample++)
-    {
+    for (uint8_t sample = 0; sample < ADC_TOTAL_SAMPLES; sample++) {
         adc_mv += sample_buffer[sample]; // ADC value, not millivolt yet.
     }
     adc_mv /= ADC_TOTAL_SAMPLES;
@@ -186,30 +179,26 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
 int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivolt)
 {
     // Ensure voltage is within bounds
-    if (battery_millivolt >= battery_states[0].voltage)
-    {
+    if (battery_millivolt >= battery_states[0].voltage) {
         *battery_percentage = battery_states[0].percentage;
         LOG_DBG("%d %%", *battery_percentage);
         return 0;
     }
-    if (battery_millivolt <= battery_states[BATTERY_STATES_COUNT - 1].voltage)
-    {
+    if (battery_millivolt <= battery_states[BATTERY_STATES_COUNT - 1].voltage) {
         *battery_percentage = battery_states[BATTERY_STATES_COUNT - 1].percentage;
         LOG_DBG("%d %%", *battery_percentage);
         return 0;
     }
 
-    for (uint16_t i = 0; i < BATTERY_STATES_COUNT - 1; i++)
-    {
+    for (uint16_t i = 0; i < BATTERY_STATES_COUNT - 1; i++) {
         // Find the two points battery_millivolt is between
-        if (battery_millivolt <= battery_states[i].voltage && battery_millivolt > battery_states[i + 1].voltage)
-        {
+        if (battery_millivolt <= battery_states[i].voltage && battery_millivolt > battery_states[i + 1].voltage) {
             // Linear interpolation
-            float voltage_range = (float)(battery_states[i].voltage - battery_states[i + 1].voltage);
-            float percentage_range = (float)(battery_states[i].percentage - battery_states[i + 1].percentage);
-            float position = (float)(battery_states[i].voltage - battery_millivolt) / voltage_range;
+            float voltage_range = (float) (battery_states[i].voltage - battery_states[i + 1].voltage);
+            float percentage_range = (float) (battery_states[i].percentage - battery_states[i + 1].percentage);
+            float position = (float) (battery_states[i].voltage - battery_millivolt) / voltage_range;
 
-            *battery_percentage = battery_states[i].percentage - (uint8_t)(position * percentage_range);
+            *battery_percentage = battery_states[i].percentage - (uint8_t) (position * percentage_range);
 
             LOG_DBG("%d %%", *battery_percentage);
             return 0;
@@ -223,22 +212,19 @@ int battery_init()
     int ret = 0;
 
     // ADC
-    if (!device_is_ready(adc_battery_dev))
-    {
+    if (!device_is_ready(adc_battery_dev)) {
         LOG_ERR("ADC device not found!");
         return -EIO;
     }
 
     ret |= adc_channel_setup(adc_battery_dev, &channel_7_cfg);
 
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("ADC setup failed (error %d)", ret);
     }
 
     // GPIO
-    if (!device_is_ready(gpio_battery_dev))
-    {
+    if (!device_is_ready(gpio_battery_dev)) {
         LOG_ERR("GPIO device not found!");
         return -EIO;
     }
@@ -247,14 +233,12 @@ int battery_init()
     ret |= gpio_pin_configure(gpio_battery_dev, GPIO_BATTERY_READ_ENABLE, GPIO_OUTPUT | GPIO_ACTIVE_LOW);
     ret |= gpio_pin_configure(gpio_battery_dev, GPIO_BATTERY_CHARGE_SPEED, GPIO_OUTPUT | GPIO_ACTIVE_LOW);
 
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("GPIO configure failed!");
         return ret;
     }
 
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Initialization failed (error %d)", ret);
         return ret;
     }
