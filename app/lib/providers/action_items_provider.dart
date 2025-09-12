@@ -6,17 +6,17 @@ import 'package:omi/backend/schema/schema.dart';
 
 class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _actionItems = [];
-  
+
   bool _isLoading = false;
   bool _isFetching = false;
   bool _hasMore = false;
-  
+
   bool _includeCompleted = true;
-  
+
   // Date range filter
   DateTime? _startDate;
   DateTime? _endDate;
-  
+
   // Debounce mechanism for refresh
   Timer? _refreshDebounceTimer;
   DateTime? _lastRefreshTime;
@@ -32,13 +32,10 @@ class ActionItemsProvider extends ChangeNotifier {
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
 
-
   // Group action items by completion status
-  List<ActionItemWithMetadata> get incompleteItems => 
-      _actionItems.where((item) => item.completed == false).toList();
-  
-  List<ActionItemWithMetadata> get completedItems => 
-      _actionItems.where((item) => item.completed == true).toList();
+  List<ActionItemWithMetadata> get incompleteItems => _actionItems.where((item) => item.completed == false).toList();
+
+  List<ActionItemWithMetadata> get completedItems => _actionItems.where((item) => item.completed == true).toList();
 
   ActionItemsProvider() {
     _preload();
@@ -91,7 +88,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<void> loadMoreActionItems() async {
     if (_isFetching || !_hasMore) return;
-    
+
     setFetching(true);
 
     try {
@@ -300,8 +297,6 @@ class ActionItemsProvider extends ChangeNotifier {
     fetchActionItems(showShimmer: true);
   }
 
-
-
   Future<void> refreshActionItems() async {
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
@@ -332,5 +327,4 @@ class ActionItemsProvider extends ChangeNotifier {
     _refreshDebounceTimer?.cancel();
     super.dispose();
   }
-} 
-
+}

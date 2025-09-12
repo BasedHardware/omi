@@ -38,7 +38,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
       }
-      
+
       // Check if we should show the app review prompt for first conversation
       if (mounted && conversationProvider.conversations.isNotEmpty) {
         await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);

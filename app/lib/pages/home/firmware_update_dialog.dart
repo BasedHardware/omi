@@ -41,7 +41,8 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
     final stepMap = {
       'no_usb': FirmwareUpdateStep(
         title: 'No USB',
-        description: "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
+        description:
+            "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
         icon: Icons.usb_off,
       ),
       'battery': FirmwareUpdateStep(

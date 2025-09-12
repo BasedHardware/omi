@@ -68,7 +68,9 @@ class _FoundDevicesState extends State<FoundDevices> {
           children: [
             !provider.isConnected
                 ? Text(
-                    provider.deviceList.isEmpty ? 'Searching for devices...' : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                    provider.deviceList.isEmpty
+                        ? 'Searching for devices...'
+                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
