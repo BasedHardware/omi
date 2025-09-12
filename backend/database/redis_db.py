@@ -211,6 +211,19 @@ def get_user_paid_app(app_id: str, uid: str) -> str:
     return val.decode()
 
 
+def set_user_app_subscription_customer_id(app_id: str, uid: str, customer_id: str):
+    """Store the Stripe customer ID for a user's app subscription"""
+    r.set(f'users:{uid}:app_subs:{app_id}:customer_id', customer_id)
+
+
+def get_user_app_subscription_customer_id(app_id: str, uid: str) -> str:
+    """Get the Stripe customer ID for a user's app subscription"""
+    val = r.get(f'users:{uid}:app_subs:{app_id}:customer_id')
+    if not val:
+        return None
+    return val.decode()
+
+
 def enable_app(uid: str, app_id: str):
     r.sadd(f'users:{uid}:enabled_plugins', app_id)
 

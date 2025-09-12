@@ -109,9 +109,6 @@ dependencies:
   video_player: ^2.8.2
   frame_sdk: ^0.0.7
   web_socket_channel: ^3.0.3
-  flutter_silero_vad:
-    git:
-      url: https://github.com/char5742/flutter_silero_vad.git
   image_picker: ^1.1.2
   timeago: ^3.7.0
   app_links: ^6.3.2
@@ -159,15 +156,14 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
-  disable-swift-package-manager: true
+  config:
+    enable-swift-package-manager: false
   assets:
     - assets/images/blob.png
     - assets/images/stars.png
     - assets/images/herologo.png
     - assets/fonts/
     - assets/images/
-    - assets/silero_vad.onnx
-    - assets/silero_vad.v5.onnx
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
   fonts:
