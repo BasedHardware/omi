@@ -14,8 +14,8 @@
         "group": "Get Started",
         "pages": [
           "doc/get_started/introduction",
-          "doc/get_started/Flash_device",
-           "getstartedwithomi"
+           "getstartedwithomi",
+          "doc/get_started/Flash_device"
         ]
       },
       {
@@ -78,8 +78,8 @@
         "group": "Hardware",
         "pages": [
           "doc/hardware/OmiConsumer",
-          "doc/hardware/DevKit1",
           "doc/hardware/DevKit2",
+          "doc/hardware/DevKit1",
           "doc/hardware/omiGlass"
         ]
       },
