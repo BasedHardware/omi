@@ -42,29 +42,33 @@ templates = Jinja2Templates(directory="templates")
 init_notion_credentials(
     client_id=os.getenv("NOTION_CLIENT_ID", ""),
     client_secret=os.getenv("NOTION_CLIENT_SECRET", ""),
-    redirect_uri=os.getenv("NOTION_REDIRECT_URI", "")
+    redirect_uri=os.getenv("NOTION_REDIRECT_URI", ""),
 )
 
 # Include routers
 app.include_router(notion_router)
 app.include_router(omi_router)
 
+
 # Create database tables on startup
 @app.on_event("startup")
 async def startup_event():
     create_db_tables()
+
 
 # Home route
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
+
 # Run the app
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True) 
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

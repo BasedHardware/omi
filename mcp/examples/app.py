@@ -31,9 +31,7 @@ def run_async_task(coro):
 
 
 # --- Agent Interaction Logic ---
-async def process_message_with_agent(
-    conversation_history: list[dict[str, any]], uid: str
-):
+async def process_message_with_agent(conversation_history: list[dict[str, any]], uid: str):
     """
     Processes the conversation history using the OMI agent and returns the response
     along with reasoning/tool call details for the latest turn.
@@ -43,9 +41,7 @@ async def process_message_with_agent(
     )
     if conversation_history:
         last_msg = conversation_history[-1]
-        print(
-            f"Last message - Role: {last_msg.get('role')}, Content snippet: {str(last_msg.get('content'))[:100]}..."
-        )
+        print(f"Last message - Role: {last_msg.get('role')}, Content snippet: {str(last_msg.get('content'))[:100]}...")
 
     if not uid:  # Check if agent_uid (OMI_UID from UI) was provided
         st.error("Error: OMI_UID was not provided to the agent processing function.")
@@ -65,9 +61,7 @@ async def process_message_with_agent(
             agent_input_messages.append({"role": role, "content": content})
         else:
             # Log if a message is skipped, this might indicate an issue with history state
-            print(
-                f"Warning: Skipping message in history due to missing 'role' or 'content': {msg}"
-            )
+            print(f"Warning: Skipping message in history due to missing 'role' or 'content': {msg}")
 
     if not agent_input_messages:
         # This case should ideally not be reached if called after a user prompt
@@ -96,9 +90,7 @@ async def process_message_with_agent(
             print("run_output:", run_output)
 
             final_response = (
-                run_output.final_output
-                if run_output and run_output.final_output
-                else "Sorry, I couldn't process that."
+                run_output.final_output if run_output and run_output.final_output else "Sorry, I couldn't process that."
             )
             reasoning_details = []
 
@@ -114,9 +106,7 @@ async def process_message_with_agent(
 
     except Exception as e:
         st.error(f"An error occurred during agent processing: {e}")
-        print(
-            f"Detailed error in process_message_with_agent: {e}"
-        )  # Log detailed error to console
+        print(f"Detailed error in process_message_with_agent: {e}")  # Log detailed error to console
         return "An error occurred while trying to get a response.", []
 
 
@@ -160,11 +150,7 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if (
-            message["role"] == "assistant"
-            and "reasoning" in message
-            and message["reasoning"]
-        ):
+        if message["role"] == "assistant" and "reasoning" in message and message["reasoning"]:
             with st.expander("View Reasoning/Tool Calls", expanded=False):
                 for i, detail in enumerate(message["reasoning"]):
                     # Using str(detail) for broader compatibility, language="json" for Pydantic models
@@ -187,14 +173,10 @@ if prompt := st.chat_input("Ask Omi about your data..."):
         uid = st.session_state.user_omi_uid
 
         if not uid.strip():
-            message_placeholder.error(
-                "Error: OMI_UID not set. Please enter it in the sidebar."
-            )
+            message_placeholder.error("Error: OMI_UID not set. Please enter it in the sidebar.")
         else:
             # Pass the entire current conversation history (including the new user prompt)
-            response_text, reasoning_data = run_async_task(
-                process_message_with_agent(st.session_state.messages, uid)
-            )
+            response_text, reasoning_data = run_async_task(process_message_with_agent(st.session_state.messages, uid))
             message_placeholder.markdown(response_text)
 
             # Add assistant's response to session state

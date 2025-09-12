@@ -5,8 +5,7 @@ from models import ExternalIntegrationMemorySource, Geolocation
 
 
 class ZapierSubcribeModel(BaseModel):
-    target_url: str = Field(
-        description="Target url is the url for web hook calling", default='')
+    target_url: str = Field(description="Target url is the url for web hook calling", default='')
 
 
 class ZapierCreateMemory(BaseModel):
