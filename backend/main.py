@@ -27,6 +27,7 @@ from routers import (
     oauth,
     auth,
     action_items,
+    other,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -54,6 +55,8 @@ app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(trends.router)
+
+app.include_router(other.router)
 
 app.include_router(firmware.router)
 app.include_router(sync.router)

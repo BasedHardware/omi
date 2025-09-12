@@ -96,7 +96,7 @@ def get_conversations(
             # Keep overview for blurred UI, but clear other sensitive data
             conv['structured']['action_items'] = []
             conv['structured']['events'] = []
-            conv['transcript_segments'] = []
+            conv['transcript_segments'] = conv.get('transcript_segments', [])[-3:]
             conv['apps_results'] = []
             conv['plugins_results'] = []
             conv['suggested_summarization_apps'] = []
