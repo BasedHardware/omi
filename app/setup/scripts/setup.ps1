@@ -12,7 +12,7 @@
 #
 # For Android Developers:
 # - Android Studio (Iguana | 2024.3)
-# - Android SDK Platform (API 35)
+# - Android SDK Platform (API 36)
 # - JDK (v21)
 # - Gradle (v8.10)
 # - NDK (28.2.13676358)
@@ -34,7 +34,7 @@ Write-Host "- CocoaPods (v1.16.2)"
 Write-Host ""
 Write-Host "For Android Developers:"
 Write-Host "- Android Studio (Iguana | 2024.3)"
-Write-Host "- Android SDK Platform (API 35)"
+Write-Host "- Android SDK Platform (API 36)"
 Write-Host "- JDK (v21)"
 Write-Host "- Gradle (v8.10)"
 Write-Host "- NDK (28.2.13676358)"
