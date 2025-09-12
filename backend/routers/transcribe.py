@@ -79,7 +79,7 @@ async def _listen(
     including_combined_segments: bool = False,
     conversation_timeout: int = 120,
 ):
-    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
+    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service, including_combined_segments, conversation_timeout)
 
     try:
         await websocket.accept()
@@ -1081,35 +1081,6 @@ async def _listen(
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid)
     print("_listen ended", uid)
-
-
-# @deprecated
-# TODO: should be removed after Sep 2025 due to backward compatibility
-@router.websocket("/v3/listen")
-async def listen_handler_v3(
-    websocket: WebSocket,
-    uid: str = Depends(auth.get_current_user_uid),
-    language: str = 'en',
-    sample_rate: int = 8000,
-    codec: str = 'pcm8',
-    channels: int = 1,
-    include_speech_profile: bool = True,
-    stt_service: STTService = None,
-    conversation_timeout: int = 120,
-):
-    await _listen(
-        websocket,
-        uid,
-        language,
-        sample_rate,
-        codec,
-        channels,
-        include_speech_profile,
-        None,
-        False,
-        conversation_timeout,
-    )
-
 
 @router.websocket("/v4/listen")
 async def listen_handler(
