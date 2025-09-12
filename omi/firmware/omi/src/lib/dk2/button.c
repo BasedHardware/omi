@@ -15,6 +15,7 @@
 #include "led.h"
 #include "mic.h"
 #include "sdcard.h"
+#include "haptic.h"
 
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -266,7 +267,6 @@ void check_button_level(struct k_work *work_item)
     }
 
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
-    return 0;
 }
 
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 

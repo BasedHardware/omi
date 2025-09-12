@@ -32,6 +32,9 @@ static struct gpio_callback bat_chg_cb;
 
 static K_MUTEX_DEFINE(battery_mut);
 
+// Forward declarations
+static int battery_charging_state_read(void);
+
 // 150mAh LiPo battery discharge profile
 typedef struct {
     uint16_t millivolts;
@@ -277,7 +280,7 @@ int battery_set_slow_charge()
     return 0;
 }
 
-int battery_charging_state_read()
+static int battery_charging_state_read(void)
 {
     if(gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
         is_charging = true;

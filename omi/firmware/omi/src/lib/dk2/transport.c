@@ -18,6 +18,7 @@
 #include "config.h"
 #include "speaker.h"
 #include "sdcard.h"
+#include "lib/battery/battery.h"
 #include "storage.h"
 #include "button.h"
 #include "mic.h"
