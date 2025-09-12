@@ -17,7 +17,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.32.4
+      flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
     cache:
@@ -203,7 +203,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-      flutter: 3.32.4
+      flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -230,7 +230,7 @@ workflows:
 
             mkdir -p $ANDROID_HOME
 
-            # Install cmdline-tools 11076708; NDK: 27.0.12077973
+            # Install cmdline-tools 11076708; NDK: 28.2.13676358
             cd "$HOME/opt" && \
             curl --fail --show-error --silent --connect-timeout 10.00 --max-time 120.00 \
               --output commandlinetools-mac-11076708_latest.zip \
@@ -239,7 +239,7 @@ workflows:
             mkdir -p $ANDROID_HOME && \
             yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "tools" && \
             yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "cmdline-tools;latest" && \
-            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "ndk;27.0.12077973" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "ndk;28.2.13676358" && \
             yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --licenses  && \
             cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --list
           fi
@@ -372,7 +372,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.32.4
+      flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
     cache:
@@ -504,7 +504,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-      flutter: 3.32.4
+      flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -538,7 +538,7 @@ workflows:
 
             mkdir -p $ANDROID_HOME
 
-            # Install cmdline-tools 11076708; NDK: 27.0.12077973
+            # Install cmdline-tools 11076708; NDK: 28.2.13676358
             cd "$HOME/opt" && \
             curl --fail --show-error --silent --connect-timeout 10.00 --max-time 120.00 \
               --output commandlinetools-mac-11076708_latest.zip \
@@ -547,7 +547,7 @@ workflows:
             mkdir -p $ANDROID_HOME && \
             yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "tools" && \
             yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "cmdline-tools;latest" && \
-            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "ndk;27.0.12077973" && \
+            yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} "ndk;28.2.13676358" && \
             yes | cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --licenses  && \
             cmdline-tools/bin/sdkmanager --sdk_root=${ANDROID_HOME} --list
           fi

@@ -3,7 +3,7 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.32.4)
+# - Flutter SDK (v3.35.3)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
@@ -15,7 +15,7 @@
 # - Android SDK Platform (API 35)
 # - JDK (v21)
 # - Gradle (v8.10)
-# - NDK (27.0.12077973)
+# - NDK (28.2.13676358)
 
 # Enable strict mode
 Set-StrictMode -Version Latest
@@ -25,7 +25,7 @@ Write-Host "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Joi
 Write-Host "Prerequisites (stable versions, use these or higher):"
 Write-Host ""
 Write-Host "Common for all developers:"
-Write-Host "- Flutter SDK (v3.32.4)"
+Write-Host "- Flutter SDK (v3.35.3)"
 Write-Host "- Opus Codec: https://opus-codec.org"
 Write-Host ""
 Write-Host "For iOS Developers:"
@@ -37,7 +37,7 @@ Write-Host "- Android Studio (Iguana | 2024.3)"
 Write-Host "- Android SDK Platform (API 35)"
 Write-Host "- JDK (v21)"
 Write-Host "- Gradle (v8.10)"
-Write-Host "- NDK (27.0.12077973)"
+Write-Host "- NDK (28.2.13676358)"
 Write-Host ""
 
 
