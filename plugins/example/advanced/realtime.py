@@ -27,7 +27,8 @@ class NewsCheck(BaseModel):
 def news_checker(conversation: List[TranscriptSegment]) -> str:
     chat_with_parser = chat_groq_8b.with_structured_output(NewsCheck)
     conversation_str = TranscriptSegment.segments_as_string(conversation)
-    result: NewsCheck = chat_with_parser.invoke(f'''
+    result: NewsCheck = chat_with_parser.invoke(
+        f'''
     You will be given the last few transcript words of an ongoing conversation.
 
     Your task is to determine if the conversation specifically discusses facts that appear conspiratorial, unscientific, or super biased.
@@ -37,14 +38,16 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
 
     Transcript:
     {conversation_str}
-    ''')
+    '''
+    )
     if len(result.query) < 5:
         return ''
 
     print('news_checker query:', result.query)
     tool = AskNewsSearch(max_results=2)
     output = tool.invoke({"query": result.query})
-    result = chat_groq_8b.invoke(f'''
+    result = chat_groq_8b.invoke(
+        f'''
     A user just asked a search engine news the following question:
     {result.query}
 
@@ -54,7 +57,8 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
     {conversation_str}
 
     Your task is to provide a 15 words summary to help debunk and contradict the obvious bias and conspiranoic conversation going. If you don't find anything like this, just output an empty string.
-    ''')
+    '''
+    )
     if len(result.content) < 5:
         return ''
     print('news_checker output:', result.content)
@@ -83,7 +87,8 @@ class EmotionalSupport(BaseModel):
 
 def emotional_support(segments: list[TranscriptSegment]) -> str:
     chat_with_parser = chat_groq_8b.with_structured_output(EmotionalSupport)
-    result: EmotionalSupport = chat_with_parser.invoke(f'''
+    result: EmotionalSupport = chat_with_parser.invoke(
+        f'''
     You will be given a segment of an ongoing conversation.
     Your task is to detect if there are any accentuated emotions on the conversation and act if it's something unpleasant.
     Please make sure that there's something valueable to say that will improve user's mood, otherwise output an empty string.
@@ -93,7 +98,8 @@ def emotional_support(segments: list[TranscriptSegment]) -> str:
     {TranscriptSegment.segments_as_string(segments)}
     
     The message has to be at most 20 words. Be short and concise.
-    ''')
+    '''
+    )
 
     print('emotional_support output:', result.message)
     if len(result.message) < 10:

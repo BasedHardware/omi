@@ -13,10 +13,16 @@ scan_segment_session = {}
 # ************ Basic Proactive Notification Plugin ************
 # *******************************************************
 
-@router.post('/mentor', tags=['mentor', 'basic', 'realtime', 'proactive_notification'], response_model=ProactiveNotificationEndpointResponse, response_model_exclude_none=True)
+
+@router.post(
+    '/mentor',
+    tags=['mentor', 'basic', 'realtime', 'proactive_notification'],
+    response_model=ProactiveNotificationEndpointResponse,
+    response_model_exclude_none=True,
+)
 def mentoring(data: RealtimePluginRequest):
     def normalize(text):
-        return re.sub(r' +', ' ',re.sub(r'[,?.!]', ' ', text)).lower().strip()
+        return re.sub(r' +', ' ', re.sub(r'[,?.!]', ' ', text)).lower().strip()
 
     session_id = data.session_id
     segments = get_upsert_segment_to_transcript_plugin('mentor-01', session_id, data.segments)
@@ -84,7 +90,9 @@ def mentoring(data: RealtimePluginRequest):
     ```
     {user_context}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
 
     # 3. Respond with the format {notification: {prompt, params, context}}
     #   - context: {question, filters: {people, topics, entities}} | None
@@ -93,9 +101,10 @@ def mentoring(data: RealtimePluginRequest):
         'notification': {
             'prompt': prompt,
             'params': ['user_name', 'user_facts', 'user_context', 'user_chat'],
-        }
+        },
     }
 
-@ router.get('/setup/mentor', tags=['mentor'])
+
+@router.get('/setup/mentor', tags=['mentor'])
 def is_setup_completed(uid: str):
     return {'is_setup_completed': True}

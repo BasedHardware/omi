@@ -194,8 +194,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
-
-
   void _scrollToBottomGently() {
     if (!_scrollController.hasClients) {
       return;

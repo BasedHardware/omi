@@ -73,21 +73,15 @@ def cancel_subscription(subscription_id: str):
 def find_app_subscription_by_customer_id(customer_id: str, app_id: str, uid: str, status_filter: str = 'all'):
     """Find app subscription using customer ID (fast path)."""
     try:
-        subscriptions = stripe.Subscription.list(
-            customer=customer_id, 
-            status=status_filter, 
-            limit=5
-        )
+        subscriptions = stripe.Subscription.list(customer=customer_id, status=status_filter, limit=5)
         latest_subscription = None
-        
+
         for sub in subscriptions.data:
             sub_dict = sub.to_dict()
-            if (sub_dict.get('metadata', {}).get('app_id') == app_id and
-                sub_dict.get('metadata', {}).get('uid') == uid):
-                if (latest_subscription is None or
-                    sub_dict.get('created', 0) > latest_subscription.get('created', 0)):
+            if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
+                if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
                     latest_subscription = sub_dict
-        
+
         return latest_subscription
     except Exception as e:
         print(f"Error finding app subscription by customer ID {customer_id}: {e}")
@@ -99,15 +93,13 @@ def find_app_subscription_by_metadata(app_id: str, uid: str, status_filter: str 
     try:
         subscriptions = stripe.Subscription.list(limit=100, status=status_filter)
         latest_subscription = None
-        
+
         for sub in subscriptions.data:
             sub_dict = sub.to_dict()
-            if (sub_dict.get('metadata', {}).get('app_id') == app_id and
-                sub_dict.get('metadata', {}).get('uid') == uid):
-                if (latest_subscription is None or
-                    sub_dict.get('created', 0) > latest_subscription.get('created', 0)):
+            if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
+                if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
                     latest_subscription = sub_dict
-        
+
         return latest_subscription
     except Exception as e:
         print(f"Error finding app subscription by metadata: {e}")

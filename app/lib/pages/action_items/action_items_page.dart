@@ -110,7 +110,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, child) {
         // Get incomplete and complete items
@@ -130,240 +130,238 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-              // Main Content
-              if (provider.isLoading && provider.actionItems.isEmpty) ...[
-                // Header shimmer
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'To-Do\'s',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
+                // Main Content
+                if (provider.isLoading && provider.actionItems.isEmpty) ...[
+                  // Header shimmer
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'To-Do\'s',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[800]?.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(8),
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[800]?.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Tap to edit • Checkbox to toggle • Swipe for actions',
-                          style: TextStyle(
-                            color: Colors.grey.shade500,
-                            fontSize: 12,
+                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap to edit • Checkbox to toggle • Swipe for actions',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                // Shimmer list
+                  // Shimmer list
                   const ActionItemsShimmerList(),
-              ]
-              else if (provider.actionItems.isEmpty)
-                SliverFillRemaining(
-                  child: _buildSmartEmptyState(provider),
-                )
-              else
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 0.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                const Text(
-                                  'To-Do\'s',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[800],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${incompleteItems.length}',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                ] else if (provider.actionItems.isEmpty)
+                  SliverFillRemaining(
+                    child: _buildSmartEmptyState(provider),
+                  )
+                else
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 0.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    'To-Do\'s',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ),
-                                
-                              ],
-                            ),
-                            // Create icon
-                            IconButton(
-                              onPressed: _showCreateActionItemSheet,
-                              icon: const Icon(
-                                Icons.add,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        // Help text for editing
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Tap to edit • Checkbox to toggle • Swipe for actions',
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 12,
-                              ),
-                            ),
-
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Incomplete Items
-              if (provider.actionItems.isNotEmpty)
-                _buildFlatIncompleteItems(incompleteItems, provider),
-
-              // Completed Section Header
-              if (provider.actionItems.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                const Text(
-                                  'Completed',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[800],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${completedItems.length}',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '${incompleteItems.length}',
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ),
+                                ],
+                              ),
+                              // Create icon
+                              IconButton(
+                                onPressed: _showCreateActionItemSheet,
+                                icon: const Icon(
+                                  Icons.add,
+                                  color: Colors.white,
+                                  size: 18,
                                 ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Completed Items
-              if (provider.actionItems.isNotEmpty && completedItems.isNotEmpty)
-                _buildFlatCompletedItems(completedItems, provider)
-              else if (provider.actionItems.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Container(
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.circular(16),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Help text for editing
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Tap to edit • Checkbox to toggle • Swipe for actions',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                       ),
+                    ),
+                  ),
+
+                // Incomplete Items
+                if (provider.actionItems.isNotEmpty) _buildFlatIncompleteItems(incompleteItems, provider),
+
+                // Completed Section Header
+                if (provider.actionItems.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    'Completed',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '${completedItems.length}',
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Completed Items
+                if (provider.actionItems.isNotEmpty && completedItems.isNotEmpty)
+                  _buildFlatCompletedItems(completedItems, provider)
+                else if (provider.actionItems.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Container(
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1F1F25),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'No completed items yet',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Loading shimmer for pagination
+                if (provider.isFetching || provider.isLoading)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: List.generate(
+                            3,
+                            (index) => const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4),
+                                  child: ActionItemShimmerWidget(),
+                                )),
+                      ),
+                    ),
+                  ),
+
+                // Load More button (fallback for manual loading)
+                if (!provider.isFetching && provider.hasMore && provider.actionItems.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
                       child: Center(
-                        child: Text(
-                          'No completed items yet',
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 14,
+                        child: ElevatedButton(
+                          onPressed: () => provider.loadMoreActionItems(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepPurpleAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
+                          child: const Text('Load More'),
                         ),
                       ),
                     ),
                   ),
-                ),
 
-              // Loading shimmer for pagination
-              if (provider.isFetching || provider.isLoading)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: List.generate(3, (index) => const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 4),
-                        child: ActionItemShimmerWidget(),
-                      )),
-                    ),
-                  ),
-                ),
-
-              // Load More button (fallback for manual loading)
-              if (!provider.isFetching && provider.hasMore && provider.actionItems.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Center(
-                      child: ElevatedButton(
-                        onPressed: () => provider.loadMoreActionItems(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurpleAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text('Load More'),
-                      ),
-                    ),
-                  ),
-                ),
-
-              const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-            ],
+                const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+              ],
             ),
           ),
         );
@@ -392,8 +390,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-
-
   Widget _buildFlatCompletedItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -415,8 +411,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-
-
   Widget _buildDismissibleActionItem({
     required ActionItemWithMetadata item,
     required ActionItemsProvider provider,
@@ -433,10 +427,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
         child: Icon(
-              item.completed ? Icons.undo : Icons.check,
-              color: Colors.white,
-              size: 24,
-            ),
+          item.completed ? Icons.undo : Icons.check,
+          color: Colors.white,
+          size: 24,
+        ),
       ),
       // Swipe left background - Delete
       secondaryBackground: Container(
@@ -448,25 +442,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(
-              Icons.delete,
-              color: Colors.white,
-              size: 24,
-            ),
+          Icons.delete,
+          color: Colors.white,
+          size: 24,
+        ),
       ),
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
           // Swipe right - Toggle completion
           await provider.updateActionItemState(item, !item.completed);
-          
+
           // Show feedback
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  item.completed 
-                    ? 'Action item marked as incomplete' 
-                    : 'Action item completed'
-                ),
+                content: Text(item.completed ? 'Action item marked as incomplete' : 'Action item completed'),
                 backgroundColor: item.completed ? Colors.orange : Colors.green,
                 duration: const Duration(seconds: 2),
               ),
@@ -553,7 +543,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ],
                   ),
                 ),
-                
+
                 // Content
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
@@ -569,7 +559,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Action item preview
                       Container(
                         width: double.infinity,
@@ -605,9 +595,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           ],
                         ),
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Warning text with better styling
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -639,9 +629,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           ],
                         ),
                       ),
-                      
+
                       const SizedBox(height: 24),
-                      
+
                       // Action buttons
                       Row(
                         children: [
@@ -701,7 +691,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _deleteActionItem(ActionItemWithMetadata item, ActionItemsProvider provider) async {
     final success = await provider.deleteActionItem(item);
-    
+
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -736,11 +726,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-
-
-
-
-
   Widget _buildSmartEmptyState(ActionItemsProvider provider) {
     return Center(
       child: Container(
@@ -750,8 +735,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       ),
     );
   }
-
-
 
   Widget _buildFirstTimeEmptyState() {
     return Column(
@@ -803,9 +786,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ],
           ),
         ),
-        
+
         const SizedBox(height: 28),
-        
+
         // Welcome heading
         const Text(
           'Ready for Action Items',
@@ -817,9 +800,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
           textAlign: TextAlign.center,
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // Educational description
         const Text(
           'Your AI will automatically extract tasks and to-dos from your conversations. They\'ll appear here when created.',
@@ -831,9 +814,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             fontWeight: FontWeight.w400,
           ),
         ),
-        
+
         const SizedBox(height: 32),
-        
+
         // Subtle feature hints
         Container(
           padding: const EdgeInsets.all(20),
@@ -924,9 +907,4 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       ],
     );
   }
-
-
-
-
-
 }

@@ -11,6 +11,7 @@ from zapier import memory_created as zapier_memory_created_router
 from chatgpt import main as chatgpt_router
 from subscription import main as subscription_router
 from notifications import hey_omi
+
 # from ahda import client as ahda_realtime_transcription_router
 # from advanced import openglass as advanced_openglass_router
 
@@ -22,6 +23,7 @@ from notifications import hey_omi
 # from advanced import realtime as advanced_realtime_router
 # from basic import realtime as basic_realtime_router
 from basic import mentor as basic_realtime_mentor_router
+
 # ****************************************
 
 app = FastAPI()
@@ -30,7 +32,7 @@ app.mount("/templates/static", StaticFiles(directory="templates/static"), name="
 modal_app = App(
     name='plugins',
     secrets=[Secret.from_dotenv('.env')],
-    mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
+    mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')],
 )
 
 

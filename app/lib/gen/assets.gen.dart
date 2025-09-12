@@ -55,7 +55,7 @@ class $AssetsFontsGen {
         sfprodisplaymedium,
         sfprodisplayregular,
         sfprodisplaysemibolditalic,
-        sfprodisplaythinitalic
+        sfprodisplaythinitalic,
       ];
 }
 
@@ -315,7 +315,7 @@ class $AssetsImagesGen {
         whatsappLogo,
         xLogo,
         xLogoMini,
-        youtubeLogo
+        youtubeLogo,
       ];
 }
 
@@ -325,20 +325,14 @@ class Assets {
   static const $AssetsDeviceAssetsGen deviceAssets = $AssetsDeviceAssetsGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
-  static const String sileroVad = 'assets/silero_vad.onnx';
-  static const String sileroVadV5 = 'assets/silero_vad.v5.onnx';
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets
-  static List<String> get values => [sileroVad, sileroVadV5, shorebird];
+  static List<String> get values => [shorebird];
 }
 
 class AssetGenImage {
-  const AssetGenImage(
-    this._assetName, {
-    this.size,
-    this.flavors = const {},
-  });
+  const AssetGenImage(this._assetName, {this.size, this.flavors = const {}});
 
   final String _assetName;
 
@@ -398,15 +392,8 @@ class AssetGenImage {
     );
   }
 
-  ImageProvider provider({
-    AssetBundle? bundle,
-    String? package,
-  }) {
-    return AssetImage(
-      _assetName,
-      bundle: bundle,
-      package: package,
-    );
+  ImageProvider provider({AssetBundle? bundle, String? package}) {
+    return AssetImage(_assetName, bundle: bundle, package: package);
   }
 
   String get path => _assetName;

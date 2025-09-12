@@ -124,7 +124,7 @@ class ConversationTimeoutDialog {
                   onPressed: () {
                     SharedPreferencesUtil().conversationSilenceDuration = selectedDuration;
                     Navigator.of(context).pop();
-                    
+
                     // Show confirmation
                     String message;
                     if (selectedDuration == -1) {

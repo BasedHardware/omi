@@ -11,6 +11,7 @@ router = APIRouter()
 # ************ On Transcript Received Plugin ************
 # *******************************************************
 
+
 @router.post('/cursing-checker', tags=['basic', 'realtime'], response_model=EndpointResponse)
 def cursing_checker(data: RealtimePluginRequest):
     """

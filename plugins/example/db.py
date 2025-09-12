@@ -10,7 +10,7 @@ r = redis.Redis(
     port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
     username='default',
     password=os.getenv('REDIS_DB_PASSWORD'),
-    health_check_interval=30
+    health_check_interval=30,
 )
 
 
@@ -50,6 +50,7 @@ def get_notion_database_id(uid: str) -> str:
 # *******************************************************
 # ************ ADVANCED REALTIME PLUGIN UTILS ***********
 # *******************************************************
+
 
 def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[TranscriptSegment]) -> List[dict]:
     key = f'transcript:{uid}:{session_id}'
@@ -107,6 +108,7 @@ def remove_zapier_subscribes(uid: str, target_url: str):
 # ************ MULTION UTILS ************
 # **********************************************************
 
+
 def store_multion_user_id(uid: str, user_id: str):
     r.set(f'multion_user_id:{uid}', user_id)
 
@@ -133,17 +135,21 @@ def get_task_result(task_id: str) -> str:
     result = r.get(f'task_result:{task_id}')
     return result.decode('utf-8') if result else None
 
+
 # **********************************************************
 # ************ AHDA UTILS (PC Control) ************
 # **********************************************************
+
 
 def store_ahda(uid: str, url: str, os: str):
     r.set(f'ahda_url:{uid}', url)
     r.set(f'ahda_os:{uid}', os)
 
+
 def get_ahda_url(uid: str) -> str:
     val = r.get(f'ahda_url:{uid}')
     return val.decode('utf-8') if val else None
+
 
 def get_ahda_os(uid: str) -> str:
     val = r.get(f'ahda_os:{uid}')
@@ -154,7 +160,10 @@ def get_ahda_os(uid: str) -> str:
 # ************ MENTOR PLUGIN UTILS ***********
 # *******************************************************
 
-def get_upsert_segment_to_transcript_plugin(plugin_id: str, session_id: str, new_segments: list[TranscriptSegment]) -> List[dict]:
+
+def get_upsert_segment_to_transcript_plugin(
+    plugin_id: str, session_id: str, new_segments: list[TranscriptSegment]
+) -> List[dict]:
     key = f'plugin:{plugin_id}:session:{session_id}:transcript_segments'
     segments = r.get(key)
     if not segments:

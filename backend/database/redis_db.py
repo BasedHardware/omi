@@ -579,6 +579,7 @@ def clear_migration_status(uid: str):
 # ******************* AUTH SESSION *********************
 # ******************************************************
 
+
 @try_catch_decorator
 def set_auth_session(session_id: str, session_data: dict, ttl: int = 600):
     """Store auth session data with expiration (default 10 minutes)"""

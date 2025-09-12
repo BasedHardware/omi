@@ -36,7 +36,7 @@ class IntercomManager {
       () async {
         if (device == 'Omi DevKit 2') {
           return await intercom.displayArticle('10003257-how-to-charge-devkit2');
-        } else if(device == 'Omi') {
+        } else if (device == 'Omi') {
           return await intercom.displayArticle('12123047-how-to-charge-omi');
         } else {
           return await intercom.displayArticle('9907475-how-to-charge-the-device');

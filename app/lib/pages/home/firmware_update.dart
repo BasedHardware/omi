@@ -454,7 +454,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                       // Set firmware update in progress when starting update
                       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
                       deviceProvider.setFirmwareUpdateInProgress(true);
-                      
+
                       if (otaUpdateSteps.isEmpty) {
                         await downloadFirmware();
                         await startDfu(widget.device!);

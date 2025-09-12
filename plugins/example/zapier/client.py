@@ -12,8 +12,10 @@ from .models import ZapierCreateMemory
 
 class ZapierDatabasePropertyModel:
     def __init__(
-            self,
-            id, name, property_type,
+        self,
+        id,
+        name,
+        property_type,
     ) -> None:
         self.id = id
         self.name = name
@@ -28,7 +30,7 @@ class ZapierDatabasePropertyModel:
 
 class ZapierDatabaseModel:
     def __init__(
-            self,
+        self,
     ) -> None:
         self.id = ""
         self.properties = []
@@ -43,8 +45,7 @@ class ZapierDatabaseModel:
         properties: [ZapierDatabasePropertyModel] = []
         if data["properties"] is not None:
             for prop in data["properties"].values():
-                properties.append(
-                    ZapierDatabasePropertyModel.from_dict(prop))
+                properties.append(ZapierDatabasePropertyModel.from_dict(prop))
         model.properties = properties
 
         return model
@@ -60,7 +61,7 @@ class ZapierDatabaseModel:
 
 class ZapierOAuthModel:
     def __init__(
-            self,
+        self,
     ) -> None:
         self.access_token = ""
         pass
@@ -76,6 +77,7 @@ class ZapierOAuthModel:
 #    Client
 # """
 
+
 class ZapierClient:
     """
     Implementation of the Zapier APIs.
@@ -84,7 +86,7 @@ class ZapierClient:
     """
 
     def __init__(
-            self,
+        self,
     ) -> None:
         pass
 
@@ -92,10 +94,14 @@ class ZapierClient:
         resp: requests.Response
         err = None
         try:
-            resp = requests.post(target_url, json=memory.model_dump(mode="json"), headers={
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            })
+            resp = requests.post(
+                target_url,
+                json=memory.model_dump(mode="json"),
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+            )
         except requests.exceptions.HTTPError:
             resp_text = f"{resp}"
             err = {
@@ -147,9 +153,9 @@ class FriendClient:
     """
 
     def __init__(
-            self,
-            base_url,
-            workflow_api_key,
+        self,
+        base_url,
+        workflow_api_key,
     ) -> None:
         self.base_url = base_url
         self.workflow_api_key = workflow_api_key
@@ -160,11 +166,15 @@ class FriendClient:
         err = None
         url = f"{self.base_url}/v1/integrations/workflow/memories?uid={uid}"
         try:
-            resp = requests.post(url, json=memory.model_dump(mode="json"), headers={
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'api-key': self.workflow_api_key,
-            })
+            resp = requests.post(
+                url,
+                json=memory.model_dump(mode="json"),
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'api-key': self.workflow_api_key,
+                },
+            )
         except requests.exceptions.HTTPError:
             resp_text = f"{resp.text()}"
             err = {
@@ -212,11 +222,14 @@ class FriendClient:
         err = None
         url = f"{self.base_url}/v1/integrations/workflow/memories?uid={uid}&limit=1"
         try:
-            resp = requests.get(url, headers={
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'api-key': self.workflow_api_key,
-            })
+            resp = requests.get(
+                url,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'api-key': self.workflow_api_key,
+                },
+            )
         except requests.exceptions.HTTPError:
             resp_text = f"{resp.text()}"
             err = {

@@ -135,7 +135,7 @@ void main() async {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
-    
+
   runZonedGuarded(
     () => runApp(const MyApp()),
     (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true),
