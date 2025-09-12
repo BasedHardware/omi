@@ -198,33 +198,60 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               ],
                             ),
                       widget.conversation.discarded
-                          ? Column(
+                          ? Stack(
                               children: [
-                                if (widget.conversation.photos.isNotEmpty)
-                                  Row(children: [
-                                    Icon(
-                                      Icons.photo_library,
-                                      color: Colors.grey.shade400,
-                                      size: 18,
-                                    ),
-                                    SizedBox(
-                                      width: 12,
-                                    ),
+                                Column(
+                                  children: [
+                                    if (widget.conversation.photos.isNotEmpty)
+                                      Row(children: [
+                                        Icon(
+                                          Icons.photo_library,
+                                          color: Colors.grey.shade400,
+                                          size: 18,
+                                        ),
+                                        SizedBox(
+                                          width: 12,
+                                        ),
+                                        Text(
+                                          "${widget.conversation.photos.length} photos",
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium!
+                                              .copyWith(color: Colors.grey.shade300, height: 1.3),
+                                        )
+                                      ]),
                                     Text(
-                                      "${widget.conversation.photos.length} photos",
+                                      widget.conversation.getTranscript(maxCount: 100),
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium!
                                           .copyWith(color: Colors.grey.shade300, height: 1.3),
-                                    )
-                                  ]),
-                                Text(
-                                  widget.conversation.getTranscript(maxCount: 100),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium!
-                                      .copyWith(color: Colors.grey.shade300, height: 1.3),
+                                    ),
+                                  ],
                                 ),
+                                if (widget.conversation.isLocked)
+                                  Positioned.fill(
+                                    child: ClipRRect(
+                                      child: BackdropFilter(
+                                        filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                                        child: Container(
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.01),
+                                            borderRadius: const BorderRadius.all(Radius.circular(8)),
+                                          ),
+                                          child: const Text(
+                                            'Upgrade to unlimited',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             )
                           : const SizedBox(height: 8),
