@@ -3,17 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/molecules/omi_popup_menu.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class DesktopActionItem extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
@@ -514,10 +513,35 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   }
 
   void _showDeleteConfirmation(BuildContext context) {
-    OmiConfirmDialog.show(context,
-            title: 'Delete Action Item', message: 'Are you sure you want to delete this action item?')
-        .then((confirmed) {
-      if (confirmed == true) {
+    final prefs = SharedPreferencesUtil();
+
+    // Check if user has opted out of delete confirmations
+    if (!prefs.showActionItemDeleteConfirmation) {
+      // Skip confirmation and proceed with deletion
+      context.read<ActionItemsProvider>().deleteActionItem(widget.actionItem);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Action item deleted'),
+          backgroundColor: ResponsiveHelper.backgroundTertiary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    OmiConfirmDialog.showWithSkipOption(
+      context,
+      title: 'Delete Action Item',
+      message: 'Are you sure you want to delete this action item?',
+    ).then((result) {
+      if (result?.confirmed == true) {
+        // Update preference if user chose to skip future confirmations
+        if (result!.skipFutureConfirmations) {
+          prefs.showActionItemDeleteConfirmation = false;
+        }
+
         context.read<ActionItemsProvider>().deleteActionItem(widget.actionItem);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

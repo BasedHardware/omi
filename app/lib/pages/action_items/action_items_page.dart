@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/action_item_form_sheet.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -12,6 +11,8 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -465,7 +466,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           return false;
         } else {
           // Swipe left - Show delete confirmation
-          return await _showDeleteConfirmationDialog(item);
+          await _deleteActionItem(item, provider);
+          return false;
         }
       },
       onDismissed: (direction) async {
@@ -488,208 +490,34 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Future<bool?> _showDeleteConfirmationDialog(ActionItemWithMetadata item) async {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 340),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header with icon
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
-                          size: 28,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Delete Action Item?',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Content
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Are you sure you want to delete this action item?',
-                        style: TextStyle(
-                          color: Colors.grey[300],
-                          fontSize: 16,
-                          height: 1.4,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Action item preview
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[800]?.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.grey[700]!.withOpacity(0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.assignment_outlined,
-                              color: Colors.grey[400],
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                item.description,
-                                style: TextStyle(
-                                  color: Colors.grey[200],
-                                  fontSize: 14,
-                                  height: 1.3,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Warning text with better styling
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.orange.withOpacity(0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.warning_amber_rounded,
-                              color: Colors.orange[300],
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'This action cannot be undone',
-                              style: TextStyle(
-                                color: Colors.orange[300],
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Action buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  color: Colors.grey[300],
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text(
-                                'Delete',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Future<void> _deleteActionItem(ActionItemWithMetadata item, ActionItemsProvider provider) async {
+    final prefs = SharedPreferencesUtil();
+
+    // Check if user has opted out of delete confirmations
+    if (!prefs.showActionItemDeleteConfirmation) {
+      // Skip confirmation and proceed with deletion
+      await _performDeleteActionItem(item, provider);
+      return;
+    }
+
+    final result = await OmiConfirmDialog.showWithSkipOption(
+      context,
+      title: 'Delete Action Item',
+      message: 'Are you sure you want to delete this action item?',
+    );
+
+    if (result?.confirmed == true) {
+      // Update preference if user chose to skip future confirmations
+      if (result!.skipFutureConfirmations) {
+        prefs.showActionItemDeleteConfirmation = false;
+      }
+
+      await _performDeleteActionItem(item, provider);
+    }
+  }
+
+  Future<void> _performDeleteActionItem(ActionItemWithMetadata item, ActionItemsProvider provider) async {
     final success = await provider.deleteActionItem(item);
 
     if (mounted) {
@@ -699,20 +527,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             content: Text('Action item "${item.description}" deleted'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'Undo',
-              textColor: Colors.white,
-              onPressed: () {
-                // For now, show that undo is not implemented
-                // In the future, you could implement an undo mechanism
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Undo functionality not implemented yet'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-              },
-            ),
           ),
         );
       } else {
