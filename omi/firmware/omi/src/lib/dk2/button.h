@@ -1,13 +1,10 @@
 #ifndef BUTTON_H
 #define BUTTON_H
 
-#include <zephyr/kernel.h>
 #include <zephyr/input/input.h>
+#include <zephyr/kernel.h>
 
-typedef enum {
-    IDLE, 
-    GRACE
-} FSM_STATE_T;
+typedef enum { IDLE, GRACE } FSM_STATE_T;
 
 int button_init();
 void activate_button_work();
