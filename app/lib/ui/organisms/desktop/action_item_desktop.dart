@@ -17,11 +17,19 @@ import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialo
 class DesktopActionItem extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
   final VoidCallback? onChanged;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSelectionToggle;
 
   const DesktopActionItem({
     super.key,
     required this.actionItem,
     this.onChanged,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onLongPress,
+    this.onSelectionToggle,
   });
 
   @override
@@ -298,27 +306,63 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+          color: widget.isSelected
+              ? ResponsiveHelper.purplePrimary.withOpacity(0.1)
+              : ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _isEditing
+            color: widget.isSelected
                 ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
-                : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-            width: 1,
+                : (_isEditing
+                    ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
+                    : ResponsiveHelper.backgroundTertiary.withOpacity(0.3)),
+            width: widget.isSelected ? 2 : 1,
           ),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            OmiCheckbox(
-              value: widget.actionItem.completed,
-              onChanged: (v) {
-                if (_isEditing) return;
-                _toggleCompletion(context);
-              },
-              size: 20,
-            ),
+        child: GestureDetector(
+          onLongPress: widget.onLongPress,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Selection checkbox when in selection mode
+              if (widget.isSelectionMode)
+              GestureDetector(
+                onTap: widget.onSelectionToggle,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: widget.isSelected
+                          ? ResponsiveHelper.purplePrimary
+                          : Colors.grey.shade600,
+                      width: 2,
+                    ),
+                    color: widget.isSelected
+                        ? ResponsiveHelper.purplePrimary
+                        : Colors.transparent,
+                  ),
+                  child: widget.isSelected
+                      ? const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 14,
+                        )
+                      : null,
+                ),
+              )
+            // Completion checkbox when not in selection mode
+            else
+              OmiCheckbox(
+                value: widget.actionItem.completed,
+                onChanged: (v) {
+                  if (_isEditing) return;
+                  _toggleCompletion(context);
+                },
+                size: 20,
+              ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -375,7 +419,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                     size: 32,
                   )
                 : _buildQuickActions(context),
-          ],
+            ],
+          ),
         ),
       ),
     );

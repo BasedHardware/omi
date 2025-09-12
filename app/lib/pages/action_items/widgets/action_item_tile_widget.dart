@@ -17,6 +17,10 @@ class ActionItemTileWidget extends StatefulWidget {
   final Function(bool) onToggle;
   final Set<String>? exportedToAppleReminders;
   final VoidCallback? onExportedToAppleReminders;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSelectionToggle;
 
   const ActionItemTileWidget({
     super.key,
@@ -24,6 +28,10 @@ class ActionItemTileWidget extends StatefulWidget {
     required this.onToggle,
     this.exportedToAppleReminders,
     this.onExportedToAppleReminders,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onLongPress,
+    this.onSelectionToggle,
   });
 
   @override
@@ -352,53 +360,87 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
-      color: const Color(0xFF1F1F25),
+      color: widget.isSelected
+          ? Colors.deepPurpleAccent.withOpacity(0.1)
+          : const Color(0xFF1F1F25),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: widget.actionItem.completed ? Colors.grey.withOpacity(0.2) : Colors.transparent,
-          width: 1,
+          color: widget.isSelected
+              ? Colors.deepPurpleAccent.withOpacity(0.5)
+              : (widget.actionItem.completed ? Colors.grey.withOpacity(0.2) : Colors.transparent),
+          width: widget.isSelected ? 2 : 1,
         ),
       ),
       clipBehavior: Clip.hardEdge,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          _showEditSheet(context);
-        },
+        onTap: widget.isSelectionMode
+            ? widget.onSelectionToggle
+            : () => _showEditSheet(context),
+        onLongPress: widget.onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Stack(
             children: [
               Row(
                 children: [
-                  // Custom checkbox with better styling
-                  GestureDetector(
-                    onTap: _handleToggle,
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
+                  // Selection checkbox when in selection mode
+                  if (widget.isSelectionMode)
+                    GestureDetector(
+                      onTap: widget.onSelectionToggle,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: widget.isSelected
+                                ? Colors.deepPurpleAccent
+                                : Colors.grey.shade600,
+                            width: 2,
+                          ),
+                          color: widget.isSelected
+                              ? Colors.deepPurpleAccent
+                              : Colors.transparent,
+                        ),
+                        child: widget.isSelected
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : null,
+                      ),
+                    )
+                  // Completion checkbox when not in selection mode
+                  else
+                    GestureDetector(
+                      onTap: _handleToggle,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: (widget.actionItem.completed || _isAnimating)
+                                ? Colors.deepPurpleAccent
+                                : Colors.grey.shade600,
+                            width: 2,
+                          ),
                           color: (widget.actionItem.completed || _isAnimating)
                               ? Colors.deepPurpleAccent
-                              : Colors.grey.shade600,
-                          width: 2,
+                              : Colors.transparent,
                         ),
-                        color: (widget.actionItem.completed || _isAnimating)
-                            ? Colors.deepPurpleAccent
-                            : Colors.transparent,
+                        child: (widget.actionItem.completed || _isAnimating)
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : null,
                       ),
-                      child: (widget.actionItem.completed || _isAnimating)
-                          ? const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 16,
-                            )
-                          : null,
                     ),
-                  ),
                   const SizedBox(width: 16),
                   // Action item text and due date
                   Expanded(

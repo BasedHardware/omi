@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
@@ -120,6 +121,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
+          appBar: provider.isSelectionMode ? _buildSelectionAppBar(provider) : null,
           body: RefreshIndicator(
             onRefresh: () async {
               HapticFeedback.mediumImpact();
@@ -163,7 +165,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Tap to edit • Checkbox to toggle • Swipe for actions',
+                            'Tap to edit • Long press to select • Swipe for actions',
                             style: TextStyle(
                               color: Colors.grey.shade500,
                               fontSize: 12,
@@ -234,7 +236,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Tap to edit • Checkbox to toggle • Swipe for actions',
+                                'Tap to edit • Long press to select • Swipe for actions',
                                 style: TextStyle(
                                   color: Colors.grey.shade500,
                                   fontSize: 12,
@@ -419,7 +421,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return Dismissible(
       key: Key(item.id),
       // Swipe right background - Mark as completed
-      background: Container(
+      background: provider.isSelectionMode ? null : Container(
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
           color: item.completed ? Colors.orange : Colors.green,
@@ -434,7 +436,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
       ),
       // Swipe left background - Delete
-      secondaryBackground: Container(
+      secondaryBackground: provider.isSelectionMode ? null : Container(
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
           color: Colors.red,
@@ -449,6 +451,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
       ),
       confirmDismiss: (direction) async {
+        // Disable swipe gestures when in selection mode
+        if (provider.isSelectionMode) {
+          return false;
+        }
+
         if (direction == DismissDirection.startToEnd) {
           // Swipe right - Toggle completion
           await provider.updateActionItemState(item, !item.completed);
@@ -486,10 +493,124 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         },
         exportedToAppleReminders: _exportedToAppleReminders,
         onExportedToAppleReminders: _checkExistingAppleReminders,
+          isSelectionMode: provider.isSelectionMode,
+          isSelected: provider.isItemSelected(item.id),
+          onLongPress: () => _handleItemLongPress(item, provider),
+          onSelectionToggle: () => provider.toggleItemSelection(item.id),
       ),
     );
   }
 
+
+  void _handleItemLongPress(ActionItemWithMetadata item, ActionItemsProvider provider) {
+    if (!provider.isSelectionMode) {
+      // Enter selection mode and select the long-pressed item
+      provider.startSelection();
+      provider.selectItem(item.id);
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  PreferredSizeWidget _buildSelectionAppBar(ActionItemsProvider provider) {
+    return AppBar(
+      backgroundColor: Colors.black.withValues(alpha: 0.05),
+      elevation: 0,
+      foregroundColor: Colors.white,
+      leading: IconButton(
+        icon: const Icon(Icons.close, size: 20),
+        onPressed: () => provider.endSelection(),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+      ),
+      title: Text(
+        '${provider.selectedCount} selected',
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      actions: [
+        if (provider.selectedCount < provider.actionItems.length)
+          IconButton(
+            icon: const FaIcon(FontAwesomeIcons.squareCheck, size: 18),
+            tooltip: 'Select all',
+            onPressed: () => provider.selectAllItems(),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+        if (provider.hasSelection)
+          IconButton(
+            icon: const FaIcon(FontAwesomeIcons.trash, size: 20),
+            tooltip: 'Delete selected',
+            onPressed: () => _deleteSelectedItems(provider),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _deleteSelectedItems(ActionItemsProvider provider) async {
+    final selectedCount = provider.selectedCount;
+    if (selectedCount == 0) return;
+
+    final prefs = SharedPreferencesUtil();
+
+    // Check if user has opted out of delete confirmations
+    if (!prefs.showActionItemDeleteConfirmation) {
+      // Skip confirmation and proceed with bulk deletion
+      await _performBulkDelete(provider);
+      return;
+    }
+
+    // Show confirmation dialog for bulk delete
+    final result = await OmiConfirmDialog.showWithSkipOption(
+      context,
+      title: 'Delete Selected Items',
+      message: 'Are you sure you want to delete $selectedCount selected action item${selectedCount > 1 ? 's' : ''}?',
+    );
+
+    if (result != null && result.confirmed) {
+      // Update preference if user chose to skip future confirmations
+      if (result.skipFutureConfirmations) {
+        prefs.showActionItemDeleteConfirmation = false;
+      }
+
+      await _performBulkDelete(provider);
+    }
+  }
+
+  Future<void> _performBulkDelete(ActionItemsProvider provider) async {
+    final selectedCount = provider.selectedCount;
+
+    try {
+      final success = await provider.deleteSelectedItems();
+
+      if (mounted && success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$selectedCount action item${selectedCount > 1 ? 's' : ''} deleted'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete some items'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete items'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _deleteActionItem(ActionItemWithMetadata item, ActionItemsProvider provider) async {
     final prefs = SharedPreferencesUtil();
