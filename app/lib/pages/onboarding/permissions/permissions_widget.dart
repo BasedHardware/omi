@@ -17,7 +17,9 @@ class PermissionsWidget extends StatefulWidget {
 
 class _PermissionsWidgetState extends State<PermissionsWidget> {
   String _getButtonText(OnboardingProvider provider) {
-    bool allPermissionsGranted = provider.hasLocationPermission && provider.hasNotificationPermission && (Platform.isAndroid ? provider.hasBackgroundPermission : true);
+    bool allPermissionsGranted = provider.hasLocationPermission &&
+        provider.hasNotificationPermission &&
+        (Platform.isAndroid ? provider.hasBackgroundPermission : true);
     return allPermissionsGranted ? 'Continue' : 'Allow All';
   }
 

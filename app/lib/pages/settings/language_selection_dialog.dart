@@ -23,7 +23,9 @@ class LanguageSelectionDialog {
 
     // Preset the selected language if the user has one
     String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? homeProvider.userPrimaryLanguage : null;
-    String? selectedLanguageName = selectedLanguage != null ? homeProvider.availableLanguages.entries.firstWhere((element) => element.value == selectedLanguage).key : null;
+    String? selectedLanguageName = selectedLanguage != null
+        ? homeProvider.availableLanguages.entries.firstWhere((element) => element.value == selectedLanguage).key
+        : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
     final ScrollController _scrollController = ScrollController();
@@ -56,7 +58,8 @@ class LanguageSelectionDialog {
                 } else {
                   // Filter all languages
                   final filtered = languages.where((lang) {
-                    return lang.key.toLowerCase().contains(searchQuery) || lang.value.toLowerCase().contains(searchQuery);
+                    return lang.key.toLowerCase().contains(searchQuery) ||
+                        lang.value.toLowerCase().contains(searchQuery);
                   }).toList();
 
                   // Keep the original order from availableLanguages
@@ -141,7 +144,8 @@ class LanguageSelectionDialog {
                                     language.key,
                                     style: const TextStyle(color: Colors.white),
                                   ),
-                                  trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                                  trailing:
+                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                   selected: isSelected,
                                   selectedTileColor: Colors.deepPurple.withOpacity(0.2),
                                   shape: RoundedRectangleBorder(

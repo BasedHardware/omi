@@ -1009,7 +1009,9 @@ async def _listen(
                                     speaker_to_person_map[speaker_id] = (person_id, person_name)
                                     for sid in segment_ids:
                                         segment_person_assignment_map[sid] = person_id
-                                    print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id)
+                                    print(
+                                        f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id
+                                    )
                             else:
                                 print(
                                     "Speaker assignment ignored: no segment_ids or no speech-profile-processed segments.",
@@ -1097,6 +1099,7 @@ async def _listen(
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid, session_id)
     print("_listen ended", uid, session_id)
+
 
 @router.websocket("/v4/listen")
 async def listen_handler(

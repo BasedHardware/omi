@@ -6,9 +6,9 @@ from .server import serve
 
 @click.command()
 # @click.option("--uid", "-u", type=str, help="User ID")
-# uid: str | None, 
+# uid: str | None,
 @click.option("-v", "--verbose", count=True)
-def main(verbose: bool) -> None: 
+def main(verbose: bool) -> None:
     """MCP Omi Server - Omi functionality for MCP"""
     import asyncio
 

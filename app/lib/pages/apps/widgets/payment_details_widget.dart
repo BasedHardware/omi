@@ -181,7 +181,8 @@ class PaymentDetailsWidget extends StatelessWidget {
                       ),
                       Text(
                         (paymentPlan?.isNotEmpty == true ? paymentPlan : 'None Selected') ?? 'None Selected',
-                        style: TextStyle(color: paymentPlan != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                        style: TextStyle(
+                            color: paymentPlan != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                       ),
                       const Spacer(),
                       Icon(

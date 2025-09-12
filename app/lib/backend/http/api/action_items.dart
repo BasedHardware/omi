@@ -14,7 +14,7 @@ Future<ActionItemsResponse> getActionItems({
   DateTime? endDate,
 }) async {
   String url = '${Env.apiBaseUrl}v1/action-items?limit=$limit&offset=$offset';
-  
+
   if (completed != null) {
     url += '&completed=$completed';
   }
@@ -27,16 +27,16 @@ Future<ActionItemsResponse> getActionItems({
   if (endDate != null) {
     url += '&end_date=${endDate.toIso8601String()}';
   }
-  
+
   var response = await makeApiCall(
     url: url,
     headers: {},
     method: 'GET',
     body: '',
   );
-  
+
   if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemsResponse.fromJson(jsonDecode(body));
@@ -53,9 +53,9 @@ Future<ActionItemWithMetadata?> getActionItem(String actionItemId) async {
     method: 'GET',
     body: '',
   );
-  
+
   if (response == null) return null;
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
@@ -75,23 +75,23 @@ Future<ActionItemWithMetadata?> createActionItem({
     'description': description,
     'completed': completed,
   };
-  
+
   if (dueAt != null) {
     requestBody['due_at'] = dueAt.toIso8601String();
   }
   if (conversationId != null) {
     requestBody['conversation_id'] = conversationId;
   }
-  
+
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items',
     headers: {},
     method: 'POST',
     body: jsonEncode(requestBody),
   );
-  
+
   if (response == null) return null;
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
@@ -108,7 +108,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   DateTime? dueAt,
 }) async {
   var requestBody = <String, dynamic>{};
-  
+
   if (description != null) {
     requestBody['description'] = description;
   }
@@ -118,16 +118,16 @@ Future<ActionItemWithMetadata?> updateActionItem(
   if (dueAt != null) {
     requestBody['due_at'] = dueAt.toIso8601String();
   }
-  
+
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items/$actionItemId',
     headers: {},
     method: 'PATCH',
     body: jsonEncode(requestBody),
   );
-  
+
   if (response == null) return null;
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
@@ -147,9 +147,9 @@ Future<ActionItemWithMetadata?> toggleActionItemCompletion(
     method: 'PATCH',
     body: '',
   );
-  
+
   if (response == null) return null;
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
@@ -166,9 +166,9 @@ Future<bool> deleteActionItem(String actionItemId) async {
     method: 'DELETE',
     body: '',
   );
-  
+
   if (response == null) return false;
-  
+
   return response.statusCode == 204;
 }
 
@@ -180,16 +180,15 @@ Future<ActionItemsResponse> getConversationActionItems(String conversationId) as
     method: 'GET',
     body: '',
   );
-  
+
   if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     var data = jsonDecode(body);
     return ActionItemsResponse(
-      actionItems: (data['action_items'] as List<dynamic>)
-          .map((item) => ActionItemWithMetadata.fromJson(item))
-          .toList(),
+      actionItems:
+          (data['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
       hasMore: false, // Conversation-specific calls don't have pagination
     );
   } else {
@@ -205,9 +204,9 @@ Future<bool> deleteConversationActionItems(String conversationId) async {
     method: 'DELETE',
     body: '',
   );
-  
+
   if (response == null) return false;
-  
+
   return response.statusCode == 204;
 }
 
@@ -221,15 +220,13 @@ Future<List<ActionItemWithMetadata>> createActionItemsBatch(
     method: 'POST',
     body: jsonEncode(actionItems),
   );
-  
+
   if (response == null) return [];
-  
+
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     var data = jsonDecode(body);
-    return (data['action_items'] as List<dynamic>)
-        .map((item) => ActionItemWithMetadata.fromJson(item))
-        .toList();
+    return (data['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList();
   } else {
     debugPrint('createActionItemsBatch error ${response.statusCode}');
     return [];

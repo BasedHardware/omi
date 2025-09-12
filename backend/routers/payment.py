@@ -463,7 +463,11 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
                     "status": latest_subscription.get('status'),
                     "current_period_end": latest_subscription.get('current_period_end'),
                     "cancel_at_period_end": latest_subscription.get('cancel_at_period_end'),
-                    "price_id": latest_subscription.get('items', {}).get('data', [{}])[0].get('price', {}).get('id') if latest_subscription.get('items', {}).get('data') else None,
+                    "price_id": (
+                        latest_subscription.get('items', {}).get('data', [{}])[0].get('price', {}).get('id')
+                        if latest_subscription.get('items', {}).get('data')
+                        else None
+                    ),
                     "customer_id": latest_subscription.get('customer'),
                 }
             }
@@ -484,7 +488,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             raise HTTPException(status_code=404, detail="No active subscription found for this app")
 
         target_subscription = find_app_subscription(app_id, uid, status_filter='active')
-        
+
         if not target_subscription:
             raise HTTPException(status_code=404, detail="Active subscription not found for this app")
 
@@ -497,14 +501,14 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             target_subscription_id,
             cancel_at_period_end=True,
         )
-        
+
         updated_sub_dict = updated_sub.to_dict()
 
         return {
             "status": "success",
             "message": "Subscription scheduled for cancellation at the end of the current billing period",
             "cancel_at_period_end": updated_sub_dict.get('cancel_at_period_end'),
-            "current_period_end": updated_sub_dict.get('current_period_end')
+            "current_period_end": updated_sub_dict.get('current_period_end'),
         }
     except stripe.error.StripeError as e:
         print(f"Stripe error canceling app subscription: {e}")

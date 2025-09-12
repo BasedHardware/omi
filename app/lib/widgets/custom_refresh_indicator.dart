@@ -57,7 +57,8 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
       // Check if we're at the top and pulling down
       if (metrics.pixels <= 0 && notification.scrollDelta! < 0) {
         setState(() {
-          _totalDragDistance = math.min(widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + (-notification.scrollDelta!));
+          _totalDragDistance = math.min(
+              widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + (-notification.scrollDelta!));
 
           // Only show visual feedback after minimum threshold is exceeded
           if (_totalDragDistance > widget.minDragStartThreshold) {
@@ -86,7 +87,8 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
       if (notification.overscroll < 0 && notification.metrics.pixels <= 0) {
         setState(() {
           final overscrollAmount = -notification.overscroll;
-          _totalDragDistance = math.min(widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + overscrollAmount);
+          _totalDragDistance =
+              math.min(widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + overscrollAmount);
 
           if (_totalDragDistance > widget.minDragStartThreshold) {
             _dragOffset = _totalDragDistance - widget.minDragStartThreshold;

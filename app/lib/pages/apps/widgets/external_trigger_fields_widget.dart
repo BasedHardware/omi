@@ -141,7 +141,8 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                                                   ),
                                                   const Spacer(),
                                                   Checkbox(
-                                                    value: provider.triggerEvent == provider.getTriggerEvents()[index].id,
+                                                    value:
+                                                        provider.triggerEvent == provider.getTriggerEvents()[index].id,
                                                     onChanged: (value) {
                                                       provider.setTriggerEvent(provider.getTriggerEvents()[index].id);
                                                     },
@@ -177,7 +178,9 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             ),
                             Text(
                               provider.mapTriggerEventIdToName(provider.triggerEvent) ?? 'None Selected',
-                              style: TextStyle(color: provider.triggerEvent != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                              style: TextStyle(
+                                  color: provider.triggerEvent != null ? Colors.grey.shade100 : Colors.grey.shade400,
+                                  fontSize: 16),
                             ),
                             const Spacer(),
                             Icon(

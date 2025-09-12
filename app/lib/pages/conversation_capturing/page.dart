@@ -14,7 +14,6 @@ import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/providers/people_provider.dart';
 
-
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -111,12 +110,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 timeoutText = "Conversation will only end manually.";
               } else {
                 final minutes = timeoutDuration ~/ 60;
-                timeoutText = "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech.";
+                timeoutText =
+                    "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech.";
               }
-              
+
               return ConfirmationDialog(
                 title: "Finished Conversation?",
-                description: "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: $timeoutText",
+                description:
+                    "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: $timeoutText",
                 checkboxValue: !showSummarizeConfirmation,
                 checkboxText: "Don't ask me again",
                 onCheckboxChanged: (value) {
@@ -235,9 +236,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         // Summary Tab
                         Center(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
                             child: Text(
-                              provider.segments.isEmpty && provider.photos.isEmpty ? "No summary yet" : _getTimeoutDisplayText(),
+                              provider.segments.isEmpty && provider.photos.isEmpty
+                                  ? "No summary yet"
+                                  : _getTimeoutDisplayText(),
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
                             ),

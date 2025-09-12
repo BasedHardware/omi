@@ -73,12 +73,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   Future<void> _loadSubscriptionData() async {
     if (widget.app.isPaid) {
-        final subscriptionResponse = await getAppSubscription(widget.app.id);
-        if (mounted) {
-          setState(() {
-            _subscriptionData = subscriptionResponse;
-          });
-        }
+      final subscriptionResponse = await getAppSubscription(widget.app.id);
+      if (mounted) {
+        setState(() {
+          _subscriptionData = subscriptionResponse;
+        });
+      }
     }
   }
 
@@ -88,13 +88,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
     try {
       final result = await cancelAppSubscription(widget.app.id);
       if (result != null && result['status'] == 'success') {
-
         await _loadSubscriptionData();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Subscription cancelled successfully. It will remain active until the end of the current billing period.'),
+              content: Text(
+                  'Subscription cancelled successfully. It will remain active until the end of the current billing period.'),
               backgroundColor: Colors.green,
             ),
           );
@@ -637,7 +637,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             )),
 
               // Cancel Subscription
-              !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !context.watch<AppProvider>().isAppOwner
+              !isLoading &&
+                      !app.private &&
+                      app.isPaid &&
+                      _hasActiveSubscription() &&
+                      !context.watch<AppProvider>().isAppOwner
                   ? Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: InkWell(
