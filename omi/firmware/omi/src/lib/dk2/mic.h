@@ -1,6 +1,9 @@
 #ifndef MIC_H
 #define MIC_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 typedef void (*mix_handler)(int16_t *);
 
 /**

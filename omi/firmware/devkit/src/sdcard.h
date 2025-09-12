@@ -1,6 +1,9 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 /**
  * @brief Mount the SD Card. Initializes the audio files
  *
