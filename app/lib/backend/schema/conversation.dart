@@ -251,7 +251,9 @@ class ServerConversation {
 
   String getTranscript({int? maxCount, bool generate = false}) {
     var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
-    if (maxCount != null) transcript = transcript.substring(0, min(maxCount, transcript.length));
+    if (maxCount != null && transcript.isNotEmpty) {
+      transcript = transcript.substring(max(transcript.length - maxCount, 0));
+    }
     try {
       return utf8.decode(transcript.codeUnits);
     } catch (e) {
