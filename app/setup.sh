@@ -5,7 +5,7 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.32.4)
+# - Flutter SDK (v3.35.3)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
@@ -17,7 +17,7 @@
 # - Android SDK Platform (API 35)
 # - JDK (v21)
 # - Gradle (v8.10)
-# - NDK (27.0.12077973)
+# - NDK (28.2.13676358)
 # Usages: 
 # - $bash setup.sh ios
 # - $bash setup.sh android
@@ -29,7 +29,7 @@ echo "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Join us o
 echo "Prerequisites (stable versions, use these or higher):"
 echo ""
 echo "Common for all developers:"
-echo "- Flutter SDK (v3.32.4)"
+echo "- Flutter SDK (v3.35.3)"
 echo "- Opus Codec: https://opus-codec.org"
 echo ""
 echo "For iOS Developers:"
@@ -38,7 +38,7 @@ echo "- CocoaPods (v1.16.2)"
 echo ""
 echo "For Android Developers:"
 echo "- Android Studio (Iguana | 2024.3)"
-echo "- Android SDK Platform (API 35)"
+echo "- Android SDK Platform (API 36)"
 echo "- JDK (v21)"
 echo "- Gradle (v8.10)"
 echo "- NDK (27.0.12077973)"
