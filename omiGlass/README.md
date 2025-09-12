@@ -136,7 +136,7 @@ You'll need the following components to build your own omiGlass:
 ## How You Can Contribute
 
 ### Software
-- [ ] Connect glasses with omi app. Currently the glasses only work with web interface
+- [x] Connect glasses with [Omi AI app](/doc/get_started/introduction#📲-get-the-app)
 
 ### Hardware
 - [ ] Redesign the legs/sides so that it would fit on bigger heads
