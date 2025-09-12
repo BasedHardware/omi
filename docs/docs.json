@@ -79,6 +79,7 @@
         "pages": [
           "doc/hardware/DevKit1",
           "doc/hardware/DevKit2",
+          "doc/hardware/OmiConsumer",
           "doc/hardware/omiGlass"
         ]
       },
