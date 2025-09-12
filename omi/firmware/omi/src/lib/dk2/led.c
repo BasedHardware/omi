@@ -1,6 +1,8 @@
-#include <zephyr/logging/log.h>
-#include <zephyr/drivers/gpio.h>
 #include "led.h"
+
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/logging/log.h>
+
 #include "utils.h"
 
 LOG_MODULE_REGISTER(led, CONFIG_LOG_DEFAULT_LEVEL);

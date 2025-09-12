@@ -1,18 +1,17 @@
-#include <zephyr/logging/log.h>
-#include <zephyr/shell/shell.h>
-
-#include <zephyr/kernel.h>
+#include <nrfx.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/sensor.h>
-#include <nrfx.h>
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/shell/shell.h>
 
 LOG_MODULE_REGISTER(IMU, CONFIG_SENSOR_LOG_LEVEL);
 
 static const struct device *const i2c_lsm6dso = DEVICE_DT_GET(DT_NODELABEL(lsm6dso));
-    static const struct gpio_dt_spec lsm6dso_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(lsm6dso_en_pin), gpios, {0});
+static const struct gpio_dt_spec lsm6dso_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(lsm6dso_en_pin), gpios, {0});
 
 // need change sdk\modules\hal\st\sensor\stmemsc\lsm6dso_STdC\driver\lsm6dso_reg.h line 195 #define LSM6DSO_ID to 0x6A
 static int cmd_imu_get(const struct shell *sh, size_t argc, char **argv)
@@ -32,49 +31,56 @@ static int cmd_imu_get(const struct shell *sh, size_t argc, char **argv)
     }
 
     ret = sensor_attr_set(i2c_lsm6dso, SENSOR_CHAN_ACCEL_XYZ, SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr);
-    if (ret)
-    {
+    if (ret) {
         shell_error(sh, "Failed to set accel sampling frequency\n");
         return ret;
     }
 
     ret = sensor_attr_set(i2c_lsm6dso, SENSOR_CHAN_GYRO_XYZ, SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr);
-    if (ret)
-    {
+    if (ret) {
         shell_error(sh, "Failed to set gyro sampling frequency\n");
         return ret;
     }
 
     ret = sensor_sample_fetch(i2c_lsm6dso);
-    if (ret)
-    {
+    if (ret) {
         shell_error(sh, "Failed to fetch sample\n");
         return ret;
     }
 
     ret = sensor_channel_get(i2c_lsm6dso, SENSOR_CHAN_ACCEL_XYZ, accel_data);
-    if (ret)
-    {
+    if (ret) {
         shell_error(sh, "Failed to get accel data\n");
         return ret;
     }
 
     ret = sensor_channel_get(i2c_lsm6dso, SENSOR_CHAN_GYRO_XYZ, gyro_data);
-    if (ret)
-    {
+    if (ret) {
         shell_error(sh, "Failed to get gyro data\n");
         return ret;
     }
 
     // gpio_pin_set_dt(&lsm6dso_en, 0);
-    shell_print(sh, "accel data: %d.%06d, %d.%06d, %d.%06d", accel_data[0].val1, accel_data[0].val2, accel_data[1].val1, accel_data[1].val2, accel_data[2].val1, accel_data[2].val2);
-    shell_print(sh, "gyro data: %d.%06d, %d.%06d, %d.%06d", gyro_data[0].val1, gyro_data[0].val2, gyro_data[1].val1, gyro_data[1].val2, gyro_data[2].val1, gyro_data[2].val2);
+    shell_print(sh,
+                "accel data: %d.%06d, %d.%06d, %d.%06d",
+                accel_data[0].val1,
+                accel_data[0].val2,
+                accel_data[1].val1,
+                accel_data[1].val2,
+                accel_data[2].val1,
+                accel_data[2].val2);
+    shell_print(sh,
+                "gyro data: %d.%06d, %d.%06d, %d.%06d",
+                gyro_data[0].val1,
+                gyro_data[0].val2,
+                gyro_data[1].val1,
+                gyro_data[1].val2,
+                gyro_data[2].val1,
+                gyro_data[2].val2);
     return ret;
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(sub_imu_cmds,
-                               SHELL_CMD(get, NULL, "Get IMU data", cmd_imu_get),
-                               SHELL_SUBCMD_SET_END);
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_imu_cmds, SHELL_CMD(get, NULL, "Get IMU data", cmd_imu_get), SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(imu, &sub_imu_cmds, "Get IMU data", NULL);
 
@@ -85,15 +91,13 @@ static int imu_poweron(void)
 
     LOG_DBG("IMU power on\n");
     ret = gpio_pin_configure_dt(&lsm6dso_en, (GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1));
-    if (ret < 0)
-    {
+    if (ret < 0) {
         LOG_ERR("Failed to configure pin %d\n", lsm6dso_en.pin);
         return ret;
     }
 
     ret = gpio_pin_set_dt(&lsm6dso_en, 1);
-    if (ret < 0)
-    {
+    if (ret < 0) {
         LOG_ERR("Failed to set pin %d\n", lsm6dso_en.pin);
         return ret;
     }
