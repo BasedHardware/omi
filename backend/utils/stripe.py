@@ -77,6 +77,51 @@ def cancel_subscription(subscription_id: str):
         return None
 
 
+def find_app_subscription_by_customer_id(customer_id: str, app_id: str, uid: str, status_filter: str = 'all'):
+    """Find app subscription using customer ID (fast path)."""
+    try:
+        subscriptions = stripe.Subscription.list(customer=customer_id, status=status_filter, limit=5)
+        latest_subscription = None
+
+        for sub in subscriptions.data:
+            sub_dict = sub.to_dict()
+            if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
+                if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
+                    latest_subscription = sub_dict
+
+        return latest_subscription
+    except Exception as e:
+        print(f"Error finding app subscription by customer ID {customer_id}: {e}")
+        return None
+
+
+def find_app_subscription_by_metadata(app_id: str, uid: str, status_filter: str = 'all'):
+    """Find app subscription by searching metadata (slow path)."""
+    try:
+        subscriptions = stripe.Subscription.list(limit=100, status=status_filter)
+        latest_subscription = None
+
+        for sub in subscriptions.data:
+            sub_dict = sub.to_dict()
+            if sub_dict.get('metadata', {}).get('app_id') == app_id and sub_dict.get('metadata', {}).get('uid') == uid:
+                if latest_subscription is None or sub_dict.get('created', 0) > latest_subscription.get('created', 0):
+                    latest_subscription = sub_dict
+
+        return latest_subscription
+    except Exception as e:
+        print(f"Error finding app subscription by metadata: {e}")
+        return None
+
+
+def modify_subscription(subscription_id: str, **kwargs):
+    """Modify a Stripe subscription with given parameters."""
+    try:
+        return stripe.Subscription.modify(subscription_id, **kwargs)
+    except Exception as e:
+        print(f"Error modifying subscription {subscription_id}: {e}")
+        return None
+
+
 def create_app_payment_link(price_id: str, app_id: str, stripe_acc_id: str):
     """Create a payment link for the specified price."""
     payment_link = stripe.PaymentLink.create(

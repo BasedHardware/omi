@@ -497,229 +497,229 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 controller: widget.scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                SliverToBoxAdapter(
-                  child: state.isLoading
-                      ? _buildShimmerCreateButton()
-                      : GestureDetector(
-                          onTap: () async {
-                            showModalBottomSheet(
-                              context: context,
-                              builder: (context) => const CreateOptionsSheet(),
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(20),
-                            margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1F1F25),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.add,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  SliverToBoxAdapter(
+                    child: state.isLoading
+                        ? _buildShimmerCreateButton()
+                        : GestureDetector(
+                            onTap: () async {
+                              showModalBottomSheet(
+                                context: context,
+                                builder: (context) => const CreateOptionsSheet(),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                 ),
-                                const SizedBox(width: 16),
-                                const Expanded(
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(20),
+                              margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1F1F25),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.add,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Create Your Own App',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                        SizedBox(height: 2),
+                                        Text(
+                                          'Build and share your custom app',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    color: Colors.black,
+                                    size: 24,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                  ),
+
+                  // Top bar with search and filters - show shimmer when loading
+                  SliverToBoxAdapter(
+                    child: state.isLoading
+                        ? _buildShimmerSearchBar()
+                        : Container(
+                            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        'Create Your Own App',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black,
+                                      SizedBox(
+                                        height: 44,
+                                        child: SearchBar(
+                                          hintText: 'Search Apps',
+                                          leading: const Padding(
+                                            padding: EdgeInsets.only(left: 6.0),
+                                            child:
+                                                Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
+                                          ),
+                                          backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
+                                          elevation: WidgetStateProperty.all(0),
+                                          padding: WidgetStateProperty.all(
+                                            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                          ),
+                                          focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
+                                          controller: searchController,
+                                          trailing: state.isSearchActive
+                                              ? [
+                                                  IconButton(
+                                                    icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                                                    padding: EdgeInsets.zero,
+                                                    constraints: const BoxConstraints(
+                                                      minHeight: 36,
+                                                      minWidth: 36,
+                                                    ),
+                                                    onPressed: () {
+                                                      searchController.clear();
+                                                      context.read<AppProvider>().searchApps('');
+                                                    },
+                                                  )
+                                                ]
+                                              : null,
+                                          hintStyle: WidgetStateProperty.all(
+                                            TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                                          ),
+                                          textStyle: WidgetStateProperty.all(
+                                            const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                          ),
+                                          shape: WidgetStateProperty.all(
+                                            RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                            ),
+                                          ),
+                                          onChanged: (value) {
+                                            debouncer.run(() {
+                                              context.read<AppProvider>().searchApps(value);
+                                            });
+                                          },
                                         ),
                                       ),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        'Build and share your custom app',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.black54,
+                                      if (state.filterCount > 0) ...[
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          height: 32,
+                                          child: ListView.separated(
+                                            scrollDirection: Axis.horizontal,
+                                            itemBuilder: (ctx, idx) {
+                                              return Container(
+                                                height: 32,
+                                                decoration: BoxDecoration(
+                                                  color: AppStyles.backgroundSecondary,
+                                                  borderRadius: BorderRadius.circular(16),
+                                                ),
+                                                child: TextButton.icon(
+                                                  onPressed: () {
+                                                    context
+                                                        .read<AppProvider>()
+                                                        .removeFilter(state.filters.keys.elementAt(idx));
+                                                  },
+                                                  icon: const Icon(
+                                                    Icons.close,
+                                                    size: 12,
+                                                    color: Colors.white70,
+                                                  ),
+                                                  label: Text(
+                                                    filterValueToString(state.filters.values.elementAt(idx)),
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  style: TextButton.styleFrom(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                                    minimumSize: Size.zero,
+                                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            separatorBuilder: (ctx, idx) => const SizedBox(width: 8),
+                                            itemCount: state.filterCount,
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ],
                                   ),
                                 ),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.black,
-                                  size: 24,
+
+                                const SizedBox(width: 8),
+
+                                // Filter button
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: AppStyles.backgroundSecondary,
+                                      borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                    ),
+                                    child: IconButton(
+                                      onPressed: () {
+                                        showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                          ),
+                                          builder: (context) => const FilterBottomSheet(),
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        FontAwesomeIcons.filter,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                ),
+                  ),
 
-                // Top bar with search and filters - show shimmer when loading
-                SliverToBoxAdapter(
-                  child: state.isLoading
-                      ? _buildShimmerSearchBar()
-                      : Container(
-                          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  children: [
-                                    SizedBox(
-                                      height: 44,
-                                      child: SearchBar(
-                                        hintText: 'Search Apps',
-                                        leading: const Padding(
-                                          padding: EdgeInsets.only(left: 6.0),
-                                          child:
-                                              Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
-                                        ),
-                                        backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
-                                        elevation: WidgetStateProperty.all(0),
-                                        padding: WidgetStateProperty.all(
-                                          const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                        ),
-                                        focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
-                                        controller: searchController,
-                                        trailing: state.isSearchActive
-                                            ? [
-                                                IconButton(
-                                                  icon: const Icon(Icons.close, color: Colors.white70, size: 16),
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(
-                                                    minHeight: 36,
-                                                    minWidth: 36,
-                                                  ),
-                                                  onPressed: () {
-                                                    searchController.clear();
-                                                    context.read<AppProvider>().searchApps('');
-                                                  },
-                                                )
-                                              ]
-                                            : null,
-                                        hintStyle: WidgetStateProperty.all(
-                                          TextStyle(color: AppStyles.textTertiary, fontSize: 14),
-                                        ),
-                                        textStyle: WidgetStateProperty.all(
-                                          const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
-                                        ),
-                                        shape: WidgetStateProperty.all(
-                                          RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                          ),
-                                        ),
-                                        onChanged: (value) {
-                                          debouncer.run(() {
-                                            context.read<AppProvider>().searchApps(value);
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                    if (state.filterCount > 0) ...[
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        height: 32,
-                                        child: ListView.separated(
-                                          scrollDirection: Axis.horizontal,
-                                          itemBuilder: (ctx, idx) {
-                                            return Container(
-                                              height: 32,
-                                              decoration: BoxDecoration(
-                                                color: AppStyles.backgroundSecondary,
-                                                borderRadius: BorderRadius.circular(16),
-                                              ),
-                                              child: TextButton.icon(
-                                                onPressed: () {
-                                                  context
-                                                      .read<AppProvider>()
-                                                      .removeFilter(state.filters.keys.elementAt(idx));
-                                                },
-                                                icon: const Icon(
-                                                  Icons.close,
-                                                  size: 12,
-                                                  color: Colors.white70,
-                                                ),
-                                                label: Text(
-                                                  filterValueToString(state.filters.values.elementAt(idx)),
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                                style: TextButton.styleFrom(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                                                  minimumSize: Size.zero,
-                                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                          separatorBuilder: (ctx, idx) => const SizedBox(width: 8),
-                                          itemCount: state.filterCount,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 0)),
 
-                              const SizedBox(width: 8),
-
-                              // Filter button
-                              SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: AppStyles.backgroundSecondary,
-                                    borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                                  ),
-                                  child: IconButton(
-                                    onPressed: () {
-                                      showModalBottomSheet(
-                                        context: context,
-                                        isScrollControlled: true,
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                        ),
-                                        builder: (context) => const FilterBottomSheet(),
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      FontAwesomeIcons.filter,
-                                      size: 16,
-                                      color: Colors.white,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
-
-                const SliverToBoxAdapter(child: SizedBox(height: 0)),
-
-                // Main content - show shimmer when loading
-                SliverToBoxAdapter(
-                  child: state.isLoading ? _buildShimmerAppsView() : _buildAppsView(),
-                ),
-              ],
+                  // Main content - show shimmer when loading
+                  SliverToBoxAdapter(
+                    child: state.isLoading ? _buildShimmerAppsView() : _buildAppsView(),
+                  ),
+                ],
               ),
             );
           },

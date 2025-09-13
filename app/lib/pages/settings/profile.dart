@@ -330,7 +330,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),

@@ -35,7 +35,8 @@ class AppProvider extends BaseProvider {
 
   List<App> get userPrivateApps => apps.where((app) => app.private).toList();
 
-  List<App> get userPublicApps => apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
+  List<App> get userPublicApps =>
+      apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
 
   Future<App?> getAppFromId(String id) async {
     if (apps.isEmpty) {

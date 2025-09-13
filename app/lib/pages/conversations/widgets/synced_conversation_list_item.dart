@@ -150,8 +150,13 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          conversation.discarded ? const SizedBox.shrink() : Text(conversation.structured.getEmoji(), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
-          conversation.structured.category.isNotEmpty && !conversation.discarded ? const SizedBox(width: 12) : const SizedBox.shrink(),
+          conversation.discarded
+              ? const SizedBox.shrink()
+              : Text(conversation.structured.getEmoji(),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
+          conversation.structured.category.isNotEmpty && !conversation.discarded
+              ? const SizedBox(width: 12)
+              : const SizedBox.shrink(),
           conversation.structured.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(

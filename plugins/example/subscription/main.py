@@ -18,6 +18,7 @@ templates = Jinja2Templates(directory=str(templates_dir))
 # Setup logging
 logger = logging.getLogger("subscription_integration")
 
+
 @router.get("/", response_class=HTMLResponse)
 async def subscription_page(request: Request, uid: str = ""):
     """
@@ -30,10 +31,5 @@ async def subscription_page(request: Request, uid: str = ""):
         logger.warning("Subscription page accessed without UID")
 
     return templates.TemplateResponse(
-        "subscription/index.html",
-        {
-            "request": request,
-            "uid": uid,
-            "page_title": "Upgrade to Unlimited"
-        }
+        "subscription/index.html", {"request": request, "uid": uid, "page_title": "Upgrade to Unlimited"}
     )

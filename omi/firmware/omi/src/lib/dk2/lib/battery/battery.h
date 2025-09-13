@@ -63,7 +63,8 @@ int battery_get_millivolt(uint16_t *battery_millivolt);
  *
  * @param[in] battery_percentage  Pointer to where battery percentage is stored.
  *
- * @param[in] battery_millivolt Voltage used to calculate the percentage of how much energy is left in a 3.7V LiPo battery.
+ * @param[in] battery_millivolt Voltage used to calculate the percentage of how much energy is left in a 3.7V LiPo
+ * battery.
  *
  * @retval 0 if successful. Negative errno number on error.
  */

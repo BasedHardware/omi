@@ -58,9 +58,11 @@ class ConversationCategory(str, Enum):
     environment = "environment"
     other = "other"
 
+
 base_url = os.getenv("OMI_API_BASE_URL", "https://api.omi.me/v1/mcp/")
 if not base_url or base_url == "":
     raise Exception("Base URL not found")
+
 
 class OmiTools(str, Enum):
     GET_MEMORIES = "get_memories"
@@ -76,9 +78,7 @@ class GetMemories(BaseModel):
         description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
-    categories: List[MemoryCategory] = Field(
-        description="The categories of memories to filter by.", default=[]
-    )
+    categories: List[MemoryCategory] = Field(description="The categories of memories to filter by.", default=[])
     limit: int = Field(description="The number of memories to retrieve.", default=100)
     offset: int = Field(description="The offset of the memories to retrieve.", default=0)
 
@@ -89,9 +89,7 @@ class CreateMemory(BaseModel):
         default=None,
     )
     content: str = Field(description="The content of the memory.")
-    category: MemoryCategory = Field(
-        description="The category of the memory to create."
-    )
+    category: MemoryCategory = Field(description="The category of the memory to create.")
 
 
 class DeleteMemory(BaseModel):
@@ -116,15 +114,9 @@ class GetConversations(BaseModel):
         description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
-    start_date: Optional[str] = Field(
-        description="Filter conversations after this date (yyyy-mm-dd)", default=None
-    )
-    end_date: Optional[str] = Field(
-        description="Filter conversations before this date (yyyy-mm-dd)", default=None
-    )
-    categories: List[ConversationCategory] = Field(
-        description="Filter by conversation categories.", default=[]
-    )
+    start_date: Optional[str] = Field(description="Filter conversations after this date (yyyy-mm-dd)", default=None)
+    end_date: Optional[str] = Field(description="Filter conversations before this date (yyyy-mm-dd)", default=None)
+    categories: List[ConversationCategory] = Field(description="Filter by conversation categories.", default=[])
     limit: int = Field(description="The number of conversations to retrieve.", default=20)
     offset: int = Field(description="The offset of the conversations to retrieve.", default=0)
 
@@ -277,9 +269,7 @@ async def serve(uid: str | None) -> None:
 
         api_key = arguments.get("api_key") or os.getenv("OMI_API_KEY")
         if not api_key:
-            raise ValueError(
-                "API key not provided and OMI_API_KEY environment variable not set."
-            )
+            raise ValueError("API key not provided and OMI_API_KEY environment variable not set.")
 
         if name == OmiTools.GET_MEMORIES:
             # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]
@@ -292,7 +282,7 @@ async def serve(uid: str | None) -> None:
                     categories_enum.append(MemoryCategory(category))
                 except ValueError:
                     logger.warning(f"Could not parse category: {category}")
-            
+
             result = get_memories(
                 logger,
                 api_key,
@@ -336,9 +326,7 @@ async def serve(uid: str | None) -> None:
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == OmiTools.GET_CONVERSATION_BY_ID:
-            result = get_conversation_by_id(
-                api_key, conversation_id=arguments["conversation_id"]
-            )
+            result = get_conversation_by_id(api_key, conversation_id=arguments["conversation_id"])
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         raise ValueError(f"Unknown tool: {name}")

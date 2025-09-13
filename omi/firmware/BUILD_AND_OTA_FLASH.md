@@ -91,15 +91,32 @@ WEST_PYTHON="/opt/homebrew/Cellar/west/1.4.0/libexec/bin/python"
 $WEST_PYTHON -m pip install cryptography intelhex ecdsa click cbor2
 ```
 
-### 3. Prepare the Workspace
+### 3. Initialize the nRF Connect SDK Workspace
+
+If the `v2.9.0` directory doesn't exist or is empty, you need to initialize the nRF Connect SDK workspace:
 
 ```bash
 # Navigate to the firmware directory
-cd /path/to/omi/firmware/v2.9.0
+cd /path/to/omi/firmware
 
-# Update West workspace (if needed)
+# Create and navigate to the v2.9.0 directory
+mkdir -p v2.9.0
+cd v2.9.0
+
+# Initialize nRF Connect SDK v2.9.0 workspace
+west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.9.0
+
+# Download all required repositories (this may take several minutes)
 west update
 ```
+
+**Note**: The `west update` command downloads approximately 1.5GB of source code including:
+- Zephyr RTOS
+- nRF Connect SDK modules
+- MCUboot bootloader
+- Various libraries and tools
+
+If the workspace already exists and is properly configured, you can skip to step 4.
 
 ## Building the Firmware
 
@@ -224,6 +241,23 @@ west build -b omi/nrf5340/cpuapp ../omi --sysbuild -- -DBOARD_ROOT=/full/path/to
 # Error: No prj.conf file found
 cd ../omi
 cp omi.conf prj.conf
+```
+
+#### Workspace Issues
+```bash
+# Error: No such file or directory: v2.9.0
+# Initialize the workspace first:
+cd /path/to/omi/firmware
+mkdir -p v2.9.0 && cd v2.9.0
+west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.9.0
+west update
+
+# Error: already initialized in /path/to/omi/firmware
+# Remove broken workspace and reinitialize:
+rm -rf .west
+cd v2.9.0
+west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.9.0
+west update
 ```
 
 ### OTA Flashing Issues

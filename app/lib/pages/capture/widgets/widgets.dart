@@ -29,7 +29,9 @@ class SpeechProfileCardWidget extends StatelessWidget {
         return provider.hasSpeakerProfile
             ? const SizedBox()
             : Consumer<DeviceProvider>(builder: (context, device, child) {
-                if (device.pairedDevice == null || !device.isConnected || device.pairedDevice?.firmwareRevision == '1.0.2') {
+                if (device.pairedDevice == null ||
+                    !device.isConnected ||
+                    device.pairedDevice?.firmwareRevision == '1.0.2') {
                   return const SizedBox();
                 }
                 return Stack(
@@ -184,6 +186,7 @@ getTranscriptWidget(
   Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
   String searchQuery = '',
   int currentResultIndex = -1,
+  VoidCallback? onTapWhenSearchEmpty,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -215,6 +218,7 @@ getTranscriptWidget(
       onAcceptSuggestion: onAcceptSuggestion,
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
+      onTapWhenSearchEmpty: onTapWhenSearchEmpty,
     );
   }
 

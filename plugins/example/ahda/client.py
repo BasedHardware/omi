@@ -29,15 +29,13 @@ prompt = requests.get("https://raw.githubusercontent.com/ActuallyAdvanced/OMI-AH
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # AHDA Utils
 def send_to_pc(uid, response):
     ahda_url = get_ahda_url(uid)
     if not ahda_url:
         raise ValueError('AHDA URL not configured for this UID')
-    payload = {
-        'uid': uid,
-        'response': response
-    }
+    payload = {'uid': uid, 'response': response}
     try:
         resp = requests.post(ahda_url + "/receive", json=payload)
         resp.raise_for_status()
@@ -47,14 +45,12 @@ def send_to_pc(uid, response):
         logger.error(f"Error sending webhook: {e}")
         return {'message': f'Failed to send webhook: {e}'}
 
+
 def send_live_transcript_to_pc(uid, response):
     ahda_url = get_ahda_url(uid)
     if not ahda_url:
         raise ValueError('AHDA URL not configured for this UID')
-    payload = {
-        'uid': uid,
-        'response': response
-    }
+    payload = {'uid': uid, 'response': response}
     try:
         resp = requests.post(ahda_url + "/transcript", json=payload)
         resp.raise_for_status()
@@ -63,14 +59,12 @@ def send_live_transcript_to_pc(uid, response):
         logger.error(f"Error sending webhook: {e}")
         return {'message': f'Failed to send webhook: {e}'}
 
+
 def send_debug_to_pc(uid, response):
     ahda_url = get_ahda_url(uid)
     if not ahda_url:
         raise ValueError('AHDA URL not configured for this UID')
-    payload = {
-        'uid': uid,
-        'response': response
-    }
+    payload = {'uid': uid, 'response': response}
     try:
         resp = requests.post(ahda_url + "/debug", json=payload)
         resp.raise_for_status()
@@ -79,9 +73,10 @@ def send_debug_to_pc(uid, response):
         logger.error(f"Error sending webhook: {e}")
         return {'message': f'Failed to send webhook: {e}'}
 
+
 @router.post('/ahda/send-webhook', tags=['ahda', 'realtime'], response_model=EndpointResponse)
 async def send_ahda_webhook(
-    uid: str = Query(...), 
+    uid: str = Query(...),
     data: dict = Body(...),
 ):
     segments = data.get("segments")
@@ -97,7 +92,7 @@ async def send_ahda_webhook(
             "command": "",
             "last_received_time": asyncio.get_event_loop().time(),
             "active": False,
-            "timer": None
+            "timer": None,
         }
 
     async def schedule_finalize_command(uid, delay):
@@ -142,9 +137,7 @@ async def send_ahda_webhook(
                         pass
 
                 # Schedule a new timer for finalizing the command
-                active_sessions[uid]["timer"] = asyncio.create_task(
-                    schedule_finalize_command(uid, COMMAND_TIMEOUT)
-                )
+                active_sessions[uid]["timer"] = asyncio.create_task(schedule_finalize_command(uid, COMMAND_TIMEOUT))
             else:
                 # Not active and keyword not detected, ignore
                 continue
@@ -163,11 +156,10 @@ async def send_ahda_webhook(
                 except asyncio.CancelledError:
                     pass
 
-            active_sessions[uid]["timer"] = asyncio.create_task(
-                schedule_finalize_command(uid, COMMAND_TIMEOUT)
-            )
+            active_sessions[uid]["timer"] = asyncio.create_task(schedule_finalize_command(uid, COMMAND_TIMEOUT))
 
     return {"status": "success"}
+
 
 async def call_chatgpt_to_generate_code(command, uid):
     try:
@@ -184,12 +176,14 @@ async def call_chatgpt_to_generate_code(command, uid):
         logger.error(f"Error calling ChatGPT-4: {e}")
         return {"type": "error", "content": str(e)}
 
+
 @router.get('/ahda/index', response_class=HTMLResponse, tags=['ahda'])
 async def get_ahda_index(request: Request, uid: str = Query(None)):
     if not uid:
         raise HTTPException(status_code=400, detail="UID is required")
 
     return FileResponse(INDEX_PATH)
+
 
 @router.get("/ahda/completion", tags=['ahda'])
 def is_setup_completed(uid: str):
@@ -198,6 +192,7 @@ def is_setup_completed(uid: str):
 
     send_debug_to_pc(uid, f"Checking AHDA setup: {ahda_url}, {ahda_os}")
     return {'is_setup_completed': ahda_url is not None and ahda_os is not None}
+
 
 @router.post('/ahda/configure', tags=['ahda'])
 def configure_ahda(uid: str = Form(...), url: str = Form(...), os: str = Form(...)):

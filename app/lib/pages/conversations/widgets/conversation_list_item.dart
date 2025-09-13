@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -15,7 +14,6 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -151,83 +149,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     children: [
                       _getConversationHeader(),
                       const SizedBox(height: 16),
-                      widget.conversation.discarded
-                          ? const SizedBox.shrink()
-                          : Text(
-                              structured.title.decodeString,
-                              style: Theme.of(context).textTheme.titleLarge,
-                              maxLines: 1,
-                            ),
-                      widget.conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-                      widget.conversation.discarded
-                          ? const SizedBox.shrink()
-                          : Stack(
-                              children: [
-                                Text(
-                                  structured.overview.decodeString,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium!
-                                      .copyWith(color: Colors.grey.shade300, height: 1.3),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (widget.conversation.isLocked)
-                                  Positioned.fill(
-                                    child: ClipRRect(
-                                      child: BackdropFilter(
-                                        filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
-                                        child: Container(
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withValues(alpha: 0.01),
-                                            borderRadius: const BorderRadius.all(Radius.circular(8)),
-                                          ),
-                                          child: const Text(
-                                            'Upgrade to unlimited',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                      widget.conversation.discarded
-                          ? Column(
-                              children: [
-                                if (widget.conversation.photos.isNotEmpty)
-                                  Row(children: [
-                                    Icon(
-                                      Icons.photo_library,
-                                      color: Colors.grey.shade400,
-                                      size: 18,
-                                    ),
-                                    SizedBox(
-                                      width: 12,
-                                    ),
-                                    Text(
-                                      "${widget.conversation.photos.length} photos",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium!
-                                          .copyWith(color: Colors.grey.shade300, height: 1.3),
-                                    )
-                                  ]),
-                                Text(
-                                  widget.conversation.getTranscript(maxCount: 100),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium!
-                                      .copyWith(color: Colors.grey.shade300, height: 1.3),
-                                ),
-                              ],
-                            )
-                          : const SizedBox(height: 8),
+                      _buildConversationBody(context),
                     ],
                   ),
                 ),
@@ -237,6 +159,90 @@ class _ConversationListItemState extends State<ConversationListItem> {
         ),
       );
     });
+  }
+
+  Widget _buildConversationBody(BuildContext context) {
+    if (widget.conversation.discarded) {
+      return Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.conversation.photos.isNotEmpty) ...[
+                Row(children: [
+                  Icon(
+                    Icons.photo_library,
+                    color: Colors.grey.shade400,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    "${widget.conversation.photos.length} photos",
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                  )
+                ]),
+                const SizedBox(height: 4),
+              ],
+              Text(
+                widget.conversation.getTranscript(maxCount: 100),
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+              ),
+            ],
+          ),
+          if (widget.conversation.isLocked) _buildLockedOverlay(),
+        ],
+      );
+    }
+
+    final structured = widget.conversation.structured;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          structured.title.decodeString,
+          style: Theme.of(context).textTheme.titleLarge,
+          maxLines: 1,
+        ),
+        const SizedBox(height: 8),
+        Stack(
+          children: [
+            Text(
+              structured.overview.decodeString,
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (widget.conversation.isLocked) _buildLockedOverlay(),
+          ],
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildLockedOverlay() {
+    return Positioned.fill(
+      child: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.01),
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+            ),
+            child: const Text(
+              'Upgrade to unlimited',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   _getConversationHeader() {

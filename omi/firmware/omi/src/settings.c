@@ -1,7 +1,8 @@
-#include <zephyr/kernel.h>
-#include <zephyr/settings/settings.h>
-#include <zephyr/logging/log.h>
 #include "lib/dk2/settings.h"
+
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/settings/settings.h>
 
 LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 

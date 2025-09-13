@@ -144,7 +144,7 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
           context,
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOut,
-          alignment: 0.05,
+          alignment: 0.40,
         );
       }
     }

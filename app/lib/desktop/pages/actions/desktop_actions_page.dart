@@ -90,7 +90,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         provider.fetchActionItems(showShimmer: true);
       }
 
-
       _fadeController.forward();
       _slideController.forward();
     }).withPostFrameCallback();
@@ -260,10 +259,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     }
   }
 
-
-
-
-
   void _retryLoadingActionItems() {
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     setState(() {
@@ -271,7 +266,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       _errorMessage = null;
     });
     provider.fetchActionItems(showShimmer: true);
-
   }
 
   Widget _buildActionsContent(
@@ -709,11 +703,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       ),
     );
   }
-
-
 }
-
-
 
 extension PostFrameCallback on Function {
   void withPostFrameCallback() {

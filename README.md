@@ -61,7 +61,7 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 - [omi App setup](https://docs.omi.me/docs/developer/AppSetup)
 - [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
 - [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
-- [Install firmware](https://docs.omi.me/docs/get_started/Flash_device/)
+- [Install firmware](https://docs.omi.me/doc/get_started/Flash_device/)
 - [Create your own app in 1 minute](https://docs.omi.me/docs/developer/apps/Introduction).
 
 ## Contributions

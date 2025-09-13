@@ -142,4 +142,4 @@ copy firmware\firmware\build\docker_build\zephyr.uf2 D:\
 ```
 (where D: is the drive letter of the XIAO-SENSE board)
 
-For more detailed flashing instructions, see our [official documentation](https://docs.omi.me/docs/get_started/Flash_device).
+For more detailed flashing instructions, see our [official documentation](https://docs.omi.me/doc/get_started/Flash_device).
