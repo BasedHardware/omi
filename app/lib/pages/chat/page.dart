@@ -65,6 +65,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   String _notificationMessage = '';
   NotificationType _notificationType = NotificationType.success;
 
+  // Chat swipe state
+  String? _swipingChatId;
+  double _swipeProgress = 0.0; // Track swipe progress for smooth animation
+
+  // Drawer state for dimming effect
+  bool _isDrawerOpen = false;
+
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
 
@@ -186,39 +193,26 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           appBar: _buildAppBar(context, provider),
           endDrawer: _buildSessionsDrawer(context),
           resizeToAvoidBottomInset: true,
-
-          body: GestureDetector(
-            onTap: () {
-              // Hide keyboard when tapping outside textfield
-              FocusScope.of(context).unfocus();
-            },
-            child: Column(
-              children: [
-                // Notification banner (appears below AppBar, above messages)
-                TopNotificationBanner(
-                  message: _notificationMessage,
-                  isVisible: _showNotificationBanner,
-                  type: _notificationType,
-                  onDismiss: _hideNotification,
-                ),
-                // Messages area - takes up remaining space
-                Expanded(
-                  child: provider.isLoadingMessages && !provider.hasCachedMessages
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              provider.firstTimeLoadingText,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        )
-                      : provider.isClearingChat
-                          ? const Column(
+          body: Stack(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  // Hide keyboard when tapping outside textfield
+                  FocusScope.of(context).unfocus();
+                },
+                child: Column(
+                  children: [
+                    // Notification banner (appears below AppBar, above messages)
+                    TopNotificationBanner(
+                      message: _notificationMessage,
+                      isVisible: _showNotificationBanner,
+                      type: _notificationType,
+                      onDismiss: _hideNotification,
+                    ),
+                    // Messages area - takes up remaining space
+                    Expanded(
+                      child: provider.isLoadingMessages && !provider.hasCachedMessages
+                          ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 const CircularProgressIndicator(
@@ -979,17 +973,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         },
                         tooltip: 'New Chat',
                       ),
-
-                      onPressed: () async {
-                        final created = await sessions.createSession(appId: effectiveAppId);
-                        if (created != null) {
-                          _showNotification('New thread created');
-                          await messageProvider.refreshMessages(dropdownSelected: true);
-                          if (mounted) Navigator.of(context).maybePop();
-                        }
-                      },
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('New Thread'),
                     ),
                   ),
                 ),
@@ -1101,27 +1084,48 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       size: 20, // Smaller icon for compact design
                                     ),
                                   ),
-
-                                );
-                                if (confirmed == true) {
-                                  final ok = await sessions.deleteSession(sessionId: s.id);
-                                  if (ok) {
-                                    _showNotification('Thread deleted');
-                                    await messageProvider.refreshMessages(dropdownSelected: true);
-                                  }
-                                }
-                              },
-                            ),
-                            onTap: () async {
-                              // Select the thread and switch to its app context
-                              final appProvider = context.read<AppProvider>();
-                              await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
-                              await messageProvider.refreshMessages(dropdownSelected: true);
-                              if (mounted) Navigator.of(context).maybePop();
-                            },
-                          ),
-                        );
-
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      // Select the chat and switch to its app context
+                                      final appProvider = context.read<AppProvider>();
+                                      await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
+                                      await messageProvider.refreshMessages(dropdownSelected: true);
+                                      if (mounted) Navigator.of(context).maybePop();
+                                    },
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 150), // Smooth color transition
+                                      width: double.infinity, // Fill the clipped area
+                                      height: 50, // Match available space and red background height
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 12), // Internal content padding
+                                      decoration: BoxDecoration(
+                                        color: cardColor, // Use calculated smooth color
+                                        borderRadius: isBeingSwiped
+                                            ? BorderRadius
+                                                .zero // Straight edges when swiping to merge with red background
+                                            : BorderRadius.circular(16), // Rounded edges for normal selection
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          s.title?.isNotEmpty == true ? s.title! : 'New Chat',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontFamily: FontFamily.sFProDisplay,
+                                            color: Colors.white,
+                                            fontSize: 14.7, // Increased by 5% (14 * 1.05)
+                                            fontWeight: FontWeight.w400, // Normal weight like ChatGPT
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ), // Close ClipRRect
+                            ), // Close horizontal Padding
+                          ), // Close bottom spacing Padding
+                        ); // Close SizedBox
                       },
                     ),
                   ),
