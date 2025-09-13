@@ -42,13 +42,16 @@ router = APIRouter()
 fc = FileChatTool()
 
 
-def normalize_app_id(app_id: Optional[str], plugin_id: Optional[str]) -> str:
-    """Normalize app_id/plugin_id, converting null/empty values to 'omi' for consistent data model."""
+def normalize_app_id(app_id: Optional[str], plugin_id: Optional[str]) -> Optional[str]:
+    """Normalize app_id/plugin_id, preserving null for OMI app backward compatibility."""
     compat_app_id = app_id or plugin_id
 
-    # For OMI app, use consistent 'omi' identifier instead of null
-    if compat_app_id is None or compat_app_id in ['null', '', 'undefined']:
-        return 'omi'
+    # Handle cross-platform null representation issues:
+    # - Python None (from JSON body requests)
+    # - String "null" (from Flutter query parameters via .toString())
+    # - Empty strings and "undefined" from various sources
+    if compat_app_id in [None, "null", "", "undefined"]:
+        return None
 
     return compat_app_id
 

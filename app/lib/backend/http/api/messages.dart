@@ -10,22 +10,13 @@ import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
-Uri _buildApiUri(String path, {Map<String, dynamic>? query}) {
-  final base = Env.apiBaseUrl!;
-  final baseUri = Uri.parse(base);
-  return baseUri.replace(
-    path: '${baseUri.path.endsWith('/') ? baseUri.path.substring(0, baseUri.path.length - 1) : baseUri.path}$path',
-    queryParameters: query?.map((k, v) => MapEntry(k, v?.toString())),
-  );
-}
-
 Future<List<ServerMessage>> getMessagesServer({
   String? appId,
   bool dropdownSelected = false,
   String? chatSessionId,
 }) async {
-  final uri = _buildApiUri('/v2/messages', query: {
-    'app_id': appId, // Send actual app_id ('omi' for OMI, actual ID for others)
+  final uri = buildApiUri('/v2/messages', query: {
+    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
     'dropdown_selected': dropdownSelected,
     if (chatSessionId != null) 'chat_session_id': chatSessionId,
   });
@@ -46,8 +37,8 @@ Future<List<ServerMessage>> getMessagesServer({
 }
 
 Future<Map<String, dynamic>?> clearChatServer({String? appId, String? chatSessionId}) async {
-  final uri = _buildApiUri('/v2/messages', query: {
-    'app_id': appId, // Send actual app_id ('omi' for OMI, actual ID for others)
+  final uri = buildApiUri('/v2/messages', query: {
+    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
     if (chatSessionId != null) 'chat_session_id': chatSessionId,
   });
   var response = await makeApiCall(url: uri.toString(), headers: {}, method: 'DELETE', body: '');
@@ -99,8 +90,8 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 
 Stream<ServerMessageChunk> sendMessageStreamServer(String text,
     {String? appId, String? chatSessionId, List<String>? filesId}) async* {
-  final uri = _buildApiUri('/v2/messages', query: {
-    'app_id': appId, // AppProvider provides clean state, backend handles normalization
+  final uri = buildApiUri('/v2/messages', query: {
+    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
     if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
   });
 
@@ -159,8 +150,8 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text,
 
 Future<ServerMessage> getInitialAppMessage(String? appId, {String? chatSessionId}) {
   return makeApiCall(
-    url: _buildApiUri('/v2/initial-message', query: {
-      if (appId != null) 'app_id': appId,
+    url: buildApiUri('/v2/initial-message', query: {
+      if (appId != null) 'app_id': appId == 'omi' ? null : appId,
       if (chatSessionId != null) 'chat_session_id': chatSessionId,
     }).toString(),
     headers: {},
@@ -178,8 +169,8 @@ Future<ServerMessage> getInitialAppMessage(String? appId, {String? chatSessionId
 
 Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
     {String? appId, String? chatSessionId}) async* {
-  final uri = _buildApiUri('/v2/voice-messages', query: {
-    'app_id': appId, // AppProvider provides clean state, backend handles normalization
+  final uri = buildApiUri('/v2/voice-messages', query: {
+    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
     if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
   });
   var request = http.MultipartRequest(
@@ -239,8 +230,8 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
 }
 
 Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId, String? chatSessionId}) async {
-  final uri = _buildApiUri('/v2/files', query: {
-    'app_id': appId, // AppProvider provides clean state, backend handles normalization
+  final uri = buildApiUri('/v2/files', query: {
+    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
     if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
   });
 
