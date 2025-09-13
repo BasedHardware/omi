@@ -404,7 +404,10 @@ def generate_chat_session_title(
 
 @router.post("/v2/voice-messages")
 async def create_voice_message_stream(
-    files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)
+    files: List[UploadFile] = File(...),
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     # wav
     paths = retrieve_file_paths(files, uid)
@@ -416,8 +419,12 @@ async def create_voice_message_stream(
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
     # process
+    compat_app_id = normalize_app_id(app_id, None)
+
     async def generate_stream():
-        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid):
+        async for chunk in process_voice_message_segment_stream(
+            list(wav_paths)[0], uid, app_id=compat_app_id, chat_session_id=chat_session_id
+        ):
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
