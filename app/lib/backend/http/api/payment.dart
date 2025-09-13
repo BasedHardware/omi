@@ -34,6 +34,21 @@ Future<bool> cancelSubscription() async {
   return false;
 }
 
+Future<Map<String, dynamic>?> upgradeSubscription({required String priceId}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/upgrade-subscription',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'price_id': priceId}),
+  );
+  if (response != null && response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    debugPrint('upgradeSubscription response: ${response.body}');
+    return jsonResponse;
+  }
+  return null;
+}
+
 Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/$appId/subscription',
@@ -49,6 +64,22 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
   return null;
 }
 
+
+Future<Map<String, dynamic>?> getAvailablePlans() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/available-plans',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response != null && response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    debugPrint('getAvailablePlans response: ${response.body}');
+    return jsonResponse;
+  }
+  return null;
+}
+    
 Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/$appId/subscription',
