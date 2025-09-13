@@ -66,8 +66,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // Search result tracking
   List<GlobalKey> _segmentKeys = [];
-  List<GlobalKey> _matchKeys = [];
+  final List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
+
+  // Cache for rendered segment heights to improve position estimation.
+  final Map<int, double> _segmentHeights = {};
 
   // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
@@ -83,7 +86,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Color(0xFF8B5CF6).withOpacity(0.8);
+      return const Color(0xFF8B5CF6).withOpacity(0.8);
     }
     // Use speakerId to get consistent color for each speaker
     final colorIndex = speakerId % _speakerColors.length;
@@ -92,7 +95,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Color _getSpeakerAvatarColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Color(0xFF8B5CF6).withOpacity(0.3);
+      return const Color(0xFF8B5CF6).withOpacity(0.3);
     }
     final colorIndex = speakerId % _speakerColors.length;
     return _speakerColors[colorIndex].withOpacity(0.3);
@@ -113,7 +116,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (widget.segments.isNotEmpty && widget.isConversationDetail) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
+        if (mounted) _scrollToBottomGently();
       });
     }
   }
@@ -127,14 +130,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (widget.searchQuery.isEmpty) return;
 
     final searchQuery = widget.searchQuery.toLowerCase();
-    int globalMatchCount = 0;
 
     for (var segment in widget.segments) {
       final text = _getDecodedText(segment.text).toLowerCase();
       final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
       for (final _ in matches) {
         _matchKeys.add(GlobalKey());
-        globalMatchCount++;
       }
     }
   }
@@ -145,6 +146,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     // Reinitialize keys if segment count changed
     if (widget.segments.length != oldWidget.segments.length) {
+      _segmentHeights.clear();
       _initializeSegmentKeys();
     }
 
@@ -152,9 +154,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _rebuildMatchKeys();
       _previousSearchResultIndex = -1;
 
-      if (widget.searchQuery.isNotEmpty && widget.currentResultIndex >= 0) {
+      if (widget.searchQuery.isNotEmpty && widget.currentResultIndex >= 0 && _matchKeys.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToSearchResult();
+          if (mounted) _scrollToSearchResult();
         });
       }
     }
@@ -163,7 +165,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
       _previousSegmentCount = widget.segments.length;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
+        if (mounted) _scrollToBottomGently();
       });
     } else {
       _previousSegmentCount = widget.segments.length;
@@ -174,9 +176,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         widget.currentResultIndex >= 0 &&
         widget.searchQuery.isNotEmpty) {
       _previousSearchResultIndex = widget.currentResultIndex;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToSearchResult();
-      });
+      // FIX: Ensure we only scroll if there are matches to scroll to.
+      if (_matchKeys.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToSearchResult();
+        });
+      }
     }
   }
 
@@ -196,28 +201,31 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (_scrollController.hasClients) {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.offset;
-      final threshold = 100.0;
+      const threshold = 100.0;
       final distanceFromBottom = maxScroll - currentScroll;
 
       if (distanceFromBottom > threshold) {
-        _userHasScrolled = true;
+        if (mounted && !_userHasScrolled) {
+          setState(() {
+            _userHasScrolled = true;
+          });
+        }
       } else if (distanceFromBottom < 50.0) {
-        _userHasScrolled = false;
+        if (mounted && _userHasScrolled) {
+          setState(() {
+            _userHasScrolled = false;
+          });
+        }
       }
     }
   }
 
   void _scrollToBottomGently() {
-    if (!_scrollController.hasClients) {
+    if (!_scrollController.hasClients || !mounted) {
       return;
     }
 
     final maxExtent = _scrollController.position.maxScrollExtent;
-
-    final startOffset = (maxExtent - 30).clamp(0.0, maxExtent);
-
-    _scrollController.jumpTo(startOffset);
-
     _isAutoScrolling = true;
     _scrollController
         .animateTo(
@@ -226,101 +234,129 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       curve: Curves.easeInOut,
     )
         .then((_) {
-      _isAutoScrolling = false;
-    });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottomGently();
+      if (mounted) {
+        _isAutoScrolling = false;
+      }
     });
   }
 
   void _scrollToSearchResult() {
-    if (!_scrollController.hasClients) {
+    if (!_scrollController.hasClients ||
+        widget.searchQuery.isEmpty ||
+        widget.currentResultIndex < 0 ||
+        widget.currentResultIndex >= _matchKeys.length) {
+      return;
+    }
+    _scrollToResult(widget.currentResultIndex);
+  }
+  
+  void _scrollToResult(int resultIndex) {
+    _isAutoScrolling = true;
+    
+    if (resultIndex >= _matchKeys.length) {
+      if (mounted) {
+        setState(() {
+          _isAutoScrolling = false;
+        });
+      }
       return;
     }
 
-    if (widget.searchQuery.isEmpty) {
-      return;
-    }
-
-    if (widget.currentResultIndex < 0 || widget.currentResultIndex >= _matchKeys.length) {
-      return;
-    }
-
-    final matchKey = _matchKeys[widget.currentResultIndex];
+    final matchKey = _matchKeys[resultIndex];
     final context = matchKey.currentContext;
 
     if (context != null) {
-      _scrollToContext(context);
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final retryContext = matchKey.currentContext;
-        if (retryContext != null) {
-          _scrollToContext(retryContext);
-        } else {
-          _scrollToSearchResultFallback();
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.5,
+      ).whenComplete(() {
+        if (mounted) {
+          _isAutoScrolling = false;
         }
       });
+    } else {
+      _scrollToFarResult(resultIndex);
     }
   }
 
-  void _scrollToContext(BuildContext context) {
-    _isAutoScrolling = true;
-    Scrollable.ensureVisible(
-      context,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-      alignment: 0.35,
-    ).then((_) {
-      _isAutoScrolling = false;
+  void _scrollToFarResult(int resultIndex) {
+    int targetSegmentIndex = -1;
+    int cumulativeMatchCount = 0;
+    final lowerQuery = widget.searchQuery.toLowerCase();
+
+    for (int i = 0; i < widget.segments.length; i++) {
+      final text = _getDecodedText(widget.segments[i].text).toLowerCase();
+      final matchCount = RegExp(RegExp.escape(lowerQuery), caseSensitive: false).allMatches(text).length;
+      if (cumulativeMatchCount + matchCount > resultIndex) {
+        targetSegmentIndex = i;
+        break;
+      }
+      cumulativeMatchCount += matchCount;
+    }
+
+    if (targetSegmentIndex == -1) {
+      if (mounted) setState(() => _isAutoScrolling = false);
+      return;
+    }
+
+    final double estimatedOffset = _calculateOffsetForSegment(targetSegmentIndex);
+    final screenHeight = MediaQuery.of(context).size.height;
+    final alignmentOffset = screenHeight * 0.5;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final targetScrollPosition = (estimatedOffset - alignmentOffset).clamp(0.0, maxScroll);
+    final currentOffset = _scrollController.offset;
+    final distance = (targetScrollPosition - currentOffset).abs();
+    final duration = Duration(milliseconds: (400 + distance * 0.2).clamp(400, 1200).toInt());
+
+    _scrollController.animateTo(
+      targetScrollPosition,
+      duration: duration,
+      curve: Curves.easeInOut,
+    ).whenComplete(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          _isAutoScrolling = false;
+          return;
+        }
+        final finalContext = _matchKeys[resultIndex].currentContext;
+        if (finalContext != null) {
+          Scrollable.ensureVisible(
+            finalContext,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            alignment: 0.5,
+          ).whenComplete(() {
+            if (mounted) {
+              _isAutoScrolling = false;
+            }
+          });
+        } else {
+          if (mounted) {
+            _isAutoScrolling = false;
+          }
+        }
+      });
     });
   }
 
-  void _scrollToSearchResultFallback() {
-    final searchQuery = widget.searchQuery.toLowerCase();
-    int currentMatchIndex = 0;
-    int targetSegmentIndex = -1;
+  double _calculateOffsetForSegment(int targetIndex) {
+    double offset = 0.0;
 
-    for (int segmentIndex = 0; segmentIndex < widget.segments.length; segmentIndex++) {
-      final text = _getDecodedText(widget.segments[segmentIndex].text).toLowerCase();
-      final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
+    offset += widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
+    offset += widget.topMargin ? 32.0 : 0.0;
 
-      if (currentMatchIndex + matches.length > widget.currentResultIndex) {
-        targetSegmentIndex = segmentIndex;
-        break;
-      }
-      currentMatchIndex += matches.length;
+    double knownHeights = 0;
+    _segmentHeights.forEach((_, height) => knownHeights += height);
+    final averageHeight = _segmentHeights.isNotEmpty ? knownHeights / _segmentHeights.length : 150.0; // Fallback
+
+    for (int i = 0; i < targetIndex; i++) {
+      final itemHeight = _segmentHeights[i] ?? averageHeight;
+      final separatorHeight = (widget.separator && i > 0) ? 4.0 : 0.0;
+      offset += itemHeight + separatorHeight;
     }
-
-    if (targetSegmentIndex >= 0 && targetSegmentIndex < _segmentKeys.length) {
-      final segmentKey = _segmentKeys[targetSegmentIndex];
-
-      final segmentContext = segmentKey.currentContext;
-      if (segmentContext != null) {
-        _scrollToContext(segmentContext);
-        return;
-      }
-
-      final itemHeight = 80.0;
-      final headerHeight = widget.topMargin ? 32.0 : 0.0;
-      final targetOffset = headerHeight + (targetSegmentIndex * itemHeight);
-
-      _isAutoScrolling = true;
-      _scrollController
-          .animateTo(
-        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      )
-          .then((_) {
-        _isAutoScrolling = false;
-      });
-    }
+    return offset;
   }
 
   String _getDecodedText(String text) {
@@ -330,7 +366,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return _decodedTextCache[text]!;
   }
 
-  // Create highlighted text spans
   List<InlineSpan> _highlightSearchMatchesWithKeys(
     String text,
     String searchQuery,
@@ -368,18 +403,20 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       final matchKey = currentGlobalIndex < _matchKeys.length ? _matchKeys[currentGlobalIndex] : null;
 
       spans.add(WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
         child: Container(
           key: matchKey,
           decoration: BoxDecoration(
-            color: isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(2),
+            color: isCurrentResult ? Colors.orange.withOpacity(0.9) : Colors.deepPurple.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(3),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
           child: Text(
             text.substring(matchStart, matchEnd),
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
+              fontSize: 15,
             ),
           ),
         ),
@@ -423,17 +460,31 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
           if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin + 120);
 
+          final segmentIdx = idx - 1;
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final key = _segmentKeys[segmentIdx];
+            final context = key.currentContext;
+            if (context != null) {
+              final renderBox = context.findRenderObject() as RenderBox?;
+              if (renderBox != null && renderBox.hasSize) {
+                _segmentHeights[segmentIdx] = renderBox.size.height;
+              }
+            }
+          });
+
           if (widget.separator && idx > 1) {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 4),
-                _buildSegmentItem(idx - 1),
+                _buildSegmentItem(segmentIdx),
               ],
             );
           }
 
-          return _buildSegmentItem(idx - 1);
+          return _buildSegmentItem(segmentIdx);
         },
       ),
     );
@@ -447,7 +498,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final bool isUser = data.isUser;
 
     return Container(
-        key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
+        key: _segmentKeys[segmentIdx],
         child: GestureDetector(
           onTap: () {
             if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
@@ -466,6 +517,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 if (!isUser) ...[
                   // Avatar for other speakers (left side)
                   Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       CircleAvatar(
                         radius: 16,
@@ -478,7 +530,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                           height: 24,
                         ),
                       ),
-                      const SizedBox(height: 2),
                     ],
                   ),
                   const SizedBox(width: 8),
@@ -556,23 +607,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
                                 color: _getSpeakerBubbleColor(isUser, data.speakerId),
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(isUser
-                                      ? 18
-                                      : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                          ? 6
-                                          : 18),
-                                  topRight: Radius.circular(isUser ? 18 : 18),
-                                  bottomLeft: Radius.circular(18),
-                                  bottomRight: Radius.circular(isUser ? 6 : 18),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.15),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 1),
-                                  ),
-                                ],
+                                borderRadius: BorderRadius.circular(18),
                               ),
                               child: SelectionArea(
                                 child: Column(
@@ -610,8 +645,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                               style: TextStyle(
                                                 letterSpacing: 0.0,
                                                 color: isUser
-                                                    ? Colors.white.withValues(alpha: 0.8)
-                                                    : Colors.grey.shade300.withValues(alpha: 0.8),
+                                                    ? Colors.white.withOpacity(0.8)
+                                                    : Colors.grey.shade300.withOpacity(0.8),
                                                 fontSize: 14,
                                                 fontStyle: FontStyle.italic,
                                                 height: 1.3,
@@ -632,7 +667,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             data.getTimestampString(),
                                             style: TextStyle(
                                               color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                                  isUser ? Colors.white.withOpacity(0.7) : Colors.grey.shade400,
                                               fontSize: 11,
                                             ),
                                           ),
@@ -654,6 +689,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   const SizedBox(width: 8),
                   // Avatar for user (right side)
                   Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       CircleAvatar(
                         radius: 16,
@@ -664,7 +700,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                           height: 24,
                         ),
                       ),
-                      const SizedBox(height: 2),
                     ],
                   ),
                 ],
@@ -700,7 +735,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       },
       child: const Opacity(
         opacity: 0.5,
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
