@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -10,6 +11,7 @@ import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import 'widgets/desktop_app_grid.dart';
 import 'widgets/desktop_filter_chips.dart';
 import 'widgets/desktop_app_detail.dart';
@@ -37,6 +39,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   bool _isInitialized = false;
   bool _isLoadingData = false;
+  bool _isReloading = false;
+  final FocusNode _focusNode = FocusNode();
 
   final ValueNotifier<App?> _selectedAppNotifier = ValueNotifier<App?>(null);
 
@@ -116,6 +120,42 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     }
   }
 
+  void _handleReload() async {
+    if (_isReloading) return;
+
+    setState(() {
+      _isReloading = true;
+    });
+
+    // Scroll to top
+    if (_scrollController.hasClients) {
+      await _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    await appProvider.getApps();
+
+    if (mounted) {
+      setState(() {
+        _isReloading = false;
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusNode.canRequestFocus) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
   @override
   void dispose() {
     try {
@@ -128,6 +168,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     _searchFocusNode.dispose();
     _scrollController.dispose();
     _selectedAppNotifier.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -136,75 +177,131 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     super.build(context);
     final responsive = ResponsiveHelper(context);
 
-    return Consumer<AppProvider>(
-      builder: (context, appProvider, _) {
-        if (_isLoadingData && appProvider.apps.isEmpty) {
-          return _buildLoadingState(responsive);
-        }
+    return VisibilityDetector(
+        key: const Key('desktop_apps_page'),
+        onVisibilityChanged: (visibilityInfo) {
+          if (visibilityInfo.visibleFraction > 0.1 && mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_focusNode.canRequestFocus) {
+                _focusNode.requestFocus();
+              }
+            });
+          }
+        },
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+          },
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            child: GestureDetector(
+              onTap: () {
+                if (!_focusNode.hasFocus) {
+                  _focusNode.requestFocus();
+                }
+              },
+              child: Consumer<AppProvider>(
+                builder: (context, appProvider, _) {
+                  if (_isLoadingData && appProvider.apps.isEmpty) {
+                    return _buildLoadingState(responsive);
+                  }
 
-        return Stack(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  _buildHeader(responsive, appProvider),
-                  if (appProvider.isFilterActive()) _buildActiveFilters(responsive, appProvider),
-                  Expanded(
-                    child: _buildContent(responsive, appProvider),
-                  ),
-                ],
-              ),
-            ),
-
-            // Panel overlay
-            ValueListenableBuilder<App?>(
-              valueListenable: _selectedAppNotifier,
-              builder: (context, selectedApp, child) {
-                if (selectedApp == null) return const SizedBox.shrink();
-
-                return Stack(
-                  children: [
-                    // Backdrop blur overlay
-                    Positioned.fill(
-                      child: GestureDetector(
-                        onTap: () {
-                          _selectedAppNotifier.value = null;
-                        },
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(16),
+                  final loadingWidget = _isReloading
+                      ? Container(
+                          decoration: BoxDecoration(
+                            color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                                ),
+                                SizedBox(height: responsive.spacing(baseSpacing: 16)),
+                                Text(
+                                  'Reloading apps...',
+                                  style: responsive.bodyLarge.copyWith(
+                                    color: ResponsiveHelper.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                        )
+                      : null;
+
+                  return Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildHeader(responsive, appProvider),
+                            if (appProvider.isFilterActive()) _buildActiveFilters(responsive, appProvider),
+                            Expanded(
+                              child: _buildContent(responsive, appProvider),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    // App detail panel
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: DesktopAppDetail(
-                        app: selectedApp,
-                        onClose: () {
-                          _selectedAppNotifier.value = null;
+
+                      // Panel overlay
+                      ValueListenableBuilder<App?>(
+                        valueListenable: _selectedAppNotifier,
+                        builder: (context, selectedApp, child) {
+                          if (selectedApp == null) return const SizedBox.shrink();
+
+                          return Stack(
+                            children: [
+                              // Backdrop blur overlay
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    _selectedAppNotifier.value = null;
+                                  },
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // App detail panel
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: DesktopAppDetail(
+                                  app: selectedApp,
+                                  onClose: () {
+                                    _selectedAppNotifier.value = null;
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
                         },
                       ),
-                    ),
-                  ],
-                );
-              },
+
+                      // Loading overlay
+                      if (loadingWidget != null) Positioned.fill(child: loadingWidget),
+                    ],
+                  );
+                },
+              ),
             ),
-          ],
-        );
-      },
-    );
+          ),
+        ));
   }
 
   Widget _buildLoadingState(ResponsiveHelper responsive) {

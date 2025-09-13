@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -8,6 +9,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_dialog.dart';
@@ -53,6 +55,8 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
   // Track unreviewed memories and notification state
   List<Memory> _unreviewedMemories = [];
   final ValueNotifier<bool> _showReviewIndicator = ValueNotifier<bool>(false);
+  bool _isReloading = false;
+  late FocusNode _focusNode;
 
   @override
   void dispose() {
@@ -63,12 +67,15 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     _pulseController.dispose();
     _reviewMemoriesNotifier.dispose();
     _showReviewIndicator.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+
+    _focusNode = FocusNode();
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -106,7 +113,23 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
       // Start animations
       _fadeController.forward();
       _slideController.forward();
+
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _focusNode.requestFocus();
+        }
+      });
     }).withPostFrameCallback();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusNode.canRequestFocus) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   void _checkUnreviewedMemories() {
@@ -155,106 +178,184 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     context.read<MemoriesProvider>().setCategoryFilter(category);
   }
 
+  Future<void> _handleReload() async {
+    if (_isReloading) return;
+
+    setState(() {
+      _isReloading = true;
+    });
+
+    // Scroll to top
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+
+    await _handleRefresh();
+
+    if (mounted) {
+      setState(() {
+        _isReloading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<MemoriesProvider>(
-      builder: (context, provider, _) {
-        return Stack(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    ResponsiveHelper.backgroundPrimary,
-                    ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Stack(
-                  children: [
-                    _buildAnimatedBackground(),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.02),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildModernHeader(provider),
-                          _buildReviewIndicator(),
-                          Expanded(
-                            child: _animationsInitialized
-                                ? FadeTransition(
-                                    opacity: _fadeAnimation,
-                                    child: SlideTransition(
-                                      position: _slideAnimation,
-                                      child: _buildMemoriesContent(provider),
-                                    ),
-                                  )
-                                : _buildMemoriesContent(provider),
+
+    return VisibilityDetector(
+        key: const Key('desktop-memories-page'),
+        onVisibilityChanged: (visibilityInfo) {
+          if (visibilityInfo.visibleFraction > 0.1 && mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_focusNode.canRequestFocus) {
+                _focusNode.requestFocus();
+              }
+            });
+          }
+        },
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+          },
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            child: GestureDetector(
+              onTap: () {
+                // Ensure focus is maintained when tapping on the widget
+                if (!_focusNode.hasFocus) {
+                  _focusNode.requestFocus();
+                }
+              },
+              child: Consumer<MemoriesProvider>(
+                builder: (context, provider, _) {
+                  return Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              ResponsiveHelper.backgroundPrimary,
+                              ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Panel overlay
-            ValueListenableBuilder<List<Memory>?>(
-              valueListenable: _reviewMemoriesNotifier,
-              builder: (context, reviewMemories, child) {
-                if (reviewMemories == null) return const SizedBox.shrink();
-
-                return Stack(
-                  children: [
-                    // Backdrop blur overlay
-                    Positioned.fill(
-                      child: GestureDetector(
-                        onTap: () {
-                          _reviewMemoriesNotifier.value = null;
-                        },
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Stack(
+                            children: [
+                              _buildAnimatedBackground(),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.02),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Column(
+                                  children: [
+                                    _buildModernHeader(provider),
+                                    _buildReviewIndicator(),
+                                    Expanded(
+                                      child: _animationsInitialized
+                                          ? FadeTransition(
+                                              opacity: _fadeAnimation,
+                                              child: SlideTransition(
+                                                position: _slideAnimation,
+                                                child: _buildMemoriesContent(provider),
+                                              ),
+                                            )
+                                          : _buildMemoriesContent(provider),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ),
 
-                    // Memory review panel
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: MemoryReviewSheet(
-                        memories: reviewMemories,
-                        provider: provider,
-                        onClose: () {
-                          _reviewMemoriesNotifier.value = null;
-                          _checkUnreviewedMemories();
+                      // Panel overlay
+                      ValueListenableBuilder<List<Memory>?>(
+                        valueListenable: _reviewMemoriesNotifier,
+                        builder: (context, reviewMemories, child) {
+                          if (reviewMemories == null) return const SizedBox.shrink();
+
+                          return Stack(
+                            children: [
+                              // Backdrop blur overlay
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    _reviewMemoriesNotifier.value = null;
+                                  },
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              // Memory review panel
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: MemoryReviewSheet(
+                                  memories: reviewMemories,
+                                  provider: provider,
+                                  onClose: () {
+                                    _reviewMemoriesNotifier.value = null;
+                                    _checkUnreviewedMemories();
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
                         },
                       ),
-                    ),
-                  ],
-                );
-              },
+
+                      // Loading overlay for CMD+R reload
+                      if (_isReloading)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Loading memories...',
+                                  style: ResponsiveHelper(context).bodyLarge.copyWith(
+                                        color: ResponsiveHelper.textPrimary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ],
-        );
-      },
-    );
+          ),
+        ));
   }
 
   Widget _buildAnimatedBackground() {
