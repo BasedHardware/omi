@@ -22,6 +22,10 @@ class ActionItemsProvider extends ChangeNotifier {
   DateTime? _lastRefreshTime;
   static const Duration _refreshCooldown = Duration(seconds: 30);
 
+  // Multi-selection state
+  bool _isSelectionMode = false;
+  Set<String> _selectedItems = {};
+
   // Getters
   List<ActionItemWithMetadata> get actionItems => _actionItems;
   bool get isLoading => _isLoading;
@@ -31,6 +35,12 @@ class ActionItemsProvider extends ChangeNotifier {
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
+
+  // Selection getters
+  bool get isSelectionMode => _isSelectionMode;
+  Set<String> get selectedItems => _selectedItems;
+  int get selectedCount => _selectedItems.length;
+  bool get hasSelection => _selectedItems.isNotEmpty;
 
   // Group action items by completion status
   List<ActionItemWithMetadata> get incompleteItems => _actionItems.where((item) => item.completed == false).toList();
@@ -320,6 +330,75 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<void> _fetchNewActionItems() async {
     await fetchActionItems();
+  }
+
+  // Selection methods
+  void startSelection() {
+    _isSelectionMode = true;
+    _selectedItems.clear();
+    notifyListeners();
+  }
+
+  void endSelection() {
+    _isSelectionMode = false;
+    _selectedItems.clear();
+    notifyListeners();
+  }
+
+  void toggleItemSelection(String itemId) {
+    if (_selectedItems.contains(itemId)) {
+      _selectedItems.remove(itemId);
+    } else {
+      _selectedItems.add(itemId);
+    }
+    notifyListeners();
+  }
+
+  void selectItem(String itemId) {
+    if (!_selectedItems.contains(itemId)) {
+      _selectedItems.add(itemId);
+      notifyListeners();
+    }
+  }
+
+  void deselectItem(String itemId) {
+    if (_selectedItems.contains(itemId)) {
+      _selectedItems.remove(itemId);
+      notifyListeners();
+    }
+  }
+
+  void selectAllItems() {
+    _selectedItems.clear();
+    for (final item in _actionItems) {
+      _selectedItems.add(item.id);
+    }
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    _selectedItems.clear();
+    notifyListeners();
+  }
+
+  bool isItemSelected(String itemId) {
+    return _selectedItems.contains(itemId);
+  }
+
+  // Bulk operations
+  Future<bool> deleteSelectedItems() async {
+    if (_selectedItems.isEmpty) return false;
+
+    final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
+    final success = await Future.wait(itemsToDelete.map((item) => deleteActionItem(item)))
+        .then((results) => results.every((success) => success));
+
+    if (success) {
+      _selectedItems.clear();
+      _isSelectionMode = false;
+    }
+
+    return success;
   }
 
   @override
