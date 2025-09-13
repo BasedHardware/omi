@@ -174,8 +174,16 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             memories_id=memories_id,
         )
 
-        chat_session = chat_db.get_chat_session(uid)
-        chat_session = ChatSession(**chat_session) if chat_session else None
+
+
+        # Use the same session as the user message (preserved context)
+        if original_chat_session_id:
+            ai_chat_session = chat_db.get_chat_session_by_id(uid, original_chat_session_id)
+        else:
+            ai_chat_session = chat_db.get_chat_session(uid, app_id=original_app_id)
+
+        chat_session = ChatSession(**ai_chat_session) if ai_chat_session else None
+
 
         if chat_session:
             ai_message.chat_session_id = chat_session.id
