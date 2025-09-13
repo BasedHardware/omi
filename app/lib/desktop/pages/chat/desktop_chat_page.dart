@@ -70,10 +70,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   String _notificationMessage = '';
   NotificationType _notificationType = NotificationType.success;
 
-  // Thread swipe state
-  String? _swipingThreadId;
-  double _swipeProgress = 0.0; // Track swipe progress for smooth animation
-
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
 
@@ -293,9 +289,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       onPressed: () async {
                         final created = await sessions.createSession(appId: effectiveAppId);
                         if (created != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('New thread created')),
-                          );
+                          _showNotification('New thread created');
                           await messageProvider.refreshMessages(dropdownSelected: true);
                         }
                       },
@@ -416,9 +410,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               if (confirmed == true) {
                                 final ok = await sessions.deleteSession(sessionId: s.id);
                                 if (ok) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Thread deleted')),
-                                  );
+                                  _showNotification('Thread deleted');
                                   await messageProvider.refreshMessages(dropdownSelected: true);
                                 }
                               }
