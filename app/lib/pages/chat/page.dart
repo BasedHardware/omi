@@ -34,6 +34,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'widgets/message_action_menu.dart';
+import 'widgets/top_notification_banner.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -56,6 +57,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
+
+  // Notification banner state
+  bool _showNotificationBanner = false;
+  String _notificationMessage = '';
+  NotificationType _notificationType = NotificationType.success;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -127,6 +133,21 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
+  // Notification banner management methods
+  void _showNotification(String message, {NotificationType type = NotificationType.success}) {
+    setState(() {
+      _notificationMessage = message;
+      _notificationType = type;
+      _showNotificationBanner = true;
+    });
+  }
+
+  void _hideNotification() {
+    setState(() {
+      _showNotificationBanner = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -146,6 +167,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             },
             child: Column(
               children: [
+                // Notification banner (appears below AppBar, above messages)
+                TopNotificationBanner(
+                  message: _notificationMessage,
+                  isVisible: _showNotificationBanner,
+                  type: _notificationType,
+                  onDismiss: _hideNotification,
+                ),
                 // Messages area - takes up remaining space
                 Expanded(
                   child: provider.isLoadingMessages && !provider.hasCachedMessages
@@ -871,9 +899,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       onPressed: () async {
                         final created = await sessions.createSession(appId: effectiveAppId);
                         if (created != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('New thread created')),
-                          );
+                          _showNotification('New thread created');
                           await messageProvider.refreshMessages(dropdownSelected: true);
                           if (mounted) Navigator.of(context).maybePop();
                         }
@@ -994,9 +1020,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 if (confirmed == true) {
                                   final ok = await sessions.deleteSession(sessionId: s.id);
                                   if (ok) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Thread deleted')),
-                                    );
+                                    _showNotification('Thread deleted');
                                     await messageProvider.refreshMessages(dropdownSelected: true);
                                   }
                                 }
