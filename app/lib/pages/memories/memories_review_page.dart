@@ -66,7 +66,9 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
   void _filterByCategory(MemoryCategory? category) {
     setState(() {
       selectedCategory = category;
-      displayedMemories = category == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == category).toList();
+      displayedMemories = category == null
+          ? List.from(remainingMemories)
+          : remainingMemories.where((f) => f.category == category).toList();
       currentCardIndex = 0;
       // Reset swipe state
       _cardOffset = 0;
@@ -88,7 +90,9 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
 
     setState(() => _isProcessing = true);
 
-    List<Memory> memoriesToProcess = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
+    List<Memory> memoriesToProcess = selectedCategory == null
+        ? List.from(remainingMemories)
+        : remainingMemories.where((f) => f.category == selectedCategory).toList();
 
     final count = memoriesToProcess.length;
 
@@ -100,7 +104,9 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
 
     setState(() {
       remainingMemories.removeWhere((f) => memoriesToProcess.contains(f));
-      displayedMemories = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
+      displayedMemories = selectedCategory == null
+          ? List.from(remainingMemories)
+          : remainingMemories.where((f) => f.category == selectedCategory).toList();
       _isProcessing = false;
       currentCardIndex = 0;
       // Reset swipe state
@@ -143,7 +149,9 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
 
     setState(() {
       remainingMemories.remove(memory);
-      displayedMemories = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
+      displayedMemories = selectedCategory == null
+          ? List.from(remainingMemories)
+          : remainingMemories.where((f) => f.category == selectedCategory).toList();
       _isProcessing = false;
 
       // Adjust current card index if we're in card view
@@ -398,8 +406,10 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
                         child: AnimatedBuilder(
                           animation: _animation,
                           builder: (context, child) {
-                            final double animatedOffset = _isDragging ? _cardOffset : _cardOffset * (1 - _animation.value);
-                            final double animatedRotation = _isDragging ? _cardRotation : _cardRotation * (1 - _animation.value);
+                            final double animatedOffset =
+                                _isDragging ? _cardOffset : _cardOffset * (1 - _animation.value);
+                            final double animatedRotation =
+                                _isDragging ? _cardRotation : _cardRotation * (1 - _animation.value);
 
                             return Transform.translate(
                               offset: Offset(animatedOffset, 0),
@@ -412,7 +422,9 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(24),
                                     decoration: BoxDecoration(
-                                      color: _isDragging ? (_cardOffset > 0 ? const Color(0xFF08A25C) : const Color(0xFFE0582F)) : Color(0xFF35343B),
+                                      color: _isDragging
+                                          ? (_cardOffset > 0 ? const Color(0xFF08A25C) : const Color(0xFFE0582F))
+                                          : Color(0xFF35343B),
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
@@ -747,7 +759,9 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> with TickerProv
   Widget build(BuildContext context) {
     return Consumer<MemoriesProvider>(builder: (context, provider, child) {
       return Scaffold(
-        backgroundColor: _isDragging ? (_cardOffset > 0 ? const Color(0xFFC8D8B2) : const Color(0xFFD2B6AD)) : Theme.of(context).colorScheme.primary,
+        backgroundColor: _isDragging
+            ? (_cardOffset > 0 ? const Color(0xFFC8D8B2) : const Color(0xFFD2B6AD))
+            : Theme.of(context).colorScheme.primary,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,

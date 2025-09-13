@@ -63,16 +63,16 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     }
 
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    
+
     Navigator.pop(context);
-    
+
     if (widget.isEditing) {
       // Editing existing item
       String newDescription = _textController.text.trim();
       bool descriptionChanged = newDescription != widget.actionItem!.description;
       bool dueDateChanged = _selectedDueDate != widget.actionItem!.dueAt;
       bool completionChanged = _isCompleted != widget.actionItem!.completed;
-      
+
       if (!descriptionChanged && !dueDateChanged && !completionChanged) {
         return;
       }
@@ -91,7 +91,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
         if (descriptionChanged) {
           await provider.updateActionItemDescription(widget.actionItem!, newDescription);
         }
-        
+
         if (dueDateChanged) {
           await provider.updateActionItemDueDate(widget.actionItem!, _selectedDueDate);
         }
@@ -127,7 +127,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
           dueAt: _selectedDueDate,
           completed: _isCompleted,
         );
-        
+
         if (!success && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -153,12 +153,12 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
   void _deleteActionItem() async {
     if (!widget.isEditing) return;
-    
+
     Navigator.pop(context);
 
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     final success = await provider.deleteActionItem(widget.actionItem!);
-    
+
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -203,19 +203,31 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
   String _formatDueDateWithTime(DateTime date) {
     final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    final months = ['January', 'February', 'March', 'April', 'May', 'June',
-                   'July', 'August', 'September', 'October', 'November', 'December'];
-    
+    final months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+
     // Format date as "Wednesday, June 25"
     final dayName = weekdays[date.weekday - 1];
     final monthName = months[date.month - 1];
-    
+
     // Format time as "8:12am"
     final hour = date.hour;
     final minute = date.minute.toString().padLeft(2, '0');
     final period = hour >= 12 ? 'pm' : 'am';
     final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    
+
     return '$dayName, $monthName ${date.day} - $displayHour:$minute$period';
   }
 
@@ -250,9 +262,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                         ),
                         onChanged: (bool? value) async {
                           if (value == null) return;
-                          
+
                           HapticFeedback.lightImpact();
-                          
+
                           setState(() {
                             _isCompleted = value;
                           });
@@ -362,13 +374,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
-                        _selectedDueDate != null 
-                          ? _formatDueDateWithTime(_selectedDueDate!)
-                          : 'Add due date',
+                        _selectedDueDate != null ? _formatDueDateWithTime(_selectedDueDate!) : 'Add due date',
                         style: TextStyle(
-                          color: _selectedDueDate != null 
-                            ? Colors.white 
-                            : Colors.grey.shade500,
+                          color: _selectedDueDate != null ? Colors.white : Colors.grey.shade500,
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
                         ),
@@ -459,11 +467,9 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
     super.initState();
     final now = DateTime.now();
     final minimumDate = widget.minimumDate ?? now;
-    
+
     if (widget.initialDateTime != null) {
-      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) 
-          ? minimumDate 
-          : widget.initialDateTime!;
+      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) ? minimumDate : widget.initialDateTime!;
     } else {
       _selectedDateTime = now.isBefore(minimumDate) ? minimumDate : now;
     }
@@ -471,16 +477,15 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     final currentMonth = months[_selectedDateTime.month - 1];
     final currentYear = _selectedDateTime.year;
     final minimumDate = widget.minimumDate ?? DateTime.now();
-    
+
     // Check if we can go to previous month
-    final canGoPrevious = _selectedDateTime.year > minimumDate.year || 
-                         (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
-    
+    final canGoPrevious = _selectedDateTime.year > minimumDate.year ||
+        (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
+
     return Material(
       color: Colors.transparent,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -520,33 +525,35 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                       ),
                     ),
                   ),
-                  
+
                   // Month/Year navigation
                   Row(
                     children: [
                       CupertinoButton(
                         padding: const EdgeInsets.all(8),
-                        onPressed: canGoPrevious ? () {
-                          final newMonth = _selectedDateTime.month == 1 ? 12 : _selectedDateTime.month - 1;
-                          final newYear = _selectedDateTime.month == 1 ? _selectedDateTime.year - 1 : _selectedDateTime.year;
-                          
-                          setState(() {
-                            _selectedDateTime = DateTime(
-                              newYear,
-                              newMonth,
-                              _selectedDateTime.day,
-                              _selectedDateTime.hour,
-                              _selectedDateTime.minute,
-                            );
-                          });
-                        } : null,
+                        onPressed: canGoPrevious
+                            ? () {
+                                final newMonth = _selectedDateTime.month == 1 ? 12 : _selectedDateTime.month - 1;
+                                final newYear =
+                                    _selectedDateTime.month == 1 ? _selectedDateTime.year - 1 : _selectedDateTime.year;
+
+                                setState(() {
+                                  _selectedDateTime = DateTime(
+                                    newYear,
+                                    newMonth,
+                                    _selectedDateTime.day,
+                                    _selectedDateTime.hour,
+                                    _selectedDateTime.minute,
+                                  );
+                                });
+                              }
+                            : null,
                         child: Icon(
                           Icons.chevron_left,
                           color: canGoPrevious ? Colors.grey.shade400 : Colors.grey.shade700,
                           size: 24,
                         ),
                       ),
-                      
                       Text(
                         '$currentMonth $currentYear',
                         style: const TextStyle(
@@ -555,7 +562,6 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                           color: Colors.white,
                         ),
                       ),
-                      
                       CupertinoButton(
                         padding: const EdgeInsets.all(8),
                         onPressed: () {
@@ -577,7 +583,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                       ),
                     ],
                   ),
-                  
+
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context, _selectedDateTime),

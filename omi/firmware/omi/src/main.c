@@ -1,18 +1,19 @@
 #include <zephyr/kernel.h>
-#include <zephyr/shell/shell.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
-#include "lib/dk2/mic.h"
+#include <zephyr/shell/shell.h>
+
+#include "lib/dk2/button.h"
 #include "lib/dk2/codec.h"
 #include "lib/dk2/config.h"
-#include "lib/dk2/transport.h"
-#include "lib/dk2/lib/battery/battery.h"
-#include "lib/dk2/led.h"
-#include "lib/dk2/button.h"
 #include "lib/dk2/haptic.h"
-#include "spi_flash.h"
-#include "sd_card.h"
+#include "lib/dk2/led.h"
+#include "lib/dk2/lib/battery/battery.h"
+#include "lib/dk2/mic.h"
 #include "lib/dk2/settings.h"
+#include "lib/dk2/transport.h"
+#include "sd_card.h"
+#include "spi_flash.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -30,8 +31,7 @@ static void codec_handler(uint8_t *data, size_t len)
 {
     broadcast_audio_count++;
     int err = broadcast_audio_packets(data, len);
-    if (err)
-    {
+    if (err) {
         LOG_ERR("Failed to broadcast audio packets: %d", err);
     }
 }
@@ -42,8 +42,7 @@ static void mic_handler(int16_t *buffer)
     total_mic_buffer_bytes += 1;
 
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
-    if (err)
-    {
+    if (err) {
         LOG_ERR("Failed to process PCM data: %d", err);
     }
 }
@@ -79,33 +78,27 @@ static void boot_led_sequence(void)
 void set_led_state()
 {
     // Set LED state based on connection and charging status
-    if (is_charging)
-    {
+    if (is_charging) {
         set_led_green(true);
-    }
-    else
-    {
+    } else {
         set_led_green(false);
     }
 
     // If device is off, turn off all status LEDs except charging indicator
-    if (is_off)
-    {
+    if (is_off) {
         set_led_red(false);
         set_led_blue(false);
         return;
     }
 
-    if (is_connected)
-    {
+    if (is_connected) {
         set_led_blue(true);
         set_led_red(false);
         return;
     }
 
     // Not connected - RED
-    if (!is_connected)
-    {
+    if (!is_connected) {
         set_led_red(true);
         set_led_blue(false);
         return;
@@ -115,20 +108,17 @@ void set_led_state()
 static int suspend_unused_modules(void)
 {
     int err = flash_off();
-    if (err)
-    {
+    if (err) {
         LOG_ERR("Can not suspend the spi flash module: %d", err);
     }
 
     err = app_sd_off();
-    if (err)
-    {
+    if (err) {
         LOG_ERR("Can not suspend the sd card module: %d", err);
     }
 
     return 0;
 }
-
 
 int main(void)
 {
@@ -140,8 +130,7 @@ int main(void)
     LOG_PRINTK("\n");
     LOG_INF("Suspending unused modules...\n");
     ret = suspend_unused_modules();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Failed to suspend unused modules (err %d)", ret);
         ret = 0;
     }
@@ -149,8 +138,7 @@ int main(void)
     // Initialize settings
     LOG_INF("Initializing settings...\n");
     ret = app_settings_init();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Failed to initialize settings (err %d)", ret);
         app_settings_save_dim_ratio(5);
         set_led_red(true);
@@ -172,8 +160,7 @@ int main(void)
     LOG_INF("Initializing LEDs...\n");
 
     ret = led_start();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Failed to initialize LEDs (err %d)", ret);
         return ret;
     }
@@ -184,15 +171,13 @@ int main(void)
     // Initialize battery
 #ifdef CONFIG_OMI_ENABLE_BATTERY
     ret = battery_init();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Battery init failed (err %d)", ret);
         return ret;
     }
 
     ret = battery_charge_start();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Battery failed to start (err %d)", ret);
         return ret;
     }
@@ -202,8 +187,7 @@ int main(void)
     // Initialize button
 #ifdef CONFIG_OMI_ENABLE_BUTTON
     ret = button_init();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Failed to initialize Button (err %d)", ret);
         return ret;
     }
@@ -214,8 +198,7 @@ int main(void)
     // Initialize Haptic driver
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     ret = haptic_init();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
     } else {
         LOG_INF("Haptic driver initialized");
@@ -230,8 +213,7 @@ int main(void)
     // Start transport
     int transportErr;
     transportErr = transport_start();
-    if (transportErr)
-    {
+    if (transportErr) {
         LOG_ERR("Failed to start transport (err %d)", transportErr);
         return transportErr;
     }
@@ -242,8 +224,7 @@ int main(void)
     // Set codec callback
     set_codec_callback(codec_handler);
     ret = codec_start();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Failed to start codec: %d", ret);
         return ret;
     }
@@ -252,8 +233,7 @@ int main(void)
     LOG_INF("Initializing microphone...\n");
     set_mic_callback(mic_handler);
     ret = mic_start();
-    if (ret)
-    {
+    if (ret) {
         LOG_ERR("Failed to start microphone: %d", ret);
         return ret;
     }
@@ -263,7 +243,10 @@ int main(void)
     while (1) {
         // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
         LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u",
-                total_mic_buffer_bytes, gatt_notify_count, broadcast_audio_count, write_to_tx_queue_count);
+                total_mic_buffer_bytes,
+                gatt_notify_count,
+                broadcast_audio_count,
+                write_to_tx_queue_count);
 
         // Update LED state based on connection and charging status
         set_led_state();

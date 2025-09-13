@@ -109,10 +109,9 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     }
 
     try {
-      
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       await provider.updateActionItemDescription(item, newText);
-      
+
       setState(() {
         _editingStates[itemId] = false;
       });
@@ -202,47 +201,45 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
               ),
             ),
             child: Row(
-                  children: [
-                    // Conversation icon
-                    OmiIconBadge(
-                      icon: FontAwesomeIcons.message,
-                      bgColor: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-                      iconColor: ResponsiveHelper.purplePrimary,
-                      radius: 8,
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // Conversation details
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.conversationTitle.isNotEmpty
-                                ? widget.conversationTitle
-                                : 'Untitled Conversation',
-                            style: const TextStyle(
-                              color: ResponsiveHelper.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '$incompleteCount remaining',
-                            style: const TextStyle(
-                              color: ResponsiveHelper.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              children: [
+                // Conversation icon
+                OmiIconBadge(
+                  icon: FontAwesomeIcons.message,
+                  bgColor: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
+                  iconColor: ResponsiveHelper.purplePrimary,
+                  radius: 8,
                 ),
+
+                const SizedBox(width: 12),
+
+                // Conversation details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.conversationTitle.isNotEmpty ? widget.conversationTitle : 'Untitled Conversation',
+                        style: const TextStyle(
+                          color: ResponsiveHelper.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$incompleteCount remaining',
+                        style: const TextStyle(
+                          color: ResponsiveHelper.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
 
           // Divider
@@ -305,17 +302,17 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
           Expanded(
             child: isEditing
                 ? TextField(
-                      controller: _textControllers[item.id],
-                      focusNode: _focusNodes[item.id],
-                      style: const TextStyle(
-                          color: ResponsiveHelper.textPrimary, fontSize: 14, height: 1.3, fontWeight: FontWeight.w500),
-                      decoration: const InputDecoration(
-                          border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
-                      maxLines: null,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _saveChanges(item.id),
-                      onChanged: (_) => setState(() {}),
-                    )
+                    controller: _textControllers[item.id],
+                    focusNode: _focusNodes[item.id],
+                    style: const TextStyle(
+                        color: ResponsiveHelper.textPrimary, fontSize: 14, height: 1.3, fontWeight: FontWeight.w500),
+                    decoration:
+                        const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                    maxLines: null,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _saveChanges(item.id),
+                    onChanged: (_) => setState(() {}),
+                  )
                 : GestureDetector(
                     onTap: () => _startEditing(item.id),
                     child: Text(
@@ -368,6 +365,4 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     final newValue = !item.completed;
     context.read<ActionItemsProvider>().updateActionItemState(item, newValue);
   }
-
-
 }

@@ -221,12 +221,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _goNext(); // Go to Permissions page
         MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
-   PermissionsWidget(
-              goNext: () {
-                _goNext(); // Go to User Review page
-                MixpanelManager().onboardingStepCompleted('Permissions');
-              },
-            ),
+      PermissionsWidget(
+        goNext: () {
+          _goNext(); // Go to User Review page
+          MixpanelManager().onboardingStepCompleted('Permissions');
+        },
+      ),
       UserReviewPage(
         goNext: () {
           _goNext(); // Go to Welcome page

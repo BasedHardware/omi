@@ -1,10 +1,7 @@
 #ifndef BUTTON_H
 #define BUTTON_H
 
-typedef enum {
-    IDLE, 
-    GRACE
-} FSM_STATE_T;
+typedef enum { IDLE, GRACE } FSM_STATE_T;
 
 int button_init();
 void activate_button_work();

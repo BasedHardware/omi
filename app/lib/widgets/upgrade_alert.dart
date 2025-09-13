@@ -7,7 +7,6 @@ import 'package:upgrader/upgrader.dart';
 
 class MyUpgrader extends Upgrader {
   MyUpgrader({super.debugLogging, super.debugDisplayOnce});
-
 }
 
 class MyUpgradeAlert extends UpgradeAlert {

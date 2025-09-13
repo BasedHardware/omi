@@ -444,7 +444,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           await SharedPreferencesUtil().clearUserPreferences();
                           personaProvider.setRouting(PersonaProfileRouting.no_device);
                           await AuthService.instance.signOut();
-                         if (context.mounted){
+                          if (context.mounted) {
                             routeToPage(context, const AppShell(), replace: true);
                           }
                         },

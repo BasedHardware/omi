@@ -38,8 +38,8 @@ Future<http.Response?> makeApiCall({
 }) async {
   try {
     if (url.contains(Env.apiBaseUrl!)) {
-     headers['Authorization'] = await getAuthHeader();
-    // headers['Authorization'] = ''; // set admin key + uid here for testing
+      headers['Authorization'] = await getAuthHeader();
+      // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
     final client = http.Client();
@@ -126,8 +126,8 @@ dynamic extractContentFromResponse(
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
     // TODO: handle error, better specially for script migration
-    PlatformManager.instance.crashReporter.reportCrash(
-        Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
+    PlatformManager.instance.crashReporter
+        .reportCrash(Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
       'response_null': (response == null).toString(),
       'response_status_code': response?.statusCode.toString() ?? '',
       'is_embedding': isEmbedding.toString(),

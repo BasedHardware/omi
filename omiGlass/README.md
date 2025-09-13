@@ -54,7 +54,7 @@ You'll need the following components to build your own omiGlass:
 
    ```bash
    git clone https://github.com/BasedHardware/omi.git
-   cd omiglass
+   cd omi/OmiGlass
    npm install
    ```
 
@@ -68,7 +68,7 @@ You'll need the following components to build your own omiGlass:
 
    - Copy the `.env.example` file to create a new `.env` file:
      ```bash
-     cp .env.example .env
+     cp .env.template .env
      ```
 
    - Edit the `.env` file and add your API keys:
@@ -109,10 +109,10 @@ You'll need the following components to build your own omiGlass:
 
 ### Firmware Installation
 
-1. Open the [firmware folder](https://github.com/BasedHardware/omiglass/tree/main/firmware) and open the `.ino` file in the Arduino IDE.
+1. Open the [firmware folder](https://github.com/BasedHardware/omi/tree/main/omiGlass/firmware) and open the `.ino` file in the Arduino IDE.
 
    - If you don't have the Arduino IDE installed, download and install it from the [official website](https://www.arduino.cc/en/software).
-   - Alternatively, follow the steps in the [firmware readme](firmware/readme.md) to build using `arduino-cli`
+   - Alternatively, follow the steps in the [firmware readme](https://github.com/BasedHardware/omi/tree/main/omiGlass/firmware/readme.md) to build using `arduino-cli`
 
 2. Set up the Arduino IDE for the XIAO ESP32S3 board:
 
@@ -136,7 +136,7 @@ You'll need the following components to build your own omiGlass:
 ## How You Can Contribute
 
 ### Software
-- [ ] Connect glasses with omi app. Currently the glasses only work with web interface
+- [x] Connect glasses with [Omi AI app](/doc/get_started/introduction#📲-get-the-app)
 
 ### Hardware
 - [ ] Redesign the legs/sides so that it would fit on bigger heads

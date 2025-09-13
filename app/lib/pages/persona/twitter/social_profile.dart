@@ -189,7 +189,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             }
                           },
                           style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(alpha: 0.12),
+                            backgroundColor: Colors.white.withValues(alpha: 0.12),
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 56),
                             shape: RoundedRectangleBorder(

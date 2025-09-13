@@ -309,9 +309,11 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                           PromptTextField(
                                             controller: provider.chatPromptController,
                                             label: 'Chat Prompt',
-                                            hint: 'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                            hint:
+                                                'You are an awesome app, your job is to respond to the user queries and make them feel good...',
                                           ),
-                                        if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat'))
+                                        if (provider.isCapabilitySelectedById('memories') &&
+                                            provider.isCapabilitySelectedById('chat'))
                                           const SizedBox(
                                             height: 20,
                                           ),
@@ -319,7 +321,8 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                           PromptTextField(
                                             controller: provider.conversationPromptController,
                                             label: 'Conversation Prompt',
-                                            hint: 'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                            hint:
+                                                'You are an awesome app, you will be given transcript and summary of a conversation...',
                                           ),
                                       ],
                                     ),

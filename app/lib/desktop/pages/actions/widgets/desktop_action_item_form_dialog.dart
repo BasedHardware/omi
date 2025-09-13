@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
@@ -176,13 +177,45 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
   Future<void> _deleteActionItem() async {
     if (!_isEditing) return;
 
-    final confirmed = await OmiConfirmDialog.show(
+    final prefs = SharedPreferencesUtil();
+
+    // Check if user has opted out of delete confirmations
+    if (!prefs.showActionItemDeleteConfirmation) {
+      // Skip confirmation and proceed with deletion
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+        await provider.deleteActionItem(widget.actionItem!);
+        _showSnackBar('Action item deleted successfully', Colors.green);
+
+        if (mounted) {
+          Navigator.of(context).pop(true);
+        }
+      } catch (e) {
+        debugPrint('Error deleting action item: $e');
+        _showSnackBar('Failed to delete action item', Colors.red);
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    final result = await OmiConfirmDialog.showWithSkipOption(
       context,
       title: 'Delete Action Item',
       message: 'Are you sure you want to delete this action item? This action cannot be undone.',
     );
 
-    if (confirmed != true) return;
+    if (result?.confirmed != true) return;
+
+    // Update preference if user chose to skip future confirmations
+    if (result!.skipFutureConfirmations) {
+      prefs.showActionItemDeleteConfirmation = false;
+    }
 
     setState(() {
       _isLoading = true;

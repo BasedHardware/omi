@@ -49,8 +49,6 @@ async def main():
 
 if __name__ == "__main__":
     if not shutil.which("uvx"):
-        raise RuntimeError(
-            "uvx is not installed. Please install it with `pip install uvx`."
-        )
+        raise RuntimeError("uvx is not installed. Please install it with `pip install uvx`.")
 
     asyncio.run(main())

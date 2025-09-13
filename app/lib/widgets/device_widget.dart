@@ -56,8 +56,12 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                     builder: (context, child) {
                       return Image.asset(
                         Assets.images.blob.path,
-                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier * _animation.value,
-                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier * _animation.value,
+                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
+                            widget.sizeMultiplier *
+                            _animation.value,
+                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
+                            widget.sizeMultiplier *
+                            _animation.value,
                       );
                     },
                   )
@@ -80,7 +84,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
         children: [
           // Bottom layer: turned-off image (always visible)
           Image.asset(
-          Assets.images.omiWithoutRopeTurnedOff.path,
+            Assets.images.omiWithoutRopeTurnedOff.path,
             height: imageHeight,
             width: imageWidth,
           ),

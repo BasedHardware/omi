@@ -62,7 +62,8 @@ class ManageCreatePage extends StatelessWidget {
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.only(left: 16.0),
-                          child: Text('Apps (${provider.apps.where((a) => a.enabled).length})', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
+                          child: Text('Apps (${provider.apps.where((a) => a.enabled).length})',
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
                         ),
                         Selector<AppProvider, List<App>>(
                           selector: (context, provider) => provider.apps.where((p) => p.enabled).toList(),
@@ -121,7 +122,8 @@ class ManageCreatePage extends StatelessWidget {
                             ? const SizedBox()
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text('Private Apps (${provider.userPrivateApps.length})', style: const TextStyle(fontSize: 18)),
+                                child: Text('Private Apps (${provider.userPrivateApps.length})',
+                                    style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPrivateApps.isEmpty
                             ? const SizedBox()
@@ -140,7 +142,8 @@ class ManageCreatePage extends StatelessWidget {
                             ? const SizedBox()
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text('Public Apps (${provider.userPublicApps.length})', style: const TextStyle(fontSize: 18)),
+                                child: Text('Public Apps (${provider.userPublicApps.length})',
+                                    style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPublicApps.isEmpty
                             ? const SizedBox()
