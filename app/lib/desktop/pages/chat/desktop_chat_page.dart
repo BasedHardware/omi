@@ -13,6 +13,7 @@ import 'package:omi/gen/fonts.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
+import 'package:omi/pages/chat/widgets/top_notification_banner.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -63,6 +64,11 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   bool isScrollingDown = false;
   bool _showVoiceRecorder = false;
+
+  // Notification banner state
+  bool _showNotificationBanner = false;
+  String _notificationMessage = '';
+  NotificationType _notificationType = NotificationType.success;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -159,6 +165,21 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     super.dispose();
   }
 
+  // Notification banner management methods
+  void _showNotification(String message, {NotificationType type = NotificationType.success}) {
+    setState(() {
+      _notificationMessage = message;
+      _notificationType = type;
+      _showNotificationBanner = true;
+    });
+  }
+
+  void _hideNotification() {
+    setState(() {
+      _showNotificationBanner = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -193,6 +214,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   child: Column(
                     children: [
                       _buildModernHeader(appProvider),
+                      // Notification banner (appears below header, above messages)
+                      TopNotificationBanner(
+                        message: _notificationMessage,
+                        isVisible: _showNotificationBanner,
+                        type: _notificationType,
+                        onDismiss: _hideNotification,
+                      ),
                       if (provider.isLoadingMessages) _buildLoadingBar(),
                       Expanded(
                         child: _animationsInitialized
@@ -261,9 +289,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       onPressed: () async {
                         final created = await sessions.createSession(appId: effectiveAppId);
                         if (created != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('New thread created')),
-                          );
+                          _showNotification('New thread created');
                           await messageProvider.refreshMessages(dropdownSelected: true);
                         }
                       },
@@ -384,9 +410,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               if (confirmed == true) {
                                 final ok = await sessions.deleteSession(sessionId: s.id);
                                 if (ok) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Thread deleted')),
-                                  );
+                                  _showNotification('Thread deleted');
                                   await messageProvider.refreshMessages(dropdownSelected: true);
                                 }
                               }
