@@ -8,6 +8,35 @@ import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/utils/platform/platform_manager.dart';
 
+/// Builds API URI with proper null query parameter handling
+///
+/// Filters out null values to prevent sending "null" strings as query parameters,
+/// which was causing cross-platform compatibility issues with backend normalization.
+Uri buildApiUri(String path, {Map<String, dynamic>? query}) {
+  final base = Env.apiBaseUrl!;
+  final baseUri = Uri.parse(base);
+
+  // Filter out null values to avoid sending "null" strings as query parameters
+  Map<String, String>? filteredQuery;
+  if (query != null) {
+    filteredQuery = <String, String>{};
+    for (final entry in query.entries) {
+      if (entry.value != null) {
+        filteredQuery[entry.key] = entry.value.toString();
+      }
+    }
+    // If no non-null values, set to null
+    if (filteredQuery.isEmpty) {
+      filteredQuery = null;
+    }
+  }
+
+  return baseUri.replace(
+    path: '${baseUri.path.endsWith('/') ? baseUri.path.substring(0, baseUri.path.length - 1) : baseUri.path}$path',
+    queryParameters: filteredQuery,
+  );
+}
+
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
@@ -38,8 +67,8 @@ Future<http.Response?> makeApiCall({
 }) async {
   try {
     if (url.contains(Env.apiBaseUrl!)) {
-     headers['Authorization'] = await getAuthHeader();
-    // headers['Authorization'] = ''; // set admin key + uid here for testing
+      headers['Authorization'] = await getAuthHeader();
+      // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
     final client = http.Client();
@@ -126,8 +155,8 @@ dynamic extractContentFromResponse(
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
     // TODO: handle error, better specially for script migration
-    PlatformManager.instance.crashReporter.reportCrash(
-        Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
+    PlatformManager.instance.crashReporter
+        .reportCrash(Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
       'response_null': (response == null).toString(),
       'response_status_code': response?.statusCode.toString() ?? '',
       'is_embedding': isEmbedding.toString(),

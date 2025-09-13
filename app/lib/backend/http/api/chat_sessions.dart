@@ -5,22 +5,13 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/env/env.dart';
 
-Uri _buildUri(String path, {Map<String, dynamic>? query}) {
-  final base = Env.apiBaseUrl!; // ensured non-null at runtime
-  final baseUri = Uri.parse(base);
-  return baseUri.replace(
-    path: '${baseUri.path.endsWith('/') ? baseUri.path.substring(0, baseUri.path.length - 1) : baseUri.path}$path',
-    queryParameters: query?.map((key, value) => MapEntry(key, value?.toString())),
-  );
-}
-
 Future<List<ChatSession>> listChatSessions({required String uid, required List<String> appIds}) async {
   // Fetch chat sessions from all provided apps and combine them
   List<ChatSession> allSessions = [];
 
   for (String appId in appIds) {
     try {
-      final uri = _buildUri('/v2/chat-sessions', query: {'app_id': appId});
+      final uri = buildApiUri('/v2/chat-sessions', query: {'app_id': appId});
       final response = await makeApiCall(url: uri.toString(), headers: {}, body: '', method: 'GET');
 
       if (response != null && response.statusCode == 200) {
@@ -51,7 +42,7 @@ Future<List<ChatSession>> listChatSessions({required String uid, required List<S
 Future<List<ChatSession>> listAllUserChatSessions({required String uid}) async {
   try {
     // Call backend without app_id parameter to get ALL user sessions
-    final uri = _buildUri('/v2/chat-sessions'); // No query parameters = all sessions
+    final uri = buildApiUri('/v2/chat-sessions'); // No query parameters = all sessions
     final response = await makeApiCall(url: uri.toString(), headers: {}, body: '', method: 'GET');
 
     if (response != null && response.statusCode == 200) {
@@ -69,10 +60,10 @@ Future<List<ChatSession>> listAllUserChatSessions({required String uid}) async {
 }
 
 Future<ChatSession?> createChatSession({required String uid, required String appId, String? title}) async {
-  final uri = _buildUri('/v2/chat-sessions');
+  final uri = buildApiUri('/v2/chat-sessions');
 
   final Map<String, dynamic> body = {
-    'app_id': appId, // Send actual app_id ('omi' for OMI, actual ID for others)
+    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
     'title': title ?? 'New Chat', // Always send title, default to 'New Chat'
   };
 
@@ -92,7 +83,7 @@ Future<ChatSession?> createChatSession({required String uid, required String app
 }
 
 Future<bool> deleteChatSession({required String uid, required String sessionId}) async {
-  final uri = _buildUri('/v2/chat-sessions/$sessionId');
+  final uri = buildApiUri('/v2/chat-sessions/$sessionId');
   final response = await makeApiCall(url: uri.toString(), headers: {}, body: '', method: 'DELETE');
   if (response == null) return false;
   if (response.statusCode == 200) return true;
@@ -102,7 +93,7 @@ Future<bool> deleteChatSession({required String uid, required String sessionId})
 
 Future<String?> generateChatSessionTitle(
     {required String uid, required String sessionId, required String firstMessage}) async {
-  final uri = _buildUri('/v2/chat-sessions/$sessionId/generate-title');
+  final uri = buildApiUri('/v2/chat-sessions/$sessionId/generate-title');
 
   final Map<String, dynamic> body = {
     'first_message': firstMessage,
