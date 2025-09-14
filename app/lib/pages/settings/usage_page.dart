@@ -8,21 +8,25 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/providers/usage_provider.dart';
-
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
-  const UsagePage({super.key, this.showUpgradeDialog = false});
+  const UsagePage({
+    super.key,
+    this.showUpgradeDialog = false,
+  });
 
   @override
   State<UsagePage> createState() => _UsagePageState();
@@ -34,7 +38,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   final List<bool> _isMetricVisible = [true, true, true, true];
   bool _isUpgrading = false;
   bool _isCancelling = false;
-  bool _isSubscriptionExpanded = false;
+  bool? _isSubscriptionExpanded;
   late AnimationController _waveController;
   late AnimationController _notesController;
   late AnimationController _arrowController;
@@ -68,7 +72,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       text: TextSpan(
         text: 'omi.me',
         style: TextStyle(
-          color: Colors.white.withOpacity(0.8),
+          color: Colors.white.withValues(alpha: 0.8),
           fontSize: 14 * 3.0, // Scale font size with pixelRatio
           fontWeight: FontWeight.w600,
         ),
@@ -177,10 +181,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await Share.shareXFiles(
-      [XFile(file.path)],
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
       text: shareText,
-    );
+    ));
   }
 
   String _getPeriodForIndex(int index) {
@@ -415,6 +419,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     final isUnlimited = provider.subscription!.subscription.plan == PlanType.unlimited;
+    _isSubscriptionExpanded ??= !isUnlimited;
 
     Widget collapsedBody;
     Widget expandedBody;
@@ -431,7 +436,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text('Unlimited Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
+          FaIcon(_isSubscriptionExpanded! ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
               size: 16, color: Colors.grey),
         ],
       );
@@ -485,28 +490,62 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           ? (sub.transcriptionSecondsUsed / sub.transcriptionSecondsLimit).clamp(0.0, 1.0)
           : 0.0;
 
-      collapsedBody = Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      collapsedBody = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Row(
-              children: [
-                const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                if (minutesLimit > 0) ...[
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit mins used',
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                      overflow: TextOverflow.ellipsis,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    if (minutesLimit > 0) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit mins used',
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  ElevatedButton(
+                    onPressed: _isUpgrading ? null : _showPlansSheet,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
+                    child: _isUpgrading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Upgrade', style: TextStyle(color: Colors.white)),
                   ),
+                  const SizedBox(width: 12),
+                  FaIcon(_isSubscriptionExpanded! ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
+                      size: 16, color: Colors.grey),
                 ],
-              ],
-            ),
+              ),
+            ],
           ),
-          FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
-              size: 16, color: Colors.grey),
+          if (minutesLimit > 0) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: Colors.grey.shade700,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ],
         ],
       );
 
@@ -559,7 +598,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       child: InkWell(
         onTap: () {
           setState(() {
-            _isSubscriptionExpanded = !_isSubscriptionExpanded;
+            _isSubscriptionExpanded = !_isSubscriptionExpanded!;
           });
         },
         borderRadius: BorderRadius.circular(16),
@@ -569,13 +608,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: AnimatedSize(
             duration: const Duration(milliseconds: 300),
             curve: Curves.fastOutSlowIn,
             alignment: Alignment.topCenter,
-            child: _isSubscriptionExpanded ? expandedBody : collapsedBody,
+            child: _isSubscriptionExpanded! ? expandedBody : collapsedBody,
           ),
         ),
       ),
@@ -622,13 +661,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   Widget _buildUsageListView(
       UsageStats? stats, List<UsageHistoryPoint>? history, String period, GlobalKey key, UsageProvider provider) {
-    final onRefresh = () async {
+    Future<void> onRefresh() async {
       // Using Future.wait to run both fetches concurrently
       await Future.wait([
         provider.fetchUsageStats(period: period),
         provider.fetchSubscription(),
       ]);
-    };
+    }
 
     if (stats == null) {
       return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
@@ -849,8 +888,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             show: true,
             gradient: LinearGradient(
               colors: [
-                metricColors[i].withOpacity(0.3),
-                metricColors[i].withOpacity(0.0),
+                metricColors[i].withValues(alpha: 0.3),
+                metricColors[i].withValues(alpha: 0.0),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -869,7 +908,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       borderData: FlBorderData(
         show: true,
         border: Border(
-          bottom: BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1),
         ),
       ),
       lineTouchData: LineTouchData(
@@ -989,7 +1028,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: LineChart(
             lineChartData,
@@ -1065,10 +1104,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 10,
             spreadRadius: 1,
             offset: const Offset(0, 2),
