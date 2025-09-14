@@ -70,6 +70,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   String _notificationMessage = '';
   NotificationType _notificationType = NotificationType.success;
 
+  // Thread swipe state
+  String? _swipingThreadId;
+  double _swipeProgress = 0.0; // Track swipe progress for smooth animation
+
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
 
@@ -256,7 +260,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   Widget _buildSessionsPanel(BuildContext context) {
     return Container(
-      color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
+      color: Colors.black, // Pure black background to match mobile
       child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
         builder: (context, appProvider, sessions, messageProvider, _) {
           final appId = appProvider.selectedChatAppId;
@@ -278,14 +282,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                             fontSize: 14,
                             fontWeight: FontWeight.w600)),
                     const Spacer(),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-                        foregroundColor: ResponsiveHelper.textPrimary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: ResponsiveHelper.textPrimary, size: 18),
                       onPressed: () async {
                         final created = await sessions.createSession(appId: effectiveAppId);
                         if (created != null) {
@@ -293,8 +291,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           await messageProvider.refreshMessages(dropdownSelected: true);
                         }
                       },
-                      icon: const Icon(Icons.add, size: 14),
-                      label: const Text('New'),
+                      tooltip: 'New Thread',
                     ),
                   ],
                 ),
@@ -313,117 +310,113 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 Expanded(
                   child: ListView.builder(
                     itemCount: sessions.sessions.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 0, vertical: 6), // Remove horizontal padding for full width
                     itemBuilder: (ctx, idx) {
                       final s = sessions.sessions[idx];
-                      // Only highlight threads that belong to the current app (including OMI)
-                      final isSelected = s.id == selectedId && s.appId == effectiveAppId;
+                      // Smooth color calculation for gradual transitions
+                      final isSelected = s.id == selectedId;
+                      final isBeingSwiped = s.id == _swipingThreadId;
+
+                      // Calculate smooth color with gradual opacity
+                      final Color cardColor;
+                      if (isSelected) {
+                        cardColor = const Color(0xFF2A2A2A); // Full highlight for selected
+                      } else if (isBeingSwiped) {
+                        cardColor = Color.fromRGBO(42, 42, 42, _swipeProgress * 0.8); // Gradual highlight during swipe
+                      } else {
+                        cardColor = Colors.transparent; // No highlight
+                      }
                       final appName = _getAppNameById(s.appId);
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? ResponsiveHelper.textPrimary.withValues(alpha: 0.08)
-                              : ResponsiveHelper.textPrimary.withValues(alpha: 0.03),
-                          borderRadius: BorderRadius.circular(12),
-                          border: isSelected
-                              ? Border.all(color: ResponsiveHelper.textPrimary.withValues(alpha: 0.12), width: 1)
-                              : null,
-                        ),
-                        child: ListTile(
-                          dense: true,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          title: Text(
-                            s.title?.isNotEmpty == true ? s.title! : 'New Chat',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontFamily: FontFamily.sFProDisplay,
-                                color: ResponsiveHelper.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                appName,
-                                style: const TextStyle(
-                                    fontFamily: FontFamily.sFProDisplay,
-                                    color: ResponsiveHelper.textSecondary,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(FontAwesomeIcons.trash, color: ResponsiveHelper.textSecondary, size: 16),
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (dCtx) => AlertDialog(
-                                  backgroundColor: ResponsiveHelper.backgroundSecondary,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  title: const Text(
-                                    'Delete thread?',
-                                    style: TextStyle(
-                                      fontFamily: FontFamily.sFProDisplay,
-                                      color: ResponsiveHelper.textPrimary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  content: const Text(
-                                    'This cannot be undone.',
-                                    style: TextStyle(
-                                      fontFamily: FontFamily.sFProDisplay,
-                                      color: ResponsiveHelper.textSecondary,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(dCtx, false),
-                                      child: const Text(
-                                        'Cancel',
-                                        style: TextStyle(
-                                          fontFamily: FontFamily.sFProDisplay,
-                                          color: ResponsiveHelper.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(dCtx, true),
-                                      child: const Text(
-                                        'Delete',
-                                        style: TextStyle(
-                                          fontFamily: FontFamily.sFProDisplay,
-                                          color: Colors.red,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                final ok = await sessions.deleteSession(sessionId: s.id);
-                                if (ok) {
-                                  _showNotification('Thread deleted');
-                                  await messageProvider.refreshMessages(dropdownSelected: true);
+                      return Padding(
+                        padding: const EdgeInsets.only(
+                            left: 8, right: 8, bottom: 2), // Card boundary padding + bottom spacing
+                        child: ClipRRect(
+                          // Clip with rounded corners to match card design
+                          borderRadius: BorderRadius.circular(16),
+                          child: Dismissible(
+                            key: Key(s.id),
+                            direction: DismissDirection.endToStart,
+                            dismissThresholds: const {
+                              DismissDirection.endToStart: 0.3
+                            }, // Lower threshold for easier access
+                            movementDuration: const Duration(milliseconds: 150), // Snappy animation
+                            onUpdate: (details) {
+                              // Track swipe progress for smooth visual feedback
+                              setState(() {
+                                if (details.progress > 0.05) {
+                                  // Start tracking at 5% swipe
+                                  _swipingThreadId = s.id;
+                                  _swipeProgress =
+                                      (details.progress * 2).clamp(0.0, 1.0); // Gradual opacity from 0 to 1
+                                } else {
+                                  _swipingThreadId = null;
+                                  _swipeProgress = 0.0;
                                 }
+                              });
+                            },
+                            background: Container(
+                              width: double.infinity, // Fill the clipped area
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Internal padding
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                // No border radius needed - ClipRRect handles the rounding
+                              ),
+                              alignment: Alignment.centerRight,
+                              child: const Icon(
+                                Icons.delete,
+                                color: Colors.white,
+                                size: 18, // Smaller icon for compact design
+                              ),
+                            ),
+                            onDismissed: (direction) async {
+                              // Clear swipe state
+                              setState(() {
+                                _swipingThreadId = null;
+                                _swipeProgress = 0.0;
+                              });
+
+                              final ok = await sessions.deleteSession(sessionId: s.id);
+                              if (ok) {
+                                _showNotification('Thread deleted');
+                                await messageProvider.refreshMessages(dropdownSelected: true);
                               }
                             },
-                          ),
-                          onTap: () async {
-                            // Select the thread and switch to its app context
-                            final appProvider = context.read<AppProvider>();
-                            await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
-                            await messageProvider.refreshMessages(dropdownSelected: true);
-                          },
-                        ),
-                      );
+                            child: GestureDetector(
+                              onTap: () async {
+                                // Select the thread and switch to its app context
+                                final appProvider = context.read<AppProvider>();
+                                await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
+                                await messageProvider.refreshMessages(dropdownSelected: true);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150), // Smooth color transition
+                                width: double.infinity, // Fill the clipped area
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Internal content padding
+                                decoration: BoxDecoration(
+                                  color: cardColor, // Use calculated smooth color
+                                  // No border radius needed - ClipRRect handles the rounding
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    s.title?.isNotEmpty == true ? s.title! : 'New Chat',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontFamily: FontFamily.sFProDisplay,
+                                      color: Colors.white,
+                                      fontSize: 13.65, // Increased by 5% (13 * 1.05)
+                                      fontWeight: FontWeight.w400, // Normal weight like ChatGPT
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ), // Close GestureDetector
+                          ), // Close Dismissible
+                        ), // Close ClipRRect
+                      ); // Close Padding
                     },
                   ),
                 ),
