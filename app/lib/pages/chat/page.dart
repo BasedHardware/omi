@@ -28,6 +28,7 @@ import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/pages/chat/widgets/welcome_screen.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -62,6 +63,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool _showNotificationBanner = false;
   String _notificationMessage = '';
   NotificationType _notificationType = NotificationType.success;
+
+  // Thread swipe state
+  String? _swipingThreadId;
+  double _swipeProgress = 0.0; // Track swipe progress for smooth animation
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -113,14 +118,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       await context.read<ChatSessionProvider>().loadSessions();
 
       scrollToBottom();
-      // Auto-focus the text field only on initial load, not on app switches
-      if (_isInitialLoad) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_showVoiceRecorder && _isInitialLoad) {
-            textFieldFocusNode.requestFocus();
-          }
-        });
-      }
+      // Removed auto-focus to prevent keyboard from always appearing
+      // User must explicitly tap the chat input to show keyboard
     });
     super.initState();
   }
@@ -862,7 +861,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   Widget _buildSessionsDrawer(BuildContext context) {
     return Drawer(
-      backgroundColor: const Color(0xFF1F1F25),
+      backgroundColor: Colors.black, // Pure black background
       child: SafeArea(
         child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
           builder: (context, appProvider, sessions, messageProvider, _) {
@@ -875,41 +874,33 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Text('Threads',
-                      style: TextStyle(
-                          fontFamily: FontFamily.sFProDisplay,
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600)),
-                ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.white24),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Threads',
+                          style: TextStyle(
+                              fontFamily: FontFamily.sFProDisplay,
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600)),
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+                        onPressed: () async {
+                          final created = await sessions.createSession(appId: effectiveAppId);
+                          if (created != null) {
+                            _showNotification('New thread created');
+                            await messageProvider.refreshMessages(dropdownSelected: true);
+                            if (mounted) Navigator.of(context).maybePop();
+                          }
+                        },
+                        tooltip: 'New Thread',
                       ),
-                      onPressed: () async {
-                        final created = await sessions.createSession(appId: effectiveAppId);
-                        if (created != null) {
-                          _showNotification('New thread created');
-                          await messageProvider.refreshMessages(dropdownSelected: true);
-                          if (mounted) Navigator.of(context).maybePop();
-                        }
-                      },
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('New Thread'),
-                    ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const Divider(height: 1, color: Colors.white12),
                 if (sessions.isLoading)
                   const Expanded(
                     child: Center(
@@ -925,116 +916,115 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   Expanded(
                     child: ListView.builder(
                       itemCount: sessions.sessions.length,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 0, vertical: 8), // Remove horizontal padding for full width
                       itemBuilder: (ctx, idx) {
                         final s = sessions.sessions[idx];
-                        // Only highlight threads that belong to the current app (including OMI)
-                        final isSelected = s.id == selectedId && s.appId == effectiveAppId;
+                        // Smooth color calculation for gradual transitions
+                        final isSelected = s.id == selectedId;
+                        final isBeingSwiped = s.id == _swipingThreadId;
+
+                        // Calculate smooth color with gradual opacity
+                        final Color cardColor;
+                        if (isSelected) {
+                          cardColor = const Color(0xFF2A2A2A); // Full highlight for selected
+                        } else if (isBeingSwiped) {
+                          cardColor =
+                              Color.fromRGBO(42, 42, 42, _swipeProgress * 0.8); // Gradual highlight during swipe
+                        } else {
+                          cardColor = Colors.transparent; // No highlight
+                        }
                         final appName = _getAppNameById(s.appId);
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border:
-                                isSelected ? Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1) : null,
-                          ),
-                          child: ListTile(
-                            dense: true,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            title: Text(
-                              s.title?.isNotEmpty == true ? s.title! : 'New Chat',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontFamily: FontFamily.sFProDisplay,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  appName,
-                                  style: const TextStyle(
-                                      fontFamily: FontFamily.sFProDisplay,
-                                      color: Colors.white70,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(FontAwesomeIcons.trash, color: Colors.white70, size: 16),
-                              onPressed: () async {
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (dCtx) => AlertDialog(
-                                    backgroundColor: const Color(0xFF1F1F25),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    title: const Text(
-                                      'Delete thread?',
-                                      style: TextStyle(
-                                        fontFamily: FontFamily.sFProDisplay,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    content: const Text(
-                                      'This cannot be undone.',
-                                      style: TextStyle(
-                                        fontFamily: FontFamily.sFProDisplay,
-                                        color: Colors.white60,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(dCtx, false),
-                                        child: const Text(
-                                          'Cancel',
-                                          style: TextStyle(
-                                            fontFamily: FontFamily.sFProDisplay,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(dCtx, true),
-                                        child: const Text(
-                                          'Delete',
-                                          style: TextStyle(
-                                            fontFamily: FontFamily.sFProDisplay,
-                                            color: Colors.red,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (confirmed == true) {
-                                  final ok = await sessions.deleteSession(sessionId: s.id);
-                                  if (ok) {
-                                    _showNotification('Thread deleted');
-                                    await messageProvider.refreshMessages(dropdownSelected: true);
+                        return Padding(
+                          padding: const EdgeInsets.only(
+                              left: 8, right: 8, bottom: 2), // Card boundary padding + bottom spacing
+                          child: ClipRRect(
+                            // Clip with rounded corners to match card design
+                            borderRadius: BorderRadius.circular(16),
+                            child: Dismissible(
+                              key: Key(s.id),
+                              direction: DismissDirection.endToStart,
+                              dismissThresholds: const {
+                                DismissDirection.endToStart: 0.3
+                              }, // Lower threshold for easier access
+                              movementDuration: const Duration(milliseconds: 150), // Snappy animation
+                              onUpdate: (details) {
+                                // Track swipe progress for smooth visual feedback
+                                setState(() {
+                                  if (details.progress > 0.05) {
+                                    // Start tracking at 5% swipe
+                                    _swipingThreadId = s.id;
+                                    _swipeProgress =
+                                        (details.progress * 2).clamp(0.0, 1.0); // Gradual opacity from 0 to 1
+                                  } else {
+                                    _swipingThreadId = null;
+                                    _swipeProgress = 0.0;
                                   }
+                                });
+                              },
+                              background: Container(
+                                width: double.infinity, // Fill the clipped area
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // Internal padding
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  // No border radius needed - ClipRRect handles the rounding
+                                ),
+                                alignment: Alignment.centerRight,
+                                child: const Icon(
+                                  Icons.delete,
+                                  color: Colors.white,
+                                  size: 20, // Smaller icon for compact design
+                                ),
+                              ),
+                              onDismissed: (direction) async {
+                                // Clear swipe state
+                                setState(() {
+                                  _swipingThreadId = null;
+                                  _swipeProgress = 0.0;
+                                });
+
+                                final ok = await sessions.deleteSession(sessionId: s.id);
+                                if (ok) {
+                                  _showNotification('Thread deleted');
+                                  await messageProvider.refreshMessages(dropdownSelected: true);
                                 }
                               },
+                              child: GestureDetector(
+                                onTap: () async {
+                                  // Select the thread and switch to its app context
+                                  final appProvider = context.read<AppProvider>();
+                                  await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
+                                  await messageProvider.refreshMessages(dropdownSelected: true);
+                                  if (mounted) Navigator.of(context).maybePop();
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150), // Smooth color transition
+                                  width: double.infinity, // Fill the clipped area
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12), // Internal content padding
+                                  decoration: BoxDecoration(
+                                    color: cardColor, // Use calculated smooth color
+                                    // No border radius needed - ClipRRect handles the rounding
+                                  ),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      s.title?.isNotEmpty == true ? s.title! : 'New Chat',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontFamily: FontFamily.sFProDisplay,
+                                        color: Colors.white,
+                                        fontSize: 14.7, // Increased by 5% (14 * 1.05)
+                                        fontWeight: FontWeight.w400, // Normal weight like ChatGPT
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                            onTap: () async {
-                              // Select the thread and switch to its app context
-                              final appProvider = context.read<AppProvider>();
-                              await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
-                              await messageProvider.refreshMessages(dropdownSelected: true);
-                              if (mounted) Navigator.of(context).maybePop();
-                            },
-                          ),
-                        );
+                          ), // Close ClipRRect
+                        ); // Close Padding
                       },
                     ),
                   ),
