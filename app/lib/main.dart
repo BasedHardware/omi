@@ -42,6 +42,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/src/watch_home.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -285,20 +286,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 };
                 return child!;
               },
-              home: TalkerWrapper(
-                talker: Logger.instance.talker,
-                options: TalkerWrapperOptions(
-                  enableErrorAlerts: true,
-                  enableExceptionAlerts: true,
-                  errorAlertBuilder: (context, data) {
-                    return LoggerSnackbar(error: data);
-                  },
-                  exceptionAlertBuilder: (context, data) {
-                    return LoggerSnackbar(exception: data);
-                  },
-                ),
-                child: const AppShell(),
-              ),
+              // home: TalkerWrapper(
+              //   talker: Logger.instance.talker,
+              //   options: TalkerWrapperOptions(
+              //     enableErrorAlerts: true,
+              //     enableExceptionAlerts: true,
+              //     errorAlertBuilder: (context, data) {
+              //       return LoggerSnackbar(error: data);
+              //     },
+              //     exceptionAlertBuilder: (context, data) {
+              //       return LoggerSnackbar(exception: data);
+              //     },
+              //   ),
+              //   child: const AppShell(),
+              // ),
+              home: const WatchHome(),
             ),
           );
         });
