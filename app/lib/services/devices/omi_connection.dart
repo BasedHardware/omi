@@ -443,12 +443,12 @@ class OmiDeviceConnection extends DeviceConnection {
       return false;
     }
 
-    var storageDataStreamCharacteristic = getCharacteristic(_storageService!, storageDataStreamCharacteristicUuid);
-    if (storageDataStreamCharacteristic == null) {
+    var storageWriteCharacteristic = getCharacteristic(_storageService!, storageDataStreamCharacteristicUuid);
+    if (storageWriteCharacteristic == null) {
       logCharacteristicNotFoundError('Storage data stream', deviceId);
       return false;
     }
-    debugPrint('About to write to storage bytes');
+    debugPrint('About to write storage command to write characteristic');
     debugPrint('about to send $numFile');
     debugPrint('about to send $command');
     debugPrint('about to send offset$offset');
@@ -459,7 +459,7 @@ class OmiDeviceConnection extends DeviceConnection {
       offset & 0xFF,
     ];
 
-    await storageDataStreamCharacteristic
+    await storageWriteCharacteristic
         .write([command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
     return true;
   }
