@@ -35,6 +35,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
