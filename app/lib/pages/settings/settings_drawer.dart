@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -18,6 +20,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'device_settings.dart';
 import '../conversations/sync_page.dart';
 
@@ -50,15 +53,51 @@ class SettingsDrawer extends StatefulWidget {
 class _SettingsDrawerState extends State<SettingsDrawer> {
   String? version;
   String? buildVersion;
+  String? shortDeviceInfo;
 
   @override
   void initState() {
     super.initState();
-    PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
-      version = packageInfo.version;
-      buildVersion = packageInfo.buildNumber.toString();
-      setState(() {});
-    });
+    _loadAppAndDeviceInfo();
+  }
+
+  Future<String> _getShortDeviceInfo() async {
+    try {
+      final deviceInfoPlugin = DeviceInfoPlugin();
+
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfoPlugin.androidInfo;
+        return '${androidInfo.brand} ${androidInfo.model} — Android ${androidInfo.version.release}';
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfoPlugin.iosInfo;
+        return '${iosInfo.name} — iOS ${iosInfo.systemVersion}';
+      } else {
+        return 'Unknown Device';
+      }
+    } catch (e) {
+      return 'Unknown Device';
+    }
+  }
+
+  Future<void> _loadAppAndDeviceInfo() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final shortDevice = await _getShortDeviceInfo();
+
+      if (mounted) {
+        setState(() {
+          version = packageInfo.version;
+          buildVersion = packageInfo.buildNumber.toString();
+          shortDeviceInfo = shortDevice;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          shortDeviceInfo = 'Unknown Device';
+        });
+      }
+    }
   }
 
   Widget _buildSettingsItem({
@@ -116,6 +155,96 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         children: children,
       ),
     );
+  }
+
+  Widget _buildVersionInfoSection() {
+    if (!Platform.isIOS && !Platform.isAndroid) {
+      return const SizedBox.shrink();
+    }
+
+    final displayText = buildVersion != null ? '${version ?? ""} ($buildVersion)' : (version ?? '');
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          displayText,
+          style: const TextStyle(
+            color: Color(0xFF8E8E93),
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const SizedBox(width: 2),
+        GestureDetector(
+          onTap: _copyVersionInfo,
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            child: const Icon(
+              Icons.copy,
+              size: 12,
+              color: Color(0xFF8E8E93),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _copyVersionInfo() async {
+    final versionPart = buildVersion != null ? 'Omi AI ${version ?? ""} ($buildVersion)' : 'Omi AI ${version ?? ""}';
+    final devicePart = shortDeviceInfo ?? 'Unknown Device';
+    final fullVersionInfo = '$versionPart — $devicePart';
+
+    await Clipboard.setData(ClipboardData(text: fullVersionInfo));
+
+    if (mounted) {
+      _showCopyNotification();
+    }
+  }
+
+  void _showCopyNotification() {
+    final overlay = Overlay.of(context);
+    late OverlayEntry overlayEntry;
+
+    overlayEntry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 20,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.7,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Text(
+                'App and device details copied',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(overlayEntry);
+
+    Future.delayed(const Duration(seconds: 2), () {
+      overlayEntry.remove();
+    });
   }
 
   Widget _buildOmiModeContent(BuildContext context) {
@@ -314,7 +443,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           Navigator.of(ctx).pop(); // Close dialog first
                           await SharedPreferencesUtil().clearUserPreferences();
                           personaProvider.setRouting(PersonaProfileRouting.no_device);
-                          await signOut();
+                          await AuthService.instance.signOut();
                           if (context.mounted) {
                             routeToPage(context, const AppShell(), replace: true);
                           }
@@ -331,14 +460,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           const SizedBox(height: 32),
 
           // Version Info
-          Text(
-            '${version ?? ""}${buildVersion != null ? " ($buildVersion)" : ""}',
-            style: const TextStyle(
-              color: Color(0xFF8E8E93),
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
+          _buildVersionInfoSection(),
           const SizedBox(height: 24),
         ],
       );
@@ -387,7 +509,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         SharedPreferencesUtil().hasOmiDevice = null;
                         SharedPreferencesUtil().verifiedPersonaId = null;
                         personaProvider.setRouting(PersonaProfileRouting.no_device);
-                        await signOut();
+                        await AuthService.instance.signOut();
                         if (context.mounted) {
                           routeToPage(context, const AppShell(), replace: true);
                         }
@@ -404,14 +526,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         const SizedBox(height: 32),
 
         // Version Info
-        Text(
-          '${version ?? ""}${buildVersion != null ? " ($buildVersion)" : ""}',
-          style: const TextStyle(
-            color: Color(0xFF8E8E93),
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
+        _buildVersionInfoSection(),
         const SizedBox(height: 24),
       ],
     );

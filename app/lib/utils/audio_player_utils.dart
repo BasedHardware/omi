@@ -14,7 +14,6 @@ class AudioPlayerUtils extends ChangeNotifier {
   FlutterSoundPlayer? _audioPlayer;
   String? _currentPlayingId;
   bool _isProcessingAudio = false;
-  String? _currentSharingId;
 
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
@@ -24,7 +23,6 @@ class AudioPlayerUtils extends ChangeNotifier {
 
   String? get currentPlayingId => _currentPlayingId;
   bool get isProcessingAudio => _isProcessingAudio;
-  bool get isSharingAudio => _currentSharingId != null;
   Duration get currentPosition => _currentPosition;
   Duration get totalDuration => _totalDuration;
 
@@ -44,7 +42,6 @@ class AudioPlayerUtils extends ChangeNotifier {
   }
 
   bool isPlaying(String id) => _currentPlayingId == id;
-  bool isSharing(String id) => _currentSharingId == id;
 
   bool canPlayOrShare(Wal wal) {
     return (wal.filePath != null && wal.filePath!.isNotEmpty) ||
@@ -147,15 +144,8 @@ class AudioPlayerUtils extends ChangeNotifier {
       throw Exception('Audio file not available for sharing');
     }
 
-    if (isSharingAudio) return;
-
-    _currentSharingId = wal.id;
-    notifyListeners();
-
     final audioFilePath = await _getOrCreateAudioFile(wal, forSharing: true);
     if (audioFilePath == null) {
-      _currentSharingId = null;
-      notifyListeners();
       throw Exception('Unable to create shareable audio file');
     }
 
@@ -168,9 +158,6 @@ class AudioPlayerUtils extends ChangeNotifier {
     if (result.status == ShareResultStatus.success) {
       debugPrint('Audio file shared successfully');
     }
-
-    _currentSharingId = null;
-    notifyListeners();
   }
 
   Future<String?> _getOrCreateAudioFile(Wal wal, {bool forSharing = false}) async {

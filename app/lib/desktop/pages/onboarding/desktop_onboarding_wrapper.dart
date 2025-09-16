@@ -140,8 +140,8 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
     SharedPreferencesUtil().hasOmiDevice = true;
     SharedPreferencesUtil().verifiedPersonaId = null;
     MixpanelManager().onboardingStepCompleted('Auth');
-    if(context.mounted) {
-    context.read<HomeProvider>().setupHasSpeakerProfile();
+    if (context.mounted) {
+      context.read<HomeProvider>().setupHasSpeakerProfile();
     }
     IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
     IntercomManager.instance.updateUser(

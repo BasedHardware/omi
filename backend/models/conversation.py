@@ -252,6 +252,7 @@ class Conversation(BaseModel):
     processing_conversation_id: Optional[str] = None
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
+    is_locked: bool = False
     data_protection_level: Optional[str] = None
 
     def __init__(self, **data):

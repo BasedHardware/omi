@@ -4,6 +4,7 @@ from mcp.client.stdio import stdio_client
 
 import dspy
 from dotenv import load_dotenv
+
 # import mlflow
 
 # mlflow.dspy.autolog()
@@ -21,9 +22,7 @@ class DSPyOmiAgent(dspy.Signature):
     user_request: str = dspy.InputField()
     user_uid: str = dspy.InputField()
 
-    response: str = dspy.OutputField(
-        desc="A response to the user's request, based on the user's OMI data."
-    )
+    response: str = dspy.OutputField(desc="A response to the user's request, based on the user's OMI data.")
 
 
 dspy.configure(lm=dspy.LM("openai/o4-mini", temperature=1, max_tokens=24000))
@@ -45,9 +44,7 @@ async def run(user_request):
             # Create the agent
             react = dspy.ReAct(DSPyOmiAgent, tools=dspy_tools)
 
-            result = await react.acall(
-                user_request=user_request, user_uid=os.getenv("OMI_UID")
-            )
+            result = await react.acall(user_request=user_request, user_uid=os.getenv("OMI_UID"))
             # print(result.reasoning)
             print(result.response)
 

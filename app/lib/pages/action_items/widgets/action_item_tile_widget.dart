@@ -1,9 +1,15 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+
 import 'action_item_form_sheet.dart';
 
 class ActionItemTileWidget extends StatefulWidget {
@@ -11,6 +17,10 @@ class ActionItemTileWidget extends StatefulWidget {
   final Function(bool) onToggle;
   final Set<String>? exportedToAppleReminders;
   final VoidCallback? onExportedToAppleReminders;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSelectionToggle;
 
   const ActionItemTileWidget({
     super.key,
@@ -18,6 +28,10 @@ class ActionItemTileWidget extends StatefulWidget {
     required this.onToggle,
     this.exportedToAppleReminders,
     this.onExportedToAppleReminders,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onLongPress,
+    this.onSelectionToggle,
   });
 
   @override
@@ -346,75 +360,151 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
-      color: const Color(0xFF1F1F25),
+      color: widget.isSelected ? Colors.deepPurpleAccent.withOpacity(0.1) : const Color(0xFF1F1F25),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: widget.actionItem.completed ? Colors.grey.withOpacity(0.2) : Colors.transparent,
-          width: 1,
+          color: widget.isSelected
+              ? Colors.deepPurpleAccent.withOpacity(0.5)
+              : (widget.actionItem.completed ? Colors.grey.withOpacity(0.2) : Colors.transparent),
+          width: widget.isSelected ? 2 : 1,
         ),
       ),
       clipBehavior: Clip.hardEdge,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _showEditSheet(context),
+        onTap: widget.isSelectionMode ? widget.onSelectionToggle : () => _showEditSheet(context),
+        onLongPress: widget.onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
+          child: Stack(
             children: [
-              // Custom checkbox with better styling
-              GestureDetector(
-                onTap: _handleToggle,
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: (widget.actionItem.completed || _isAnimating)
-                          ? Colors.deepPurpleAccent
-                          : Colors.grey.shade600,
-                      width: 2,
-                    ),
-                    color: (widget.actionItem.completed || _isAnimating) ? Colors.deepPurpleAccent : Colors.transparent,
-                  ),
-                  child: (widget.actionItem.completed || _isAnimating)
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 16,
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Action item text and due date
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.actionItem.description,
-                      style: TextStyle(
-                        color: (widget.actionItem.completed || _isAnimating) ? Colors.grey.shade400 : Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                        decoration: (widget.actionItem.completed || _isAnimating) ? TextDecoration.lineThrough : null,
-                        decorationColor: Colors.grey.shade400,
+              Row(
+                children: [
+                  // Selection checkbox when in selection mode
+                  if (widget.isSelectionMode)
+                    GestureDetector(
+                      onTap: widget.onSelectionToggle,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: widget.isSelected ? Colors.deepPurpleAccent : Colors.grey.shade600,
+                            width: 2,
+                          ),
+                          color: widget.isSelected ? Colors.deepPurpleAccent : Colors.transparent,
+                        ),
+                        child: widget.isSelected
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : null,
+                      ),
+                    )
+                  // Completion checkbox when not in selection mode
+                  else
+                    GestureDetector(
+                      onTap: _handleToggle,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: (widget.actionItem.completed || _isAnimating)
+                                ? Colors.deepPurpleAccent
+                                : Colors.grey.shade600,
+                            width: 2,
+                          ),
+                          color: (widget.actionItem.completed || _isAnimating)
+                              ? Colors.deepPurpleAccent
+                              : Colors.transparent,
+                        ),
+                        child: (widget.actionItem.completed || _isAnimating)
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : null,
                       ),
                     ),
-                    if (widget.actionItem.dueAt != null) ...[
-                      const SizedBox(height: 6),
-                      _buildDueDateChip(),
-                    ],
+                  const SizedBox(width: 16),
+                  // Action item text and due date
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Stack(
+                                children: [
+                                  Text(
+                                    widget.actionItem.description,
+                                    style: TextStyle(
+                                      color: (widget.actionItem.completed || _isAnimating)
+                                          ? Colors.grey.shade400
+                                          : Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
+                                      decoration: (widget.actionItem.completed || _isAnimating)
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                      decorationColor: Colors.grey.shade400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (widget.actionItem.dueAt != null) ...[
+                          const SizedBox(height: 6),
+                          _buildDueDateChip(),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Apple Reminders icon (only show on Apple platforms)
+                  if (PlatformService.isApple) ...[
+                    const SizedBox(width: 12),
+                    _buildAppleRemindersIcon(context),
                   ],
-                ),
+                ],
               ),
-              // Apple Reminders icon (only show on Apple platforms)
-              if (PlatformService.isApple) ...[
-                const SizedBox(width: 12),
-                _buildAppleRemindersIcon(context),
-              ],
+              if (widget.actionItem.isLocked)
+                Positioned.fill(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        MixpanelManager().paywallOpened('Action Item');
+                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                        return;
+                      },
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.01),
+                          borderRadius: const BorderRadius.all(Radius.circular(8)),
+                        ),
+                        child: const Text(
+                          'Upgrade to unlimited',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

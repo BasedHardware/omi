@@ -1,10 +1,9 @@
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/shell/shell.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/kernel.h> 
 
-static const struct gpio_dt_spec motor =
-   GPIO_DT_SPEC_GET_OR(DT_NODELABEL(motor_pin), gpios, {0});
+static const struct gpio_dt_spec motor = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(motor_pin), gpios, {0});
 
 static struct k_work_delayable motor_off_work;
 

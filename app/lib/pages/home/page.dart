@@ -30,7 +30,6 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -41,7 +40,6 @@ import 'package:omi/utils/enums.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
 
-import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
 import 'widgets/out_of_credits_widget.dart';
 
@@ -103,12 +101,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
 
-  PageController? _controller;
-
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
+  late final List<Widget> _pages;
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -192,6 +189,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
+    _pages = [
+      ConversationsPage(key: _conversationsPageKey),
+      ActionItemsPage(key: _actionItemsPageKey),
+      MemoriesPage(key: _memoriesPageKey),
+      AppsPage(key: _appsPageKey),
+    ];
     SharedPreferencesUtil().onboardingCompleted = true;
 
     // Navigate uri
@@ -222,11 +225,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
 
     // Home controller
-    _controller = PageController(initialPage: homePageIdx);
     context.read<HomeProvider>().selectedIndex = homePageIdx;
-    context.read<HomeProvider>().onSelectedIndexChanged = (index) {
-      _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-    };
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -429,7 +428,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
                 length: 4,
-                initialIndex: _controller?.initialPage ?? 0,
+                initialIndex: homeProvider.selectedIndex,
                 child: GestureDetector(
                   onTap: () {
                     primaryFocus?.unfocus();
@@ -440,17 +439,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
-                          const OutOfCreditsWidget(),
                           Expanded(
-                            child: PageView(
-                              controller: _controller,
-                              physics: const NeverScrollableScrollPhysics(),
-                              children: [
-                                ConversationsPage(key: _conversationsPageKey),
-                                ActionItemsPage(key: _actionItemsPageKey),
-                                MemoriesPage(key: _memoriesPageKey),
-                                AppsPage(key: _appsPageKey),
-                              ],
+                            child: IndexedStack(
+                              index: context.watch<HomeProvider>().selectedIndex,
+                              children: _pages,
                             ),
                           ),
                         ],
@@ -493,10 +485,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(0);
-                                              _controller?.animateToPage(0,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -526,10 +516,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(1);
-                                              _controller?.animateToPage(1,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -561,10 +549,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(2);
-                                              _controller?.animateToPage(2,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -594,10 +580,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(3);
-                                              _controller?.animateToPage(3,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
-                                            child: Container(
+                                            child: SizedBox(
                                               height: 90,
                                               child: Padding(
                                                 padding: const EdgeInsets.only(bottom: 15),
@@ -713,41 +697,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      toolbarHeight: PlatformService.isDesktop ? 80 : null,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const BatteryInfoWidget(),
           const SizedBox.shrink(),
-          // Top Title App Bar - titles removed for Actions, Memories, and Apps pages
-          Consumer<HomeProvider>(
-            builder: (context, provider, child) {
-              if (provider.selectedIndex == 1 || provider.selectedIndex == 2 || provider.selectedIndex == 3) {
-                return const SizedBox.shrink();
-              } else {
-                return const Expanded(
-                  child: Center(
-                    child: Text(
-                      '',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                );
-              }
-            },
-          ),
           Row(
             children: [
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F25),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
@@ -818,16 +780,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               width: 0.5,
                             ),
                           ),
-                          child: Row(
+                          child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
+                              Icon(
                                 FontAwesomeIcons.solidComment,
                                 size: 14,
                                 color: Colors.white70,
                               ),
-                              const SizedBox(width: 6),
-                              const Text(
+                              SizedBox(width: 6),
+                              Text(
                                 'Ask',
                                 style: TextStyle(
                                   color: Colors.white70,
@@ -858,10 +820,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ForegroundUtil.stopForegroundTask();
-    if (_controller != null) {
-      _controller!.dispose();
-      _controller = null;
-    }
     super.dispose();
   }
 }

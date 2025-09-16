@@ -1,14 +1,11 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -19,9 +16,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
-import 'package:omi/widgets/recording_waveform.dart';
 import 'package:provider/provider.dart';
-import 'package:tuple/tuple.dart';
 
 class SpeechProfileCardWidget extends StatelessWidget {
   const SpeechProfileCardWidget({super.key});
@@ -34,7 +29,9 @@ class SpeechProfileCardWidget extends StatelessWidget {
         return provider.hasSpeakerProfile
             ? const SizedBox()
             : Consumer<DeviceProvider>(builder: (context, device, child) {
-                if (device.pairedDevice == null || !device.isConnected || device.pairedDevice?.firmwareRevision == '1.0.2') {
+                if (device.pairedDevice == null ||
+                    !device.isConnected ||
+                    device.pairedDevice?.firmwareRevision == '1.0.2') {
                   return const SizedBox();
                 }
                 return Stack(
@@ -51,9 +48,9 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         }
                       },
                       child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F25),
-                          borderRadius: const BorderRadius.all(Radius.circular(12)),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1F1F25),
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
                         ),
                         margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                         padding: const EdgeInsets.all(16),
@@ -107,9 +104,9 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                       routeToPage(context, FirmwareUpdate(device: provider.pairedDevice));
                     },
                     child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F1F25),
-                        borderRadius: const BorderRadius.all(Radius.circular(12)),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1F1F25),
+                        borderRadius: BorderRadius.all(Radius.circular(12)),
                       ),
                       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       padding: const EdgeInsets.all(16),
@@ -189,6 +186,7 @@ getTranscriptWidget(
   Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
   String searchQuery = '',
   int currentResultIndex = -1,
+  VoidCallback? onTapWhenSearchEmpty,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -220,6 +218,7 @@ getTranscriptWidget(
       onAcceptSuggestion: onAcceptSuggestion,
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
+      onTapWhenSearchEmpty: onTapWhenSearchEmpty,
     );
   }
 
@@ -262,50 +261,5 @@ getLiteTranscriptWidget(
           segments: segments,
         ),
     ],
-  );
-}
-
-getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
-  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
-  return Visibility(
-    visible: true,
-    child: Padding(
-      padding: const EdgeInsets.only(bottom: 128),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: MaterialButton(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            // side: BorderSide(color: state == RecordState.record ? Colors.red : Colors.white),
-          ),
-          onPressed: state == RecordingState.initialising ? null : recordingToggled,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                state == RecordingState.initialising
-                    ? const SizedBox(
-                        height: 8,
-                        width: 8,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : (state == RecordingState.record ? const Icon(Icons.stop, color: Colors.red, size: 24) : const Icon(Icons.mic)),
-                const SizedBox(width: 8),
-                Text(
-                  state == RecordingState.initialising ? 'Initialising Recorder' : (state == RecordingState.record ? 'Pause Recording' : 'Continue Recording'),
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(width: 4),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
   );
 }

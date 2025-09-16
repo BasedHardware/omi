@@ -21,6 +21,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -47,6 +48,7 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
+  DateTime? _keepAliveLastExecutedAt;
 
   // Method channel for system audio permissions
   static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
@@ -58,10 +60,10 @@ class CaptureProvider extends ChangeNotifier
 
   bool get isWalSupported => _isWalSupported;
 
-  StreamSubscription<InternetStatus>? _internetStatusListener;
-  InternetStatus? _internetStatus;
+  StreamSubscription<bool>? _connectionStateListener;
+  bool _isConnected = ConnectivityService().isConnected;
 
-  get internetStatus => _internetStatus;
+  get isConnected => _isConnected;
 
   String? microphoneName;
   double microphoneLevel = 0.0;
@@ -84,8 +86,8 @@ class CaptureProvider extends ChangeNotifier
   bool _systemAudioCaching = true;
 
   CaptureProvider() {
-    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
-      onInternetSatusChanged(status);
+    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
+      onConnectionStateChanged(isConnected);
     });
 
     // Add app lifecycle listener to detect sleep/wake cycles
@@ -164,50 +166,7 @@ class CaptureProvider extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
-  // Audio level tracking for waveform visualization
-  final List<double> _audioLevels = List.generate(8, (_) => 0.15);
-  List<double> get audioLevels => List.from(_audioLevels);
-
-  void _processAudioBytesForVisualization(List<int> bytes) {
-    if (bytes.isEmpty) return;
-
-    double rms = 0;
-
-    // Process bytes as 16-bit samples (2 bytes per sample)
-    for (int i = 0; i < bytes.length - 1; i += 2) {
-      // Convert two bytes to a 16-bit signed integer
-      int sample = bytes[i] | (bytes[i + 1] << 8);
-
-      // Convert to signed value (if high bit is set)
-      if (sample > 32767) {
-        sample = sample - 65536;
-      }
-
-      // Square the sample and add to sum
-      rms += sample * sample;
-    }
-
-    // Calculate RMS and normalize to 0.0-1.0 range
-    int sampleCount = bytes.length ~/ 2;
-    if (sampleCount > 0) {
-      rms = math.sqrt(rms / sampleCount) / 32768.0;
-    } else {
-      rms = 0;
-    }
-
-    // Apply non-linear scaling for better dynamic range - quieter on silence, same on noise
-    final level = (math.pow(rms, 0.3).toDouble() * 2.1).clamp(0.15, 1.6);
-
-    // Shift all values left and add new level
-    for (int i = 0; i < _audioLevels.length - 1; i++) {
-      _audioLevels[i] = _audioLevels[i + 1];
-    }
-    _audioLevels[_audioLevels.length - 1] = level;
-
-    notifyListeners(); // Notify UI to update waveform
-  }
-
-  bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
+  bool get transcriptServiceReady => _transcriptServiceReady && _isConnected;
 
   // having a connected device or using the phone's mic for recording
   bool get recordingDeviceServiceReady =>
@@ -586,7 +545,7 @@ class CaptureProvider extends ChangeNotifier
     _blePhotoStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
-    _internetStatusListener?.cancel();
+    _connectionStateListener?.cancel();
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
@@ -854,11 +813,20 @@ class CaptureProvider extends ChangeNotifier
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-      debugPrint("[Provider] keep alive...");
+      debugPrint("[Provider] keep alive");
+      // rate 1/15s
+      if (_keepAliveLastExecutedAt != null &&
+          DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
+        debugPrint("[Provider] keep alive - hitting rate limits 1/15s");
+        return;
+      }
+
+      _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
         return;
       }
+
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
         await _initiateWebsocket(audioCodec: codec);
@@ -1143,9 +1111,9 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void onInternetSatusChanged(InternetStatus status) {
-    debugPrint("[SocketService] Internet connection changed $status");
-    _internetStatus = status;
+  void onConnectionStateChanged(bool isConnected) {
+    debugPrint("[CaptureProvider] Internet connection changed $isConnected");
+    _isConnected = isConnected;
     notifyListeners();
   }
 

@@ -36,6 +36,17 @@ enum DeviceConnectionState {
   disconnected,
 }
 
+class OmiFeatures {
+  static const int speaker = 1 << 0;
+  static const int accelerometer = 1 << 1;
+  static const int button = 1 << 2;
+  static const int battery = 1 << 3;
+  static const int usb = 1 << 4;
+  static const int haptic = 1 << 5;
+  static const int offlineStorage = 1 << 6;
+  static const int ledDimming = 1 << 7;
+}
+
 abstract class IDeviceServiceSubsciption {
   void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
@@ -201,42 +212,23 @@ class DeviceService implements IDeviceService {
     await _mutex.acquire();
     try {
       debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+
       // Not force
       if (!force && _connection != null) {
         if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
           return null;
         }
 
-        // connected
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 30))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
+        // Connected
         return _connection;
       }
 
       // Force
       if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 30))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
         return _connection;
       }
 
-      // connect
+      // Connect
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {

@@ -76,7 +76,8 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(_isComplete ? 'Update PayPal' : 'Set Up PayPal', style: const TextStyle(color: Colors.white, fontSize: 20)),
+        title: Text(_isComplete ? 'Update PayPal' : 'Set Up PayPal',
+            style: const TextStyle(color: Colors.white, fontSize: 20)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -134,7 +135,9 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                             ),
                             const SizedBox(height: 24),
                             Text(
-                              _isComplete ? 'Update your PayPal account details' : 'Connect your PayPal account to start receiving payments for your apps',
+                              _isComplete
+                                  ? 'Update your PayPal account details'
+                                  : 'Connect your PayPal account to start receiving payments for your apps',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.grey.shade300,

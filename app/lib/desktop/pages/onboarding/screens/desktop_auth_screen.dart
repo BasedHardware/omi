@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -90,16 +89,14 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                           SizedBox(height: responsive.spacing(baseSpacing: 24)),
 
-                          // Apple Sign In (if available)
-                          if (Platform.isMacOS) ...[
-                            OmiSignInButton(
-                              icon: Icons.apple,
-                              label: 'Continue with Apple',
-                              onPressed: provider.loading ? null : () => _handleAppleSignIn(provider),
-                              enabled: !provider.loading,
-                            ),
-                            SizedBox(height: responsive.spacing(baseSpacing: 16)),
-                          ],
+                          // Apple Sign In
+                          OmiSignInButton(
+                            icon: Icons.apple,
+                            label: 'Continue with Apple',
+                            onPressed: provider.loading ? null : () => _handleAppleSignIn(provider),
+                            enabled: !provider.loading,
+                          ),
+                          SizedBox(height: responsive.spacing(baseSpacing: 16)),
 
                           // Google Sign In
                           OmiSignInButton(

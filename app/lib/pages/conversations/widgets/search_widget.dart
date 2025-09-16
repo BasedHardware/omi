@@ -179,7 +179,8 @@ class _SearchWidgetState extends State<SearchWidget> {
             builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
               return Container(
                 decoration: BoxDecoration(
-                  color: convoProvider.selectedDate != null ? Colors.deepPurple.withOpacity(0.5) : const Color(0xFF1F1F25),
+                  color:
+                      convoProvider.selectedDate != null ? Colors.deepPurple.withOpacity(0.5) : const Color(0xFF1F1F25),
                   borderRadius: const BorderRadius.all(Radius.circular(16)),
                 ),
                 child: IconButton(
@@ -198,7 +199,9 @@ class _SearchWidgetState extends State<SearchWidget> {
                     color: Colors.white,
                     size: 18,
                   ),
-                  tooltip: convoProvider.selectedDate != null ? 'Filtered by ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)} - Tap to clear' : 'Filter by date',
+                  tooltip: convoProvider.selectedDate != null
+                      ? 'Filtered by ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)} - Tap to clear'
+                      : 'Filter by date',
                 ),
               );
             },
@@ -207,7 +210,8 @@ class _SearchWidgetState extends State<SearchWidget> {
             width: 8,
           ),
           // Filter button
-          Consumer<ConversationProvider>(builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+          Consumer<ConversationProvider>(
+              builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
             return Container(
               decoration: BoxDecoration(
                 color: convoProvider.showDiscardedConversations ? Colors.red.withOpacity(0.5) : const Color(0xFF1F1F25),

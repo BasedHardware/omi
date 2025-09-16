@@ -57,7 +57,8 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
       // Check if we're at the top and pulling down
       if (metrics.pixels <= 0 && notification.scrollDelta! < 0) {
         setState(() {
-          _totalDragDistance = math.min(widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + (-notification.scrollDelta!));
+          _totalDragDistance = math.min(
+              widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + (-notification.scrollDelta!));
 
           // Only show visual feedback after minimum threshold is exceeded
           if (_totalDragDistance > widget.minDragStartThreshold) {
@@ -81,6 +82,26 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
         _triggerRefresh();
       } else if (!_isRefreshing) {
         _resetDrag();
+      }
+    } else if (notification is OverscrollNotification) {
+      if (notification.overscroll < 0 && notification.metrics.pixels <= 0) {
+        setState(() {
+          final overscrollAmount = -notification.overscroll;
+          _totalDragDistance =
+              math.min(widget.triggerDistance + widget.minDragStartThreshold, _totalDragDistance + overscrollAmount);
+
+          if (_totalDragDistance > widget.minDragStartThreshold) {
+            _dragOffset = _totalDragDistance - widget.minDragStartThreshold;
+            _canRefresh = _dragOffset >= widget.triggerDistance;
+          } else {
+            _dragOffset = 0.0;
+            _canRefresh = false;
+          }
+        });
+
+        if (_dragOffset > 0) {
+          _checkForHapticFeedback();
+        }
       }
     }
   }
@@ -138,7 +159,9 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
   Widget build(BuildContext context) {
     return NotificationListener<ScrollNotification>(
       onNotification: (ScrollNotification notification) {
-        _handleScrollNotification(notification);
+        if (notification.depth == 0) {
+          _handleScrollNotification(notification);
+        }
         return false;
       },
       child: Stack(
@@ -150,8 +173,8 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
               left: 0,
               right: 0,
               child: Container(
-                height: _dragOffset,
-                alignment: Alignment.center,
+                height: math.min(_dragOffset, 100),
+                alignment: Alignment.bottomCenter,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -162,12 +185,15 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
                     ],
                   ),
                 ),
-                child: CustomPaint(
-                  size: const Size(60, 60),
-                  painter: CircularDotsIndicator(
-                    progress: _dragOffset / widget.triggerDistance,
-                    isRefreshing: _isRefreshing,
-                    animation: _animation,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: CustomPaint(
+                    size: const Size(60, 60),
+                    painter: CircularDotsIndicator(
+                      progress: _dragOffset / widget.triggerDistance,
+                      isRefreshing: _isRefreshing,
+                      animation: _animation,
+                    ),
                   ),
                 ),
               ),

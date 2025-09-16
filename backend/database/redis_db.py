@@ -211,6 +211,19 @@ def get_user_paid_app(app_id: str, uid: str) -> str:
     return val.decode()
 
 
+def set_user_app_subscription_customer_id(app_id: str, uid: str, customer_id: str):
+    """Store the Stripe customer ID for a user's app subscription"""
+    r.set(f'users:{uid}:app_subs:{app_id}:customer_id', customer_id)
+
+
+def get_user_app_subscription_customer_id(app_id: str, uid: str) -> str:
+    """Get the Stripe customer ID for a user's app subscription"""
+    val = r.get(f'users:{uid}:app_subs:{app_id}:customer_id')
+    if not val:
+        return None
+    return val.decode()
+
+
 def enable_app(uid: str, app_id: str):
     r.sadd(f'users:{uid}:enabled_plugins', app_id)
 
@@ -556,9 +569,47 @@ def get_migration_status(uid: str) -> dict:
     return {"status": "idle"}
 
 
+@try_catch_decorator
 def clear_migration_status(uid: str):
-    key = f"migration_status:{uid}"
-    r.delete(key)
+    """Clear the migration status for a user."""
+    r.delete(f'migration_status:{uid}')
+
+
+# ******************************************************
+# ******************* AUTH SESSION *********************
+# ******************************************************
+
+
+@try_catch_decorator
+def set_auth_session(session_id: str, session_data: dict, ttl: int = 600):
+    """Store auth session data with expiration (default 10 minutes)"""
+    r.set(f'auth_session:{session_id}', json.dumps(session_data), ex=ttl)
+
+
+@try_catch_decorator
+def get_auth_session(session_id: str) -> dict:
+    """Retrieve auth session data"""
+    data = r.get(f'auth_session:{session_id}')
+    return json.loads(data.decode('utf-8')) if data else None
+
+
+@try_catch_decorator
+def set_auth_code(auth_code: str, firebase_token: str, ttl: int = 300):
+    """Store auth code with Firebase token (default 5 minutes)"""
+    r.set(f'auth_code:{auth_code}', firebase_token, ex=ttl)
+
+
+@try_catch_decorator
+def get_auth_code(auth_code: str) -> str:
+    """Retrieve Firebase token by auth code"""
+    token = r.get(f'auth_code:{auth_code}')
+    return token.decode('utf-8') if token else None
+
+
+@try_catch_decorator
+def delete_auth_code(auth_code: str):
+    """Delete used auth code"""
+    r.delete(f'auth_code:{auth_code}')
 
 
 # ******************************************************

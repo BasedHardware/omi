@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-// no random file names; we use date-based naming and prune by age
-
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/preferences.dart';
@@ -19,6 +17,7 @@ class DebugLogManager {
     final day = d.day.toString().padLeft(2, '0');
     return 'omi_debug_$y$m$day.log';
   }
+
   static const int _maxFileBytes = 5 * 1024 * 1024; // 5MB cap
 
   static File? _file;
@@ -151,7 +150,8 @@ class DebugLogManager {
     } catch (_) {}
   }
 
-  static Future<void> logError(Object error, [StackTrace? stack, String? message, Map<String, Object?> extra = const {}]) async {
+  static Future<void> logError(Object error,
+      [StackTrace? stack, String? message, Map<String, Object?> extra = const {}]) async {
     final payload = <String, Object?>{
       'ts': _timestamp(),
       'level': 'ERROR',
@@ -193,5 +193,3 @@ class DebugLogManager {
     await _append(jsonEncode(payload));
   }
 }
-
-

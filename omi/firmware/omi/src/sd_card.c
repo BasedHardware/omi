@@ -1,13 +1,13 @@
-#include <zephyr/kernel.h>
+#include "sd_card.h"
+
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/fs/ext2.h>
+#include <zephyr/fs/fs.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/storage/disk_access.h>
-#include <zephyr/fs/fs.h>
-#include <zephyr/fs/ext2.h>
-#include <zephyr/logging/log.h>
-
-#include "sd_card.h"
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 static struct fs_mount_t mp = {
     .type = FS_EXT2,
     .flags = FS_MOUNT_FLAG_NO_FORMAT,
-    .storage_dev = (void *)DISK_DRIVE_NAME,
+    .storage_dev = (void *) DISK_DRIVE_NAME,
     .mnt_point = "/ext",
 };
 
@@ -33,13 +33,10 @@ static int sd_enable_power(bool enable)
 {
     int ret;
     gpio_pin_configure_dt(&sd_en, GPIO_OUTPUT);
-    if (enable)
-    {
+    if (enable) {
         ret = gpio_pin_set_dt(&sd_en, 1);
         pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
-    }
-    else
-    {
+    } else {
         ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
         // gpio_pin_set_dt(&sd_en,    0);
     }
@@ -50,8 +47,7 @@ static int sd_unmount()
 {
     int ret;
     ret = fs_unmount(&mp);
-    if (ret)
-    {
+    if (ret) {
         LOG_INF("Disk unmounted error (%d) .", ret);
         return ret;
     }
@@ -65,8 +61,7 @@ static int sd_unmount()
 static int sd_mount()
 {
     int ret;
-    do
-    {
+    do {
         static const char *disk_pdrv = DISK_DRIVE_NAME;
         uint64_t memory_size_mb;
         uint32_t block_count;
@@ -78,61 +73,49 @@ static int sd_mount()
             return ret;
         }
 
-        if (disk_access_ioctl(disk_pdrv,
-                              DISK_IOCTL_CTRL_INIT, NULL) != 0)
-        {
+        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL) != 0) {
             LOG_ERR("Storage init ERROR!");
             break;
         }
 
-        if (disk_access_ioctl(disk_pdrv,
-                              DISK_IOCTL_GET_SECTOR_COUNT, &block_count))
-        {
+        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_COUNT, &block_count)) {
             LOG_ERR("Unable to get sector count");
             break;
         }
         LOG_INF("Block count %u", block_count);
 
-        if (disk_access_ioctl(disk_pdrv,
-                              DISK_IOCTL_GET_SECTOR_SIZE, &block_size))
-        {
+        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_SIZE, &block_size)) {
             LOG_ERR("Unable to get sector size");
             break;
         }
         LOG_INF("Sector size %u", block_size);
 
-        memory_size_mb = (uint64_t)block_count * block_size;
-        LOG_INF("Memory Size(MB) %u", (uint32_t)(memory_size_mb >> 20));
+        memory_size_mb = (uint64_t) block_count * block_size;
+        LOG_INF("Memory Size(MB) %u", (uint32_t) (memory_size_mb >> 20));
 
-        if (disk_access_ioctl(disk_pdrv,
-                              DISK_IOCTL_CTRL_DEINIT, NULL) != 0)
-        {
+        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_DEINIT, NULL) != 0) {
             LOG_ERR("Storage deinit ERROR!");
             break;
         }
     } while (0);
     mp.mnt_point = disk_mount_pt;
 
-    if (is_mounted)
-    {
+    if (is_mounted) {
         LOG_INF("Disk already mounted.");
         return 0;
     }
 
-    if (fs_mount(&mp) != FS_RET_OK)
-    {
+    if (fs_mount(&mp) != FS_RET_OK) {
         LOG_INF("File system not found, creating file system...");
-        ret = fs_mkfs(FS_EXT2, (uintptr_t)mp.storage_dev, NULL, 0);
-        if (ret != 0)
-        {
+        ret = fs_mkfs(FS_EXT2, (uintptr_t) mp.storage_dev, NULL, 0);
+        if (ret != 0) {
             LOG_ERR("Error formatting filesystem [%d]", ret);
             sd_enable_power(false);
             return ret;
         }
 
         ret = fs_mount(&mp);
-        if (ret != FS_RET_OK)
-        {
+        if (ret != FS_RET_OK) {
             LOG_INF("Error mounting disk %d.", ret);
             sd_enable_power(false);
             return ret;

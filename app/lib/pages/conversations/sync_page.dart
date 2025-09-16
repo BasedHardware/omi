@@ -97,12 +97,6 @@ class WalListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
-        final isPlaying = syncProvider.isWalPlaying(wal.id);
-        final isProcessing = syncProvider.isProcessingAudio && syncProvider.currentPlayingWalId == wal.id;
-        final isSharingThisWal = syncProvider.isWalSharing(wal.id);
-        final isAnyWalSharing = syncProvider.isSharingAudio;
-        final canPlayOrShare = syncProvider.canPlayOrShareWal(wal);
-        final isSynced = wal.status == WalStatus.synced;
         final hasError = syncProvider.failedWal?.id == wal.id;
 
         return GestureDetector(
@@ -277,31 +271,6 @@ class DateTimeListItem extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class SyncWalGroupWidget extends StatelessWidget {
-  final List<Wal> wals;
-  final DateTime date;
-  final bool isFirst;
-  const SyncWalGroupWidget({super.key, required this.wals, required this.date, required this.isFirst});
-
-  @override
-  Widget build(BuildContext context) {
-    if (wals.isNotEmpty) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DateTimeListItem(date: date, isFirst: isFirst),
-          ...wals.map((wal) {
-            return WalListItem(wal: wal, walIdx: wals.indexOf(wal), date: date);
-          }),
-          const SizedBox(height: 16),
-        ],
-      );
-    } else {
-      return const SizedBox.shrink();
-    }
   }
 }
 
@@ -1297,15 +1266,4 @@ class WalItem extends ListItem {
   final int index;
   final DateTime date;
   WalItem(this.wal, this.index, this.date);
-}
-
-// Keep the original WalsListWidget for backward compatibility if needed
-class WalsListWidget extends StatelessWidget {
-  final List<Wal> wals;
-  const WalsListWidget({super.key, required this.wals});
-
-  @override
-  Widget build(BuildContext context) {
-    return OptimizedWalsListWidget(wals: wals);
-  }
 }

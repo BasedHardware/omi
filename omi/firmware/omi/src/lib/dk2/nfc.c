@@ -1,15 +1,16 @@
 #include "nfc.h"
-#include <zephyr/logging/log.h>
-#include <zephyr/drivers/hwinfo.h>
-#include <nfc_t2t_lib.h>
+
 #include <nfc/ndef/msg.h>
 #include <nfc/ndef/uri_msg.h>
+#include <nfc_t2t_lib.h>
+#include <zephyr/drivers/hwinfo.h>
+#include <zephyr/logging/log.h>
 
-//for later......
+// for later......
 LOG_MODULE_REGISTER(nfc, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_URI_LENGTH 64
-#define MAX_DEVICE_ID_LENGTH 7  // 6 chars + null terminator
+#define MAX_DEVICE_ID_LENGTH 7 // 6 chars + null terminator
 #define NDEF_MSG_BUF_SIZE 256
 #define MAX_REC_COUNT 1
 
@@ -47,7 +48,7 @@ int get_device_id(char *device_id_out, size_t len)
     const char *test_device_id = "ABC123";
 
     strncpy(device_id_out, test_device_id, len - 1);
-    device_id_out[len - 1] = '\0';  // Ensure null-termination
+    device_id_out[len - 1] = '\0'; // Ensure null-termination
 
     LOG_INF("Device ID (hardcoded): %s", device_id_out);
 

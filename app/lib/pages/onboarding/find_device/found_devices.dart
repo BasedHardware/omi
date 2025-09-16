@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:provider/provider.dart';
 
@@ -69,7 +68,9 @@ class _FoundDevicesState extends State<FoundDevices> {
           children: [
             !provider.isConnected
                 ? Text(
-                    provider.deviceList.isEmpty ? 'Searching for devices...' : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                    provider.deviceList.isEmpty
+                        ? 'Searching for devices...'
+                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,

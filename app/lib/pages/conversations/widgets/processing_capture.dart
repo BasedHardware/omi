@@ -14,11 +14,8 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-
-import 'package:omi/widgets/gradient_waveform.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
@@ -28,65 +25,12 @@ class ConversationCaptureWidget extends StatefulWidget {
   State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
 }
 
-class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> with SingleTickerProviderStateMixin {
+class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   bool _isPhoneMicPaused = false;
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-    _pulseAnimation = Tween<double>(
-      begin: 0.4,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
-    _pulseController.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  Widget _buildPulsatingDot({required Color color, bool isPulsating = true}) {
-    if (!isPulsating) {
-      return Container(
-        width: 6,
-        height: 6,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-        ),
-      );
-    }
-
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        return Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: _pulseAnimation.value),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
+    return Consumer<CaptureProvider>(builder: (context, provider, child) {
       var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
           ? provider.conversationProvider!.conversations.first.id
           : null;
@@ -98,7 +42,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
 
       return GestureDetector(
         onTap: () async {
-          if (provider.outOfCredits || (provider.segments.isEmpty && provider.photos.isEmpty)) return;
+          if (provider.segments.isEmpty && provider.photos.isEmpty) return;
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
@@ -235,7 +179,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
-              color: Color(0xFF35343B),
+              color: const Color(0xFF35343B),
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -255,7 +199,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
-              color: Color(0xFF35343B),
+              color: const Color(0xFF35343B),
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -379,9 +323,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> w
                         ),
                       ),
                       const SizedBox(width: 6),
-                      _buildPulsatingDot(
-                        color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                        isPulsating: !isPaused,
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ],
                   ),
@@ -744,49 +692,47 @@ class ProcessingConversationWidget extends StatefulWidget {
 class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      return GestureDetector(
-          onTap: () async {
-            routeToPage(
-              context,
-              ProcessingConversationPage(
-                conversation: widget.conversation,
-              ),
-            );
-          },
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            width: double.maxFinite,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(16.0),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _getConversationHeader(context),
-                  (widget.conversation.transcriptSegments.isNotEmpty || widget.conversation.photos.isNotEmpty)
-                      ? Column(
-                          children: [
-                            const SizedBox(height: 8),
-                            getLiteTranscriptWidget(
-                              widget.conversation.transcriptSegments,
-                              widget.conversation.photos,
-                              null,
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
-                ],
-              ),
-            ),
-          ));
-    });
+    return GestureDetector(
+      onTap: () async {
+        routeToPage(
+          context,
+          ProcessingConversationPage(
+            conversation: widget.conversation,
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        width: double.maxFinite,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(16.0),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _getConversationHeader(context),
+              (widget.conversation.transcriptSegments.isNotEmpty || widget.conversation.photos.isNotEmpty)
+                  ? Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        getLiteTranscriptWidget(
+                          widget.conversation.transcriptSegments,
+                          widget.conversation.photos,
+                          null,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   _getConversationHeader(BuildContext context) {
@@ -807,7 +753,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
               const SizedBox(width: 20),
               Container(
                 decoration: BoxDecoration(
-                  color: Color(0xFF35343B),
+                  color: const Color(0xFF35343B),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

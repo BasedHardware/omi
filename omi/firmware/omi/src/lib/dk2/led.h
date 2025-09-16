@@ -1,12 +1,8 @@
 #ifndef LED_H
 #define LED_H
 
-#include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
-
-extern const struct gpio_dt_spec led_red;
-extern const struct gpio_dt_spec led_green;
-extern const struct gpio_dt_spec led_blue;
+#include <zephyr/kernel.h>
 
 /**
  * @brief Initialize the LEDs

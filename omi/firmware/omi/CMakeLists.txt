@@ -12,6 +12,7 @@ file(GLOB app_sources
     src/haptic.c
     src/sd_card.c
     src/spi_flash.c
+    src/settings.c
 )
 file(GLOB dk2_sources
     src/lib/dk2/config.h

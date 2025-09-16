@@ -7,6 +7,7 @@ class ActionItemWithMetadata {
   final DateTime? dueAt;
   final DateTime? completedAt;
   final String? conversationId;
+  final bool isLocked;
 
   ActionItemWithMetadata({
     required this.id,
@@ -17,6 +18,7 @@ class ActionItemWithMetadata {
     this.dueAt,
     this.completedAt,
     this.conversationId,
+    this.isLocked = false,
   });
 
   factory ActionItemWithMetadata.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class ActionItemWithMetadata {
       dueAt: json['due_at'] != null ? DateTime.parse(json['due_at']) : null,
       completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at']) : null,
       conversationId: json['conversation_id'],
+      isLocked: json['is_locked'] ?? false,
     );
   }
 
@@ -42,6 +45,7 @@ class ActionItemWithMetadata {
       'due_at': dueAt?.toIso8601String(),
       'completed_at': completedAt?.toIso8601String(),
       'conversation_id': conversationId,
+      'is_locked': isLocked,
     };
   }
 
@@ -54,6 +58,7 @@ class ActionItemWithMetadata {
     DateTime? dueAt,
     DateTime? completedAt,
     String? conversationId,
+    bool? isLocked,
   }) {
     return ActionItemWithMetadata(
       id: id ?? this.id,
@@ -64,6 +69,7 @@ class ActionItemWithMetadata {
       dueAt: dueAt ?? this.dueAt,
       completedAt: completedAt ?? this.completedAt,
       conversationId: conversationId ?? this.conversationId,
+      isLocked: isLocked ?? this.isLocked,
     );
   }
 }
@@ -79,11 +85,9 @@ class ActionItemsResponse {
 
   factory ActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return ActionItemsResponse(
-      actionItems: (json['action_items'] as List<dynamic>)
-          .map((item) => ActionItemWithMetadata.fromJson(item))
-          .toList(),
+      actionItems:
+          (json['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList(),
       hasMore: json['has_more'],
     );
   }
-} 
-
+}
