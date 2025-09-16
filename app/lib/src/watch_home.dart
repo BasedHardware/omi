@@ -18,14 +18,35 @@ class _WatchHomeState extends State<WatchHome> implements WatchCounterFlutterAPI
   Uint8List? _audioData;
   String? _audioFilePath;
   final Map<int, (Uint8List, double)> _audioChunks = {}; // (audioData, sampleRate)
-  int _nextExpectedChunkIndex = 0;
   double _sampleRate = 16000.0; // Now consistently 16kHz from watch resampling
+
+  // Watch status
+  bool _isWatchSupported = false;
+  bool _isWatchPaired = false;
+  bool _isWatchReachable = false;
 
   @override
   void initState() {
     WatchCounterFlutterAPI.setUp(this);
     _hostAPI.increment();
+    _checkWatchStatus();
     super.initState();
+  }
+
+  Future<void> _checkWatchStatus() async {
+    try {
+      final isSupported = await _hostAPI.isWatchSessionSupported();
+      final isPaired = await _hostAPI.isWatchPaired();
+      final isReachable = await _hostAPI.isWatchReachable();
+
+      setState(() {
+        _isWatchSupported = isSupported;
+        _isWatchPaired = isPaired;
+        _isWatchReachable = isReachable;
+      });
+    } catch (e) {
+      print('Error checking watch status: $e');
+    }
   }
 
   @override
@@ -37,6 +58,35 @@ class _WatchHomeState extends State<WatchHome> implements WatchCounterFlutterAPI
           children: [
             Text('Watch Home $_count'),
             const SizedBox(height: 20),
+
+            // Watch Status Section
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Apple Watch Status',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildStatusRow('Session Supported', _isWatchSupported),
+                  _buildStatusRow('Paired', _isWatchPaired),
+                  _buildStatusRow('Reachable', _isWatchReachable),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: _checkWatchStatus,
+                    child: const Text('Refresh Status'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
             if (_isRecording)
               const Text(
                 'Recording Audio...',
@@ -44,15 +94,60 @@ class _WatchHomeState extends State<WatchHome> implements WatchCounterFlutterAPI
               ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _toggleRecording,
+              onPressed: _isWatchPaired ? _toggleRecording : null,
               child: Text(_isRecording ? 'Stop Recording' : 'Start Recording'),
             ),
+            if (!_isWatchPaired)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Watch must be paired to record',
+                  style: TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
+            if (_isWatchPaired && !_isWatchReachable)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  '⚠️ Watch shows as not reachable (normal in simulator)',
+                  style: TextStyle(color: Colors.orange, fontSize: 12),
+                ),
+              ),
             const SizedBox(height: 10),
             if (_audioChunks.isNotEmpty) Text('Receiving chunks: ${_audioChunks.length}'),
             if (_audioData != null) Text('Audio file received: ${_audioData!.length} bytes'),
             if (_audioFilePath != null) Text('Saved to: ${_audioFilePath!.split('/').last}'),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(String label, bool status) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Row(
+            children: [
+              Icon(
+                status ? Icons.check_circle : Icons.cancel,
+                color: status ? Colors.green : Colors.red,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                status ? 'Yes' : 'No',
+                style: TextStyle(
+                  color: status ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -86,7 +181,6 @@ class _WatchHomeState extends State<WatchHome> implements WatchCounterFlutterAPI
       _audioChunks.clear();
       _audioData = null;
       _audioFilePath = null;
-      _nextExpectedChunkIndex = 0;
       _sampleRate = 16000.0; // Reset to 16kHz (consistent from watch)
     });
     print('Recording started from watch');
@@ -153,7 +247,6 @@ class _WatchHomeState extends State<WatchHome> implements WatchCounterFlutterAPI
     setState(() {
       _audioData = combinedData;
       _audioChunks.clear();
-      _nextExpectedChunkIndex = 0;
     });
 
     // Save the complete audio file

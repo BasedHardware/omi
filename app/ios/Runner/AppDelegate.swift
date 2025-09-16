@@ -25,11 +25,28 @@ private class WatchCounterHostApiImpl: WatchCounterHostAPI {
     }
 
     func startRecording() {
-        session.sendMessage(["method": "startRecording"], replyHandler: nil, errorHandler: nil)
+        // Try sendMessage first (requires reachable), fallback to updateApplicationContext
+        if session.isReachable {
+            session.sendMessage(["method": "startRecording"], replyHandler: nil, errorHandler: { error in
+                print("sendMessage failed, using fallback: \(error)")
+                // Fallback for background/unreachable scenarios
+                try? self.session.updateApplicationContext(["method": "startRecording"])
+            })
+        } else {
+            // Use updateApplicationContext when not reachable
+            try? session.updateApplicationContext(["method": "startRecording"])
+        }
     }
 
     func stopRecording() {
-        session.sendMessage(["method": "stopRecording"], replyHandler: nil, errorHandler: nil)
+        if session.isReachable {
+            session.sendMessage(["method": "stopRecording"], replyHandler: nil, errorHandler: { error in
+                print("sendMessage failed, using fallback: \(error)")
+                try? self.session.updateApplicationContext(["method": "stopRecording"])
+            })
+        } else {
+            try? session.updateApplicationContext(["method": "stopRecording"])
+        }
     }
 
     func sendAudioData(audioData: FlutterStandardTypedData) {
@@ -46,6 +63,22 @@ private class WatchCounterHostApiImpl: WatchCounterHostAPI {
             "isLast": isLast,
             "sampleRate": sampleRate
         ], replyHandler: nil, errorHandler: nil)
+    }
+
+    func isWatchPaired() -> Bool {
+        return session.isPaired
+    }
+
+    func isWatchReachable() -> Bool {
+        return session.isReachable
+    }
+
+    func isWatchSessionSupported() -> Bool {
+        return WCSession.isSupported()
+    }
+
+    func isWatchAppInstalled() -> Bool {
+        return session.isWatchAppInstalled
     }
 }
 

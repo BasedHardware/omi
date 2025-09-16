@@ -286,21 +286,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 };
                 return child!;
               },
-              // home: TalkerWrapper(
-              //   talker: Logger.instance.talker,
-              //   options: TalkerWrapperOptions(
-              //     enableErrorAlerts: true,
-              //     enableExceptionAlerts: true,
-              //     errorAlertBuilder: (context, data) {
-              //       return LoggerSnackbar(error: data);
-              //     },
-              //     exceptionAlertBuilder: (context, data) {
-              //       return LoggerSnackbar(exception: data);
-              //     },
-              //   ),
-              //   child: const AppShell(),
-              // ),
-              home: const WatchHome(),
+              home: TalkerWrapper(
+                talker: Logger.instance.talker,
+                options: TalkerWrapperOptions(
+                  enableErrorAlerts: true,
+                  enableExceptionAlerts: true,
+                  errorAlertBuilder: (context, data) {
+                    return LoggerSnackbar(error: data);
+                  },
+                  exceptionAlertBuilder: (context, data) {
+                    return LoggerSnackbar(exception: data);
+                  },
+                ),
+                child: const AppShell(),
+              ),
+              // home: const WatchHome(),
             ),
           );
         });

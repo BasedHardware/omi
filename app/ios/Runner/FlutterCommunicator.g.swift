@@ -98,8 +98,9 @@ protocol WatchCounterHostAPI {
   func sendAudioData(audioData: FlutterStandardTypedData) throws
   func sendAudioChunk(audioChunk: FlutterStandardTypedData, chunkIndex: Int64, isLast: Bool, sampleRate: Double) throws
   func isWatchPaired() throws -> Bool
-  func isWatchAppInstalled() throws -> Bool
   func isWatchReachable() throws -> Bool
+  func isWatchSessionSupported() throws -> Bool
+  func isWatchAppInstalled() throws -> Bool
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -206,19 +207,6 @@ class WatchCounterHostAPISetup {
     } else {
       isWatchPairedChannel.setMessageHandler(nil)
     }
-    let isWatchAppInstalledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchAppInstalled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      isWatchAppInstalledChannel.setMessageHandler { _, reply in
-        do {
-          let result = try api.isWatchAppInstalled()
-          reply(wrapResult(result))
-        } catch {
-          reply(wrapError(error))
-        }
-      }
-    } else {
-      isWatchAppInstalledChannel.setMessageHandler(nil)
-    }
     let isWatchReachableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchReachable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isWatchReachableChannel.setMessageHandler { _, reply in
@@ -231,6 +219,32 @@ class WatchCounterHostAPISetup {
       }
     } else {
       isWatchReachableChannel.setMessageHandler(nil)
+    }
+    let isWatchSessionSupportedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchSessionSupported\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      isWatchSessionSupportedChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.isWatchSessionSupported()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      isWatchSessionSupportedChannel.setMessageHandler(nil)
+    }
+    let isWatchAppInstalledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchAppInstalled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      isWatchAppInstalledChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.isWatchAppInstalled()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      isWatchAppInstalledChannel.setMessageHandler(nil)
     }
   }
 }
