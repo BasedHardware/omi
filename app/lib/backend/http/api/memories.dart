@@ -92,19 +92,3 @@ Future<bool> editMemoryServer(String memoryId, String value) async {
   debugPrint('editMemory response: ${response.body}');
   return response.statusCode == 200;
 }
-
-Future<Memory?> getMemoryById(String memoryId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories/$memoryId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return Memory.fromJson(jsonDecode(body));
-  }
-  debugPrint('getMemoryById error ${response.statusCode}');
-  return null;
-}

@@ -94,23 +94,6 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   return null;
 }
 
-Future<ServerConversation?> getConversationByMemoryId(String memoryId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$memoryId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return ServerConversation.fromJson(jsonDecode(body));
-  } else {
-    debugPrint('getConversationByMemoryId error ${response.statusCode}');
-  }
-  return null;
-}
-
 Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/title?title=$title',
