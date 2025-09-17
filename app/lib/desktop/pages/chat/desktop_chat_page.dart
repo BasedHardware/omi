@@ -149,6 +149,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _requestFocusIfPossible();
+  }
+
+  void _requestFocusIfPossible() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _focusNode.canRequestFocus) {
         _focusNode.requestFocus();
@@ -181,12 +185,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     return VisibilityDetector(
         key: const Key('desktop-chat-page'),
         onVisibilityChanged: (visibilityInfo) {
-          if (visibilityInfo.visibleFraction > 0.1 && mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_focusNode.canRequestFocus) {
-                _focusNode.requestFocus();
-              }
-            });
+          if (visibilityInfo.visibleFraction > 0.1) {
+            _requestFocusIfPossible();
           }
         },
         child: CallbackShortcuts(

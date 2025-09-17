@@ -44,6 +44,12 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   final ValueNotifier<App?> _selectedAppNotifier = ValueNotifier<App?>(null);
 
+  void _requestFocusIfPossible() {
+    if (mounted && _focusNode.canRequestFocus) {
+      _focusNode.requestFocus();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -149,11 +155,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _focusNode.canRequestFocus) {
-        _focusNode.requestFocus();
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
   }
 
   @override
@@ -180,12 +182,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     return VisibilityDetector(
         key: const Key('desktop_apps_page'),
         onVisibilityChanged: (visibilityInfo) {
-          if (visibilityInfo.visibleFraction > 0.1 && mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_focusNode.canRequestFocus) {
-                _focusNode.requestFocus();
-              }
-            });
+          if (visibilityInfo.visibleFraction > 0.1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
           }
         },
         child: CallbackShortcuts(

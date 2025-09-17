@@ -125,6 +125,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _requestFocusIfPossible();
+  }
+
+  void _requestFocusIfPossible() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _focusNode.canRequestFocus) {
         _focusNode.requestFocus();
@@ -211,11 +215,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         key: const Key('desktop-memories-page'),
         onVisibilityChanged: (visibilityInfo) {
           if (visibilityInfo.visibleFraction > 0.1 && mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_focusNode.canRequestFocus) {
-                _focusNode.requestFocus();
-              }
-            });
+            _requestFocusIfPossible();
           }
         },
         child: CallbackShortcuts(

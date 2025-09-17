@@ -115,6 +115,10 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _requestFocusIfPossible();
+  }
+
+  void _requestFocusIfPossible() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _focusNode.canRequestFocus) {
         _focusNode.requestFocus();
@@ -185,12 +189,8 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     return VisibilityDetector(
         key: const Key('desktop_conversations_page'),
         onVisibilityChanged: (visibilityInfo) {
-          if (visibilityInfo.visibleFraction > 0.1 && mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _focusNode.canRequestFocus) {
-                _focusNode.requestFocus();
-              }
-            });
+          if (visibilityInfo.visibleFraction > 0.1) {
+            _requestFocusIfPossible();
           }
         },
         child: CallbackShortcuts(

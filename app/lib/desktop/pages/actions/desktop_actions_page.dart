@@ -41,6 +41,12 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   bool _isReloading = false;
   late FocusNode _focusNode;
 
+  void _requestFocusIfPossible() {
+    if (mounted && _focusNode.canRequestFocus) {
+      _focusNode.requestFocus();
+    }
+  }
+
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
@@ -100,9 +106,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       _slideController.forward();
 
       Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          _focusNode.requestFocus();
-        }
+        _requestFocusIfPossible();
       });
     }).withPostFrameCallback();
   }
@@ -110,11 +114,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _focusNode.canRequestFocus) {
-        _focusNode.requestFocus();
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
   }
 
   void _onScroll() {
@@ -133,12 +133,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     return VisibilityDetector(
         key: const Key('desktop-actions-page'),
         onVisibilityChanged: (visibilityInfo) {
-          if (visibilityInfo.visibleFraction > 0.1 && mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_focusNode.canRequestFocus) {
-                _focusNode.requestFocus();
-              }
-            });
+          if (visibilityInfo.visibleFraction > 0.1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
           }
         },
         child: CallbackShortcuts(
