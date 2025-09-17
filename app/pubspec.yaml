@@ -118,6 +118,7 @@ dependencies:
   font_awesome_flutter: ^10.8.0
   in_app_review: ^2.0.9
   fl_chart: ^0.68.0
+  image: ^4.3.0
 
 dependency_overrides:
   uuid: ^4.4.0
@@ -135,7 +136,6 @@ dev_dependencies:
   flutter_launcher_icons: 0.13.1
   google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0
-  image: ^4.2.0
   integration_test:
     sdk: flutter
   lints: ^4.0.0
