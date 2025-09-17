@@ -20,6 +20,9 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 import 'package:omi/ui/molecules/omi_panel_header.dart';
+import 'package:omi/pages/chat/page.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/backend/http/api/messages.dart';
 
 class DesktopConversationSummary extends StatelessWidget {
   final ServerConversation conversation;
@@ -200,6 +203,16 @@ class DesktopConversationSummary extends StatelessWidget {
           icon: FontAwesomeIcons.chevronDown,
           enabled: !isReprocessing,
           onPressed: () => _showAppSelectionSheet(context, provider),
+        ),
+
+        const SizedBox(width: 8),
+
+        // Chat with this conversation (opens bottom drawer)
+        OmiButton(
+          label: 'Chat',
+          type: OmiButtonType.neutral,
+          enabled: true,
+          onPressed: () => _openChatSheet(context, provider),
         ),
 
         // Copy button (if has content)
@@ -413,6 +426,82 @@ class DesktopConversationSummary extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => _DesktopAppSelectionSheet(provider: provider),
+    );
+  }
+
+  void _openChatSheet(BuildContext context, ConversationDetailProvider provider) async {
+    // Start a scoped blank chat for this conversation (session-first)
+    await context.read<MessageProvider>().startScopedChat(conversation.id);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final height = MediaQuery.of(ctx).size.height * 0.9;
+        return Container(
+          height: height,
+          decoration: const BoxDecoration(
+            color: Color(0xFF1f1f25),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            top: true,
+            child: Column(
+              children: [
+                // Header with delete (left) and close (right)
+                Container(
+                  color: Colors.black,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.white),
+                              onPressed: () async {
+                                final mp = Provider.of<MessageProvider>(context, listen: false);
+                                final sessionId = mp.currentChatSessionId;
+                                if (sessionId != null && sessionId.isNotEmpty) {
+                                  try {
+                                    await deleteChatSessionServer(sessionId);
+                                    mp.setCurrentChatSessionId(null);
+                                    mp.messages = [];
+                                    if (ctx.mounted) Navigator.of(ctx).pop();
+                                  } catch (_) {}
+                                } else {
+                                  if (ctx.mounted) Navigator.of(ctx).pop();
+                                }
+                              },
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white),
+                              onPressed: () {
+                                Navigator.of(ctx).pop();
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, color: Color(0xFF2A2A33)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ChatPage(
+                    isPivotBottom: true,
+                    showAppBar: false,
+                    scopedConversationId: conversation.id,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

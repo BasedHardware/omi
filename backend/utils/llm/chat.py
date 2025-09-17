@@ -22,28 +22,64 @@ from utils.llms.memory import get_prompt_memories
 # ****************************************
 
 
-def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_str: str = '') -> str:
-    user_name, memories_str = get_prompt_memories(uid)
-    if plugin is None:
-        prompt = f"""
-You are 'Omi', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
-You know the following about {user_name}: {memories_str}.
+def generate_session_title(message_text: str) -> str:
+    """
+    Generate a concise, meaningful title for a chat session based on the first user message.
+    """
 
-{prev_messages_str}
+    if not message_text or not message_text.strip():
+        return "New Chat"
 
-Compose {"an initial" if not prev_messages_str else "a follow-up"} message to {user_name} that fully embodies your friendly and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just {"start" if not prev_messages_str else "continue"} the conversation naturally, showcasing your personality.
-"""
-    else:
-        prompt = f"""
-You are '{plugin.name}', {plugin.chat_prompt}.
-You know the following about {user_name}: {memories_str}.
+    clean_text = message_text.strip()[:500]
 
-{prev_messages_str}
+    prompt = f"""
+    You are an expert at creating concise, meaningful titles for conversations.
 
-As {plugin.name}, fully embrace your personality and characteristics in your {"initial" if not prev_messages_str else "follow-up"} message to {user_name}. Use language, tone, and style that reflect your unique personality traits. {"Start" if not prev_messages_str else "Continue"} the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
-"""
-    prompt = prompt.strip()
-    return llm_medium.invoke(prompt).content
+    Your task is to generate a short title (3-4 words maximum) that captures the main topic or intent of this message.
+
+    The title should be:
+    - Very concise (3-4 words max)
+    - Clear and descriptive
+    - Focus on the main topic, not implementation details
+    - Use Title Case (capitalize first letter of each word)
+    - Avoid generic words like "Help", "Question", "Issue" unless very specific
+    - Avoid quotes or special characters
+
+    Examples of good titles:
+    - "Python Data Analysis"
+    - "Travel Planning Europe"
+    - "Career Change Advice"
+    - "Recipe Recommendations"
+    - "Investment Strategy"
+    - "Machine Learning Setup"
+    - "React Component Design"
+
+    Message: ```{clean_text}```
+
+    Output only the title, nothing else.
+    """.replace(
+        '    ', ''
+    ).strip()
+
+    try:
+        response = llm_mini.invoke(prompt)
+        title = response.content.strip()
+
+        title = title.replace('"', '').replace("'", '').strip()
+
+        words = title.split()
+        if len(words) > 4:
+            title = ' '.join(words[:4])
+        elif len(words) == 0:
+            title = "New Chat"
+
+        title = ' '.join(word.capitalize() for word in title.split())
+
+        return title
+
+    except Exception as e:
+        print(f"Error generating session title: {e}")
+        return "New Chat"
 
 
 # *********************************************
@@ -69,8 +105,14 @@ class DatesContext(BaseModel):
 
 def requires_context(question: str) -> bool:
     prompt = f'''
-    Based on the current question your task is to determine whether the user is asking a question that requires context outside the conversation to be answered.
-    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
+    Based on the current question your task is to determine whether the user is asking a question that is generic and does not require further context about them or the experiences they have had.
+    Exmaples: 
+    
+    1. If the user is saying "Hi", "Hello", "How are you?", "Good morning", "Whats the weather today" etc, the answer is False.
+    2. If the user is asking a generic question like "What is the capital of France?", the answer is False.
+    3. If the user is asking a question about a meeting they had today, the answer is True.
+    4. If the user is asking a question about a person they might know, the answer is True
+    5. If the user is asking a question about a potential memory or experience they might have had, the answer is True
 
     User's Question:
     {question}
@@ -275,6 +317,8 @@ def _get_qa_rag_prompt(
     cited: Optional[bool] = False,
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
+    pinned_mode: Optional[bool] = False,
+    chunks: Optional[List[dict]] = None,
 ) -> str:
     user_name, memories_str = get_prompt_memories(uid)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
@@ -287,13 +331,34 @@ def _get_qa_rag_prompt(
 
     # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_instruction = """
-    - You MUST cite the most relevant <memories> that answer the question. \
+    - Cite only  <memories> that are directly relevant to answering the <question>; otherwise do not include any citations.
       - Only cite in <memories> not <user_facts>, not <previous_messages>.
-      - Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
-      - NO SPACE between the last word and the citation.
+      - Place citations at the end of sentences (immediately after the final punctuation), never at the start or middle.
+      - Use [index] with no space before the bracket, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
       - Avoid citing irrelevant memories.
     """
 
+    pinned_note = (
+        "- Pinned Mode: The user refers to the conversation(s) in <memories>. Treat them as the primary context.\n"
+        if pinned_mode
+        else ""
+    )
+
+    chunks_section = ""
+    chunks_instruction = ""
+    if chunks:
+        # Build a numbered chunks section the model can cite with [i]
+        numbered = []
+        for i, ch in enumerate(chunks, start=1):
+            header = ch.get('header', '')
+            text = ch.get('text', '')
+            numbered.append(f"[{i}] {header}\n{text}")
+        chunks_section = "\n".join(numbered)
+        chunks_instruction = (
+            "- Use <chunks> only when they are directly relevant to answering the <question>; if not relevant, do not include any citations.\n"
+            "- When adding a citation, place the bracket reference [i] at the end of the sentence (immediately after the final punctuation), never at the start or middle, and with no space before the bracket.\n"
+            "- If no specific chunk is directly relied upon for a sentence, do not cite for that sentence.\n"
+        )
     return (
         f"""
     <assistant_role>
@@ -314,6 +379,8 @@ def _get_qa_rag_prompt(
     - You MUST follow the <reports_instructions> if the user is asking for reporting or summarizing their dates, weeks, months, or years.
     {cited_instruction if cited and len(context) > 0 else ""}
     {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
+    {pinned_note}
+    {chunks_instruction}
     </instructions>
 
     <plugin_instructions>
@@ -335,6 +402,8 @@ def _get_qa_rag_prompt(
     <memories>
     {context}
     </memories>
+
+    {"<chunks>\n" + chunks_section + "\n</chunks>" if chunks_section else ""}
 
     <previous_messages>
     {Message.get_messages_as_xml(messages)}
@@ -370,8 +439,10 @@ def qa_rag(
     cited: Optional[bool] = False,
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
+    pinned_mode: Optional[bool] = False,
+    chunks: Optional[List[dict]] = None,
 ) -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz, pinned_mode, chunks)
     # print('qa_rag prompt', prompt)
     return llm_medium.invoke(prompt).content
 
@@ -385,8 +456,10 @@ def qa_rag_stream(
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
     callbacks=[],
+    pinned_mode: Optional[bool] = False,
+    chunks: Optional[List[dict]] = None,
 ) -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz, pinned_mode, chunks)
     # print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 

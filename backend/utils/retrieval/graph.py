@@ -1,7 +1,10 @@
 import datetime
+import os
 import uuid
 import asyncio
-from typing import List, Optional, Tuple, AsyncGenerator
+from typing import List, Optional, Tuple, AsyncGenerator, Dict
+import json
+import time
 
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
@@ -36,10 +39,16 @@ from utils.llm.chat import (
     select_structured_filters,
     extract_question_from_conversation,
 )
+from utils.llm.clients import num_tokens_from_string
+from utils.retrieval.context_selector import select_relevant_segments, pick_relevant_info_from_conversation_node
+from utils.retrieval.chunks import build_chunks_payload_from_matches
 from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
+from utils.conversations.citations import (
+    annotate_with_transcript_citations_from_windows,
+)
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -110,6 +119,11 @@ class GraphState(TypedDict):
     ask_for_nps: Optional[bool]
 
     chat_session: Optional[ChatSession]
+
+    chunk_matches: Optional[Dict[str, List[dict]]]
+    relevant_windows: Optional[Dict[str, List[dict]]]
+    selected_memory_ids: Optional[List[str]]
+    pinned_context_str: Optional[str]
 
 
 def determine_conversation(state: GraphState):
@@ -263,6 +277,11 @@ def retrieve_topics_filters(state: GraphState):
 def retrieve_date_filters(state: GraphState):
     print('retrieve_date_filters')
     # TODO: if this makes vector search fail further, query firestore instead
+    # UI takes precedence over LLM inference
+    client_range = state.get("date_filters")
+    if client_range and client_range.get("start") and client_range.get("end"):
+        return {"date_filters": client_range}
+    # Otherwise, infer from question
     dates_range = retrieve_context_dates_by_question(state.get("parsed_question", ""), state.get("tz", "UTC"))
     print('retrieve_date_filters dates_range:', dates_range)
     if dates_range and len(dates_range) >= 2:
@@ -285,37 +304,38 @@ def query_vectors(state: GraphState):
     #    else [0] * 3072
     # )
 
-    # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
-    vector = [1] * 3072
-    print("query_vectors vector:", vector[:5])
+    # Candidate selection: if client pinned memory ids we only want to focus on those, skip Pinecone entirely
+    # Candidate selection: if client pinned memory ids we only want to focus on those, skip Pinecone entirely
+    selected_memory_ids = state.get("selected_memory_ids") or []
 
-    # TODO: enable it when the in-accurate topic filter get fixed
-    is_topic_filter_enabled = date_filters.get("start") is None
-    memories_id = query_vectors_by_metadata(
-        uid,
-        vector,
-        dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=state.get("filters", {}).get("people", []) if is_topic_filter_enabled else [],
-        topics=state.get("filters", {}).get("topics", []) if is_topic_filter_enabled else [],
-        entities=state.get("filters", {}).get("entities", []) if is_topic_filter_enabled else [],
-        dates=state.get("filters", {}).get("dates", []),
-        limit=100,
-    )
-    memories = conversations_db.get_conversations_by_id(uid, memories_id)
+    if selected_memory_ids:
+        candidate_ids = selected_memory_ids
+    else:
+        # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
+        vector = [1] * 3072
+        print("query_vectors vector:", vector[:5])
+
+        # TODO: enable it when the in-accurate topic filter get fixed
+        is_topic_filter_enabled = date_filters.get("start") is None
+        candidate_ids = query_vectors_by_metadata(
+            uid,
+            vector,
+            dates_filter=[date_filters.get("start"), date_filters.get("end")],
+            people=state.get("filters", {}).get("people", []) if is_topic_filter_enabled else [],
+            topics=state.get("filters", {}).get("topics", []) if is_topic_filter_enabled else [],
+            entities=state.get("filters", {}).get("entities", []) if is_topic_filter_enabled else [],
+            dates=state.get("filters", {}).get("dates", []),
+            limit=100,
+        )
+
+    memories = conversations_db.get_conversations_by_id(uid, candidate_ids)
 
     # Filter out locked conversations if user doesn't have premium access
     memories = [m for m in memories if not m.get('is_locked', False)]
 
-    # stream
-    # if state.get('streaming', False):
-    #    if len(memories) == 0:
-    #        msg = "No relevant memories found"
-    #    else:
-    #        msg = f"Found {len(memories)} relevant memories"
-    #    state['callback'].put_thought_nowait(msg)
-
-    # print(memories_id)
-    return {"memories_found": memories}
+    return {
+        "memories_found": memories,
+    }
 
 
 def qa_handler(state: GraphState):
@@ -335,21 +355,59 @@ def qa_handler(state: GraphState):
 
     # streaming
     streaming = state.get("streaming")
+    # Build combined context once for logging and reuse
+    combined_context = (
+        (state.get("pinned_context_str") + "\n\n") if state.get("pinned_context_str") else ""
+    ) + Conversation.conversations_to_string(memories, False, people=people)
+
+    def _maybe_annotate_citations(answer_text: str) -> tuple[str, list]:
+        try:
+            # Convert raw memories to Conversation models
+            convs: list[Conversation] = []
+            for m in memories or []:
+                try:
+                    convs.append(Conversation(**m) if isinstance(m, dict) else m)
+                except Exception:
+                    pass
+
+            pinned_mode = bool(state.get('selected_memory_ids') or [])
+            matches = state.get('relevant_windows') or {}
+
+            # Prefer window-based citation computation when we have selected segments (matches)
+            annotated, cites = annotate_with_transcript_citations_from_windows(answer_text, matches)
+            return annotated, (cites or [])
+        except Exception:
+            return answer_text, []
+
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
+        # Build chunks payload from relevant windows for streaming as well
+        chunks_payload = build_chunks_payload_from_matches(state.get('relevant_windows'))
+
         response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
-            Conversation.conversations_to_string(memories, False, people=people),
+            combined_context,
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
             tz=state.get("tz"),
             callbacks=[state.get('callback')],
+            pinned_mode=bool(state.get('selected_memory_ids') or []),
+            chunks=chunks_payload if chunks_payload else None,
         )
-        return {"answer": response, "ask_for_nps": True}
+        # Annotate with citations when appropriate
+        annotated, citations = _maybe_annotate_citations(response)
+        return {
+            "answer": annotated,
+            "ask_for_nps": True,
+            "memories_found": memories,
+            "citations": citations,
+        }
 
-    # no streaming
+    # Build chunks payload from relevant windows (top windows per matched conversation)
+    chunks_payload = build_chunks_payload_from_matches(state.get('relevant_windows'))
+
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
@@ -358,8 +416,15 @@ def qa_handler(state: GraphState):
         cited=state.get("cited"),
         messages=state.get("messages"),
         tz=state.get("tz"),
+        pinned_mode=bool(state.get('selected_memory_ids') or []),
+        chunks=chunks_payload if chunks_payload else None,
     )
-    return {"answer": response, "ask_for_nps": True}
+    annotated, citations = _maybe_annotate_citations(response)
+    return {
+        "answer": annotated,
+        "ask_for_nps": True,
+        "citations": citations,
+    }
 
 
 def file_chat_question(state: GraphState):
@@ -423,7 +488,15 @@ workflow.add_edge("retrieve_date_filters", "query_vectors")
 
 workflow.add_node("query_vectors", query_vectors)
 
-workflow.add_edge("query_vectors", "qa_handler")
+
+def pick_relevant_info_from_conversation(state: GraphState):
+    return pick_relevant_info_from_conversation_node(state)
+
+
+workflow.add_node("pick_relevant_info_from_conversation", pick_relevant_info_from_conversation)
+
+workflow.add_edge("query_vectors", "pick_relevant_info_from_conversation")
+workflow.add_edge("pick_relevant_info_from_conversation", "qa_handler")
 
 workflow.add_node("qa_handler", qa_handler)
 
@@ -455,6 +528,8 @@ async def execute_graph_chat_stream(
     cited: Optional[bool] = False,
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
+    client_date_range: Optional[dict] = None,
+    selected_memory_ids: Optional[List[str]] = None,
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -471,6 +546,13 @@ async def execute_graph_chat_stream(
                 "streaming": True,
                 "callback": callback,
                 "chat_session": chat_session,
+                # inject overrides
+                "date_filters": (
+                    {"start": client_date_range.get('start'), "end": client_date_range.get('end')}
+                    if client_date_range and client_date_range.get('start') and client_date_range.get('end')
+                    else {}
+                ),
+                "selected_memory_ids": selected_memory_ids or [],
             },
             {"configurable": {"thread_id": str(uuid.uuid4())}},
         )

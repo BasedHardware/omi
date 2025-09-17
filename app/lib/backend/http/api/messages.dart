@@ -10,14 +10,34 @@ import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
-Future<List<ServerMessage>> getMessagesServer({
+String _buildMessagesUrl({
   String? appId,
+  String? chatSessionId,
+  bool? dropdownSelected,
+}) {
+  final hasSession = chatSessionId != null && chatSessionId != 'no_selected';
+  final hasAppId = appId != null && appId != 'no_selected';
+  final hasDropdownSelected = dropdownSelected != null;
+  final params = <String, String>{
+    if (hasSession) 'chat_session_id': chatSessionId,
+    if (hasAppId) 'app_id': appId,
+    if (hasDropdownSelected) 'dropdown_selected': '$dropdownSelected',
+  };
+  return Uri.parse('${Env.apiBaseUrl}v2/messages').replace(queryParameters: params).toString();
+}
+
+Future<List<ServerMessage>> getMessagesServer({
+  String? chatSessionId,
   bool dropdownSelected = false,
 }) async {
-  if (appId == 'no_selected') appId = null;
   // TODO: Add pagination
+  final url = _buildMessagesUrl(
+    appId: null,
+    chatSessionId: chatSessionId,
+    dropdownSelected: dropdownSelected,
+  );
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}&dropdown_selected=$dropdownSelected',
+    url: url,
     headers: {},
     method: 'GET',
     body: '',
@@ -36,18 +56,16 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer({String? appId}) async {
-  if (appId == 'no_selected') appId = null;
+Future<void> clearChatServer({String? chatSessionId}) async {
+  final url = _buildMessagesUrl(appId: null, chatSessionId: chatSessionId);
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}',
+    url: url,
     headers: {},
     method: 'DELETE',
     body: '',
   );
   if (response == null) throw Exception('Failed to delete chat');
-  if (response.statusCode == 200) {
-    return [ServerMessage.fromJson(jsonDecode(response.body))];
-  } else {
+  if (response.statusCode != 204) {
     throw Exception('Failed to delete chat');
   }
 }
@@ -76,17 +94,20 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
-  var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v2/messages';
-  }
+Stream<ServerMessageChunk> sendMessageStreamServer(String text,
+    {String? appId, String? chatSessionId, List<String>? filesId, Map<String, dynamic>? context}) async* {
+  final url = _buildMessagesUrl(appId: appId, chatSessionId: chatSessionId);
 
   try {
     final request = await HttpClient().postUrl(Uri.parse(url));
     request.headers.set('Authorization', await getAuthHeader());
     request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'text': text, 'file_ids': filesId}));
+    final Map<String, dynamic> body = {
+      'text': text,
+      'file_ids': filesId,
+      'context': context ?? {},
+    };
+    request.write(jsonEncode(body));
 
     final response = await request.close();
 
@@ -135,20 +156,60 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
   }
 }
 
-Future<ServerMessage> getInitialAppMessage(String? appId) {
-  return makeApiCall(
-    url: '${Env.apiBaseUrl}v2/initial-message?app_id=$appId',
-    headers: {},
+// ---------------- Chat sessions API (multi-session) ----------------
+
+Future<Map<String, dynamic>> createChatSessionServer({String? appId, List<String>? pinnedConversationIds}) async {
+  final url = '${Env.apiBaseUrl}v2/chat-sessions?app_id=$appId';
+  final Map<String, dynamic> bodyMap = {};
+  final response = await makeApiCall(
+    url: url,
+    headers: {'Content-Type': 'application/json'},
     method: 'POST',
+    body: jsonEncode(bodyMap),
+  );
+  if (response == null || response.statusCode != 200) {
+    throw Exception('Failed to create chat session');
+  }
+  return jsonDecode(utf8.decode(response.bodyBytes));
+}
+
+Future<List<Map<String, dynamic>>> listChatSessionsServer({int limit = 20}) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/chat-sessions?limit=$limit',
+    headers: {},
+    method: 'GET',
     body: '',
-  ).then((response) {
-    if (response == null) throw Exception('Failed to send message');
-    if (response.statusCode == 200) {
-      return ServerMessage.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('Failed to send message');
-    }
-  });
+  );
+  if (response == null || response.statusCode != 200) {
+    throw Exception('Failed to list chat sessions');
+  }
+  final body = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+  return body.cast<Map<String, dynamic>>();
+}
+
+Future<Map<String, dynamic>> getChatSessionServer(String chatSessionId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/chat-sessions/$chatSessionId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) {
+    throw Exception('Failed to get chat session');
+  }
+  return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+}
+
+Future<void> deleteChatSessionServer(String chatSessionId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/chat-sessions/$chatSessionId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) {
+    throw Exception('Failed to delete chat session');
+  }
 }
 
 Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async* {

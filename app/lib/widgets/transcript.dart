@@ -128,7 +128,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     if (widget.segments.isNotEmpty && widget.isConversationDetail) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
+        if (_highlightIndex < 0) {
+          // only scroll to bottom if we dont have segments cited to navigate to
+          _scrollToBottomGently();
+        }
       });
     }
     // Auto-scroll to bottom after first frame
@@ -261,7 +264,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     super.didChangeDependencies();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottomGently();
+      if (_highlightIndex < 0) {
+        // only scroll to bottom if we dont have segments cited to navigate to
+        _scrollToBottomGently();
+      }
     });
   }
 
@@ -664,16 +670,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: isHighlighted
-                                        ? Colors.white.withOpacity(0.15)
-                                        : Colors.black.withOpacity(0.15),
+                                    color:
+                                        isHighlighted ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.15),
                                     blurRadius: 4,
                                     offset: const Offset(0, 1),
                                   ),
                                 ],
-                                border: isHighlighted
-                                    ? Border.all(color: Colors.white.withOpacity(0.7), width: 1.5)
-                                    : null,
+                                border:
+                                    isHighlighted ? Border.all(color: Colors.white.withOpacity(0.7), width: 1.5) : null,
                               ),
                               child: SelectionArea(
                                 child: Column(
@@ -732,9 +736,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                           Text(
                                             data.getTimestampString(),
                                             style: TextStyle(
-                                              color: isUser
-                                                  ? Colors.white.withValues(alpha: 0.7)
-                                                  : Colors.grey.shade400,
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
                                               fontSize: 11,
                                             ),
                                           ),

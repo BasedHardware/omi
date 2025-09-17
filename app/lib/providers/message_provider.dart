@@ -7,22 +7,23 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/messages.dart';
-import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:uuid/uuid.dart';
+import 'package:omi/utils/date_presets.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
+  String? currentChatSessionId;
   bool _isNextMessageFromVoice = false;
 
   bool isLoadingMessages = false;
@@ -38,9 +39,101 @@ class MessageProvider extends ChangeNotifier {
   List<MessageFile> uploadedFiles = [];
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
+  List<Map<String, dynamic>> sessions = [];
+
+  // Blank draft guard to prevent background repopululation (i.e. re-gaining internet connection)
+  bool isBlankDraft = false;
+
+  // UI-driven retrieval controls
+  DateTime? _dateRangeStartUtc;
+  DateTime? _dateRangeEndUtc;
+  final List<String> _scopedConversationIds = [];
+  int _datePreset = 0; // 0: All, 1: Today, 2: Yesterday, 3: Last7, 4: Last30
+
+  void clearRetrievalScope() {
+    _scopedConversationIds.clear();
+    notifyListeners();
+  }
+
+  void scopeToConversation(String id) {
+    _scopedConversationIds
+      ..clear()
+      ..add(id);
+    notifyListeners();
+  }
+
+  void setDateRange(DateTime? startUtc, DateTime? endUtc) {
+    _dateRangeStartUtc = startUtc;
+    _dateRangeEndUtc = endUtc;
+    notifyListeners();
+  }
+
+  List<String> get scopedConversationIds => List.unmodifiable(_scopedConversationIds);
+  DateTime? get dateRangeStartUtc => _dateRangeStartUtc;
+  DateTime? get dateRangeEndUtc => _dateRangeEndUtc;
+  int get datePreset => _datePreset;
+
+  void setDatePreset(int preset) {
+    _datePreset = preset;
+    DateTime? s;
+    DateTime? e;
+
+    final range = computeDateRangeUtc(preset);
+    s = range.startUtc;
+    e = range.endExclusiveUtc;
+
+    _dateRangeStartUtc = s;
+    _dateRangeEndUtc = e;
+    notifyListeners();
+  }
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void setCurrentChatSessionId(String? id) {
+    currentChatSessionId = id;
+    notifyListeners();
+  }
+
+  Future<void> startNewChat({String? appId}) async {
+    if (appId != null) {
+      appProvider?.setSelectedChatAppId(appId);
+    }
+    setCurrentChatSessionId(null);
+    setLoadingMessages(false);
+    messages = [];
+    clearRetrievalScope();
+    setDatePreset(0);
+    clearSelectedFiles();
+    clearUploadedFiles();
+    isBlankDraft = true;
+    notifyListeners();
+  }
+
+  Future<void> startScopedChat(String conversationId, {String? appId}) async {
+    await startNewChat(appId: appId);
+    scopeToConversation(conversationId);
+  }
+
+  Future<void> loadSessions({int limit = 20}) async {
+    try {
+      final list = await listChatSessionsServer(limit: limit);
+      sessions = list;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> switchToSession(String id) async {
+    final session = await getChatSessionServer(id);
+    final String? pluginId = (session['plugin_id'] as String?);
+    appProvider?.setSelectedChatAppId(pluginId);
+    setCurrentChatSessionId(id);
+    setLoadingMessages(true);
+    messages = [];
+    await refreshMessages();
+    setLoadingMessages(false);
+    notifyListeners();
   }
 
   void setNextMessageOriginIsVoice(bool isVoice) {
@@ -91,6 +184,19 @@ class MessageProvider extends ChangeNotifier {
   void setLoadingMessages(bool value) {
     isLoadingMessages = value;
     notifyListeners();
+  }
+
+  // Helper: adopt a session id from a streamed message if we don't have one yet
+  bool _adoptSessionIdFromMessage(ServerMessage? message) {
+    final bool noSessionYet = currentChatSessionId == null || currentChatSessionId!.isEmpty;
+    final String? newSessionId = message?.chatSessionId;
+    final bool chunkHasSession = newSessionId != null && newSessionId.isNotEmpty;
+    if (noSessionYet && chunkHasSession) {
+      setCurrentChatSessionId(newSessionId);
+      isBlankDraft = false;
+      return true;
+    }
+    return false;
   }
 
   void captureImage() async {
@@ -268,59 +374,25 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future refreshMessages({bool dropdownSelected = false}) async {
-    setLoadingMessages(true);
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-    }
-    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
-    if (messages.isEmpty) {
-      messages = SharedPreferencesUtil().cachedMessages;
-    } else {
-      SharedPreferencesUtil().cachedMessages = messages;
-      setHasCachedMessages(true);
-    }
-    setLoadingMessages(false);
-    notifyListeners();
-  }
-
-  void setMessagesFromCache() {
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-      messages = SharedPreferencesUtil().cachedMessages;
-    }
-    notifyListeners();
-  }
-
-  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
-    if (!hasCachedMessages) {
-      firstTimeLoadingText = 'Reading your memories...';
+    if (currentChatSessionId == null && isBlankDraft) {
+      setLoadingMessages(false);
       notifyListeners();
+      return;
     }
     setLoadingMessages(true);
-    var mes = await getMessagesServer(
-      appId: appProvider?.selectedChatAppId,
+    setHasCachedMessages(false);
+    messages = await getMessagesServer(
+      chatSessionId: currentChatSessionId,
       dropdownSelected: dropdownSelected,
     );
-    if (!hasCachedMessages) {
-      firstTimeLoadingText = 'Learning from your memories...';
-      notifyListeners();
-    }
-    messages = mes;
     setLoadingMessages(false);
-    notifyListeners();
-    return messages;
-  }
-
-  Future setMessageNps(ServerMessage message, int value) async {
-    await setMessageResponseRating(message.id, value);
-    message.askForNps = false;
     notifyListeners();
   }
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
-    messages = mes;
+    await clearChatServer(chatSessionId: currentChatSessionId);
+    await startNewChat(appId: appProvider?.selectedChatAppId);
     setClearingChat(false);
     notifyListeners();
   }
@@ -338,6 +410,7 @@ class MessageProvider extends ChangeNotifier {
       MessageSender.human,
       MessageType.text,
       appId,
+      null,
       false,
       List.from(uploadedFiles),
       fileIds,
@@ -408,12 +481,14 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
+          _adoptSessionIdFromMessage(chunk.message);
           messages[0] = message;
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.message) {
+          _adoptSessionIdFromMessage(chunk.message);
           messages.insert(1, chunk.message!);
           notifyListeners();
           continue;
@@ -473,7 +548,21 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+      String? sessionIdToUse = currentChatSessionId;
+      // Build date range & optional conversation scoping
+      final Map<String, dynamic> context = {};
+      if (_dateRangeStartUtc != null && _dateRangeEndUtc != null) {
+        context['date_range'] = {
+          'start': _dateRangeStartUtc!.toIso8601String(),
+          'end': _dateRangeEndUtc!.toIso8601String(),
+        };
+      }
+      if (_scopedConversationIds.isNotEmpty) {
+        context['conversation_ids'] = List<String>.from(_scopedConversationIds);
+      }
+
+      await for (var chunk in sendMessageStreamServer(text,
+          appId: currentAppId, chatSessionId: sessionIdToUse, filesId: fileIds, context: context)) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);
@@ -495,8 +584,10 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
+          _adoptSessionIdFromMessage(chunk.message);
           messages[0] = message;
           notifyListeners();
+          unawaited(loadSessions());
           continue;
         }
 
@@ -516,11 +607,9 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
-  Future sendInitialAppMessage(App? app) async {
-    setSendingMessage(true);
-    ServerMessage message = await getInitialAppMessage(app?.id);
-    addMessage(message);
-    setSendingMessage(false);
+  Future setMessageNps(ServerMessage message, int value) async {
+    await setMessageResponseRating(message.id, value);
+    message.askForNps = false;
     notifyListeners();
   }
 

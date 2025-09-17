@@ -294,19 +294,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         // Navigate directly to chat page with this app selected
                         var appId = app.id;
                         var appProvider = Provider.of<AppProvider>(context, listen: false);
-                        var messageProvider = Provider.of<MessageProvider>(context, listen: false);
 
-                        // Set the selected app
+                        // Set the selected app and start clean chat
                         appProvider.setSelectedChatAppId(appId);
-
-                        // Refresh messages and get the selected app
-                        await messageProvider.refreshMessages();
-                        App? selectedApp = await appProvider.getAppFromId(appId);
-
-                        // Send initial message if chat is empty
-                        if (messageProvider.messages.isEmpty) {
-                          messageProvider.sendInitialAppMessage(selectedApp);
-                        }
+                        await Provider.of<MessageProvider>(context, listen: false).startNewChat(appId: appId);
 
                         // Navigate directly to chat page
                         if (mounted) {

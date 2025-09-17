@@ -36,6 +36,7 @@ import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_section_header.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
+import 'widgets/desktop_sessions_panel.dart';
 
 class DesktopChatPage extends StatefulWidget {
   const DesktopChatPage({super.key});
@@ -59,6 +60,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   bool isScrollingDown = false;
   bool _showVoiceRecorder = false;
+  bool _showSessionsPanel = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -200,6 +202,23 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       ),
                       _buildFloatingInputArea(provider, connectivityProvider),
                     ],
+                  ),
+                ),
+
+                // Sessions panel overlay (slide-in from right)
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  top: 0,
+                  bottom: 0,
+                  right: _showSessionsPanel ? 0 : -360,
+                  width: 340,
+                  child: DesktopSessionsPanel(
+                    onClose: () {
+                      setState(() {
+                        _showSessionsPanel = false;
+                      });
+                    },
                   ),
                 ),
               ],
@@ -357,6 +376,34 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ),
                 child: const Icon(
                   FontAwesomeIcons.trash,
+                  color: ResponsiveHelper.textSecondary,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Sessions/history button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                context.read<MessageProvider>().loadSessions();
+                setState(() {
+                  _showSessionsPanel = true;
+                });
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  FontAwesomeIcons.clockRotateLeft,
                   color: ResponsiveHelper.textSecondary,
                   size: 16,
                 ),
@@ -1671,11 +1718,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       appProvider.setSelectedChatAppId(app?.id);
 
       final messageProvider = context.read<MessageProvider>();
-      await messageProvider.refreshMessages(dropdownSelected: true);
-
-      if (messageProvider.messages.isEmpty) {
-        messageProvider.sendInitialAppMessage(app);
-      }
+      await messageProvider.startNewChat(appId: app?.id);
 
       scrollToBottom();
     }

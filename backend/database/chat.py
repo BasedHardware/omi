@@ -151,15 +151,11 @@ def get_messages(
     limit: int = 20,
     offset: int = 0,
     include_conversations: bool = False,
-    app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
-    # include_plugin_id_filter: bool = True,
 ):
-    print('get_messages', uid, limit, offset, app_id, include_conversations)
+    print('get_messages', uid, limit, offset, include_conversations)
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
-    # if include_plugin_id_filter:
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
 
@@ -244,14 +240,11 @@ def report_message(uid: str, msg_doc_id: str):
         return {"message": f"Update failed: {e}"}
 
 
-def batch_delete_messages(
-    parent_doc_ref, batch_size=450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
-):
+def batch_delete_messages(parent_doc_ref, batch_size=450, chat_session_id: Optional[str] = None):
     messages_ref = parent_doc_ref.collection('messages')
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
-    print('batch_delete_messages', app_id)
+    print('batch_delete_messages')
 
     while True:
         docs_stream = messages_ref.limit(batch_size).stream()
@@ -273,13 +266,13 @@ def batch_delete_messages(
             break
 
 
-def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
+def clear_chat(uid: str, chat_session_id: Optional[str] = None):
     try:
         user_ref = db.collection('users').document(uid)
         print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
             return {"message": "User not found"}
-        batch_delete_messages(user_ref, app_id=app_id, chat_session_id=chat_session_id)
+        batch_delete_messages(user_ref, chat_session_id=chat_session_id)
         return None
     except Exception as e:
         return {"message": str(e)}
@@ -337,6 +330,27 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
     return None
 
 
+def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[dict]:
+    session_ref = db.collection('users').document(uid).collection('chat_sessions').document(chat_session_id)
+    doc = session_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
+
+def list_chat_sessions(uid: str, app_id: Optional[str] = None, limit: int = 20) -> list[dict]:
+    ref = db.collection('users').document(uid).collection('chat_sessions')
+    if app_id is not None:
+        ref = ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+    # Order by last_active_at if exists, else created_at
+    try:
+        ref = ref.order_by('last_active_at', direction=firestore.Query.DESCENDING)
+    except Exception:
+        ref = ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    ref = ref.limit(limit)
+    return [doc.to_dict() for doc in ref.stream()]
+
+
 def delete_chat_session(uid, chat_session_id):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
@@ -346,7 +360,9 @@ def delete_chat_session(uid, chat_session_id):
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
+    session_ref.update(
+        {"message_ids": firestore.ArrayUnion([message_id]), "last_active_at": datetime.now(timezone.utc)}
+    )
 
 
 def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]):
@@ -356,6 +372,27 @@ def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
     session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
+
+
+def touch_chat_session(uid: str, chat_session_id: str):
+    """Update last_active_at for a session."""
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"last_active_at": datetime.now(timezone.utc)})
+
+
+def update_chat_session_title(uid: str, chat_session_id: str, title: str):
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"title": title})
+
+
+def set_pinned_conversations(uid: str, chat_session_id: str, conversation_ids: List[str]):
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update(
+        {"pinned_conversation_ids": conversation_ids or [], "last_active_at": datetime.now(timezone.utc)}
+    )
 
 
 # **************************************

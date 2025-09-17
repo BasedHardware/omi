@@ -1224,15 +1224,8 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     var appId = app.id;
     var appProvider = Provider.of<AppProvider>(context, listen: false);
     var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-    App? selectedApp;
-    if (appId.isNotEmpty) {
-      selectedApp = await appProvider.getAppFromId(appId);
-    }
     appProvider.setSelectedChatAppId(appId);
-    await messageProvider.refreshMessages();
-    if (messageProvider.messages.isEmpty) {
-      messageProvider.sendInitialAppMessage(selectedApp);
-    }
+    await messageProvider.startNewChat(appId: appId);
   }
 
   void _handleWebAppTap() {

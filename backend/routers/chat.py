@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
+import os
 from fastapi.responses import StreamingResponse
-from multipart.multipart import shutil
+import shutil
 
 import database.chat as chat_db
 from database.apps import record_app_usage
@@ -24,38 +25,53 @@ from models.chat import (
 from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
+from typing import Dict
 from utils.chat import (
     process_voice_message_segment,
     process_voice_message_segment_stream,
     transcribe_voice_message_segment,
+    acquire_chat_session,
 )
-from utils.llm.persona import initial_persona_chat_message
-from utils.llm.chat import initial_chat_message
+from utils.llm.chat import generate_session_title
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+import database.conversations as conversations_db
 
 router = APIRouter()
 fc = FileChatTool()
+# ----------------- Multi-session endpoints -----------------
 
 
-def filter_messages(messages, app_id):
-    print('filter_messages', len(messages), app_id)
-    collected = []
-    for message in messages:
-        if message.sender == MessageSender.ai and message.plugin_id != app_id:
-            break
-        collected.append(message)
-    print('filter_messages output:', len(collected))
-    return collected
+@router.get('/v2/chat-sessions', tags=['chat'])
+def list_chat_sessions(
+    app_id: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    limit: int = 20,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    compat_app_id = app_id or plugin_id
+    sessions = chat_db.list_chat_sessions(uid, app_id=compat_app_id, limit=limit)
+    return sessions
 
 
-def acquire_chat_session(uid: str, app_id: Optional[str] = None):
-    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
-    if chat_session is None:
-        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
-        chat_session = chat_db.add_chat_session(uid, cs.dict())
-    return chat_session
+@router.get('/v2/chat-sessions/{chat_session_id}', tags=['chat'])
+def get_chat_session_by_id(chat_session_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+        chat_db.touch_chat_session(uid, chat_session_id)
+    return session
+
+
+@router.delete('/v2/chat-sessions/{chat_session_id}', tags=['chat'])
+def delete_chat_session_by_id(chat_session_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    # clear messages in this session then delete session
+    err = chat_db.clear_chat(uid, chat_session_id=chat_session_id)
+    if err:
+        raise HTTPException(status_code=500, detail='Failed to clear chat')
+    chat_db.delete_chat_session(uid, chat_session_id)
+    return {"ok": True}
 
 
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
@@ -63,17 +79,16 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    print('send_message', data.text, compat_app_id, uid)
+    dr = data.context.date_range if data.context else None
+    conversation_ids = (data.context.conversation_ids or []) if data.context else []
+    client_date_range_dict = {'start': dr.start, 'end': dr.end} if (dr and dr.start and dr.end) else {}
 
-    if compat_app_id in ['null', '']:
-        compat_app_id = None
-
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session = ChatSession(**chat_session) if chat_session else None
+    # resolve or acquire session
+    chat_session = acquire_chat_session(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
 
     message = Message(
         id=str(uuid.uuid4()),
@@ -84,11 +99,10 @@ def send_message(
         app_id=compat_app_id,
     )
     if data.file_ids is not None:
-        new_file_ids = fc.retrieve_new_file(data.file_ids)
-        if chat_session:
-            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
-            chat_session.add_file_ids(data.file_ids)
-            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+        # Session-first file handling
+        new_file_ids = chat_session.retrieve_new_file(data.file_ids)
+        chat_session.add_file_ids(data.file_ids)
+        chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
 
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
@@ -97,33 +111,39 @@ def send_message(
             message.files = files
             fc.add_files(new_file_ids)
 
-    if chat_session:
-        message.chat_session_id = chat_session.id
-        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
+    message.chat_session_id = chat_session.id
+    chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
+    chat_db.touch_chat_session(uid, chat_session.id)
 
     chat_db.add_message(uid, message.dict())
 
-    app = get_available_app_by_id(compat_app_id, uid)
-    app = App(**app) if app else None
+    app_data = get_available_app_by_id(compat_app_id, uid) if compat_app_id else None
+    app = App(**app_data) if app_data else None
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    messages = list(
+        reversed(
+            [
+                Message(**msg)
+                for msg in chat_db.get_messages(
+                    uid,
+                    limit=10,
+                    chat_session_id=chat_session.id,
+                )
+            ]
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
 
-        # cited extraction
-        cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
-        if len(cited_conversation_idxs) > 0:
-            response = re.sub(r'\[\d+\]', '', response)
-        memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
+        is_pinned = bool(conversation_ids)  # scoped to specific conversation(s)
 
         memories_id = []
-        # check if the items in the conversations list are dict
-        if memories:
-            converted_memories = []
+        converted_memories = []
+        if memories and not is_pinned:
             for m in memories[:5]:
                 if isinstance(m, dict):
                     converted_memories.append(Conversation(**m))
@@ -140,21 +160,40 @@ def send_message(
             type='text',
             memories_id=memories_id,
         )
-        if chat_session:
-            ai_message.chat_session_id = chat_session.id
-            chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+
+        ai_message.chat_session_id = chat_session.id
+        chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+        chat_db.touch_chat_session(uid, chat_session.id)
 
         chat_db.add_message(uid, ai_message.dict())
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        # Attach memories for chips from retrieved list only when not pinned/scoped
+        ai_message.memories = (
+            []
+            if is_pinned
+            else [
+                MessageConversation(**m) if isinstance(m, dict) else m  # m should already be dicts from DB
+                for m in (memories if len(memories) < 5 else memories[:5])
+            ]
+        )
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
         return ai_message, ask_for_nps
 
     async def generate_stream():
-        callback_data = {}
+        # Attach client overrides to callback_data for downstream logging visibility
+        callback_data = {
+            'client_date_range': client_date_range_dict,
+        }
         async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
+            uid,
+            messages,
+            app,
+            cited=False,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            client_date_range=client_date_range_dict,
+            selected_memory_ids=conversation_ids,
         ):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
@@ -166,8 +205,28 @@ def send_message(
                     ai_message_dict = ai_message.dict()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
+                    try:
+                        if 'citations' in callback_data:
+                            response_message.citations = callback_data.get('citations')
+                    except Exception:
+                        pass
+                    # Preserve markdown; avoid any cleanup that could alter formatting
+
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
                     yield f"done: {data}\n\n"
+
+    # Auto-generate title for new sessions based on first user message
+    try:
+        if chat_session and (getattr(chat_session, 'title', None) in [None, '', 'New Chat']):
+            # Only consider first human message in session
+            session_msgs = chat_db.get_messages(uid, limit=10, chat_session_id=chat_session.id)
+            human_msgs = [m for m in session_msgs if m.get('sender') == 'human']
+            if len(human_msgs) <= 1 and data.text and len(data.text.strip()) > 5:
+                new_title = generate_session_title(data.text)
+                if new_title:
+                    chat_db.update_chat_session_title(uid, chat_session.id, new_title)
+    except Exception as e:
+        print(f"Failed to auto-title session {chat_session.id if chat_session else ''}: {e}")
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
@@ -185,19 +244,13 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
     return {'message': 'Message reported'}
 
 
-@router.delete('/v2/messages', tags=['chat'], response_model=Message)
+@router.delete('/v2/messages', tags=['chat'])
 def clear_chat_messages(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
-    compat_app_id = app_id or plugin_id
-    if compat_app_id in ['null', '']:
-        compat_app_id = None
 
-    # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
-
-    err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
+    err = chat_db.clear_chat(uid, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
@@ -205,78 +258,26 @@ def clear_chat_messages(
     fc_tool = FileChatTool()
     fc_tool.cleanup(uid)
 
-    # clear session
     if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, compat_app_id)
-
-
-def initial_message_util(uid: str, app_id: Optional[str] = None):
-    print('initial_message_util', app_id)
-
-    # init chat session
-    chat_session = acquire_chat_session(uid, app_id=app_id)
-
-    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
-    print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
-
-    app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
-
-    # persona
-    text: str
-    if app and app.is_a_persona():
-        text = initial_persona_chat_message(uid, app, prev_messages)
-    else:
-        prev_messages_str = ''
-        if prev_messages:
-            prev_messages_str = 'Previous conversation history:\n'
-            prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
-        print('initial_message_util', len(prev_messages_str), app_id)
-        text = initial_chat_message(uid, app, prev_messages_str)
-
-    ai_message = Message(
-        id=str(uuid.uuid4()),
-        text=text,
-        created_at=datetime.now(timezone.utc),
-        sender='ai',
-        app_id=app_id,
-        from_external_integration=False,
-        type='text',
-        memories_id=[],
-        chat_session_id=chat_session['id'],
-    )
-    chat_db.add_message(uid, ai_message.dict())
-    chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
-    return ai_message
-
-
-@router.post('/v2/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
-    compat_app_id = app_id or plugin_id
-    return initial_message_util(uid, compat_app_id)
+    return StreamingResponse(iter(()), status_code=204)
 
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
-    compat_app_id = app_id or plugin_id
-    if compat_app_id in ['null', '']:
-        compat_app_id = None
-
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
-        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
+        uid,
+        limit=10,
+        include_conversations=True,
+        chat_session_id=chat_session_id,
     )
-    print('get_messages', len(messages), compat_app_id)
-    if not messages:
-        return [initial_message_util(uid, compat_app_id)]
+
+    print('get_messages', len(messages), chat_session_id)
     return messages
 
 
@@ -489,7 +490,7 @@ def clear_chat_messages(
     if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, compat_app_id)
+    return
 
 
 @router.post("/v1/voice-message/transcribe")
@@ -538,11 +539,3 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
 
     # If we got here, no transcript was produced
     raise HTTPException(status_code=400, detail='Failed to transcribe audio')
-
-
-@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
-    compat_app_id = app_id or plugin_id
-    return initial_message_util(uid, compat_app_id)

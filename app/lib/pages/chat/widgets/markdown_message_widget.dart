@@ -10,7 +10,8 @@ Widget getMarkdownWidget(BuildContext context, String content, {void Function(St
       a: style.copyWith(
         decoration: TextDecoration.none,
         color: const Color(0xFF8B5CF6),
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        fontSize: 15,
       ),
       p: style.copyWith(
         height: 1.5,

@@ -3,7 +3,7 @@ import time
 import base64
 import uuid
 from datetime import datetime, timezone
-from typing import List, AsyncGenerator
+from typing import List, AsyncGenerator, Optional
 
 import database.chat as chat_db
 import database.notifications as notification_db
@@ -72,7 +72,11 @@ def process_voice_message_segment(path: str, uid: str):
     app = None
     app_id = None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    chat_session = chat_db.get_chat_session(uid)
+    chat_session_id = chat_session.get('id') if chat_session else None
+    messages = list(
+        reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, chat_session_id=chat_session_id)])
+    )
     response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
     memories_id = []
     # check if the items in the conversations list are dict
@@ -189,7 +193,11 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
 
         return ai_message, ask_for_nps
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    chat_session = chat_db.get_chat_session(uid)
+    chat_session_id = chat_session.get('id') if chat_session else None
+    messages = list(
+        reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, chat_session_id=chat_session_id)])
+    )
     callback_data = {}
     async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
         if chunk:
@@ -224,3 +232,20 @@ def send_chat_message_notification(token: str, app_name: str, app_id: str, messa
         navigate_to=f'/chat/{app_id}',
     )
     send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+
+def acquire_chat_session(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None) -> ChatSession:
+    """Acquire a chat session and return a ChatSession model.
+
+    - If chat_session_id is provided and found, return that session as ChatSession
+    - If none found, create a new session, persist to DB, and return the model
+    """
+    if chat_session_id:
+        session_dict = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        return ChatSession(**session_dict)
+
+    cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
+    # default title
+    cs.title = "New Chat"
+    chat_db.add_chat_session(uid, cs.dict())
+    return cs

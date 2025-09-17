@@ -260,25 +260,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           break;
         case "chat":
           print('inside chat alias $detailPageId');
-          if (detailPageId != null && detailPageId.isNotEmpty) {
-            var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
-            if (mounted) {
-              var appProvider = Provider.of<AppProvider>(context, listen: false);
-              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-              App? selectedApp;
-              if (appId.isNotEmpty) {
-                selectedApp = await appProvider.getAppFromId(appId);
-              }
-              appProvider.setSelectedChatAppId(appId);
-              await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
-              }
-            }
-          } else {
-            if (mounted) {
-              await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
-            }
+          var appId = (detailPageId != null && detailPageId.isNotEmpty && detailPageId != "omi") ? detailPageId : '';
+          if (mounted) {
+            var appProvider = Provider.of<AppProvider>(context, listen: false);
+            var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+            appProvider.setSelectedChatAppId(appId);
+            await messageProvider.startNewChat(appId: appId);
           }
           // Navigate to chat page directly since it's no longer in the tab bar
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -757,7 +744,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       onTap: () {
                         HapticFeedback.mediumImpact();
                         MixpanelManager().bottomNavigationTabClicked('Chat');
-                        // Navigate to chat page
+                        unawaited(context.read<MessageProvider>().startNewChat(
+                              appId: context.read<AppProvider>().selectedChatAppId,
+                            ));
                         Navigator.push(
                           context,
                           MaterialPageRoute(

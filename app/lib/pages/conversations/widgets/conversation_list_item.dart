@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/pages/chat/page.dart';
+import 'package:omi/backend/http/api/messages.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -64,7 +67,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       });
     }
 
-    Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
@@ -103,19 +105,141 @@ class _ConversationListItemState extends State<ConversationListItem> {
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
                 key: UniqueKey(),
-                direction: DismissDirection.endToStart,
+                direction: DismissDirection.horizontal,
                 background: Container(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 20.0),
+                  color: Colors.blueGrey,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      Icon(Icons.chat_bubble_outline, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text('Chat with summary', style: TextStyle(color: Colors.white))
+                    ],
+                  ),
+                ),
+                secondaryBackground: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20.0),
                   color: Colors.red,
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 confirmDismiss: (direction) async {
+                  if (widget.isFromOnboarding) return false;
                   HapticFeedback.mediumImpact();
-                  bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
-                  if (!showDeleteConfirmation) return Future.value(true);
-                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                  if (connectivityProvider.isConnected) {
+
+                  // Swipe right (startToEnd): start a new chat with summary (scoped to this conversation), do not dismiss
+                  if (direction == DismissDirection.startToEnd) {
+                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    if (!connectivityProvider.isConnected) {
+                      ConnectivityProvider.showNoInternetDialog(context);
+                      return false;
+                    }
+                    try {
+                      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                      await messageProvider.startScopedChat(
+                        widget.conversation.id,
+                        appId: Provider.of<AppProvider>(context, listen: false).selectedChatAppId,
+                      );
+                      if (context.mounted) {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (ctx) {
+                            final height = MediaQuery.of(ctx).size.height * 0.9;
+                            return Container(
+                              height: height,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF1f1f25),
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                              ),
+                              child: SafeArea(
+                                top: true,
+                                child: Column(
+                                  children: [
+                                    // Top header bar (make it black so icons look floating)
+                                    Container(
+                                      color: Colors.black,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                            child: Row(
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(Icons.delete_outline, color: Colors.white),
+                                                  onPressed: () async {
+                                                    final provider =
+                                                        Provider.of<MessageProvider>(context, listen: false);
+                                                    final sessionId = provider.currentChatSessionId;
+                                                    if (sessionId != null && sessionId.isNotEmpty) {
+                                                      try {
+                                                        await deleteChatSessionServer(sessionId);
+                                                        provider.setCurrentChatSessionId(null);
+                                                        provider.messages = [];
+                                                        if (ctx.mounted) Navigator.of(ctx).pop();
+                                                      } catch (_) {}
+                                                    } else {
+                                                      if (ctx.mounted) Navigator.of(ctx).pop();
+                                                    }
+                                                  },
+                                                ),
+                                                const Spacer(),
+                                                IconButton(
+                                                  icon: const Icon(Icons.close, color: Colors.white),
+                                                  onPressed: () {
+                                                    Navigator.of(ctx).pop();
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const Divider(height: 1, color: Color(0xFF2A2A33)),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                        child: ChatPage(
+                                            isPivotBottom: true,
+                                            showAppBar: false,
+                                            scopedConversationId: widget.conversation.id)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      }
+                    } catch (e) {
+                      debugPrint('Failed to start chat with summary: $e');
+                    }
+                    return false;
+                  }
+
+                  // Swipe left (endToStart): delete conversation after confirmation
+                  if (direction == DismissDirection.endToStart) {
+                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    if (!connectivityProvider.isConnected) {
+                      return showDialog(
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () => Navigator.pop(context),
+                          'Unable to Delete Conversation',
+                          'Please check your internet connection and try again.',
+                          singleButton: true,
+                          okButtonText: 'OK',
+                        ),
+                        context: context,
+                      );
+                    }
+
+                    bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+                    if (!showDeleteConfirmation) return Future.value(true);
+
                     return await showDialog(
                       context: context,
                       builder: (ctx) => getDialog(
