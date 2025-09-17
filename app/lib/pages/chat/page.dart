@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/gen/fonts.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/suggestion_chips.dart';
@@ -24,7 +25,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/pages/chat/widgets/welcome_screen.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -114,6 +117,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       if (provider.messages.isEmpty) {
         provider.refreshMessages();
       }
+
+      // Load all sessions across all apps on initialization
+      await context.read<ChatSessionProvider>().loadSessions();
+
       scrollToBottom();
       // Removed auto-focus to prevent keyboard from always appearing
       // User must explicitly tap the chat input to show keyboard
@@ -184,32 +191,28 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          // endDrawer: _buildSessionsDrawer(context),
-          body: GestureDetector(
-            onTap: () {
-              // Hide keyboard when tapping outside textfield
-              FocusScope.of(context).unfocus();
-            },
-            child: Column(
-              children: [
-                // Messages area - takes up remaining space
-                Expanded(
-                  child: provider.isLoadingMessages && !provider.hasCachedMessages
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              provider.firstTimeLoadingText,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        )
-                      : provider.isClearingChat
-                          ? const Column(
+          endDrawer: _buildSessionsDrawer(context),
+          resizeToAvoidBottomInset: true,
+          body: Stack(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  // Hide keyboard when tapping outside textfield
+                  FocusScope.of(context).unfocus();
+                },
+                child: Column(
+                  children: [
+                    // Notification banner (appears below AppBar, above messages)
+                    TopNotificationBanner(
+                      message: _notificationMessage,
+                      isVisible: _showNotificationBanner,
+                      type: _notificationType,
+                      onDismiss: _hideNotification,
+                    ),
+                    // Messages area - takes up remaining space
+                    Expanded(
+                      child: provider.isLoadingMessages && !provider.hasCachedMessages
+                          ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 const CircularProgressIndicator(
@@ -222,38 +225,32 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 ),
                               ],
                             )
-
-                          : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 32.0),
-                                    child: Text(
-                                        connectivityProvider.isConnected
-                                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
-                                            : 'Please check your internet connection and try again',
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(color: Colors.white)),
-                                  ),
+                          : provider.isClearingChat
+                              ? const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      "Deleting your messages from Omi's memory...",
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ],
                                 )
-                              : ListView.builder(
-                                  shrinkWrap: false,
-                                  reverse: true,
-                                  controller: scrollController,
-                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                                  itemCount: provider.messages.length,
-                                  itemBuilder: (context, chatIndex) {
-                                    final message = provider.messages[chatIndex];
-                                    double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-
-                                    double bottomPadding = chatIndex == 0 ? 16 : 0;
-                                    return GestureDetector(
-                                      onLongPress: () {
-                                        showModalBottomSheet(
-                                          context: context,
-                                          shape: const RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.vertical(
-                                              top: Radius.circular(20),
-                                            ),
+                              : provider.messages.isEmpty
+                                  ? (connectivityProvider.isConnected
+                                      ? WelcomeScreen(
+                                          sendMessage: _sendMessageUtil,
+                                          appName: context.read<AppProvider>().getSelectedApp()?.name,
+                                        )
+                                      : Center(
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(bottom: 32.0),
+                                            child: Text('Please check your internet connection and try again',
+                                                textAlign: TextAlign.center,
+                                                style: const TextStyle(color: Colors.white)),
                                           ),
                                         ))
                                   : ListView.builder(
@@ -853,6 +850,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);
 
+    // Clear any selected chats to show welcome screen
+    final chatSessionProvider = mounted ? context.read<ChatSessionProvider>() : null;
+    if (chatSessionProvider != null) {
+      await chatSessionProvider.switchToApp(appId);
+    }
 
     // Add a small delay to let the keyboard animation complete
     // This prevents the widget from being unmounted during the keyboard transition
@@ -861,17 +863,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     // Check if widget is still mounted after delay
     if (!mounted) return;
 
+    // Load sessions for the new app
+    if (chatSessionProvider != null) {
+      await chatSessionProvider.loadSessions();
+    }
+
     // Perform async operation
     await messageProvider.refreshMessages(dropdownSelected: true);
 
     // Check if widget is still mounted before proceeding
     if (!mounted) return;
-
-    // Get the selected app and send initial message if needed
-    var app = appProvider.getSelectedApp();
-    if (messageProvider.messages.isEmpty) {
-      messageProvider.sendInitialAppMessage(app);
-    }
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
@@ -888,18 +889,29 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         },
       ),
       centerTitle: true,
-
-      actions: const [
-        // IconButton(
-        //   icon: const Icon(Icons.history, color: Colors.white),
-        //   onPressed: () {
-        //     HapticFeedback.mediumImpact();
-        //     // Dismiss keyboard before opening drawer
-        //     FocusScope.of(context).unfocus();
-        //     scaffoldKey.currentState?.openEndDrawer();
-        //   },
-        // ),
-
+      actions: [
+        Container(
+          width: 36,
+          height: 36,
+          margin: const EdgeInsets.only(right: 12),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1F1F25),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: const Icon(FontAwesomeIcons.clockRotateLeft, color: Colors.white70, size: 16),
+            tooltip: 'Chats',
+            onPressed: () {
+              HapticFeedback.lightImpact(); // Subtle vibration like streaming responses
+              FocusScope.of(context).unfocus();
+              // Open drawer immediately for better UX, then load sessions
+              scaffoldKey.currentState?.openEndDrawer();
+              // Load sessions in background without blocking UI
+              context.read<ChatSessionProvider>().loadSessions(refresh: true);
+            },
+          ),
+        ),
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
@@ -917,6 +929,211 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildSessionsDrawer(BuildContext context) {
+    return Drawer(
+      backgroundColor: Colors.black, // Pure black background
+      child: SafeArea(
+        child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
+          builder: (context, appProvider, sessions, messageProvider, _) {
+            final appId = appProvider.selectedChatAppId;
+            // AppProvider provides clean state - no conversion needed
+            final effectiveAppId = appId;
+
+            final selectedId = sessions.selectedSessionId;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header section with pencil icon aligned to AppBar bottom
+                Container(
+                  height: kToolbarHeight, // Same height as AppBar
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  alignment: Alignment.bottomRight, // Align pencil to bottom right
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12), // Add padding between bottom line and icon
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1), // Subtle white background
+                        borderRadius: BorderRadius.circular(8), // Rounded corners
+                      ),
+                      child: IconButton(
+                        visualDensity: VisualDensity.compact, // Make button more compact
+                        padding: const EdgeInsets.all(8), // Reduce button padding
+                        icon: const Icon(Icons.border_color, color: Colors.white, size: 16),
+                        onPressed: () async {
+                          final created = await sessions.createSession(appId: effectiveAppId);
+                          if (created != null) {
+                            _showNotification('New chat created');
+                            await messageProvider.refreshMessages(dropdownSelected: true);
+                            if (mounted) Navigator.of(context).maybePop();
+                          }
+                        },
+                        tooltip: 'New Chat',
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, color: Colors.white12),
+                if (sessions.isLoading)
+                  const Expanded(
+                    child: Center(
+                        child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
+                  )
+                else if (sessions.sessions.isEmpty)
+                  const Expanded(
+                    child: Center(
+                      child: Text('No chats yet', style: TextStyle(color: Colors.white60)),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: sessions.sessions.length,
+                      itemExtent: 52, // Explicit item height prevents infinite size issues
+                      physics: const BouncingScrollPhysics(), // Better scroll physics
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 0, vertical: 8), // Remove horizontal padding for full width
+                      itemBuilder: (ctx, idx) {
+                        final s = sessions.sessions[idx];
+                        // Smooth color calculation for gradual transitions
+                        final isSelected = s.id == selectedId;
+                        final isBeingSwiped = s.id == _swipingChatId;
+
+                        // Calculate smooth color with gradual opacity
+                        final Color cardColor;
+                        if (isSelected) {
+                          cardColor = const Color(0xFF2A2A2A); // Full highlight for selected
+                        } else if (isBeingSwiped) {
+                          cardColor =
+                              Color.fromRGBO(42, 42, 42, _swipeProgress * 0.8); // Gradual highlight during swipe
+                        } else {
+                          cardColor = Colors.transparent; // No highlight
+                        }
+                        final appName = _getAppNameById(s.appId);
+                        return SizedBox(
+                          height: 52, // Fixed height for entire list item (48px content + 4px spacing)
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 2), // Bottom spacing for card separation
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8), // Card boundary padding
+                              child: ClipRRect(
+                                // Clip with rounded corners to match card design
+                                borderRadius: BorderRadius.circular(16),
+                                child: Dismissible(
+                                  key: Key(s.id),
+                                  direction: DismissDirection.endToStart,
+                                  dismissThresholds: const {
+                                    DismissDirection.endToStart: 0.3
+                                  }, // Lower threshold for easier access
+                                  movementDuration: const Duration(milliseconds: 150), // Snappy animation
+                                  confirmDismiss: (direction) async {
+                                    // Subtle vibration for delete action
+                                    HapticFeedback.lightImpact();
+
+                                    // Clear swipe state immediately
+                                    setState(() {
+                                      _swipingChatId = null;
+                                      _swipeProgress = 0.0;
+                                    });
+
+                                    // Delete session and return result to control dismissal
+                                    final ok = await sessions.deleteSession(sessionId: s.id);
+                                    if (ok) {
+                                      _showNotification('Chat deleted');
+                                      return true; // Allow dismissal
+                                    } else {
+                                      _showNotification('Failed to delete chat', type: NotificationType.error);
+                                      return false; // Prevent dismissal and restore item
+                                    }
+                                  },
+                                  onUpdate: (details) {
+                                    // Track swipe progress for smooth visual feedback
+                                    setState(() {
+                                      if (details.progress > 0.05) {
+                                        // Start tracking at 5% swipe
+                                        _swipingChatId = s.id;
+                                        _swipeProgress =
+                                            (details.progress * 2).clamp(0.0, 1.0); // Gradual opacity from 0 to 1
+                                      } else {
+                                        _swipingChatId = null;
+                                        _swipeProgress = 0.0;
+                                      }
+                                    });
+                                  },
+                                  background: Container(
+                                    width: double.infinity,
+                                    height: 50, // Match available space (52px parent - 2px spacing)
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12), // Identical padding to main card
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.only(
+                                        topRight: Radius.circular(16), // Rounded on right side only
+                                        bottomRight: Radius.circular(16), // Rounded on right side only
+                                        topLeft: Radius.zero, // Straight left edge to merge with greyish card
+                                        bottomLeft: Radius.zero, // Straight left edge to merge with greyish card
+                                      ),
+                                    ),
+                                    alignment: Alignment.centerRight,
+                                    child: const Icon(
+                                      Icons.delete,
+                                      color: Colors.white,
+                                      size: 20, // Smaller icon for compact design
+                                    ),
+                                  ),
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      // Select the chat and switch to its app context
+                                      final appProvider = context.read<AppProvider>();
+                                      await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
+                                      await messageProvider.refreshMessages(dropdownSelected: true);
+                                      if (mounted) Navigator.of(context).maybePop();
+                                    },
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 150), // Smooth color transition
+                                      width: double.infinity, // Fill the clipped area
+                                      height: 50, // Match available space and red background height
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 12), // Internal content padding
+                                      decoration: BoxDecoration(
+                                        color: cardColor, // Use calculated smooth color
+                                        borderRadius: isBeingSwiped
+                                            ? BorderRadius
+                                                .zero // Straight edges when swiping to merge with red background
+                                            : BorderRadius.circular(16), // Rounded edges for normal selection
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          s.title?.isNotEmpty == true ? s.title! : 'New Chat',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontFamily: FontFamily.sFProDisplay,
+                                            color: Colors.white,
+                                            fontSize: 14.7, // Increased by 5% (14 * 1.05)
+                                            fontWeight: FontWeight.w400, // Normal weight like ChatGPT
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ), // Close ClipRRect
+                            ), // Close horizontal Padding
+                          ), // Close bottom spacing Padding
+                        ); // Close SizedBox
+                      },
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -962,6 +1179,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       },
       color: const Color(0xFF1F1F25),
     );
+  }
+
+  String _getAppNameById(String? appId) {
+    if (appId == null || appId == 'omi') {
+      return 'Omi';
+    }
+    final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
+    return app?.name ?? 'Unknown App';
   }
 
   Widget _getAppAvatar(App app) {
@@ -1076,7 +1301,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       PopupMenuItem<String>(
         height: 40,
-        value: 'no_selected',
+        value: 'omi',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [

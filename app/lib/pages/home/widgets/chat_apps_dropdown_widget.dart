@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -103,11 +104,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
 
                 // select app by id
                 provider.setSelectedChatAppId(val);
+                // Clear any selected threads to show welcome screen
+                await context.read<ChatSessionProvider>().switchToApp(val);
                 await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
-                var app = provider.getSelectedApp();
-                if (context.read<MessageProvider>().messages.isEmpty) {
-                  context.read<MessageProvider>().sendInitialAppMessage(app);
-                }
               },
               itemBuilder: (BuildContext context) {
                 return _getAppsDropdownItems(context, provider);
@@ -204,7 +203,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       // Add Omi option to the dropdown
       PopupMenuItem<String>(
         height: 40,
-        value: 'no_selected',
+        value: 'omi',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -331,7 +330,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       ),
       PopupMenuItem<String>(
         height: 40,
-        value: 'no_selected',
+        value: 'omi',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [

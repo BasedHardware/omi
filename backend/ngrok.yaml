@@ -1,0 +1,14 @@
+version: "2"
+authtoken: 32Igv1bHeKfiNDGR7ji4BJLZpob_3KizNZy7xy6qXfCFRMir9
+
+tunnels:
+
+  main-backend:
+    addr: 8000
+    proto: http
+    domain: charier-subcancellous-ginette.ngrok-free.app
+    
+  pusher-service:
+    addr: 8001
+    proto: http
+    # This will get a random subdomain since you only have one reserved domain
