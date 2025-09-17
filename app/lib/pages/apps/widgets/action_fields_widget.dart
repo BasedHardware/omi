@@ -88,7 +88,7 @@ class ActionFieldsWidget extends StatelessWidget {
                                         if (actionType.docUrl != null) {
                                           launchUrl(Uri.parse(actionType.docUrl!));
                                         } else {
-                                          launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Import'));
+                                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Import'));
                                         }
                                       },
                                       child: Text(
