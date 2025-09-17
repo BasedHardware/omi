@@ -196,3 +196,13 @@ omiGlass/.expo
 /backend/logs/
 app/.fvm/
 app/android/.kotlin/
+
+
+# Local development files & secrets
+WARP.md
+app/lib/backend/auth.dart
+backend/_temp/
+backend/cloudflared.deb
+backend/google-credentials-test.json
+backend/ngrok.yaml
+backend/utils/retrieval/app.code-workspace
