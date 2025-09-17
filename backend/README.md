@@ -1,6 +1,6 @@
 # Omi Backend Setup
 
-This README provides a quick setup guide for the Omi backend. For a comprehensive step-by-step guide with detailed explanations, please refer to the [Backend Setup Documentation](https://docs.omi.me/docs/developer/backend/Backend_Setup).
+This README provides a quick setup guide for the Omi backend. For a comprehensive step-by-step guide with detailed explanations, please refer to the [Backend Setup Documentation](https://docs.omi.me/doc/developer/backend/Backend_Setup).
 
 ## Quick Setup Steps
 

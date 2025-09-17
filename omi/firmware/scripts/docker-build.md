@@ -2,7 +2,7 @@
 
 This document explains how to build the firmware using Docker, which provides a consistent environment across different platforms (Linux, macOS, Windows). This is the **recommended** method for building the Omi firmware as it eliminates environment setup complexities.
 
-> **Note:** For the traditional nRF Connect build method, see our [official documentation](https://docs.omi.me/docs/developer/Compile_firmware).
+> **Note:** For the traditional nRF Connect build method, see our [official documentation](https://docs.omi.me/doc/developer/Compile_firmware).
 
 ## Prerequisites
 

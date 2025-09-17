@@ -58,26 +58,26 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 ## Documentation:
 
 - [Introduction](https://docs.omi.me/)
-- [omi App setup](https://docs.omi.me/docs/developer/AppSetup)
+- [omi App setup](https://docs.omi.me/doc/developer/AppSetup)
 - [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
 - [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/doc/get_started/Flash_device/)
-- [Create your own app in 1 minute](https://docs.omi.me/docs/developer/apps/Introduction).
+- [Create your own app in 1 minute](https://docs.omi.me/doc/developer/apps/Introduction).
 
 ## Contributions
 
-- Check out our [contributions guide](https://docs.omi.me/docs/developer/Contribution/).
+- Check out our [contributions guide](https://docs.omi.me/doc/developer/Contribution/).
 - Earn from contributing! Check the [paid bounties 🤑](https://omi.me/bounties).
 - Check out the [current issues](https://github.com/BasedHardware/Omi/issues).
 - Join the [Discord](http://discord.omi.me).
-- Build your own [Plugins/Integrations](https://docs.omi.me/docs/developer/apps/Introduction).
+- Build your own [Plugins/Integrations](https://docs.omi.me/doc/developer/apps/Introduction).
 
 [//]: # "## More links:"
 [//]: #
-[//]: # "- [Contributing](https://docs.omi.me/docs/developer/Contribution/)"
+[//]: # "- [Contributing](https://docs.omi.me/doc/developer/Contribution/)"
 [//]: # "- [Support](https://docs.omi.me/docs/info/Support/;"
-[//]: # "- [BLE Protocol](https://docs.omi.me/docs/developer/Protocol/)"
-[//]: # "- [Plugins](https://docs.omi.me/docs/developer/Plugins/)"
+[//]: # "- [BLE Protocol](https://docs.omi.me/doc/developer/Protocol/)"
+[//]: # "- [Plugins](https://docs.omi.me/doc/developer/Plugins/)"
 
 ## Licensing
 
