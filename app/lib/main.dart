@@ -32,7 +32,6 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -40,6 +39,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
@@ -57,7 +57,7 @@ import 'package:window_manager/window_manager.dart';
 
 Future<bool> _init() async {
   // Service manager
-  ServiceManager.init();
+  await ServiceManager.init();
 
   if (PlatformService.isWindows) {
     // Windows does not support flavors
@@ -189,21 +189,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
-
-          ChangeNotifierProxyProvider<AppProvider, ChatSessionProvider>(
-            create: (context) => ChatSessionProvider(),
-            update: (BuildContext context, app, ChatSessionProvider? previous) =>
-                (previous?..updateAppProvider(app)) ?? (ChatSessionProvider()..updateAppProvider(app)),
-          ),
-          ChangeNotifierProxyProvider2<AppProvider, ChatSessionProvider, MessageProvider>(
+          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
-            update: (BuildContext context, app, sessions, MessageProvider? previous) =>
-                (previous
-                  ?..updateAppProvider(app)
-                  ..updateChatSessionProvider(sessions)) ??
-                (MessageProvider()
-                  ..updateAppProvider(app)
-                  ..updateChatSessionProvider(sessions)),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
           ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
               CaptureProvider>(

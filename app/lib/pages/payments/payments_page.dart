@@ -98,7 +98,10 @@ class _PaymentsPageState extends State<PaymentsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
-                          if (hasActiveMethod) ...[_buildActiveMethodCard(activeMethod, provider), const SizedBox(height: 24)],
+                          if (hasActiveMethod) ...[
+                            _buildActiveMethodCard(activeMethod, provider),
+                            const SizedBox(height: 24)
+                          ],
                           const Text(
                             'Available Payment Methods',
                             style: TextStyle(

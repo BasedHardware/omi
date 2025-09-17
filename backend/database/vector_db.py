@@ -57,10 +57,8 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
     if starts_at is not None:
         filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
 
-    # print('filter_data', filter_data)
     xq = embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
-    # print(xc)
     return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
 
 
@@ -96,8 +94,6 @@ def query_vectors_by_metadata(
             {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
         )
 
-    # print('query_vectors_by_metadata:', json.dumps(filter_data))
-
     xc = index.query(
         vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=1000
     )
@@ -132,7 +128,6 @@ def query_vectors_by_metadata(
 
     conversations_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
     conversations_id.sort(key=lambda x: conversation_id_to_matches[x], reverse=True)
-    print('query_vectors_by_metadata result:', conversations_id)
     return conversations_id[:limit] if len(conversations_id) > limit else conversations_id
 
 

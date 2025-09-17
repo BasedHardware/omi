@@ -20,7 +20,6 @@ import 'memories/desktop_memories_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -253,9 +252,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 selectedApp = await appProvider.getAppFromId(appId);
               }
               appProvider.setSelectedChatAppId(appId);
-              // Clear any selected threads to show welcome screen
-              await context.read<ChatSessionProvider>().switchToApp(appId);
               await messageProvider.refreshMessages();
+              if (messageProvider.messages.isEmpty) {
+                messageProvider.sendInitialAppMessage(selectedApp);
+              }
             }
           } else {
             if (mounted) {

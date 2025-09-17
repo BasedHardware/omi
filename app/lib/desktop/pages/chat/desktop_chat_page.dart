@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -9,7 +8,6 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/gen/fonts.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
@@ -17,11 +15,9 @@ import 'package:omi/pages/chat/widgets/top_notification_banner.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/desktop/pages/chat/widgets/desktop_welcome_screen.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -148,9 +144,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         provider.refreshMessages();
       }
 
-      // Load all sessions across all apps
-      await context.read<ChatSessionProvider>().loadSessions();
-
       _fadeController.forward();
       _slideController.forward();
 
@@ -232,16 +225,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                                 opacity: _fadeAnimation,
                                 child: SlideTransition(
                                   position: _slideAnimation,
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 280,
-                                        child: _buildSessionsPanel(context),
-                                      ),
-                                      const VerticalDivider(width: 1, color: Colors.white10),
-                                      Expanded(child: _buildChatContent(provider, connectivityProvider)),
-                                    ],
-                                  ),
+                                  child: _buildChatContent(provider, connectivityProvider),
                                 ),
                               )
                             : _buildChatContent(provider, connectivityProvider),
@@ -255,175 +239,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           ),
         );
       },
-    );
-  }
-
-  Widget _buildSessionsPanel(BuildContext context) {
-    return Container(
-      color: Colors.black, // Pure black background to match mobile
-      child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
-        builder: (context, appProvider, sessions, messageProvider, _) {
-          final appId = appProvider.selectedChatAppId;
-          // Enable multi-threading for all apps including OMI (no_selected)
-          final effectiveAppId = appId.isEmpty ? 'omi' : appId;
-
-          final selectedId = sessions.selectedSessionId;
-
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Row(
-                  children: [
-                    const Text('Threads',
-                        style: TextStyle(
-                            fontFamily: FontFamily.sFProDisplay,
-                            color: ResponsiveHelper.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: ResponsiveHelper.textPrimary, size: 18),
-                      onPressed: () async {
-                        final created = await sessions.createSession(appId: effectiveAppId);
-                        if (created != null) {
-                          _showNotification('New thread created');
-                          await messageProvider.refreshMessages(dropdownSelected: true);
-                        }
-                      },
-                      tooltip: 'New Thread',
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              if (sessions.isLoading)
-                const Expanded(
-                  child:
-                      Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
-                )
-              else if (sessions.sessions.isEmpty)
-                const Expanded(
-                  child: Center(child: Text('No threads yet', style: TextStyle(color: ResponsiveHelper.textSecondary))),
-                )
-              else
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: sessions.sessions.length,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 0, vertical: 6), // Remove horizontal padding for full width
-                    itemBuilder: (ctx, idx) {
-                      final s = sessions.sessions[idx];
-                      // Smooth color calculation for gradual transitions
-                      final isSelected = s.id == selectedId;
-                      final isBeingSwiped = s.id == _swipingThreadId;
-
-                      // Calculate smooth color with gradual opacity
-                      final Color cardColor;
-                      if (isSelected) {
-                        cardColor = const Color(0xFF2A2A2A); // Full highlight for selected
-                      } else if (isBeingSwiped) {
-                        cardColor = Color.fromRGBO(42, 42, 42, _swipeProgress * 0.8); // Gradual highlight during swipe
-                      } else {
-                        cardColor = Colors.transparent; // No highlight
-                      }
-                      final appName = _getAppNameById(s.appId);
-                      return Padding(
-                        padding: const EdgeInsets.only(
-                            left: 8, right: 8, bottom: 2), // Card boundary padding + bottom spacing
-                        child: ClipRRect(
-                          // Clip with rounded corners to match card design
-                          borderRadius: BorderRadius.circular(16),
-                          child: Dismissible(
-                            key: Key(s.id),
-                            direction: DismissDirection.endToStart,
-                            dismissThresholds: const {
-                              DismissDirection.endToStart: 0.3
-                            }, // Lower threshold for easier access
-                            movementDuration: const Duration(milliseconds: 150), // Snappy animation
-                            onUpdate: (details) {
-                              // Track swipe progress for smooth visual feedback
-                              setState(() {
-                                if (details.progress > 0.05) {
-                                  // Start tracking at 5% swipe
-                                  _swipingThreadId = s.id;
-                                  _swipeProgress =
-                                      (details.progress * 2).clamp(0.0, 1.0); // Gradual opacity from 0 to 1
-                                } else {
-                                  _swipingThreadId = null;
-                                  _swipeProgress = 0.0;
-                                }
-                              });
-                            },
-                            background: Container(
-                              width: double.infinity, // Fill the clipped area
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Internal padding
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                // No border radius needed - ClipRRect handles the rounding
-                              ),
-                              alignment: Alignment.centerRight,
-                              child: const Icon(
-                                Icons.delete,
-                                color: Colors.white,
-                                size: 18, // Smaller icon for compact design
-                              ),
-                            ),
-                            onDismissed: (direction) async {
-                              // Clear swipe state
-                              setState(() {
-                                _swipingThreadId = null;
-                                _swipeProgress = 0.0;
-                              });
-
-                              final ok = await sessions.deleteSession(sessionId: s.id);
-                              if (ok) {
-                                _showNotification('Thread deleted');
-                                await messageProvider.refreshMessages(dropdownSelected: true);
-                              }
-                            },
-                            child: GestureDetector(
-                              onTap: () async {
-                                // Select the thread and switch to its app context
-                                final appProvider = context.read<AppProvider>();
-                                await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
-                                await messageProvider.refreshMessages(dropdownSelected: true);
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150), // Smooth color transition
-                                width: double.infinity, // Fill the clipped area
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Internal content padding
-                                decoration: BoxDecoration(
-                                  color: cardColor, // Use calculated smooth color
-                                  // No border radius needed - ClipRRect handles the rounding
-                                ),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    s.title?.isNotEmpty == true ? s.title! : 'New Chat',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontFamily: FontFamily.sFProDisplay,
-                                      color: Colors.white,
-                                      fontSize: 13.65, // Increased by 5% (13 * 1.05)
-                                      fontWeight: FontWeight.w400, // Normal weight like ChatGPT
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ), // Close GestureDetector
-                          ), // Close Dismissible
-                        ), // Close ClipRRect
-                      ); // Close Padding
-                    },
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
     );
   }
 
@@ -463,7 +278,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildModernHeader(AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId == 'omi' ? null : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
+        ? null
+        : appProvider.getSelectedApp();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -629,12 +446,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     }
 
     if (provider.messages.isEmpty) {
-      return connectivityProvider.isConnected
-          ? DesktopWelcomeScreen(
-              sendMessage: _sendMessageUtil,
-              appName: context.read<AppProvider>().getSelectedApp()?.name,
-            )
-          : _buildEmptyState(false);
+      return _buildEmptyState(connectivityProvider.isConnected);
     }
 
     return _buildMessagesList(provider);
@@ -1657,7 +1469,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   void _showAppSelectionSheet(BuildContext context, AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId == 'omi' ? null : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
+        ? null
+        : appProvider.getSelectedApp();
     final availableApps = appProvider.apps.where((app) => app.worksWithChat() && app.enabled).toList();
 
     showModalBottomSheet(
@@ -1882,30 +1696,21 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   void _handleAppSelection(BuildContext context, AppProvider appProvider, App? app) async {
     Navigator.pop(context);
 
-    final String selectedAppId = app?.id ?? 'omi';
-    final String currentAppId = appProvider.selectedChatAppId;
+    final String selectedAppId = app?.id ?? 'no_selected';
+    final String currentAppId = appProvider.selectedChatAppId.isEmpty ? 'no_selected' : appProvider.selectedChatAppId;
 
     if (selectedAppId != currentAppId) {
       appProvider.setSelectedChatAppId(app?.id);
 
-      // Load sessions for the new app and clear any selected threads to show welcome screen
-      final chatSessionProvider = context.read<ChatSessionProvider>();
-      await chatSessionProvider.switchToApp(selectedAppId);
-      await chatSessionProvider.loadSessions(refresh: true);
-
       final messageProvider = context.read<MessageProvider>();
       await messageProvider.refreshMessages(dropdownSelected: true);
 
+      if (messageProvider.messages.isEmpty) {
+        messageProvider.sendInitialAppMessage(app);
+      }
+
       scrollToBottom();
     }
-  }
-
-  String _getAppNameById(String? appId) {
-    if (appId == null || appId == 'omi') {
-      return 'Omi';
-    }
-    final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
-    return app?.name ?? 'Unknown App';
   }
 
   void _showClearChatDialog(BuildContext context) {

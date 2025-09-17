@@ -1,12 +1,12 @@
-#include <zephyr/kernel.h>
-#include <zephyr/shell/shell.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/sys/ring_buffer.h>
-#include <zephyr/sys/atomic.h> // Include for atomic operations
 #include <stdint.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/sys/atomic.h> // Include for atomic operations
+#include <zephyr/sys/ring_buffer.h>
 #include <zephyr/timing/timing.h> // Include for timing
 
 LOG_MODULE_REGISTER(transport_ble, CONFIG_LOG_DEFAULT_LEVEL);
@@ -14,8 +14,8 @@ LOG_MODULE_REGISTER(transport_ble, CONFIG_LOG_DEFAULT_LEVEL);
 #define TEST_PACKET_SIZE 100
 #define WRITE_INTERVAL_MS 10
 #define TEST_RING_BUF_SIZE (TEST_PACKET_SIZE * 150) // Store 100 packets
-#define WRITER_STACK_SIZE 1024*10
-#define READER_STACK_SIZE 2048*10
+#define WRITER_STACK_SIZE 1024 * 10
+#define READER_STACK_SIZE 2048 * 10
 #define WRITER_PRIORITY K_PRIO_PREEMPT(7)
 #define READER_PRIORITY K_PRIO_PREEMPT(6)
 
@@ -43,8 +43,10 @@ K_THREAD_STACK_DEFINE(show_logger_area, LOGGER_STACK_SIZE);
 static struct k_thread logger_thread_data;
 
 // Use the same UUIDs as transport.c for compatibility with clients
-static struct bt_uuid_128 ble_throughput_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1215));
-static struct bt_uuid_128 ble_throughput_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1215));
+static struct bt_uuid_128 ble_throughput_service_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1215));
+static struct bt_uuid_128 ble_throughput_characteristic_data_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1215));
 
 static void ble_throughput_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -52,10 +54,15 @@ static void ble_throughput_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint
     LOG_INF("Client %s", test_subscribed ? "subscribed" : "unsubscribed");
 }
 
-// Minimal GATT service definition for the test 
+// Minimal GATT service definition for the test
 static struct bt_gatt_attr ble_throughput_service_attrs[] = {
     BT_GATT_PRIMARY_SERVICE(&ble_throughput_service_uuid),
-    BT_GATT_CHARACTERISTIC(&ble_throughput_characteristic_data_uuid.uuid, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, NULL, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(&ble_throughput_characteristic_data_uuid.uuid,
+                           BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ,
+                           NULL,
+                           NULL,
+                           NULL),
     BT_GATT_CCC(ble_throughput_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
@@ -76,8 +83,7 @@ static void writer_thread_entry(void *p1, void *p2, void *p3)
     LOG_INF("Writer thread started");
 
     while (1) {
-        if(!test_start)
-        {
+        if (!test_start) {
             k_msleep(100);
             continue;
         }
@@ -91,8 +97,7 @@ static void writer_thread_entry(void *p1, void *p2, void *p3)
             // LOG_WRN("Ring buffer full, discarding data!");
             atomic_inc(&test_write_failed_count); // Increment write failed counter
             // Optional: Add a small sleep here if buffer is often full
-        }
-        else {
+        } else {
             atomic_inc(&test_write_count); // Increment write counter on success
         }
     }
@@ -122,25 +127,25 @@ static void reader_notifier_thread_entry(void *p1, void *p2, void *p3)
                 LOG_WRN("bt_gatt_notify failed (%d), retrying...", err);
                 // Put data back into ring buffer (might fail if buffer became full)
                 if (ring_buf_put(&test_ring_buf, data_buffer, TEST_PACKET_SIZE) != TEST_PACKET_SIZE) {
-                     LOG_ERR("Failed to put data back into ring buffer after notify failure!");
+                    LOG_ERR("Failed to put data back into ring buffer after notify failure!");
                 }
                 k_msleep(5); // Small delay before retrying
-                continue; // Skip yield at the end, try again immediately
+                continue;    // Skip yield at the end, try again immediately
             } else if (err) {
                 LOG_ERR("bt_gatt_notify failed unexpectedly (err %d)", err);
                 atomic_inc(&test_notify_failed_count); // Increment notify failed counter
                 // Consider what to do on other errors - maybe stop test?
                 // For now, just log and continue trying.
             } else {
-                 // LOG_DBG("Sent %d bytes", TEST_PACKET_SIZE);
-                 atomic_inc(&test_gatt_notify_count); // Increment notify counter on success
+                // LOG_DBG("Sent %d bytes", TEST_PACKET_SIZE);
+                atomic_inc(&test_gatt_notify_count); // Increment notify counter on success
             }
         } else if (read == 0) {
             // Buffer is empty, wait a bit
             k_msleep(5);
         } else {
-             // Should not happen if writes are always TEST_PACKET_SIZE
-             LOG_ERR("Ring buffer read unexpected size: %d", read);
+            // Should not happen if writes are always TEST_PACKET_SIZE
+            LOG_ERR("Ring buffer read unexpected size: %d", read);
         }
 
         // Yield to other threads
@@ -171,8 +176,7 @@ static void logger_thread_entry(void *p1, void *p2, void *p3)
     LOG_INF("Logger thread started");
 
     while (1) {
-        if(!test_start)
-        {
+        if (!test_start) {
             k_msleep(100);
             continue;
         }
@@ -188,19 +192,22 @@ static void logger_thread_entry(void *p1, void *p2, void *p3)
 
         current_write_count = atomic_get(&test_write_count);
         current_notify_count = atomic_get(&test_gatt_notify_count);
- 
+
         current_write_failed_count = atomic_get(&test_write_failed_count);
         current_notify_failed_count = atomic_get(&test_notify_failed_count);
- 
+
         // Calculate rate per second
         write_rate = ((current_write_count - last_write_count) * 1000) / delta_time;
         notify_rate = ((current_notify_count - last_notify_count) * 1000) / delta_time;
         write_failed_rate = ((current_write_failed_count - last_write_failed_count) * 1000) / delta_time;
         notify_failed_rate = ((current_notify_failed_count - last_notify_failed_count) * 1000) / delta_time;
- 
+
         printk("BLE Test Rate -> Writes/s: %u (Fail: %u), Notifies/s: %u (Fail: %u)",
-                write_rate, write_failed_rate, notify_rate, notify_failed_rate);
- 
+               write_rate,
+               write_failed_rate,
+               notify_rate,
+               notify_failed_rate);
+
         last_write_count = current_write_count;
         last_notify_count = current_notify_count;
         last_write_failed_count = current_write_failed_count;
@@ -229,7 +236,7 @@ static int cmd_ble_throughput_on(const struct shell *sh, size_t argc, char **arg
     atomic_set(&test_gatt_notify_count, 0);
     atomic_set(&test_write_failed_count, 0);
     atomic_set(&test_notify_failed_count, 0);
-	return 0;
+    return 0;
 }
 
 static int cmd_ble_throughput_off(const struct shell *sh, size_t argc, char **argv)
@@ -239,23 +246,22 @@ static int cmd_ble_throughput_off(const struct shell *sh, size_t argc, char **ar
     return 0;
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(
-	sub_ble_throughput_cmds,
-	SHELL_CMD(on, NULL, "Enable the BLE throughput test", cmd_ble_throughput_on),
-	SHELL_CMD(off, NULL, "Disable the BLE throughput test", cmd_ble_throughput_off),
-	SHELL_SUBCMD_SET_END);
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_ble_throughput_cmds,
+                               SHELL_CMD(on, NULL, "Enable the BLE throughput test", cmd_ble_throughput_on),
+                               SHELL_CMD(off, NULL, "Disable the BLE throughput test", cmd_ble_throughput_off),
+                               SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(ble_throughput, &sub_ble_throughput_cmds, "BLE Throughput Test Commands", NULL);
 int ble_throughput_init(void)
 {
-	int ret;
+    int ret;
     test_subscribed = false;
     atomic_set(&test_write_count, 0); // Ensure counters start at 0
     atomic_set(&test_gatt_notify_count, 0);
     atomic_set(&test_write_failed_count, 0);
     atomic_set(&test_notify_failed_count, 0);
     ring_buf_init(&test_ring_buf, sizeof(test_tx_queue), test_tx_queue);
-    
+
     // Register GATT Service
     ret = bt_gatt_service_register(&ble_throughput_service);
     if (ret) {
@@ -269,25 +275,34 @@ int ble_throughput_init(void)
 
     // Start Threads
     // Writer Thread
-    k_tid_t writer_tid = k_thread_create(&writer_thread_data, writer_ring_area,
-                                       K_THREAD_STACK_SIZEOF(writer_ring_area),
-                                       writer_thread_entry,
-                                       NULL, NULL, NULL,
-                                       WRITER_PRIORITY, 0, K_NO_WAIT);
+    k_tid_t writer_tid = k_thread_create(&writer_thread_data,
+                                         writer_ring_area,
+                                         K_THREAD_STACK_SIZEOF(writer_ring_area),
+                                         writer_thread_entry,
+                                         NULL,
+                                         NULL,
+                                         NULL,
+                                         WRITER_PRIORITY,
+                                         0,
+                                         K_NO_WAIT);
     if (!writer_tid) {
         LOG_ERR("Failed to create writer thread");
         return -1; // Or appropriate error code
     }
-     k_thread_name_set(writer_tid, "ble_test_writer");
-
+    k_thread_name_set(writer_tid, "ble_test_writer");
 
     // Reader/Notifier Thread
-    k_tid_t reader_tid = k_thread_create(&reader_thread_data, reader_ring_area,
-                                       K_THREAD_STACK_SIZEOF(reader_ring_area),
-                                       reader_notifier_thread_entry,
-                                       NULL, NULL, NULL,
-                                       READER_PRIORITY, 0, K_NO_WAIT);
-     if (!reader_tid) {
+    k_tid_t reader_tid = k_thread_create(&reader_thread_data,
+                                         reader_ring_area,
+                                         K_THREAD_STACK_SIZEOF(reader_ring_area),
+                                         reader_notifier_thread_entry,
+                                         NULL,
+                                         NULL,
+                                         NULL,
+                                         READER_PRIORITY,
+                                         0,
+                                         K_NO_WAIT);
+    if (!reader_tid) {
         LOG_ERR("Failed to create reader thread");
         // Consider stopping the writer thread here
         return -1; // Or appropriate error code
@@ -295,11 +310,16 @@ int ble_throughput_init(void)
     k_thread_name_set(reader_tid, "ble_test_reader");
 
     // Logger Thread
-    k_tid_t logger_tid = k_thread_create(&logger_thread_data, show_logger_area,
-                                       K_THREAD_STACK_SIZEOF(show_logger_area),
-                                       logger_thread_entry,
-                                       NULL, NULL, NULL,
-                                       LOGGER_PRIORITY, 0, K_NO_WAIT);
+    k_tid_t logger_tid = k_thread_create(&logger_thread_data,
+                                         show_logger_area,
+                                         K_THREAD_STACK_SIZEOF(show_logger_area),
+                                         logger_thread_entry,
+                                         NULL,
+                                         NULL,
+                                         NULL,
+                                         LOGGER_PRIORITY,
+                                         0,
+                                         K_NO_WAIT);
     if (!logger_tid) {
         LOG_ERR("Failed to create logger thread");
         // Consider stopping other threads here
@@ -307,7 +327,6 @@ int ble_throughput_init(void)
     }
     k_thread_name_set(logger_tid, "ble_test_logger");
 
-
     LOG_INF("Test threads started. Running indefinitely.");
-	return 0;
+    return 0;
 }

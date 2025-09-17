@@ -9,4 +9,4 @@ export 'message_event.dart';
 export 'mcp_api_key.dart';
 export 'person.dart';
 export 'structured.dart';
-export 'transcript_segment.dart'; 
+export 'transcript_segment.dart';

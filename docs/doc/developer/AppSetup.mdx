@@ -89,21 +89,21 @@ flutter doctor -v
 **Example output:**
 
 ```
-[✓] Flutter (Channel stable, 3.32.4, on macOS 15.4.1 24E263 darwin-arm64)
-    • Flutter version 3.32.4 on channel stable at /Users/bread/dev/flutter
+[✓] Flutter (Channel stable, 3.35.3, on macOS 15.4.1 24E263 darwin-arm64)
+    • Flutter version 3.35.3 on channel stable at /REDACTED/flutter
     • Upstream repository https://github.com/flutter/flutter.git
-    • Framework revision 6fba2447e9 (2 days ago), 2025-06-12 19:03:56 -0700
-    • Engine revision 8cd19e509d
-    • Dart version 3.8.1
-    • DevTools version 2.45.1
+    • Framework revision a402d9a437 (8 days ago), 2025-09-03 14:54:31 -0700
+    • Engine revision ddf47dd3ff
+    • Dart version 3.9.2
+    • DevTools version 2.48.0
 
-[✓] Android toolchain - develop for Android devices (Android SDK version 35.0.1)
+[✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0)
     • Android SDK at /Users/mohsin/Library/Android/sdk
-    • Platform android-35, build-tools 35.0.1
+    • Platform android-36, build-tools 36.0.0
     • Java binary at: /Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java
       This is the JDK bundled with the latest Android Studio installation on this machine.
       To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
-    • Java version OpenJDK Runtime Environment (build 21.0.6+-13368085-b895.109)
+    • Java version OpenJDK Runtime Environment (build 21.0.7+-13880790-b1038.5)
     • All Android licenses accepted.
 
 [✓] Xcode - develop for iOS and macOS (Xcode 16.4)
@@ -114,9 +114,9 @@ flutter doctor -v
 [✓] Chrome - develop for the web
     • Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
 
-[✓] Android Studio (version 2024.3)
+[✓] Android Studio (version 2025.1)
     • Android Studio at /Applications/Android Studio.app/Contents
-    • Java version OpenJDK Runtime Environment (build 21.0.6+-13368085-b895.109)
+    • Java version OpenJDK Runtime Environment (build 21.0.7+-13880790-b1038.5)
 
 [✓] VS Code (version 1.101.0)
     • VS Code at /Applications/Visual Studio Code.app/Contents
@@ -135,7 +135,7 @@ flutter doctor -v
 ```
 
 **Notes:**
-- This project is tested with specific versions of tools like Flutter SDK, Xcode, Android SDK, NDK, and JDK. Please refer to the [`app/setup.sh`](https://github.com/BasedHardware/omi/blob/main/app/setup.sh) script for these recommended versions (e.g., Flutter 3.32.4, Xcode 16.4, Android SDK Platform 35, NDK 27.0.12077973, JDK 21).
+- This project is tested with specific versions of tools like Flutter SDK, Xcode, Android SDK, NDK, and JDK. Please refer to the [`app/setup.sh`](https://github.com/BasedHardware/omi/blob/main/app/setup.sh) script for these recommended versions (e.g., Flutter 3.35.3, Xcode 16.4, Android SDK Platform 35, NDK 28.2.13676358, JDK 21).
 
 - To ensure Android builds use the recommended JDK version (e.g., JDK 21), you might need to set it explicitly if it was installed separately from Android Studio. For example, on macOS, you can configure Flutter to use a specific JDK path:
 ```

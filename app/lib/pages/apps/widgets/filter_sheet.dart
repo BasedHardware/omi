@@ -93,7 +93,8 @@ class FilterBottomSheet extends StatelessWidget {
                         provider.isFilterSelected('Installed Apps', 'Apps'),
                         () {
                           provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                          MixpanelManager().appsTypeFilter('Installed Apps', provider.isFilterSelected('Installed Apps', 'Apps'));
+                          MixpanelManager()
+                              .appsTypeFilter('Installed Apps', provider.isFilterSelected('Installed Apps', 'Apps'));
                         },
                       ),
 

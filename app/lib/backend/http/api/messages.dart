@@ -13,14 +13,16 @@ import 'package:path/path.dart';
 Future<List<ServerMessage>> getMessagesServer({
   String? appId,
   bool dropdownSelected = false,
-  String? chatSessionId,
 }) async {
-  final uri = buildApiUri('/v2/messages', query: {
-    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
-    'dropdown_selected': dropdownSelected,
-    if (chatSessionId != null) 'chat_session_id': chatSessionId,
-  });
-  var response = await makeApiCall(url: uri.toString(), headers: {}, method: 'GET', body: '');
+  if (appId == 'no_selected') appId = null;
+  // TODO: Add pagination
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}&dropdown_selected=$dropdownSelected',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
@@ -35,31 +37,20 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<Map<String, dynamic>?> clearChatServer({String? appId, String? chatSessionId}) async {
-  final uri = buildApiUri('/v2/messages', query: {
-    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
-    if (chatSessionId != null) 'chat_session_id': chatSessionId,
-  });
-  var response = await makeApiCall(url: uri.toString(), headers: {}, method: 'DELETE', body: '');
-  if (response == null) return null;
+Future<List<ServerMessage>> clearChatServer({String? appId}) async {
+  if (appId == 'no_selected') appId = null;
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) throw Exception('Failed to delete chat');
 
   if (response.statusCode == 200) {
-    final body = utf8.decode(response.bodyBytes);
-    final result = jsonDecode(body) as Map<String, dynamic>;
-
-    // Handle new structured response format
-    if (result['status'] == 'success') {
-      debugPrint('Chat cleared successfully for app: ${result['cleared']?['app_id']}');
-      debugPrint('Session: ${result['cleared']?['chat_session_id']}');
-      debugPrint('Timestamp: ${result['cleared']?['timestamp']}');
-      return result;
-    } else {
-      debugPrint('Clear chat failed: ${result['message'] ?? 'Unknown error'}');
-      return null;
-    }
+    return [ServerMessage.fromJson(jsonDecode(response.body))];
   } else {
-    debugPrint('Clear chat HTTP error: ${response.statusCode} ${response.body}');
-    return null;
+    throw Exception('Failed to delete chat');
   }
 }
 
@@ -87,15 +78,14 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text,
-    {String? appId, String? chatSessionId, List<String>? filesId}) async* {
-  final uri = buildApiUri('/v2/messages', query: {
-    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
-    if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
-  });
+Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
+  var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v2/messages';
+  }
 
   try {
-    final request = await HttpClient().postUrl(uri);
+    final request = await HttpClient().postUrl(Uri.parse(url));
     request.headers.set('Authorization', await getAuthHeader());
     request.headers.contentType = ContentType.json;
     request.write(jsonEncode({'text': text, 'file_ids': filesId}));
@@ -147,12 +137,9 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text,
   }
 }
 
-Future<ServerMessage> getInitialAppMessage(String? appId, {String? chatSessionId}) {
+Future<ServerMessage> getInitialAppMessage(String? appId) {
   return makeApiCall(
-    url: buildApiUri('/v2/initial-message', query: {
-      if (appId != null) 'app_id': appId == 'omi' ? null : appId,
-      if (chatSessionId != null) 'chat_session_id': chatSessionId,
-    }).toString(),
+    url: '${Env.apiBaseUrl}v2/initial-message?app_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
@@ -166,15 +153,10 @@ Future<ServerMessage> getInitialAppMessage(String? appId, {String? chatSessionId
   });
 }
 
-Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
-    {String? appId, String? chatSessionId}) async* {
-  final uri = buildApiUri('/v2/voice-messages', query: {
-    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
-    if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
-  });
+Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async* {
   var request = http.MultipartRequest(
     'POST',
-    uri,
+    Uri.parse('${Env.apiBaseUrl}v2/voice-messages'),
   );
   for (var file in files) {
     request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
@@ -228,14 +210,15 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
   }
 }
 
-Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId, String? chatSessionId}) async {
-  final uri = buildApiUri('/v2/files', query: {
-    'app_id': appId == 'omi' ? null : appId, // Send null for OMI app to maintain backward compatibility
-    if (chatSessionId != null && chatSessionId.isNotEmpty) 'chat_session_id': chatSessionId,
-  });
+Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
+  var url = '${Env.apiBaseUrl}v2/files?app_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v2/files';
+  }
+
   var request = http.MultipartRequest(
     'POST',
-    uri,
+    Uri.parse(url),
   );
   request.headers.addAll({'Authorization': await getAuthHeader()});
   for (var file in files) {

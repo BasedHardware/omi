@@ -193,7 +193,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: provider.connectedDevice != null ? Colors.green.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.2),
+                          color: provider.connectedDevice != null
+                              ? Colors.green.withValues(alpha: 0.2)
+                              : Colors.grey.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -318,7 +320,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                                 'Tap to see the guide',
                                 hasArrow: true,
                                 onTap: () async {
-                                  await IntercomManager.instance.displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
+                                  await IntercomManager.instance
+                                      .displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
                                 },
                               ),
                               _buildSectionRow(
@@ -328,7 +331,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                                 isLast: true,
                                 isRedBackground: true,
                                 onTap: () async {
-                                  await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+                                  await SharedPreferencesUtil()
+                                      .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                                   SharedPreferencesUtil().deviceName = '';
                                   if (provider.connectedDevice != null) {
                                     await _bleDisconnectDevice(provider.connectedDevice!);
@@ -383,7 +387,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                               ),
                               _buildSectionRow(
                                 'Serial Number',
-                                provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ?? 'Unknown',
+                                provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ??
+                                    'Unknown',
                                 hasArrow: false,
                               ),
                               if (provider.isDeviceV2Connected)

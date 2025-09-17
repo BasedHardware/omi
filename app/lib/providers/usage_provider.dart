@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 
@@ -32,12 +33,19 @@ class UsageProvider with ChangeNotifier {
 
   bool _isUsageLoading = false;
   bool _isSubscriptionLoading = false;
-  bool get isLoading => _isUsageLoading || _isSubscriptionLoading;
+  bool _isPaymentLoading = false;
+  bool get isLoading => _isUsageLoading || _isSubscriptionLoading || _isPaymentLoading;
 
   String? _error;
   String? get error => _error;
 
   bool _forceOutOfCredits = false;
+
+  // Payment-related state
+  Map<String, dynamic>? _availablePlans;
+  Map<String, dynamic>? get availablePlans => _availablePlans;
+  bool _isLoadingPlans = false;
+  bool get isLoadingPlans => _isLoadingPlans;
 
   bool get isOutOfCredits {
     if (_forceOutOfCredits) return true;
@@ -114,6 +122,98 @@ class UsageProvider with ChangeNotifier {
       debugPrint('Failed to fetch usage stats: $e');
     } finally {
       _isUsageLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Payment-related methods
+  Future<void> loadAvailablePlans() async {
+    if (_isLoadingPlans) return;
+
+    _isLoadingPlans = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await getAvailablePlans();
+      if (response != null) {
+        _availablePlans = response;
+      } else {
+        _error = 'Failed to load available plans. Please try again later.';
+      }
+    } catch (e) {
+      _error = 'Failed to load available plans. Please try again later.';
+      debugPrint('Error loading available plans: $e');
+    } finally {
+      _isLoadingPlans = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> cancelUserSubscription() async {
+    if (_isPaymentLoading) return false;
+
+    _isPaymentLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final success = await cancelSubscription();
+      if (success) {
+        await fetchSubscription();
+        await loadAvailablePlans();
+      }
+      return success;
+    } catch (e) {
+      _error = 'Failed to cancel subscription. Please try again later.';
+      debugPrint('Error canceling subscription: $e');
+      return false;
+    } finally {
+      _isPaymentLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId}) async {
+    if (_isPaymentLoading) return null;
+
+    _isPaymentLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final result = await upgradeSubscription(priceId: priceId);
+      if (result != null) {
+        await fetchSubscription(); // Refresh subscription data
+        await loadAvailablePlans(); // Refresh available plans
+      }
+      return result;
+    } catch (e) {
+      _error = 'Failed to upgrade subscription. Please try again later.';
+      debugPrint('Error upgrading subscription: $e');
+      return null;
+    } finally {
+      _isPaymentLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, String>?> createUserCheckoutSession({required String priceId}) async {
+    if (_isPaymentLoading) return null;
+
+    _isPaymentLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final sessionData = await createCheckoutSession(priceId: priceId);
+      return sessionData;
+    } catch (e) {
+      _error = 'Failed to create checkout session. Please try again later.';
+      debugPrint('Error creating checkout session: $e');
+      return null;
+    } finally {
+      _isPaymentLoading = false;
       notifyListeners();
     }
   }

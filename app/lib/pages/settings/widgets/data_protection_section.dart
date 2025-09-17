@@ -41,7 +41,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           text: TextSpan(
             style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
             children: const [
-              TextSpan(text: 'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.\n\n'),
+              TextSpan(
+                  text:
+                      'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.\n\n'),
               TextSpan(
                 text: 'Important Trade-offs:\n',
                 style: TextStyle(fontWeight: FontWeight.bold),
@@ -182,7 +184,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             children: [
               Expanded(
                 child: LinearProgressIndicator(
-                  value: provider.migrationTotalCount > 0 ? provider.migrationProcessedCount / provider.migrationTotalCount : 0.0,
+                  value: provider.migrationTotalCount > 0
+                      ? provider.migrationProcessedCount / provider.migrationTotalCount
+                      : 0.0,
                   backgroundColor: Colors.grey.shade700,
                   color: Colors.deepPurple,
                   minHeight: 6,
@@ -191,7 +195,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               ),
               const SizedBox(width: 12),
               Text(
-                provider.migrationTotalCount > 0 ? '${(provider.migrationProcessedCount / provider.migrationTotalCount * 100).toInt()}%' : '0%',
+                provider.migrationTotalCount > 0
+                    ? '${(provider.migrationProcessedCount / provider.migrationTotalCount * 100).toInt()}%'
+                    : '0%',
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ],
