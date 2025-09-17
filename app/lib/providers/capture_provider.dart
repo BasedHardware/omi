@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -25,17 +23,17 @@ import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/sdcard_socket.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:omi/utils/debug_log_manager.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
@@ -486,9 +484,10 @@ class CaptureProvider extends ChangeNotifier
     if (connection == null) return;
 
     await connection.performCameraStartPhotoController();
-    _blePhotoStream = await connection.performGetImageListener(onImageReceived: (photoBytes) async {
+    _blePhotoStream = await connection.performGetImageListener(onImageReceived: (orientedImage) async {
+      final rotatedImageBytes = rotateImage(orientedImage);
       final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-      final String base64Image = base64Encode(photoBytes);
+      final String base64Image = base64Encode(rotatedImageBytes);
 
       // Add placeholder to UI for immediate feedback
       photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));

@@ -13,6 +13,7 @@ import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:version/version.dart';
 
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
@@ -570,7 +571,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<StreamSubscription?> performGetImageListener({
-    required void Function(Uint8List base64JpgData) onImageReceived,
+    required void Function(OrientedImage orientedImage) onImageReceived,
   }) async {
     if (!await hasPhotoStreamingCharacteristic()) {
       return null;
@@ -580,6 +581,15 @@ class OmiDeviceConnection extends DeviceConnection {
     var buffer = BytesBuilder();
     var nextExpectedFrame = 0;
     var isTransferring = false;
+    ImageOrientation? currentOrientation;
+
+    Version newFirmwareVersion = Version.parse("2.1.1");
+    Version deviceFirmwareVersion;
+    try {
+      deviceFirmwareVersion = Version.parse(device.firmwareRevision);
+    } catch (e) {
+      deviceFirmwareVersion = Version(0, 0, 0);
+    }
 
     var bleBytesStream = await _getBleImageBytesListener(
       onImageBytesReceived: (List<int> value) async {
@@ -595,7 +605,10 @@ class OmiDeviceConnection extends DeviceConnection {
             if (imageBytes.isNotEmpty) {
               debugPrint('Completed image bytes length: ${imageBytes.length}');
               try {
-                onImageReceived(imageBytes);
+                onImageReceived(OrientedImage(
+                  imageBytes: imageBytes,
+                  orientation: currentOrientation ?? ImageOrientation.orientation0,
+                ));
               } catch (e) {
                 debugPrint('Error processing image: $e');
               }
@@ -605,6 +618,7 @@ class OmiDeviceConnection extends DeviceConnection {
           buffer.clear();
           isTransferring = false;
           nextExpectedFrame = 0;
+          currentOrientation = null;
           return;
         }
 
@@ -613,6 +627,7 @@ class OmiDeviceConnection extends DeviceConnection {
           buffer.clear();
           isTransferring = true;
           nextExpectedFrame = 0;
+          currentOrientation = null;
         }
 
         // If we are not in a transfer state, ignore the packet unless it's frame 0.
@@ -623,8 +638,29 @@ class OmiDeviceConnection extends DeviceConnection {
 
         // Check if the frame is the one we expect.
         if (frameIndex == nextExpectedFrame) {
-          if (chunk.length > 2) {
-            buffer.add(chunk.sublist(2));
+          if (frameIndex == 0) {
+            if (deviceFirmwareVersion >= newFirmwareVersion) {
+              // New firmware: parse orientation from packet
+              if (chunk.length > 2) {
+                currentOrientation = ImageOrientation.fromValue(chunk[2]);
+                if (chunk.length > 3) {
+                  buffer.add(chunk.sublist(3));
+                }
+              } else {
+                // Malformed packet, default orientation
+                currentOrientation = ImageOrientation.orientation0;
+              }
+            } else {
+              // Old firmware: default to 180 degrees and treat whole chunk as data
+              currentOrientation = ImageOrientation.orientation180;
+              if (chunk.length > 2) {
+                buffer.add(chunk.sublist(2));
+              }
+            }
+          } else {
+            if (chunk.length > 2) {
+              buffer.add(chunk.sublist(2));
+            }
           }
           nextExpectedFrame++;
         } else {
@@ -634,6 +670,7 @@ class OmiDeviceConnection extends DeviceConnection {
           buffer.clear();
           isTransferring = false;
           nextExpectedFrame = 0;
+          currentOrientation = null;
         }
 
         // Safety break for oversized buffer
@@ -642,6 +679,7 @@ class OmiDeviceConnection extends DeviceConnection {
           buffer.clear();
           isTransferring = false;
           nextExpectedFrame = 0;
+          currentOrientation = null;
         }
       },
     );

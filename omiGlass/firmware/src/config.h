@@ -12,7 +12,7 @@
 // DEVICE CONFIGURATION
 // =============================================================================
 #define BLE_DEVICE_NAME "OMI Glass"
-#define FIRMWARE_VERSION_STRING "2.1.0"
+#define FIRMWARE_VERSION_STRING "2.1.1"
 #define HARDWARE_REVISION "ESP32-S3-v1.0"
 #define MANUFACTURER_NAME "Based Hardware"
 
@@ -58,6 +58,19 @@
 
 // Camera Power Management - Reduce power cycling
 #define CAMERA_POWER_DOWN_DELAY_MS 60000 // Power down camera after 60s idle (was 8s)
+
+// =============================================================================
+// IMAGE ORIENTATION
+// =============================================================================
+typedef enum {
+    ORIENTATION_0_DEGREES = 0,   // Normal
+    ORIENTATION_90_DEGREES = 1,  // Rotated right
+    ORIENTATION_180_DEGREES = 2, // Upside down
+    ORIENTATION_270_DEGREES = 3  // Rotated left
+} image_orientation_t;
+
+// The device is mounted upside down, so we need to rotate 180 degrees.
+#define FIXED_IMAGE_ORIENTATION ORIENTATION_180_DEGREES
 
 // =============================================================================
 // BLE CONFIGURATION - Power optimized for extended battery life
