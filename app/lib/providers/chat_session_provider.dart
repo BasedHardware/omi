@@ -10,12 +10,21 @@ class ChatSessionProvider extends ChangeNotifier {
   String? _selectedSessionId; // In-memory only, no persistence for ChatGPT-like behavior
   bool _isLoading = false;
   AppProvider? _appProvider;
+  String _searchQuery = '';
 
   List<ChatSession> get sessions => _sessions;
   bool get isLoading => _isLoading;
   String? get currentAppId => _currentAppId;
-
   String? get selectedSessionId => _selectedSessionId;
+  String get searchQuery => _searchQuery;
+
+  List<ChatSession> get filteredSessions {
+    if (_searchQuery.isEmpty) return _sessions;
+    return _sessions.where((session) {
+      final title = session.title?.toLowerCase() ?? 'new chat';
+      return title.contains(_searchQuery.toLowerCase());
+    }).toList();
+  }
 
   void updateAppProvider(AppProvider appProvider) {
     _appProvider = appProvider;
@@ -113,5 +122,15 @@ class ChatSessionProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error generating title for session $sessionId: $e');
     }
+  }
+
+  void updateSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void clearSearch() {
+    _searchQuery = '';
+    notifyListeners();
   }
 }

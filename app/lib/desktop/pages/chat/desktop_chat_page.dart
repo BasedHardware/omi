@@ -260,6 +260,30 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     );
   }
 
+  Widget _buildSearchBar(ChatSessionProvider sessions) {
+    return Container(
+      height: 40, // Match pencil icon exact height
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
+      ),
+      child: TextField(
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: const InputDecoration(
+          hintText: 'Search',
+          hintStyle: TextStyle(color: Colors.white60, fontSize: 14),
+          prefixIcon: Icon(Icons.search_rounded, color: Colors.white70, size: 20),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        textAlign: TextAlign.left,
+        textAlignVertical: TextAlignVertical.center,
+        onChanged: (query) => sessions.updateSearchQuery(query),
+      ),
+    );
+  }
+
   Widget _buildSessionsPanel(BuildContext context) {
     return Container(
       color: Colors.black, // Pure black background to match mobile
@@ -274,16 +298,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    const Text('Threads',
-                        style: TextStyle(
-                            fontFamily: FontFamily.sFProDisplay,
-                            color: ResponsiveHelper.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
-                    const Spacer(),
+                    // Search bar (takes most space)
+                    Expanded(child: _buildSearchBar(sessions)),
+                    const SizedBox(width: 8),
+                    // New thread button
                     IconButton(
                       icon: const Icon(Icons.edit, color: ResponsiveHelper.textPrimary, size: 18),
                       onPressed: () async {
@@ -304,6 +325,11 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   child:
                       Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
                 )
+              else if (sessions.filteredSessions.isEmpty && sessions.searchQuery.isNotEmpty)
+                const Expanded(
+                  child:
+                      Center(child: Text('No threads found', style: TextStyle(color: ResponsiveHelper.textSecondary))),
+                )
               else if (sessions.sessions.isEmpty)
                 const Expanded(
                   child: Center(child: Text('No threads yet', style: TextStyle(color: ResponsiveHelper.textSecondary))),
@@ -311,11 +337,11 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               else
                 Expanded(
                   child: ListView.builder(
-                    itemCount: sessions.sessions.length,
+                    itemCount: sessions.filteredSessions.length,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 0, vertical: 6), // Remove horizontal padding for full width
                     itemBuilder: (ctx, idx) {
-                      final s = sessions.sessions[idx];
+                      final s = sessions.filteredSessions[idx];
                       // Smooth color calculation for gradual transitions
                       final isSelected = s.id == selectedId;
                       final isBeingSwiped = s.id == _swipingThreadId;

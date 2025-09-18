@@ -936,6 +936,30 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
+  Widget _buildSearchBar(ChatSessionProvider sessions) {
+    return Container(
+      height: 40, // Match pencil icon exact height
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
+      ),
+      child: TextField(
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: const InputDecoration(
+          hintText: 'Search',
+          hintStyle: TextStyle(color: Colors.white60, fontSize: 14),
+          prefixIcon: Icon(Icons.search_rounded, color: Colors.white70, size: 20),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        ),
+        textAlign: TextAlign.left,
+        textAlignVertical: TextAlignVertical.center,
+        onChanged: (query) => sessions.updateSearchQuery(query),
+      ),
+    );
+  }
+
   Widget _buildSessionsDrawer(BuildContext context) {
     return Drawer(
       backgroundColor: Colors.black, // Pure black background
@@ -951,33 +975,36 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header section with pencil icon aligned to AppBar bottom
+                // Header section with search and pencil icon
                 Container(
-                  height: kToolbarHeight, // Same height as AppBar
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  alignment: Alignment.bottomRight, // Align pencil to bottom right
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 12), // Add padding between bottom line and icon
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1), // Subtle white background
-                        borderRadius: BorderRadius.circular(8), // Rounded corners
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      // Search bar (takes most space)
+                      Expanded(child: _buildSearchBar(sessions)),
+                      const SizedBox(width: 8),
+                      // New chat button
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.all(8),
+                          icon: const Icon(Icons.border_color, color: Colors.white, size: 16),
+                          onPressed: () async {
+                            final created = await sessions.createSession(appId: effectiveAppId);
+                            if (created != null) {
+                              _showNotification('New chat created');
+                              await messageProvider.refreshMessages(dropdownSelected: true);
+                              if (mounted) Navigator.of(context).maybePop();
+                            }
+                          },
+                          tooltip: 'New Chat',
+                        ),
                       ),
-                      child: IconButton(
-                        visualDensity: VisualDensity.compact, // Make button more compact
-                        padding: const EdgeInsets.all(8), // Reduce button padding
-                        icon: const Icon(Icons.border_color, color: Colors.white, size: 16),
-                        onPressed: () async {
-                          final created = await sessions.createSession(appId: effectiveAppId);
-                          if (created != null) {
-                            _showNotification('New chat created');
-                            await messageProvider.refreshMessages(dropdownSelected: true);
-                            if (mounted) Navigator.of(context).maybePop();
-                          }
-                        },
-                        tooltip: 'New Chat',
-                      ),
-                    ),
+                    ],
                   ),
                 ),
                 const Divider(height: 1, color: Colors.white12),
@@ -985,6 +1012,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   const Expanded(
                     child: Center(
                         child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
+                  )
+                else if (sessions.filteredSessions.isEmpty && sessions.searchQuery.isNotEmpty)
+                  const Expanded(
+                    child: Center(
+                      child: Text('No chats found', style: TextStyle(color: Colors.white60)),
+                    ),
                   )
                 else if (sessions.sessions.isEmpty)
                   const Expanded(
@@ -995,13 +1028,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 else
                   Expanded(
                     child: ListView.builder(
-                      itemCount: sessions.sessions.length,
+                      itemCount: sessions.filteredSessions.length,
                       itemExtent: 52, // Explicit item height prevents infinite size issues
                       physics: const BouncingScrollPhysics(), // Better scroll physics
                       padding: const EdgeInsets.symmetric(
                           horizontal: 0, vertical: 8), // Remove horizontal padding for full width
                       itemBuilder: (ctx, idx) {
-                        final s = sessions.sessions[idx];
+                        final s = sessions.filteredSessions[idx];
                         // Smooth color calculation for gradual transitions
                         final isSelected = s.id == selectedId;
                         final isBeingSwiped = s.id == _swipingChatId;
