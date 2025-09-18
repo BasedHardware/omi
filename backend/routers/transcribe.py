@@ -1,16 +1,16 @@
-import os
-import uuid
 import asyncio
-import struct
 import json
-from datetime import datetime, timezone, timedelta, time
+import os
+import struct
+import uuid
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
-from typing import Dict, Tuple, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 import opuslib
 import webrtcvad
 from fastapi import APIRouter, Depends
-from fastapi.websockets import WebSocketDisconnect, WebSocket
+from fastapi.websockets import WebSocket, WebSocketDisconnect
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
@@ -18,51 +18,51 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
-from models.users import PlanType
 from models.conversation import (
     Conversation,
-    TranscriptSegment,
-    ConversationStatus,
-    Structured,
-    Geolocation,
     ConversationPhoto,
     ConversationSource,
+    ConversationStatus,
+    Geolocation,
+    Structured,
+    TranscriptSegment,
 )
 from models.message_event import (
     ConversationEvent,
+    LastConversationEvent,
     MessageEvent,
     MessageServiceStatusEvent,
-    LastConversationEvent,
-    TranslationEvent,
-    PhotoProcessingEvent,
     PhotoDescribedEvent,
+    PhotoProcessingEvent,
     SpeakerLabelSuggestionEvent,
+    TranslationEvent,
 )
 from models.transcript_segment import Translation
+from models.users import PlanType
+from utils.analytics import record_usage
+from utils.app_integrations import trigger_external_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.notifications import send_credit_limit_notification, send_silent_user_notification
+from utils.other import endpoints as auth
+from utils.other.storage import get_profile_audio_if_exists
 from utils.other.task import safe_create_task
-from utils.app_integrations import trigger_external_integrations
+from utils.pusher import connect_to_trigger_pusher
+from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import *
-from utils.stt.streaming import get_stt_service_for_language, STTService
 from utils.stt.streaming import (
-    process_audio_soniox,
+    STTService,
+    get_stt_service_for_language,
     process_audio_dg,
+    process_audio_soniox,
     process_audio_speechmatics,
     send_initial_file_path,
 )
-from utils.webhooks import get_audio_bytes_webhook_seconds
-from utils.pusher import connect_to_trigger_pusher
+from utils.subscription import has_transcription_credits
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
-from utils.speaker_identification import detect_speaker_from_text
-from utils.analytics import record_usage
-from utils.subscription import has_transcription_credits
-
-from utils.other import endpoints as auth
-from utils.other.storage import get_profile_audio_if_exists
-from utils.notifications import send_credit_limit_notification, send_silent_user_notification
+from utils.webhooks import get_audio_bytes_webhook_seconds
 
 router = APIRouter()
 
@@ -676,8 +676,9 @@ async def _listen(
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
             nonlocal pusher_ws
+            nonlocal websocket_active
             async with pusher_connect_lock:
-                if pusher_connected:
+                if pusher_connected or not websocket_active:
                     return
                 # drain
                 if pusher_ws:

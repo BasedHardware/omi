@@ -14,8 +14,35 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
     React.useEffect(() => {
         (async () => {
 
+            // Get firmware version
+            let firmwareVersion = '0.0.0'; // Default to old
+            try {
+                const deviceInfoService = await device.getPrimaryService('device_information');
+                const firmwareChar = await deviceInfoService.getCharacteristic('firmware_revision_string');
+                const firmwareValue = await firmwareChar.readValue();
+                firmwareVersion = new TextDecoder().decode(firmwareValue);
+            } catch (e) {
+                console.error('Failed to read firmware version', e);
+            }
+
+            function compareVersions(v1: string, v2: string): number {
+                const parts1 = v1.split('.').map(Number);
+                const parts2 = v2.split('.').map(Number);
+                const len = Math.max(parts1.length, parts2.length);
+                for (let i = 0; i < len; i++) {
+                    const p1 = parts1[i] || 0;
+                    const p2 = parts2[i] || 0;
+                    if (p1 > p2) return 1;
+                    if (p1 < p2) return -1;
+                }
+                return 0;
+            }
+
+            const newRotationLogic = compareVersions(firmwareVersion, '2.1.1') >= 0;
+
             let previousChunk = -1;
             let buffer: Uint8Array = new Uint8Array(0);
+            let orientation: number = 0;
             function onChunk(id: number | null, data: Uint8Array) {
 
                 // Resolve if packet is the first one
@@ -25,6 +52,10 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
                     } else if (id === 0) {
                         previousChunk = 0;
                         buffer = new Uint8Array(0);
+                        if (newRotationLogic) {
+                            orientation = data[0];
+                            data = data.slice(1);
+                        }
                     } else {
                         return;
                     }
@@ -32,7 +63,18 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
                     if (id === null) {
                         console.log('Photo received', buffer);
                         const timestamp = Date.now(); // Get current timestamp
-                        rotateImage(buffer, '270').then((rotated) => {
+                        let rotation: '0' | '90' | '180' | '270' = '180';
+                        if (newRotationLogic) {
+                            rotation = '0';
+                            if (orientation === 1) {
+                                rotation = '90';
+                            } else if (orientation === 2) {
+                                rotation = '180';
+                            } else if (orientation === 3) {
+                                rotation = '270';
+                            }
+                        }
+                        rotateImage(buffer, rotation).then((rotated) => {
                             console.log('Rotated photo', rotated);
                             setPhotos((p) => [...p, { data: rotated, timestamp: timestamp }]); // Store data and timestamp
                         });

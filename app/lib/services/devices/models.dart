@@ -1,8 +1,18 @@
 import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:collection/collection.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/logger.dart';
+
+class OrientedImage {
+  final Uint8List imageBytes;
+  final ImageOrientation orientation;
+
+  OrientedImage({required this.imageBytes, required this.orientation});
+}
 
 const String omiServiceUuid = '19b10000-e8f2-537e-4f6c-d104768a1214';
 

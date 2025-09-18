@@ -1,24 +1,21 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
-import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +23,10 @@ import 'package:share_plus/share_plus.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
-  const UsagePage({super.key, this.showUpgradeDialog = false});
+  const UsagePage({
+    super.key,
+    this.showUpgradeDialog = false,
+  });
 
   @override
   State<UsagePage> createState() => _UsagePageState();
@@ -35,141 +35,19 @@ class UsagePage extends StatefulWidget {
 class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
-  List<bool> _isMetricVisible = [true, true, true, true];
+  final List<bool> _isMetricVisible = [true, true, true, true];
   bool _isUpgrading = false;
   bool _isCancelling = false;
-  bool _isSubscriptionExpanded = false;
+  bool? _isSubscriptionExpanded;
   late AnimationController _waveController;
   late AnimationController _notesController;
   late AnimationController _arrowController;
   late Animation<double> _arrowAnimation;
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
 
-  Future<void> _handleCancelSubscription() async {
+  Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
-    final sub = provider.subscription?.subscription;
-    if (sub == null) return;
-
-    String renewalDateInfo = 'at the end of your current billing period';
-    if (sub.currentPeriodEnd != null) {
-      final date = DateTime.fromMillisecondsSinceEpoch(sub.currentPeriodEnd! * 1000);
-      renewalDateInfo = 'on ${DateFormat.yMMMd().format(date)}';
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => ConfirmationDialog(
-        title: 'Cancel Subscription?',
-        description:
-            'Your plan will remain active until $renewalDateInfo. After that, you will lose access to your unlimited features. Are you sure?',
-        confirmText: 'Confirm Cancellation',
-        cancelText: 'Keep My Plan',
-        onCancel: () => Navigator.of(ctx).pop(false),
-        onConfirm: () => Navigator.of(ctx).pop(true),
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    setState(() => _isCancelling = true);
-    try {
-      final success = await cancelSubscription();
-      if (success) {
-        AppSnackbar.showSnackbar('Your subscription is set to cancel at the end of the period.');
-        context.read<UsageProvider>().fetchSubscription();
-      } else {
-        AppSnackbar.showSnackbarError('Failed to cancel subscription. Please try again.');
-      }
-    } catch (e) {
-      AppSnackbar.showSnackbarError('An error occurred. Please try again.');
-    } finally {
-      if (mounted) {
-        setState(() => _isCancelling = false);
-      }
-    }
-  }
-
-  Future<void> _handleUpgradeWithSelectedPlan() async {
-    final bool isYearly = selectedPlan == 'yearly';
-    final String priceId = isYearly
-        ? 'price_1RtJQ71F8wnoWYvwKMPaGlGY' // Annual plan
-        : 'price_1RtJPm1F8wnoWYvwhVJ38kLb'; // Monthly plan
-
-    MixpanelManager().upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
-    await _handleUpgrade(priceId);
-  }
-
-  Future<void> _handleUpgrade(String priceId) async {
-    final provider = context.read<UsageProvider>();
-
-    // Find the selected pricing option to show in the dialog.
-    PricingOption? selectedPrice;
-    final plans = provider.subscription?.availablePlans ?? [];
-    for (final plan in plans) {
-      for (final price in plan.prices) {
-        if (price.id == priceId) {
-          selectedPrice = price;
-          break;
-        }
-      }
-      if (selectedPrice != null) break;
-    }
-
-    if (selectedPrice == null) {
-      AppSnackbar.showSnackbarError('Selected plan is not available. Please try again.');
-      return;
-    }
-
-    final currentSub = provider.subscription!.subscription;
-
-    if (currentSub.plan == PlanType.unlimited) {
-      final description = "You're switching your Unlimited Plan to the ${selectedPrice.title}.";
-
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => ConfirmationDialog(
-          title: 'Confirm Plan Change',
-          description: '$description Are you sure you want to proceed?',
-          confirmText: 'Confirm & Proceed',
-          cancelText: 'Cancel',
-          onCancel: () => Navigator.of(ctx).pop(false),
-          onConfirm: () => Navigator.of(ctx).pop(true),
-        ),
-      );
-
-      if (confirmed != true) {
-        return;
-      }
-    }
-
-    setState(() => _isUpgrading = true);
-    try {
-      final sessionData = await createCheckoutSession(priceId: priceId);
-      if (sessionData != null && sessionData['url'] != null && mounted) {
-        final result = await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => PaymentWebViewPage(
-              checkoutUrl: sessionData['url']!,
-            ),
-          ),
-        );
-
-        if (result == true) {
-          AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
-          context.read<UsageProvider>().fetchSubscription();
-          MixpanelManager().upgradeSucceeded();
-        } else {
-          MixpanelManager().upgradeCancelled();
-          // Optional: handle cancellation or failure
-        }
-      } else {
-        AppSnackbar.showSnackbarError('Could not launch upgrade page. Please try again.');
-      }
-    } catch (e) {
-      AppSnackbar.showSnackbarError('An error occurred. Please try again.');
-    } finally {
-      if (mounted) setState(() => _isUpgrading = false);
-    }
+    await provider.loadAvailablePlans();
   }
 
   Future<void> _shareUsage() async {
@@ -194,7 +72,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       text: TextSpan(
         text: 'omi.me',
         style: TextStyle(
-          color: Colors.white.withOpacity(0.8),
+          color: Colors.white.withValues(alpha: 0.8),
           fontSize: 14 * 3.0, // Scale font size with pixelRatio
           fontWeight: FontWeight.w600,
         ),
@@ -204,9 +82,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     textPainter.layout();
 
     // Define sizes and padding
-    final double logoHeight = 20 * 3.0; // Scaled logo height
+    const double logoHeight = 20 * 3.0; // Scaled logo height
     final double logoWidth = (logoImage.width / logoImage.height) * logoHeight;
-    final double padding = 4 * 3.0;
+    const double padding = 4 * 3.0;
     final double totalWatermarkWidth = logoWidth + padding + textPainter.width;
     final double totalWatermarkHeight = logoHeight > textPainter.height ? logoHeight : textPainter.height;
 
@@ -258,7 +136,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final numberFormatter = NumberFormat.decimalPattern('en_US');
 
     String shareText;
-    final baseText = 'Sharing my Omi stats! (omi.me - your always-on AI assistant)';
+    const baseText = 'Sharing my Omi stats! (omi.me - your always-on AI assistant)';
 
     if (stats != null) {
       final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
@@ -303,10 +181,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await Share.shareXFiles(
-      [XFile(file.path)],
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
       text: shareText,
-    );
+    ));
   }
 
   String _getPeriodForIndex(int index) {
@@ -386,6 +264,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         _showPlansSheet();
       }
     });
+
+    // Load available plans
+    _loadAvailablePlans();
   }
 
   @override
@@ -485,43 +366,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildFeatureItem({required IconData faIcon, required String text}) {
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white,
-              width: 1,
-            ),
-          ),
-          child: Center(
-            child: FaIcon(
-              faIcon,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   IconData _getIconForFeature(String featureText) {
     final text = featureText.toLowerCase();
     if (text.contains('unlimited') || text.contains('infinity')) {
@@ -575,6 +419,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     final isUnlimited = provider.subscription!.subscription.plan == PlanType.unlimited;
+    _isSubscriptionExpanded ??= !isUnlimited;
 
     Widget collapsedBody;
     Widget expandedBody;
@@ -591,7 +436,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text('Unlimited Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
+          FaIcon(_isSubscriptionExpanded! ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
               size: 16, color: Colors.grey),
         ],
       );
@@ -645,28 +490,62 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           ? (sub.transcriptionSecondsUsed / sub.transcriptionSecondsLimit).clamp(0.0, 1.0)
           : 0.0;
 
-      collapsedBody = Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      collapsedBody = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Row(
-              children: [
-                const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                if (minutesLimit > 0) ...[
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit mins used',
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                      overflow: TextOverflow.ellipsis,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    const Text('Basic Plan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    if (minutesLimit > 0) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '${NumberFormat.decimalPattern('en_US').format(minutesUsed)} of $minutesLimit mins used',
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  ElevatedButton(
+                    onPressed: _isUpgrading ? null : _showPlansSheet,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
+                    child: _isUpgrading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Upgrade', style: TextStyle(color: Colors.white)),
                   ),
+                  const SizedBox(width: 12),
+                  FaIcon(_isSubscriptionExpanded! ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
+                      size: 16, color: Colors.grey),
                 ],
-              ],
-            ),
+              ),
+            ],
           ),
-          FaIcon(_isSubscriptionExpanded ? FontAwesomeIcons.chevronUp : FontAwesomeIcons.chevronDown,
-              size: 16, color: Colors.grey),
+          if (minutesLimit > 0) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: Colors.grey.shade700,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ],
         ],
       );
 
@@ -719,7 +598,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       child: InkWell(
         onTap: () {
           setState(() {
-            _isSubscriptionExpanded = !_isSubscriptionExpanded;
+            _isSubscriptionExpanded = !_isSubscriptionExpanded!;
           });
         },
         borderRadius: BorderRadius.circular(16),
@@ -729,13 +608,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: AnimatedSize(
             duration: const Duration(milliseconds: 300),
             curve: Curves.fastOutSlowIn,
             alignment: Alignment.topCenter,
-            child: _isSubscriptionExpanded ? expandedBody : collapsedBody,
+            child: _isSubscriptionExpanded! ? expandedBody : collapsedBody,
           ),
         ),
       ),
@@ -750,567 +629,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
-            return Consumer<UsageProvider>(builder: (context, provider, child) {
-              final sub = provider.subscription?.subscription;
-              final isUnlimited = sub?.plan == PlanType.unlimited;
-              final isCancelled = sub?.cancelAtPeriodEnd ?? false;
-
-              String renewalDate = 'N/A';
-              if (sub?.currentPeriodEnd != null) {
-                final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
-                renewalDate = DateFormat.yMMMd().format(date);
-              }
-              return DraggableScrollableSheet(
-                initialChildSize: 0.9,
-                minChildSize: 0.5,
-                maxChildSize: 0.9,
-                builder: (BuildContext context, ScrollController scrollController) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Colors.deepPurple.withOpacity(0.5),
-                          Colors.deepPurple.withOpacity(0.3),
-                          Colors.black.withOpacity(0.8),
-                          Colors.black,
-                        ],
-                        stops: const [0.0, 0.2, 0.6, 1.0],
-                      ),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                    ),
-                    child: ListView(
-                      controller: scrollController,
-                      children: [
-                        Center(
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 24),
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade700,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          height: 150,
-                          width: double.infinity,
-                          child: Stack(
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    flex: 1,
-                                    child: ClipRect(
-                                      child: SizedBox(
-                                        height: 120,
-                                        child: AnimatedBuilder(
-                                          animation: _waveController,
-                                          builder: (context, child) {
-                                            const double totalWidth = 420.0;
-                                            final scrollOffset = (_waveController.value * totalWidth) % totalWidth;
-                                            return Stack(
-                                              children: [
-                                                Positioned(
-                                                  left: -totalWidth + scrollOffset,
-                                                  top: 0,
-                                                  bottom: 0,
-                                                  child: Row(
-                                                    children: List.generate(60, (index) {
-                                                      final heights = [
-                                                        20.0,
-                                                        32.0,
-                                                        45.0,
-                                                        26.0,
-                                                        52.0,
-                                                        39.0,
-                                                        32.0,
-                                                        45.0,
-                                                        28.0,
-                                                        36.0,
-                                                        41.0,
-                                                        24.0,
-                                                        48.0,
-                                                        37.0,
-                                                        30.0,
-                                                        43.0,
-                                                        22.0,
-                                                        34.0,
-                                                        47.0,
-                                                        29.0,
-                                                        50.0,
-                                                        38.0,
-                                                        33.0,
-                                                        44.0
-                                                      ];
-                                                      final height = heights[index % heights.length];
-
-                                                      return Container(
-                                                        width: 4,
-                                                        height: height,
-                                                        margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.red.withOpacity(0.7),
-                                                          borderRadius: BorderRadius.circular(2),
-                                                        ),
-                                                      );
-                                                    }),
-                                                  ),
-                                                ),
-                                                Positioned(
-                                                  left: scrollOffset,
-                                                  top: 0,
-                                                  bottom: 0,
-                                                  child: Row(
-                                                    children: List.generate(60, (index) {
-                                                      final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
-                                                      final height = heights[index % heights.length];
-
-                                                      return Container(
-                                                        width: 4,
-                                                        height: height,
-                                                        margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.red.withOpacity(0.7),
-                                                          borderRadius: BorderRadius.circular(2),
-                                                        ),
-                                                      );
-                                                    }),
-                                                  ),
-                                                ),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 1,
-                                    child: ClipRect(
-                                      child: SizedBox(
-                                        height: 120,
-                                        child: AnimatedBuilder(
-                                          animation: _notesController,
-                                          builder: (context, child) {
-                                            const double totalWidth = 440.0;
-                                            final scrollOffset = (_notesController.value * totalWidth) % totalWidth;
-                                            return Stack(
-                                              children: [
-                                                Positioned(
-                                                  left: -totalWidth + scrollOffset,
-                                                  top: 0,
-                                                  bottom: 0,
-                                                  child: Row(
-                                                    children: List.generate(8, (index) {
-                                                      return Container(
-                                                        width: 45,
-                                                        height: 55,
-                                                        margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.white.withOpacity(0.95),
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          boxShadow: [
-                                                            BoxShadow(
-                                                              color: Colors.black.withOpacity(0.15),
-                                                              blurRadius: 4,
-                                                              offset: const Offset(0, 2),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        child: Padding(
-                                                          padding: const EdgeInsets.all(6),
-                                                          child: Column(
-                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                            children: [
-                                                              Container(
-                                                                width: 26,
-                                                                height: 3,
-                                                                decoration: BoxDecoration(
-                                                                  color: Colors.black,
-                                                                  borderRadius: BorderRadius.circular(1.5),
-                                                                ),
-                                                              ),
-                                                              const SizedBox(height: 4),
-                                                              ...List.generate(
-                                                                  5,
-                                                                  (i) => Container(
-                                                                        width: i == 4 ? 24 : 35, // Last line shorter
-                                                                        height: 2,
-                                                                        margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                        decoration: BoxDecoration(
-                                                                          color: Colors.grey[350],
-                                                                          borderRadius: BorderRadius.circular(1),
-                                                                        ),
-                                                                      )),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }),
-                                                  ),
-                                                ),
-                                                Positioned(
-                                                  left: scrollOffset,
-                                                  top: 0,
-                                                  bottom: 0,
-                                                  child: Row(
-                                                    children: List.generate(8, (index) {
-                                                      return Container(
-                                                        width: 45,
-                                                        height: 55,
-                                                        margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.white.withOpacity(0.95),
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          boxShadow: [
-                                                            BoxShadow(
-                                                              color: Colors.black.withOpacity(0.15),
-                                                              blurRadius: 4,
-                                                              offset: const Offset(0, 2),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        child: Padding(
-                                                          padding: const EdgeInsets.all(6),
-                                                          child: Column(
-                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                            children: [
-                                                              Container(
-                                                                width: 26,
-                                                                height: 3,
-                                                                decoration: BoxDecoration(
-                                                                  color: Colors.black,
-                                                                  borderRadius: BorderRadius.circular(1.5),
-                                                                ),
-                                                              ),
-                                                              const SizedBox(height: 4),
-                                                              ...List.generate(
-                                                                  5,
-                                                                  (i) => Container(
-                                                                        width: i == 4 ? 24 : 35, // Last line shorter
-                                                                        height: 2,
-                                                                        margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                        decoration: BoxDecoration(
-                                                                          color: Colors.grey[350],
-                                                                          borderRadius: BorderRadius.circular(1),
-                                                                        ),
-                                                                      )),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }),
-                                                  ),
-                                                ),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Positioned(
-                                left: (MediaQuery.of(context).size.width - 120) / 2,
-                                top: 5,
-                                child: Container(
-                                  width: 120,
-                                  height: 120,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.blue.withOpacity(0.4),
-                                        blurRadius: 20,
-                                        spreadRadius: 3,
-                                      ),
-                                    ],
-                                  ),
-                                  child: ClipOval(
-                                    child: Image.asset(
-                                      Assets.images.omiWithoutRope.path,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Column(
-                            children: [
-                              const SizedBox(height: 24),
-                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  isUnlimited ? 'Manage Subscription' : 'Upgrade to Unlimited',
-                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
-                              ]),
-                              const SizedBox(height: 8),
-                              Text(
-                                isUnlimited
-                                    ? 'You are on the Unlimited Plan.'
-                                    : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                              ),
-                              if (isUnlimited && isCancelled) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                                ),
-                              ] else if (isUnlimited && !isCancelled) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Your plan renews on $renewalDate.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                                ),
-                              ],
-                              const SizedBox(height: 32),
-                              // Features list
-                              Column(
-                                children: [
-                                  _buildFeatureItem(
-                                    faIcon: FontAwesomeIcons.infinity,
-                                    text: 'Unlimited conversations',
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildFeatureItem(
-                                    faIcon: FontAwesomeIcons.solidComments,
-                                    text: 'Ask Omi anything about your life',
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildFeatureItem(
-                                    faIcon: FontAwesomeIcons.brain,
-                                    text: 'Unlock Omi\'s infinite memory',
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 48),
-
-                              // Yearly plan
-                              _buildHardcodedPlanOption(
-                                isSelected: selectedPlan == 'yearly',
-                                saveTag: '2 Months Free',
-                                isPopular: true,
-                                title: 'Annual Unlimited',
-                                subtitle: '12 months / \$199',
-                                monthlyPrice: '\$16 /mo',
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  setModalState(() => selectedPlan = 'yearly');
-                                  setState(() => selectedPlan = 'yearly');
-                                },
-                              ),
-                              const SizedBox(height: 18),
-
-                              // Monthly plan
-                              _buildHardcodedPlanOption(
-                                isSelected: selectedPlan == 'monthly',
-                                title: 'Monthly Unlimited',
-                                subtitle: null, // Remove subtitle
-                                monthlyPrice: '\$19 /mo',
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  setModalState(() => selectedPlan = 'monthly');
-                                  setState(() => selectedPlan = 'monthly');
-                                },
-                              ),
-                              const SizedBox(height: 24),
-
-                              // Continue button
-                              SizedBox(
-                                width: double.infinity,
-                                height: 56,
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    HapticFeedback.mediumImpact();
-                                    _handleUpgradeWithSelectedPlan();
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white,
-                                    foregroundColor: Colors.black,
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text(
-                                        'Continue',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      AnimatedBuilder(
-                                        animation: _arrowAnimation,
-                                        builder: (context, child) {
-                                          return Transform.translate(
-                                            offset: Offset(_arrowAnimation.value, 0),
-                                            child: const Icon(Icons.arrow_forward, size: 20),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              if (isUnlimited == true && !isCancelled) ...[
-                                TextButton(
-                                  onPressed: () {
-                                    _handleCancelSubscription();
-                                  },
-                                  child: const Text('Cancel Subscription',
-                                      style: TextStyle(color: Colors.red, fontSize: 16)),
-                                ),
-                                const SizedBox(height: 8),
-                              ],
-                            ],
-                          ),
-                        )
-                      ],
-                    ),
-                  );
-                },
-              );
-            });
+            return PlansSheet(waveController: _waveController, notesController: _notesController, arrowController: _arrowController, arrowAnimation: _arrowAnimation);
           },
         );
       },
     );
   }
 
-  Widget _buildHardcodedPlanOption({
-    required bool isSelected,
-    required String title,
-    required String? subtitle,
-    required String monthlyPrice,
-    required VoidCallback onTap,
-    String? saveTag,
-    bool isPopular = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25), // Use conversation list background
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Colors.white : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          children: [
-            // Popular badge only at the top
-            if (isPopular) ...[
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'POPULAR',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      monthlyPrice,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (saveTag != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade800,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          saveTag,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
+
 
   Widget _buildEmptyState() {
     return Center(
@@ -1334,13 +661,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   Widget _buildUsageListView(
       UsageStats? stats, List<UsageHistoryPoint>? history, String period, GlobalKey key, UsageProvider provider) {
-    final onRefresh = () async {
+    Future<void> onRefresh() async {
       // Using Future.wait to run both fetches concurrently
       await Future.wait([
         provider.fetchUsageStats(period: period),
         provider.fetchSubscription(),
       ]);
-    };
+    }
 
     if (stats == null) {
       return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
@@ -1561,8 +888,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             show: true,
             gradient: LinearGradient(
               colors: [
-                metricColors[i].withOpacity(0.3),
-                metricColors[i].withOpacity(0.0),
+                metricColors[i].withValues(alpha: 0.3),
+                metricColors[i].withValues(alpha: 0.0),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -1581,7 +908,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       borderData: FlBorderData(
         show: true,
         border: Border(
-          bottom: BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1),
         ),
       ),
       lineTouchData: LineTouchData(
@@ -1701,7 +1028,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: LineChart(
             lineChartData,
@@ -1768,19 +1095,19 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final numberFormatter = NumberFormat.decimalPattern('en_US');
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [
-            const Color(0xFF2A2A2E),
-            const Color(0xFF1F1F25),
+            Color(0xFF2A2A2E),
+            Color(0xFF1F1F25),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 10,
             spreadRadius: 1,
             offset: const Offset(0, 2),
