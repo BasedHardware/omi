@@ -242,25 +242,18 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       // Handle navigation
       switch (pageAlias) {
         case "chat":
-          if (detailPageId != null && detailPageId.isNotEmpty) {
-            var appId = detailPageId != "omi" ? detailPageId : '';
-            if (mounted) {
-              var appProvider = Provider.of<AppProvider>(context, listen: false);
-              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-              App? selectedApp;
-              if (appId.isNotEmpty) {
-                selectedApp = await appProvider.getAppFromId(appId);
-              }
-              appProvider.setSelectedChatAppId(appId);
-              await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
-              }
-            }
+          if (!mounted) break;
+          final String? appId =
+              (detailPageId != null && detailPageId.isNotEmpty) ? (detailPageId != "omi" ? detailPageId : '') : null;
+
+          final appProvider = Provider.of<AppProvider>(context, listen: false);
+          final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+
+          if (appId != null) {
+            appProvider.setSelectedChatAppId(appId);
+            await messageProvider.startNewChat(appId: appId);
           } else {
-            if (mounted) {
-              await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
-            }
+            await messageProvider.startNewChat();
           }
           break;
         default:

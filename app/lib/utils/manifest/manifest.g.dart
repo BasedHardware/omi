@@ -9,7 +9,9 @@ part of 'manifest.dart';
 Manifest _$ManifestFromJson(Map<String, dynamic> json) => Manifest(
       formatVersion: (json['format-version'] as num).toInt(),
       time: (json['time'] as num).toInt(),
-      files: (json['files'] as List<dynamic>).map((e) => ManifestFile.fromJson(e as Map<String, dynamic>)).toList(),
+      files: (json['files'] as List<dynamic>)
+          .map((e) => ManifestFile.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
 
 Map<String, dynamic> _$ManifestToJson(Manifest instance) => <String, dynamic>{
@@ -32,7 +34,8 @@ ManifestFile _$ManifestFileFromJson(Map<String, dynamic> json) => ManifestFile(
       imageIndex: json['image_index'] as String?,
     );
 
-Map<String, dynamic> _$ManifestFileToJson(ManifestFile instance) => <String, dynamic>{
+Map<String, dynamic> _$ManifestFileToJson(ManifestFile instance) =>
+    <String, dynamic>{
       'type': instance.type,
       'board': instance.board,
       'soc': instance.soc,

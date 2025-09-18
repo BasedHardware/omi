@@ -1,29 +1,26 @@
 import 'dart:convert';
 
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/widgets/transcript.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'markdown_message_widget.dart';
 
@@ -284,18 +281,8 @@ class NormalMessageWidget extends StatelessWidget {
       children: [
         FilesHandlerWidget(message: message),
         showTypingIndicator && messageText.isEmpty
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
-                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+            ? Padding(
+                padding: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -330,7 +317,8 @@ class NormalMessageWidget extends StatelessWidget {
                           )
                         : const TypingIndicator(),
                   ],
-                ))
+                ),
+              )
             : const SizedBox.shrink(),
         // !(showTypingIndicator && messageText.isEmpty)
         //     ? Container(
@@ -346,18 +334,59 @@ class NormalMessageWidget extends StatelessWidget {
         //     : const SizedBox.shrink(),
         messageText.isEmpty
             ? const SizedBox.shrink()
-            : Container(
+            : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
-                child: getMarkdownWidget(context, messageText),
+                child: getMarkdownWidget(context, messageText, onTapLink: (href) async {
+                  // Support transcript deep links omi://time?conv=...&start=...&end=...
+                  if (href.startsWith('omi://time')) {
+                    try {
+                      final uri = Uri.parse(href);
+                      final convId = uri.queryParameters['conv'];
+                      final start = double.tryParse(uri.queryParameters['start'] ?? '');
+                      final end = double.tryParse(uri.queryParameters['end'] ?? '');
+                      if (start == null || end == null) return;
+                      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                      if (!connectivityProvider.isConnected) return;
+                      final memProvider = Provider.of<ConversationProvider>(context, listen: false);
+                      ServerConversation? conv;
+                      if (convId != null && convId.isNotEmpty) {
+                        var found = false;
+                        for (var entry in memProvider.groupedConversations.entries) {
+                          final idx = entry.value.indexWhere((e) => e.id == convId);
+                          if (idx != -1) {
+                            context.read<ConversationDetailProvider>().updateConversation(idx, entry.key);
+                            conv = entry.value[idx];
+                            found = true;
+                            break;
+                          }
+                        }
+                        if (!found) {
+                          conv = await getConversationById(convId);
+                        }
+                      }
+                      conv ??=
+                          (message.memories.isNotEmpty ? await getConversationById(message.memories.first.id) : null);
+                      if (conv == null) return;
+                      final nonNullConv = conv;
+                      debugPrint('Opening transcript for conv=' +
+                          (nonNullConv.id) +
+                          ' start=' +
+                          start.toString() +
+                          ' end=' +
+                          end.toString());
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (c) => _ChatTranscriptViewPage(
+                            conversation: nonNullConv,
+                            highlightStart: start,
+                            highlightEnd: end,
+                          ),
+                        ),
+                      );
+                    } catch (_) {}
+                    return;
+                  }
+                }),
               ),
       ],
     );
@@ -423,7 +452,61 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   Spacer(),
                 ],
               )
-            : getMarkdownWidget(context, widget.messageText),
+            : getMarkdownWidget(context, widget.messageText, onTapLink: (href) async {
+                // Support transcript deep links omi://time?conv=...&start=...&end=...
+                if (href.startsWith('omi://time')) {
+                  try {
+                    final uri = Uri.parse(href);
+                    final convId = uri.queryParameters['conv'];
+                    final start = double.tryParse(uri.queryParameters['start'] ?? '');
+                    final end = double.tryParse(uri.queryParameters['end'] ?? '');
+                    if (start == null || end == null) return;
+                    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    if (!connectivityProvider.isConnected) return;
+                    final memProvider = Provider.of<ConversationProvider>(context, listen: false);
+                    ServerConversation? conv;
+                    if (convId != null && convId.isNotEmpty) {
+                      // Try find locally by id
+                      var found = false;
+                      for (var entry in memProvider.groupedConversations.entries) {
+                        final idx = entry.value.indexWhere((e) => e.id == convId);
+                        if (idx != -1) {
+                          context.read<ConversationDetailProvider>().updateConversation(idx, entry.key);
+                          conv = entry.value[idx];
+                          found = true;
+                          break;
+                        }
+                      }
+                      if (!found) {
+                        conv = await getConversationById(convId);
+                      }
+                    }
+                    conv ??= (widget.message.memories.isNotEmpty
+                        ? await getConversationById(widget.message.memories.first.id)
+                        : null);
+                    if (conv == null) return;
+                    // Debug
+                    debugPrint('omi://time link tapped conv=' +
+                        (convId ?? '') +
+                        ' start=' +
+                        start.toString() +
+                        ' end=' +
+                        end.toString() +
+                        ' convFound=' +
+                        (conv != null).toString());
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (c) => _ChatTranscriptViewPage(
+                          conversation: conv!,
+                          highlightStart: start,
+                          highlightEnd: end,
+                        ),
+                      ),
+                    );
+                  } catch (_) {}
+                  return;
+                }
+              }),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
@@ -589,6 +672,45 @@ class CopyButton extends StatelessWidget {
               width: 8,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatTranscriptViewPage extends StatelessWidget {
+  final ServerConversation conversation;
+  final double highlightStart;
+  final double highlightEnd;
+
+  const _ChatTranscriptViewPage(
+      {Key? key, required this.conversation, required this.highlightStart, required this.highlightEnd})
+      : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    debugPrint('Rendering chat transcript view highlightStart=$highlightStart highlightEnd=$highlightEnd');
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Text(
+          conversation.structured.title.isNotEmpty ? conversation.structured.title.decodeString : 'Transcript',
+          style: const TextStyle(color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: TranscriptWidget(
+          segments: conversation.transcriptSegments,
+          horizontalMargin: true,
+          topMargin: true,
+          canDisplaySeconds: TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments),
+          isConversationDetail: true,
+          bottomMargin: 20,
+          highlightStart: highlightStart,
+          highlightEnd: highlightEnd,
         ),
       ),
     );

@@ -139,11 +139,23 @@ class Message(BaseModel):
 
 class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
+    citations: Optional[List[dict]] = None
+
+
+class DateRange(BaseModel):
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
+
+
+class ChatContext(BaseModel):
+    date_range: Optional[DateRange] = None
+    conversation_ids: Optional[List[str]] = []
 
 
 class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
+    context: Optional[ChatContext] = None
 
 
 class ChatSession(BaseModel):
@@ -152,6 +164,8 @@ class ChatSession(BaseModel):
     file_ids: Optional[List[str]] = []
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
+    title: Optional[str] = None
+    last_active_at: Optional[datetime] = None
     created_at: datetime
 
     @model_validator(mode='before')

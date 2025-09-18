@@ -138,6 +138,14 @@ class Structured(BaseModel):
         description="A brief overview of the conversation, highlighting the key details from it",
         default='',
     )
+    # Citations for overview (stored alongside the overview)
+    overview_citations: Optional[List[Dict]] = Field(
+        default=None, description="Citations for the conversation overview"
+    )
+    # Computed-only: server renders this on GET for clients
+    overview_citations_markdown: Optional[str] = Field(
+        default=None, description="Overview with footnote-style links, rendered on the server"
+    )
     emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])

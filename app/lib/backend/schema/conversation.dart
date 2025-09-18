@@ -131,6 +131,8 @@ class ServerConversation {
   final bool deleted;
   final bool isLocked;
 
+  final String? overviewCitationsMarkdown;
+
   // local label
   bool isNew = false;
 
@@ -152,6 +154,7 @@ class ServerConversation {
     this.externalIntegration,
     this.status = ConversationStatus.completed,
     this.isLocked = false,
+    this.overviewCitationsMarkdown,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -182,6 +185,7 @@ class ServerConversation {
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
       isLocked: json['is_locked'] ?? false,
+      overviewCitationsMarkdown: json['structured'] != null ? json['structured']['overview_citations_markdown'] : null,
     );
   }
 

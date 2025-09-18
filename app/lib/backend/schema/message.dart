@@ -115,6 +115,7 @@ class ServerMessage {
   MessageType type;
 
   String? appId;
+  String? chatSessionId;
   bool fromIntegration;
 
   List<MessageFile> files;
@@ -132,6 +133,7 @@ class ServerMessage {
     this.sender,
     this.type,
     this.appId,
+    this.chatSessionId,
     this.fromIntegration,
     this.files,
     this.filesId,
@@ -147,6 +149,7 @@ class ServerMessage {
       MessageSender.values.firstWhere((e) => e.toString().split('.').last == json['sender']),
       MessageType.valuesFromString(json['type']),
       json['plugin_id'],
+      json['chat_session_id'],
       json['from_integration'] ?? false,
       ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
       (json['files_id'] ?? []).map((m) => m.toString()).toList(),
@@ -163,6 +166,7 @@ class ServerMessage {
       'sender': sender.toString().split('.').last,
       'type': type.toString().split('.').last,
       'plugin_id': appId,
+      'chat_session_id': chatSessionId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
       'files': files.map((m) => m.toJson()).toList(),
@@ -187,6 +191,7 @@ class ServerMessage {
       MessageSender.ai,
       MessageType.text,
       appId,
+      null,
       false,
       [],
       [],
@@ -201,6 +206,7 @@ class ServerMessage {
       'Looks like we are having issues with the server. Please try again later.',
       MessageSender.ai,
       MessageType.text,
+      null,
       null,
       false,
       [],

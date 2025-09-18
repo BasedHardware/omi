@@ -15,6 +15,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
+import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -27,6 +28,8 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
+import 'package:omi/widgets/transcript.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 
 import 'maps_util.dart';
 import 'share.dart';
@@ -591,6 +594,46 @@ class AppResultDetailWidget extends StatelessWidget {
   }
 }
 
+class _TranscriptViewPage extends StatelessWidget {
+  final ServerConversation conversation;
+  final double highlightStart;
+  final double highlightEnd;
+
+  const _TranscriptViewPage({
+    required this.conversation,
+    required this.highlightStart,
+    required this.highlightEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Text(
+          conversation.structured.title.isNotEmpty ? conversation.structured.title.decodeString : 'Transcript',
+          style: const TextStyle(color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: TranscriptWidget(
+          segments: conversation.transcriptSegments,
+          horizontalMargin: true,
+          topMargin: true,
+          canDisplaySeconds: TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments),
+          isConversationDetail: true,
+          bottomMargin: 20,
+          highlightStart: highlightStart,
+          highlightEnd: highlightEnd,
+        ),
+      ),
+    );
+  }
+}
+
 class GetAppsWidgets extends StatelessWidget {
   final String searchQuery;
   final int currentResultIndex;
@@ -639,6 +682,38 @@ class GetAppsWidgets extends StatelessWidget {
                       searchQuery: searchQuery,
                       currentResultIndex: currentResultIndex,
                     ),
+                    Builder(builder: (context) {
+                      final md = provider.conversation.overviewCitationsMarkdown;
+                      final raw = md?.trim().isNotEmpty == true ? md! : summarizedApp.content.decodeString;
+                      final text = raw;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 20),
+                        child: SelectionArea(
+                          child: getMarkdownWidget(
+                            context,
+                            text,
+                            onTapLink: (href) {
+                              if (!href.startsWith('omi://')) return;
+                              try {
+                                final uri = Uri.parse(href);
+                                final start = double.tryParse(uri.queryParameters['start'] ?? '');
+                                final end = double.tryParse(uri.queryParameters['end'] ?? '');
+                                if (start == null || end == null) return;
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => _TranscriptViewPage(
+                                      conversation: provider.conversation,
+                                      highlightStart: start,
+                                      highlightEnd: end,
+                                    ),
+                                  ),
+                                );
+                              } catch (_) {}
+                            },
+                          ),
+                        ),
+                      );
+                    }),
                   ],
                   const SizedBox(height: 8)
                 ],

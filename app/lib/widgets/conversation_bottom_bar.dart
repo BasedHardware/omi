@@ -22,6 +22,7 @@ class ConversationBottomBar extends StatelessWidget {
   final Function(ConversationTab) onTabSelected;
   final VoidCallback onStopPressed;
   final bool hasSegments;
+  final VoidCallback? onChatPressed;
 
   const ConversationBottomBar({
     super.key,
@@ -30,6 +31,7 @@ class ConversationBottomBar extends StatelessWidget {
     required this.onTabSelected,
     required this.onStopPressed,
     this.hasSegments = true,
+    this.onChatPressed,
   });
 
   @override
@@ -81,6 +83,8 @@ class ConversationBottomBar extends StatelessWidget {
                   _buildSummaryTab(context),
                   const SizedBox(width: 4),
                   _buildActionItemsTab(),
+                  const SizedBox(width: 4),
+                  _buildChatAction(),
                 ],
               _ => [_buildSummaryTab(context)],
             },
@@ -189,6 +193,16 @@ class ConversationBottomBar extends StatelessWidget {
       icon: FontAwesomeIcons.listCheck,
       isSelected: selectedTab == ConversationTab.actionItems,
       onTap: () => onTabSelected(ConversationTab.actionItems),
+    );
+  }
+
+  Widget _buildChatAction() {
+    return TabButton(
+      icon: Icons.chat_bubble,
+      isSelected: false,
+      onTap: () {
+        if (onChatPressed != null) onChatPressed!();
+      },
     );
   }
 }

@@ -72,8 +72,7 @@ class _AppShellState extends State<AppShell> {
         } catch (e) {
           debugPrint('Failed to login to Intercom: $e');
         }
-
-        context.read<MessageProvider>().setMessagesFromCache();
+        // TODO: Create a cache for chat sessions
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
         context.read<UsageProvider>().fetchSubscription();

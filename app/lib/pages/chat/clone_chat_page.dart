@@ -46,10 +46,7 @@ class CloneChatPageState extends State<CloneChatPage> {
         }
 
         var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-        await messageProvider.refreshMessages();
-        if (messageProvider.messages.isEmpty) {
-          messageProvider.sendInitialAppMessage(selectedApp);
-        }
+        await messageProvider.startNewChat(appId: selectedApp.id);
       }
     });
     super.initState();

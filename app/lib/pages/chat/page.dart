@@ -33,10 +33,16 @@ import 'widgets/message_action_menu.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
+  final String? chatSessionId;
+  final bool showAppBar;
+  final String? scopedConversationId;
 
   const ChatPage({
     super.key,
     this.isPivotBottom = false,
+    this.chatSessionId,
+    this.showAppBar = true,
+    this.scopedConversationId,
   });
 
   @override
@@ -95,9 +101,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
-      if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+
+      if (widget.scopedConversationId != null && widget.scopedConversationId!.isNotEmpty) {
+        provider.scopeToConversation(widget.scopedConversationId!);
       }
+
+      // If a session id was provided, always switch and refresh immediately
+      if (widget.chatSessionId != null && widget.chatSessionId!.isNotEmpty) {
+        provider.setCurrentChatSessionId(widget.chatSessionId);
+        await provider.refreshMessages();
+      }
+
       scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
@@ -128,8 +142,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: _buildAppBar(context, provider),
-          // endDrawer: _buildSessionsDrawer(context),
+          appBar: widget.showAppBar ? _buildAppBar(context, provider) : null,
+          endDrawer: _buildSessionsEndDrawer(context),
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -137,6 +151,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             },
             child: Column(
               children: [
+                const SizedBox.shrink(),
                 // Messages area - takes up remaining space
                 Expanded(
                   child: provider.isLoadingMessages && !provider.hasCachedMessages
@@ -168,17 +183,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               ],
                             )
                           : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 32.0),
-                                    child: Text(
-                                        connectivityProvider.isConnected
-                                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
-                                            : 'Please check your internet connection and try again',
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(color: Colors.white)),
-                                  ),
-                                )
+                              ? const SizedBox.shrink()
                               : ListView.builder(
                                   shrinkWrap: false,
                                   reverse: true,
@@ -237,14 +242,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             },
                                             onThumbsUp: message.sender == MessageSender.ai && message.askForNps
                                                 ? () {
-                                                    provider.setMessageNps(message, 1);
+                                                    context.read<MessageProvider>().setMessageNps(message, 1);
                                                     Navigator.pop(context);
                                                     AppSnackbar.showSnackbar('Thank you for your feedback!');
                                                   }
                                                 : null,
                                             onThumbsDown: message.sender == MessageSender.ai && message.askForNps
                                                 ? () {
-                                                    provider.setMessageNps(message, 0);
+                                                    context.read<MessageProvider>().setMessageNps(message, 0);
                                                     Navigator.pop(context);
                                                     AppSnackbar.showSnackbar('Thank you for your feedback!');
                                                   }
@@ -318,7 +323,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                   context.read<ConversationProvider>().updateConversation(conversation);
                                                 },
                                                 setMessageNps: (int value) {
-                                                  provider.setMessageNps(message, value);
+                                                  context.read<MessageProvider>().setMessageNps(message, value);
                                                 },
                                               )
                                             : HumanMessage(message: message),
@@ -645,17 +650,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     provider.setSendingMessage(false);
   }
 
-  sendInitialAppMessage(App? app) async {
-    context.read<MessageProvider>().setSendingMessage(true);
-    scrollToBottom();
-    ServerMessage message = await getInitialAppMessage(app?.id);
-    if (mounted) {
-      context.read<MessageProvider>().addMessage(message);
-    }
-    scrollToBottom();
-    context.read<MessageProvider>().setSendingMessage(false);
-  }
-
   void _moveListToBottom() {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (scrollController.hasClients) {
@@ -735,25 +729,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);
-
-    // Add a small delay to let the keyboard animation complete
-    // This prevents the widget from being unmounted during the keyboard transition
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    // Check if widget is still mounted after delay
-    if (!mounted) return;
-
-    // Perform async operation
-    await messageProvider.refreshMessages(dropdownSelected: true);
+    await messageProvider.startNewChat(appId: appId);
 
     // Check if widget is still mounted before proceeding
     if (!mounted) return;
-
-    // Get the selected app and send initial message if needed
-    var app = appProvider.getSelectedApp();
-    if (messageProvider.messages.isEmpty) {
-      messageProvider.sendInitialAppMessage(app);
-    }
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
@@ -770,16 +749,62 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         },
       ),
       centerTitle: true,
-      actions: const [
-        // IconButton(
-        //   icon: const Icon(Icons.history, color: Colors.white),
-        //   onPressed: () {
-        //     HapticFeedback.mediumImpact();
-        //     // Dismiss keyboard before opening drawer
-        //     FocusScope.of(context).unfocus();
-        //     scaffoldKey.currentState?.openEndDrawer();
-        //   },
-        // ),
+      actions: [
+        IconButton(
+          tooltip: 'Filter by date',
+          icon: const Icon(Icons.filter_alt_outlined, color: Colors.white),
+          onPressed: () async {
+            final selection = await showModalBottomSheet<int>(
+              context: context,
+              backgroundColor: const Color(0xFF1f1f25),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              builder: (ctx) {
+                final preset = context.read<MessageProvider>().datePreset;
+                Widget item(String label, int value) => Container(
+                      decoration: BoxDecoration(
+                        color: value == preset ? const Color(0xFF2A2A33) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        title: Text(label, style: const TextStyle(color: Colors.white)),
+                        onTap: () => Navigator.pop(ctx, value),
+                      ),
+                    );
+                return SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        item('All time', 0),
+                        item('Today', 1),
+                        item('Yesterday', 2),
+                        item('Last 7 days', 3),
+                        item('Last 30 days', 4),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+            if (selection != null) {
+              context.read<MessageProvider>().setDatePreset(selection);
+            }
+          },
+        ),
+        // Sessions/history panel
+        IconButton(
+          tooltip: 'Sessions',
+          icon: const Icon(Icons.history, color: Colors.white),
+          onPressed: () {
+            context.read<MessageProvider>().loadSessions();
+            scaffoldKey.currentState?.openEndDrawer();
+          },
+        ),
+        // Removed: manual add-context UI
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
@@ -797,6 +822,134 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildSessionsEndDrawer(BuildContext context) {
+    return Drawer(
+      width: MediaQuery.of(context).size.width * 0.8,
+      backgroundColor: const Color(0xFF1f1f25),
+      child: SafeArea(
+        child: Consumer<MessageProvider>(builder: (context, mp, _) {
+          final sessions = mp.sessions;
+          final TextEditingController searchCtrl = TextEditingController();
+          final ValueNotifier<String> query = ValueNotifier('');
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search, color: Colors.white60, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: searchCtrl,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          hintText: 'Search chats',
+                          hintStyle: TextStyle(color: Colors.white60),
+                          border: InputBorder.none,
+                          isDense: true,
+                        ),
+                        onChanged: (v) => query.value = v.trim().toLowerCase(),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      onPressed: () async {
+                        Navigator.of(context).maybePop();
+                        final p = context.read<MessageProvider>();
+                        await p.startNewChat(
+                          appId: context.read<AppProvider>().selectedChatAppId,
+                        );
+                      },
+                      icon: const Icon(Icons.add_circle_outline, color: Colors.white60),
+                      tooltip: 'New chat',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: ValueListenableBuilder<String>(
+                  valueListenable: query,
+                  builder: (context, q, _) {
+                    final filtered = q.isEmpty
+                        ? sessions
+                        : sessions.where((s) {
+                            final t = ((s['title'] as String?) ?? '').toLowerCase();
+                            return t.contains(q);
+                          }).toList();
+                    if (filtered.isEmpty) {
+                      return const Center(
+                        child: Text('No sessions', style: TextStyle(color: Colors.white60)),
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, i) {
+                        final s = filtered[i];
+                        final id = s['id'] as String? ?? '';
+                        final title = (s['title'] as String?)?.trim();
+                        final display = (title != null && title.isNotEmpty) ? title : 'Chat';
+                        final isCurrent = context.read<MessageProvider>().currentChatSessionId == id;
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isCurrent ? const Color(0xFF2A2A33) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                            title: Text(
+                              display,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Delete',
+                              icon: const Icon(Icons.delete_outline, color: Colors.white60, size: 20),
+                              onPressed: () async {
+                                try {
+                                  final mp = context.read<MessageProvider>();
+                                  await deleteChatSessionServer(id);
+                                  if (mp.currentChatSessionId == id) {
+                                    await mp.startNewChat(
+                                      appId: context.read<AppProvider>().selectedChatAppId,
+                                    );
+                                  }
+                                  await mp.loadSessions();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Chat deleted'),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                } catch (_) {}
+                              },
+                            ),
+                            onTap: () async {
+                              Navigator.of(context).maybePop();
+                              final p = context.read<MessageProvider>();
+                              await p.switchToSession(id);
+                            },
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        }),
+      ),
     );
   }
 
@@ -1044,7 +1197,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
-                        if (mounted) {
+                        if (context.mounted) {
                           context.read<MessageProvider>().captureImage();
                         }
                       },
@@ -1057,7 +1210,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
-                        if (mounted) {
+                        if (context.mounted) {
                           context.read<MessageProvider>().selectImage();
                         }
                       },
@@ -1069,7 +1222,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
-                        if (mounted) {
+                        if (context.mounted) {
                           context.read<MessageProvider>().selectFile();
                         }
                       },

@@ -12,6 +12,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -25,9 +26,12 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 import 'package:pull_down_button/pull_down_button.dart';
+import 'package:omi/pages/chat/page.dart';
+import 'package:omi/backend/http/api/messages.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
+// import '../action_items/widgets/action_item_title_widget.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -36,8 +40,9 @@ import 'package:omi/backend/http/webhooks.dart';
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
   final bool isFromOnboarding;
+  final ConversationTab? initialTab;
 
-  const ConversationDetailPage({super.key, this.isFromOnboarding = false, required this.conversation});
+  const ConversationDetailPage({super.key, this.isFromOnboarding = false, required this.conversation, this.initialTab});
 
   @override
   State<ConversationDetailPage> createState() => _ConversationDetailPageState();
@@ -127,8 +132,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   @override
   void initState() {
     super.initState();
-
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
+    final initialTab = widget.initialTab ?? ConversationTab.summary;
+    selectedTab = initialTab;
+    _controller = TabController(length: 3, vsync: this, initialIndex: initialTab.index);
     _controller!.addListener(() {
       setState(() {
         switch (_controller!.index) {
@@ -652,6 +658,81 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                       },
                       onStopPressed: () {
                         // Empty since we don't show the stop button in detail mode
+                      },
+                      onChatPressed: () async {
+                        // Open chat drawer scoped to this conversation
+                        final convo = Provider.of<ConversationDetailProvider>(context, listen: false).conversation;
+                        final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                        await messageProvider.startScopedChat(convo.id);
+                        if (context.mounted) {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (ctx) {
+                              final height = MediaQuery.of(ctx).size.height * 0.9;
+                              return Container(
+                                height: height,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF1f1f25),
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                ),
+                                child: SafeArea(
+                                  top: true,
+                                  child: Column(
+                                    children: [
+                                      // Top header bar (make it black so icons look floating)
+                                      Container(
+                                        color: Colors.black,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                              child: Row(
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(Icons.delete_outline, color: Colors.white),
+                                                    onPressed: () async {
+                                                      final provider =
+                                                          Provider.of<MessageProvider>(context, listen: false);
+                                                      final sessionId = provider.currentChatSessionId;
+                                                      if (sessionId != null && sessionId.isNotEmpty) {
+                                                        try {
+                                                          await deleteChatSessionServer(sessionId);
+                                                          provider.setCurrentChatSessionId(null);
+                                                          provider.messages = [];
+                                                          if (ctx.mounted) Navigator.of(ctx).pop();
+                                                        } catch (_) {}
+                                                      } else {
+                                                        if (ctx.mounted) Navigator.of(ctx).pop();
+                                                      }
+                                                    },
+                                                  ),
+                                                  const Spacer(),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.close, color: Colors.white),
+                                                    onPressed: () {
+                                                      Navigator.of(ctx).pop();
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const Divider(height: 1, color: Color(0xFF2A2A33)),
+                                          ],
+                                        ),
+                                      ),
+                                      Expanded(
+                                          child: ChatPage(
+                                              isPivotBottom: true, showAppBar: false, scopedConversationId: convo.id)),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }
                       },
                     );
                   },
