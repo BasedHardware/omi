@@ -146,11 +146,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  Future periodicConnect(String printer) async {
+  Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
     _reconnectionTimer?.cancel();
     scan(t) async {
       debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");
       if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
+        return;
+      }
+      if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
+        t.cancel();
         return;
       }
       Logger.debug("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");

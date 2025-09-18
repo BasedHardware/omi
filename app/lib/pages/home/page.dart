@@ -70,7 +70,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
+        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
       }
       if (mounted) {
         await context.read<ConversationProvider>().getInitialConversations();
