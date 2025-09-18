@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
@@ -7,6 +9,18 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:path/path.dart';
+
+class ApiClient {
+  static const Duration requestTimeoutRead = Duration(seconds: 30);
+  static const Duration requestTimeoutWrite = Duration(seconds: 300);
+
+  static final _client = http.Client();
+
+  static void dispose() {
+    _client.close();
+  }
+}
 
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
@@ -30,6 +44,28 @@ Future<String> getAuthHeader() async {
   return 'Bearer ${SharedPreferencesUtil().authToken}';
 }
 
+bool _isRequiredAuthCheck(String url) {
+  if (url.contains(Env.apiBaseUrl!)) {
+    return true;
+  }
+  return false;
+}
+
+Future<http.StreamedResponse> makeRawApiCall({
+  required String url,
+  required String method,
+  Map<String, String> headers = const {},
+}) async {
+  var request = http.Request(method, Uri.parse(url));
+  final bool requireAuthCheck = _isRequiredAuthCheck(url);
+  if (requireAuthCheck) {
+    headers['Authorization'] = await getAuthHeader();
+    // headers['Authorization'] = ''; // set admin key + uid here for testing
+  }
+  request.headers.addAll(headers);
+  return ApiClient._client.send(request);
+}
+
 Future<http.Response?> makeApiCall({
   required String url,
   required Map<String, String> headers,
@@ -37,23 +73,19 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
-    if (url.contains(Env.apiBaseUrl!)) {
+    final bool requireAuthCheck = _isRequiredAuthCheck(url);
+    if (requireAuthCheck) {
       headers['Authorization'] = await getAuthHeader();
       // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
-    final client = http.Client();
-
-    http.Response? response = await _performRequest(client, url, headers, body, method);
-    if (response.statusCode == 401) {
+    http.Response? response = await _performRequest(url, headers, body, method);
+    if (requireAuthCheck && response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
-      // Refresh the token
       SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        // Update the header with the new token
         headers['Authorization'] = 'Bearer ${SharedPreferencesUtil().authToken}';
-        // Retry the request with the new token
-        response = await _performRequest(client, url, headers, body, method);
+        response = await _performRequest(url, headers, body, method);
         Logger.log('Token refreshed and request retried');
         if (response.statusCode == 401) {
           // Force user to sign in again
@@ -78,29 +110,205 @@ Future<http.Response?> makeApiCall({
 }
 
 Future<http.Response> _performRequest(
-  http.Client client,
   String url,
   Map<String, String> headers,
   String body,
   String method,
 ) async {
+  final client = ApiClient._client;
+
   switch (method) {
     case 'POST':
       headers['Content-Type'] = 'application/json';
-      return await client.post(Uri.parse(url), headers: headers, body: body);
+      return await client.post(Uri.parse(url), headers: headers, body: body).timeout(
+            ApiClient.requestTimeoutWrite,
+            onTimeout: () => throw TimeoutException('Request timeout'),
+          );
     case 'GET':
-      return await client.get(Uri.parse(url), headers: headers);
+      return await client.get(Uri.parse(url), headers: headers).timeout(
+            ApiClient.requestTimeoutRead,
+            onTimeout: () => throw TimeoutException('Request timeout'),
+          );
     case 'DELETE':
       headers['Content-Type'] = 'application/json';
-      return await client.delete(Uri.parse(url), headers: headers, body: body);
+      return await client.delete(Uri.parse(url), headers: headers, body: body).timeout(
+            ApiClient.requestTimeoutWrite,
+            onTimeout: () => throw TimeoutException('Request timeout'),
+          );
     case 'PATCH':
       headers['Content-Type'] = 'application/json';
-      return await client.patch(Uri.parse(url), headers: headers, body: body);
+      return await client.patch(Uri.parse(url), headers: headers, body: body).timeout(
+            ApiClient.requestTimeoutWrite,
+            onTimeout: () => throw TimeoutException('Request timeout'),
+          );
     case 'PUT':
       headers['Content-Type'] = 'application/json';
-      return await client.put(Uri.parse(url), headers: headers, body: body);
+      return await client.put(Uri.parse(url), headers: headers, body: body).timeout(
+            ApiClient.requestTimeoutWrite,
+            onTimeout: () => throw TimeoutException('Request timeout'),
+          );
     default:
       throw Exception('Unsupported HTTP method: $method');
+  }
+}
+
+Future<http.Response> makeMultipartApiCall({
+  required String url,
+  required List<File> files,
+  Map<String, String> headers = const {},
+  Map<String, String> fields = const {},
+  String fileFieldName = 'files',
+  String method = 'POST',
+}) async {
+  try {
+    var request = http.MultipartRequest(method, Uri.parse(url));
+
+    final bool requireAuthCheck = _isRequiredAuthCheck(url);
+    if (requireAuthCheck) {
+      headers = Map.from(headers);
+      headers['Authorization'] = await getAuthHeader();
+    }
+
+    request.headers.addAll(headers);
+    request.fields.addAll(fields);
+
+    for (var file in files) {
+      var stream = http.ByteStream(file.openRead());
+      var length = await file.length();
+      var multipartFile = http.MultipartFile(
+        fileFieldName,
+        stream,
+        length,
+        filename: basename(file.path),
+      );
+      request.files.add(multipartFile);
+    }
+
+    var streamedResponse = await ApiClient._client.send(request);
+    return await http.Response.fromStream(streamedResponse);
+  } catch (e, stackTrace) {
+    debugPrint('Multipart HTTP request failed: $e, $stackTrace');
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    rethrow;
+  }
+}
+
+Stream<String> makeStreamingApiCall({
+  required String url,
+  Map<String, String> headers = const {},
+  String body = '',
+  String method = 'POST',
+}) async* {
+  try {
+    var request = http.Request(method, Uri.parse(url));
+
+    final bool requireAuthCheck = _isRequiredAuthCheck(url);
+    if (requireAuthCheck) {
+      headers = Map.from(headers);
+      headers['Authorization'] = await getAuthHeader();
+    }
+
+    request.headers.addAll(headers);
+
+    if (body.isNotEmpty) {
+      request.headers['Content-Type'] = 'application/json';
+      request.body = body;
+    }
+
+    var streamedResponse = await ApiClient._client.send(request);
+
+    if (streamedResponse.statusCode != 200) {
+      Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
+      return;
+    }
+
+    var buffers = <String>[];
+    await for (var data in streamedResponse.stream.transform(utf8.decoder)) {
+      var lines = data.split('\n\n');
+      for (var line in lines.where((line) => line.isNotEmpty)) {
+        // Handle package splitting by 1024 bytes in dart
+        if (line.length >= 1024) {
+          buffers.add(line);
+          continue;
+        }
+
+        // Merge packages if needed
+        if (buffers.isNotEmpty) {
+          buffers.add(line);
+          line = buffers.join();
+          buffers.clear();
+        }
+
+        yield line;
+      }
+    }
+
+    // Flush remaining buffers
+    if (buffers.isNotEmpty) {
+      yield buffers.join();
+    }
+  } catch (e, stackTrace) {
+    Logger.error('Streaming request error: $e');
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+  }
+}
+
+Stream<String> makeMultipartStreamingApiCall({
+  required String url,
+  required List<File> files,
+  Map<String, String> headers = const {},
+  String fileFieldName = 'files',
+}) async* {
+  try {
+    var request = http.MultipartRequest('POST', Uri.parse(url));
+
+    final bool requireAuthCheck = _isRequiredAuthCheck(url);
+    if (requireAuthCheck) {
+      headers = Map.from(headers);
+      headers['Authorization'] = await getAuthHeader();
+    }
+
+    request.headers.addAll(headers);
+
+    for (var file in files) {
+      request.files.add(await http.MultipartFile.fromPath(fileFieldName, file.path, filename: basename(file.path)));
+    }
+
+    var response = await ApiClient._client.send(request);
+
+    if (response.statusCode != 200) {
+      Logger.error('Multipart streaming request failed: ${response.statusCode}');
+      return;
+    }
+
+    var buffers = <String>[];
+    await for (var data in response.stream.transform(utf8.decoder)) {
+      var lines = data.split('\n\n');
+      for (var line in lines.where((line) => line.isNotEmpty)) {
+        // Handle package splitting by 1024 bytes in dart
+        if (line.length >= 1024) {
+          buffers.add(line);
+          continue;
+        }
+
+        // Merge packages if needed
+        if (buffers.isNotEmpty) {
+          buffers.add(line);
+          line = buffers.join();
+          buffers.clear();
+        }
+
+        yield line;
+      }
+    }
+
+    // Flush remaining buffers
+    if (buffers.isNotEmpty) {
+      yield buffers.join();
+    }
+  } catch (e, stackTrace) {
+    Logger.error('Multipart streaming request error: $e');
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
   }
 }
 

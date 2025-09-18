@@ -173,7 +173,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool? previousConnection;
 
   void _onReceiveTaskData(dynamic data) async {
-    debugPrint('_onReceiveTaskData $data');
     if (data is! Map<String, dynamic>) return;
     if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
     await updateUserGeolocation(
