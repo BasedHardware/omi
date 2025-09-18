@@ -3,7 +3,7 @@ import time
 import base64
 import uuid
 from datetime import datetime, timezone
-from typing import List, AsyncGenerator
+from typing import List, AsyncGenerator, Optional
 
 import database.chat as chat_db
 import database.notifications as notification_db
@@ -109,7 +109,9 @@ def process_voice_message_segment(path: str, uid: str):
     return [message.dict(), ai_message_resp]
 
 
-async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGenerator[str, None]:
+async def process_voice_message_segment_stream(
+    path: str, uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
+) -> AsyncGenerator[str, None]:
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -129,13 +131,27 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
         print('voice message text is empty')
         return
 
-    # create message
-    message = Message(
-        id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
-    )
+    # Get session first to determine correct app_id for the message
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            # Session not found, get default for app
+            chat_session = chat_db.get_chat_session(uid, app_id=app_id)
+    else:
+        chat_session = chat_db.get_chat_session(uid, app_id=app_id)
 
-    chat_session = chat_db.get_chat_session(uid)
     chat_session = ChatSession(**chat_session) if chat_session else None
+
+    # Create message with correct app_id inherited from the session
+    message_app_id = chat_session.plugin_id if chat_session else app_id
+    message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.now(timezone.utc),
+        sender='human',
+        type='text',
+        app_id=message_app_id,  # Inherit app_id from session
+    )
 
     if chat_session:
         message.chat_session_id = chat_session.id
@@ -149,7 +165,9 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
 
     # not support plugin
     app = None
-    app_id = None
+    # Preserve session context for AI response (don't reset app_id and chat_session_id)
+    original_app_id = message_app_id
+    original_chat_session_id = chat_session.id if chat_session else None
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -169,13 +187,18 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
-            app_id=app_id,
+            app_id=original_app_id,  # Use preserved app_id from session context
             type='text',
             memories_id=memories_id,
         )
 
-        chat_session = chat_db.get_chat_session(uid)
-        chat_session = ChatSession(**chat_session) if chat_session else None
+        # Use the same session as the user message (preserved context)
+        if original_chat_session_id:
+            ai_chat_session = chat_db.get_chat_session_by_id(uid, original_chat_session_id)
+        else:
+            ai_chat_session = chat_db.get_chat_session(uid, app_id=original_app_id)
+
+        chat_session = ChatSession(**ai_chat_session) if ai_chat_session else None
 
         if chat_session:
             ai_message.chat_session_id = chat_session.id

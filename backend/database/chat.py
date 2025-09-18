@@ -158,8 +158,9 @@ def get_messages(
     print('get_messages', uid, limit, offset, app_id, include_conversations)
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
-    # if include_plugin_id_filter:
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+    # Only filter by plugin_id if app_id is provided (enables multi-threading for default OMI app)
+    if app_id is not None:
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
 
@@ -248,10 +249,16 @@ def batch_delete_messages(
     parent_doc_ref, batch_size=450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ):
     messages_ref = parent_doc_ref.collection('messages')
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    # Only filter by plugin_id if app_id is provided
+    if app_id is not None:
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    # Filter by chat_session_id if provided
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
-    print('batch_delete_messages', app_id)
+
+    print('batch_delete_messages', app_id, chat_session_id)
 
     while True:
         docs_stream = messages_ref.limit(batch_size).stream()
@@ -326,7 +333,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
         db.collection('users')
         .document(uid)
         .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .where(filter=FieldFilter('plugin_id', '==', app_id))  # Always filter by plugin_id (including None for OMI)
         .limit(1)
     )
 
@@ -337,10 +344,93 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
     return None
 
 
-def delete_chat_session(uid, chat_session_id):
+def get_chat_sessions(uid: str, app_id: Optional[str]):
+    """Get all chat sessions for a specific app_id or all sessions if app_id is None."""
+    session_ref = db.collection('users').document(uid).collection('chat_sessions')
+
+    # Only filter by plugin_id if app_id is provided (enables multi-threading for default OMI app)
+    if app_id is not None:
+        session_ref = session_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    session_ref = session_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    sessions = []
+    for session in session_ref.stream():
+        sessions.append(session.to_dict())
+
+    return sessions
+
+
+def get_chat_session_by_id(uid: str, chat_session_id: str):
+    """Get a specific chat session by its ID."""
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.delete()
+    session_doc = session_ref.get()
+
+    if session_doc.exists:
+        return session_doc.to_dict()
+
+    return None
+
+
+def create_chat_session(uid: str, app_id: Optional[str], title: Optional[str] = None):
+    """Create a new chat session for a specific app."""
+    import uuid
+    from datetime import datetime, timezone
+
+    session_data = {
+        'id': str(uuid.uuid4()),
+        'app_id': app_id,
+        'plugin_id': app_id,  # Legacy compatibility
+        'title': title or "New Chat",
+        'message_ids': [],
+        'file_ids': [],
+        'created_at': datetime.now(timezone.utc),
+    }
+
+    return add_chat_session(uid, session_data)
+
+
+def update_chat_session_title(uid: str, chat_session_id: str, title: str) -> bool:
+    """Update the title of a specific chat session."""
+    try:
+        user_ref = db.collection('users').document(uid)
+        session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+
+        # Check if session exists
+        session_doc = session_ref.get()
+        if not session_doc.exists:
+            return False
+
+        # Update the title
+        session_ref.update({'title': title})
+        return True
+
+    except Exception as e:
+        print(f"Error updating chat session title: {e}")
+        return False
+
+
+def delete_chat_session(uid, chat_session_id):
+    """Delete a chat session and all its associated messages."""
+    user_ref = db.collection('users').document(uid)
+
+    # First, get the session to extract its app_id
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_doc = session_ref.get()
+
+    if session_doc.exists:
+        session_data = session_doc.to_dict()
+        app_id = session_data.get('app_id') or session_data.get('plugin_id')
+
+        # Delete all messages belonging to this session
+        batch_delete_messages(user_ref, app_id=app_id, chat_session_id=chat_session_id)
+
+        # Then delete the session itself
+        session_ref.delete()
+    else:
+        # Session doesn't exist, but try to delete any orphaned messages anyway
+        batch_delete_messages(user_ref, chat_session_id=chat_session_id)
 
 
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
