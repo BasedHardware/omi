@@ -9,6 +9,8 @@ abstract class Env {
 
   static String? get openAIAPIKey => _instance.openAIAPIKey;
 
+  static String? get openRouterAPIKey => _instance.openRouterAPIKey;
+
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
   static String? get apiBaseUrl => _instance.apiBaseUrl;
@@ -30,6 +32,8 @@ abstract class Env {
 
 abstract class EnvFields {
   String? get openAIAPIKey;
+
+  String? get openRouterAPIKey;
 
   String? get mixpanelProjectToken;
 

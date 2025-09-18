@@ -40,9 +40,12 @@ from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
+from utils.llm.clients import llm_mini as model, llm_medium_stream
 
-model = ChatOpenAI(model="gpt-4o-mini")
-llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
+# ===== ORIGINAL LOCAL MODEL DEFINITIONS (COMMENTED OUT FOR ROLLBACK) =====
+# To rollback to GPT models, comment out the import above and uncomment these:
+# model = ChatOpenAI(model="gpt-4o-mini")
+# llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 
 
 class StructuredFilters(TypedDict):

@@ -8,15 +8,57 @@ import tiktoken
 from models.conversation import Structured
 
 
-llm_mini = ChatOpenAI(model='gpt-4o-mini')
-llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
+# ===== GEMINI 2.5 MODELS (PRIMARY CHAT) =====
+# Light tasks - replaces gpt-4o-mini
+llm_mini = ChatOpenAI(
+    temperature=0.2,
+    model="google/gemini-2.5-flash",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Chat"},
+    streaming=False,
+)
+
+llm_mini_stream = ChatOpenAI(
+    temperature=0.2,
+    model="google/gemini-2.5-flash",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Chat"},
+    streaming=True,
+)
+
+# Heavy tasks - replaces gpt-4o
+llm_medium = ChatOpenAI(
+    temperature=0.3,
+    model="google/gemini-2.5-pro",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Chat"},
+    streaming=False,
+)
+
+llm_medium_stream = ChatOpenAI(
+    temperature=0.3,
+    model="google/gemini-2.5-pro",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Chat"},
+    streaming=True,
+)
+
+# ===== ORIGINAL GPT MODELS (COMMENTED OUT FOR ROLLBACK) =====
+# llm_mini = ChatOpenAI(model='gpt-4o-mini')
+# llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
+# llm_medium = ChatOpenAI(model='gpt-4o')
+# llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
+
+# ===== LEGACY MODELS (KEPT FOR SPECIFIC USE CASES) =====
 llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
 llm_high = ChatOpenAI(model='o4-mini')
 llm_high_stream = ChatOpenAI(model='o4-mini', streaming=True, temperature=1)
-llm_medium = ChatOpenAI(model='gpt-4o')
 llm_medium_experiment = ChatOpenAI(model='gpt-4.1')
-llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
     model="google/gemini-flash-1.5-8b",

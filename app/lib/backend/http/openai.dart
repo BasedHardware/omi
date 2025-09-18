@@ -18,7 +18,8 @@ class SummaryResult {
 }
 
 Future<String> triggerTestConversationPrompt(String prompt, String transcript) async {
-  return await executeGptPrompt('''
+  return await executeGeminiPrompt(
+      '''
         Your task is: $prompt
         
         Current Conversation: ```${transcript.trim()}```,
@@ -26,9 +27,10 @@ Future<String> triggerTestConversationPrompt(String prompt, String transcript) a
         Output your response in plain text, without markdown.
         Make sure to be concise and clear.
         '''
-      .replaceAll('     ', '')
-      .replaceAll('    ', '')
-      .trim());
+          .replaceAll('     ', '')
+          .replaceAll('    ', '')
+          .trim(),
+      useProModel: true); // Use Pro model for complex conversation analysis
 }
 
 Future<String> getPhotoDescription(Uint8List data) async {
@@ -48,7 +50,8 @@ Future<String> getPhotoDescription(Uint8List data) async {
       ],
     },
   ];
-  var res = await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
+  var res = await geminiApiCall(
+      model: 'google/gemini-2.5-pro', messages: messages, maxTokens: 150); // Use Pro model for vision tasks
   if (res == null) return '';
   return res;
 }
@@ -93,6 +96,50 @@ Future<dynamic> gptApiCall({
     isFunctionCalling: tools.isNotEmpty,
   );
 }
+
+// ===== GEMINI API FUNCTIONS =====
+
+Future<dynamic> geminiApiCall({
+  required String model,
+  List<Map<String, dynamic>> messages = const [],
+  double temperature = 0.3,
+  int? maxTokens,
+}) async {
+  final url = 'https://openrouter.ai/api/v1/chat/completions';
+  final headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Authorization': 'Bearer ${Env.openRouterAPIKey}',
+    'X-Title': 'Omi Chat',
+  };
+
+  var bodyData = {'model': model, 'messages': messages, 'temperature': temperature};
+  if (maxTokens != null) {
+    bodyData['max_tokens'] = maxTokens;
+  }
+
+  final body = jsonEncode(bodyData);
+  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  return extractContentFromResponse(response);
+}
+
+Future<String> executeGeminiPrompt(String? prompt, {bool ignoreCache = false, bool useProModel = false}) async {
+  if (prompt == null) return '';
+
+  var prefs = SharedPreferencesUtil();
+  var promptBase64 = base64Encode(utf8.encode(prompt));
+  var cachedResponse = prefs.gptCompletionCache(promptBase64); // Reuse same cache for now
+  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
+
+  String model = useProModel ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
+  String response = await geminiApiCall(model: model, messages: [
+    {'role': 'user', 'content': prompt} // Changed from 'system' to 'user' for better Gemini compatibility
+  ]);
+  prefs.setGptCompletionCache(promptBase64, response);
+  debugPrint('executeGeminiPrompt response: $response');
+  return response;
+}
+
+// ===== LEGACY OPENAI FUNCTIONS (KEPT FOR COMPATIBILITY) =====
 
 Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) async {
   if (prompt == null) return '';
