@@ -23,14 +23,16 @@ class _DesktopAboutOmiPageState extends State<DesktopAboutOmiPage> {
       backgroundColor: ResponsiveHelper.backgroundPrimary,
       body: Stack(
         children: [
-          Padding(
-            padding: EdgeInsets.all(responsive.spacing(baseSpacing: 24)),
-            child: Column(
-              children: [
-                _buildHeader(responsive),
-                SizedBox(height: responsive.spacing(baseSpacing: 24)),
-                Expanded(child: _buildContent(responsive)),
-              ],
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.all(responsive.spacing(baseSpacing: 24)),
+              child: Column(
+                children: [
+                  _buildHeader(responsive),
+                  SizedBox(height: responsive.spacing(baseSpacing: 24)),
+                  Expanded(child: _buildContent(responsive)),
+                ],
+              ),
             ),
           ),
         ],

@@ -210,44 +210,46 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 _buildAnimatedBackground(),
 
                 // Main content with glassmorphism
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildModernHeader(appProvider),
-                      // Notification banner (appears below header, above messages)
-                      TopNotificationBanner(
-                        message: _notificationMessage,
-                        isVisible: _showNotificationBanner,
-                        type: _notificationType,
-                        onDismiss: _hideNotification,
-                      ),
-                      if (provider.isLoadingMessages) _buildLoadingBar(),
-                      Expanded(
-                        child: _animationsInitialized
-                            ? FadeTransition(
-                                opacity: _fadeAnimation,
-                                child: SlideTransition(
-                                  position: _slideAnimation,
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 280,
-                                        child: _buildSessionsPanel(context),
-                                      ),
-                                      const VerticalDivider(width: 1, color: Colors.white10),
-                                      Expanded(child: _buildChatContent(provider, connectivityProvider)),
-                                    ],
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.02),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildModernHeader(appProvider),
+                        // Notification banner (appears below header, above messages)
+                        TopNotificationBanner(
+                          message: _notificationMessage,
+                          isVisible: _showNotificationBanner,
+                          type: _notificationType,
+                          onDismiss: _hideNotification,
+                        ),
+                        if (provider.isLoadingMessages) _buildLoadingBar(),
+                        Expanded(
+                          child: _animationsInitialized
+                              ? FadeTransition(
+                                  opacity: _fadeAnimation,
+                                  child: SlideTransition(
+                                    position: _slideAnimation,
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 280,
+                                          child: _buildSessionsPanel(context),
+                                        ),
+                                        const VerticalDivider(width: 1, color: Colors.white10),
+                                        Expanded(child: _buildChatContent(provider, connectivityProvider)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              )
-                            : _buildChatContent(provider, connectivityProvider),
-                      ),
-                      _buildFloatingInputArea(provider, connectivityProvider),
-                    ],
+                                )
+                              : _buildChatContent(provider, connectivityProvider),
+                        ),
+                        _buildFloatingInputArea(provider, connectivityProvider),
+                      ],
+                    ),
                   ),
                 ),
               ],

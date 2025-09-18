@@ -381,63 +381,65 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               body: Stack(
                 children: [
                   // Main app content
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: ResponsiveHelper.backgroundPrimary,
-                    ),
-                    child: Row(
-                      children: [
-                        // Sidebar
-                        _buildSidebar(responsive, homeProvider),
+                  Positioned.fill(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: ResponsiveHelper.backgroundPrimary,
+                      ),
+                      child: Row(
+                        children: [
+                          // Sidebar
+                          _buildSidebar(responsive, homeProvider),
 
-                        // Main content area with rounded container
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
+                          // Main content area with rounded container
+                          Expanded(
                             child: Container(
-                              decoration: BoxDecoration(
-                                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-                                  width: 1,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.05),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 4),
+                              padding: const EdgeInsets.all(12),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                                    width: 1,
                                   ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    primaryFocus?.unfocus();
-                                  },
-                                  child: PageView(
-                                    controller: _controller,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    children: [
-                                      const DesktopConversationsPage(),
-                                      const DesktopChatPage(),
-                                      const DesktopMemoriesPage(),
-                                      const DesktopActionsPage(),
-                                      DesktopAppsPage(
-                                        onNavigateToCreateApp: navigateToCreateApp,
-                                      ),
-                                      DesktopAddAppPage(
-                                        onNavigateBack: navigateBackToApps,
-                                      ),
-                                    ],
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.05),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      primaryFocus?.unfocus();
+                                    },
+                                    child: PageView(
+                                      controller: _controller,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      children: [
+                                        const DesktopConversationsPage(),
+                                        const DesktopChatPage(),
+                                        const DesktopMemoriesPage(),
+                                        const DesktopActionsPage(),
+                                        DesktopAppsPage(
+                                          onNavigateToCreateApp: navigateToCreateApp,
+                                        ),
+                                        DesktopAddAppPage(
+                                          onNavigateBack: navigateBackToApps,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],

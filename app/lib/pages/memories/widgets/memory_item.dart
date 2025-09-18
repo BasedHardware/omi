@@ -55,47 +55,28 @@ class MemoryItem extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
                     memory.content.decodeString,
                     style: AppStyles.body,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ],
-               ),
-             ),
-             const SizedBox(width: AppStyles.spacingM),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (memory.conversationId != null) ...[
-                  _buildConversationLinkButton(context),
-                  const SizedBox(width: AppStyles.spacingS),
-                ],
-                _buildVisibilityButton(context),
-              ],
-            ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Text(
-                        memory.content.decodeString,
-                        style: AppStyles.body,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
-                _buildVisibilityButton(context),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (memory.conversationId != null) ...[
+                      _buildConversationLinkButton(context),
+                      const SizedBox(width: AppStyles.spacingS),
+                    ],
+                    _buildVisibilityButton(context),
+                  ],
+                ),
               ],
             ),
             if (memory.isLocked)
@@ -190,7 +171,7 @@ class MemoryItem extends StatelessWidget {
 
   Future<void> _navigateToConversation(BuildContext context) async {
     if (memory.conversationId == null) return;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -200,15 +181,16 @@ class MemoryItem extends StatelessWidget {
     );
 
     final conversation = await getConversationById(memory.conversationId!);
-    
+
     if (context.mounted) {
       Navigator.of(context).pop();
     }
-    
+
     if (conversation != null && context.mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => ChangeNotifierProxyProvider2<ConversationProvider, AppProvider, ConversationDetailProvider>(
+          builder: (context) =>
+              ChangeNotifierProxyProvider2<ConversationProvider, AppProvider, ConversationDetailProvider>(
             create: (context) {
               var provider = ConversationDetailProvider();
               provider.conversationIdx = 0;
@@ -248,11 +230,11 @@ class MemoryItem extends StatelessWidget {
               return previous;
             },
             child: ConversationDetailPage(
-               conversation: conversation,
-             ),
-           ),
-         ),
-       );
+              conversation: conversation,
+            ),
+          ),
+        ),
+      );
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
