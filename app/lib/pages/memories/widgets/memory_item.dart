@@ -3,12 +3,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/memory.dart';
-import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -55,30 +49,6 @@ class MemoryItem extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    memory.content.decodeString,
-                    style: AppStyles.body,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-               ),
-             ),
-             const SizedBox(width: AppStyles.spacingM),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (memory.conversationId != null) ...[
-                  _buildConversationLinkButton(context),
-                  const SizedBox(width: AppStyles.spacingS),
-                ],
-                _buildVisibilityButton(context),
-              ],
-            ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -167,100 +137,6 @@ class MemoryItem extends StatelessWidget {
       ),
       child: memoryWidget,
     );
-  }
-
-  Widget _buildConversationLinkButton(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _navigateToConversation(context),
-      child: Container(
-        height: 36,
-        width: 36,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-        ),
-        child: const Icon(
-          Icons.chat_bubble_outline,
-          size: 16,
-          color: Colors.white70,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _navigateToConversation(BuildContext context) async {
-    if (memory.conversationId == null) return;
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    final conversation = await getConversationById(memory.conversationId!);
-    
-    if (context.mounted) {
-      Navigator.of(context).pop();
-    }
-    
-    if (conversation != null && context.mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ChangeNotifierProxyProvider2<ConversationProvider, AppProvider, ConversationDetailProvider>(
-            create: (context) {
-              var provider = ConversationDetailProvider();
-              provider.conversationIdx = 0;
-              provider.selectedDate = DateTime(
-                conversation.createdAt.year,
-                conversation.createdAt.month,
-                conversation.createdAt.day,
-              );
-              return provider;
-            },
-            update: (context, conversationProvider, appProvider, previous) {
-              if (previous == null) {
-                var provider = ConversationDetailProvider();
-                provider.conversationIdx = 0;
-                provider.selectedDate = DateTime(
-                  conversation.createdAt.year,
-                  conversation.createdAt.month,
-                  conversation.createdAt.day,
-                );
-                provider.conversationProvider = conversationProvider;
-                provider.appProvider = appProvider;
-                final date = DateTime(
-                  conversation.createdAt.year,
-                  conversation.createdAt.month,
-                  conversation.createdAt.day,
-                );
-                if (!conversationProvider.groupedConversations.containsKey(date)) {
-                  conversationProvider.groupedConversations[date] = [];
-                }
-                if (!conversationProvider.groupedConversations[date]!.any((c) => c.id == conversation.id)) {
-                  conversationProvider.groupedConversations[date]!.insert(0, conversation);
-                }
-                return provider;
-              }
-              previous.conversationProvider = conversationProvider;
-              previous.appProvider = appProvider;
-              return previous;
-            },
-            child: ConversationDetailPage(
-               conversation: conversation,
-             ),
-           ),
-         ),
-       );
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Conversation not found or has been deleted'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   Widget _buildVisibilityButton(BuildContext context) {
