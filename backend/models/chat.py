@@ -146,18 +146,8 @@ class SendMessageRequest(BaseModel):
     file_ids: Optional[List[str]] = []
 
 
-class CreateSessionRequest(BaseModel):
-    app_id: Optional[str] = None
-    title: Optional[str] = None
-
-
-class GenerateTitleRequest(BaseModel):
-    first_message: str
-
-
 class ChatSession(BaseModel):
     id: str
-    title: Optional[str] = None
     message_ids: Optional[List[str]] = []
     file_ids: Optional[List[str]] = []
     app_id: Optional[str] = None

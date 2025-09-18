@@ -120,10 +120,14 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, bool force = false}) async {
+    // Connect to the transcript socket
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int sampleRate = (codec.isOpusSupported() ? 16000 : 8000);
+
     _socket = await ServiceManager.instance()
         .socket
-        .speechProfile(codec: codec, sampleRate: sampleRate, language: "auto", force: force);
+        .speechProfile(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }

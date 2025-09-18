@@ -29,7 +29,8 @@ class BooksToBuy(BaseModel):
 def retrieve_books_to_buy(transcript: str) -> List[str]:
     chat = ChatGroq(temperature=0, model="llama3-groq-8b-8192-tool-use-preview").with_structured_output(BooksToBuy)
 
-    response: BooksToBuy = chat.invoke(f'''
+    response: BooksToBuy = chat.invoke(
+        f'''
     The following is the transcript of a conversation:
     ```
     {transcript}
@@ -37,7 +38,8 @@ def retrieve_books_to_buy(transcript: str) -> List[str]:
     Your task is to identify the titles of the books mentioned in the conversation, if any.
     Make sure to find clear mentions of book titles, and not just random conversations.
     Make sure to only include the titles of the books, and not any other information.
-    ''')
+    '''
+    )
 
     print('Books to buy:', response.books)
     return response.books
@@ -45,10 +47,7 @@ def retrieve_books_to_buy(transcript: str) -> List[str]:
 
 async def call_multion(books: List[str], user_id: str):
     print('call_multion', f'Buying books with MultiOn for user_id: {user_id}')
-    headers = {
-        "X_MULTION_API_KEY": MULTION_API_KEY,
-        "Content-Type": "application/json"
-    }
+    headers = {"X_MULTION_API_KEY": MULTION_API_KEY, "Content-Type": "application/json"}
 
     data = {
         "url": "https://amazon.com",
@@ -56,17 +55,13 @@ async def call_multion(books: List[str], user_id: str):
         "user_id": user_id,
         "local": False,
         "use_proxy": True,
-        "include_screenshot": True
+        "include_screenshot": True,
     }
 
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             print(f"Sending request to Multion API: {data}")
-            response = await client.post(
-                "https://api.multion.ai/v1/web/browse",
-                headers=headers,
-                json=data
-            )
+            response = await client.post("https://api.multion.ai/v1/web/browse", headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
             print(f"MultiOn API response: {result}")
@@ -85,10 +80,7 @@ async def call_multion(books: List[str], user_id: str):
 
 
 async def retry_multion(session_id: str):
-    headers = {
-        "X_MULTION_API_KEY": MULTION_API_KEY,
-        "Content-Type": "application/json"
-    }
+    headers = {"X_MULTION_API_KEY": MULTION_API_KEY, "Content-Type": "application/json"}
 
     data = {
         "session_id": session_id,
@@ -96,16 +88,12 @@ async def retry_multion(session_id: str):
         "url": "https://amazon.com",
         "local": False,
         "use_proxy": True,
-        "include_screenshot": True
+        "include_screenshot": True,
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.multion.ai/v1/web/browse",
-                headers=headers,
-                json=data
-            )
+            response = await client.post("https://api.multion.ai/v1/web/browse", headers=headers, json=data)
             response.raise_for_status()
             return response.json().get('message')
     except httpx.HTTPStatusError as e:
@@ -145,11 +133,10 @@ async def setup_uid_page(request: Request):
 async def submit_uid(request: Request, user_id: str = Form(...), uid: str = Form(...)):
     db.store_multion_user_id(uid, user_id)
     is_setup_completed = db.get_multion_user_id(uid) is not None
-    return templates.TemplateResponse("setup_multion_complete.html", {
-        "request": request,
-        "is_setup_completed": is_setup_completed,
-        "user_id": user_id
-    })
+    return templates.TemplateResponse(
+        "setup_multion_complete.html",
+        {"request": request, "is_setup_completed": is_setup_completed, "user_id": user_id},
+    )
 
 
 @router.get("/multion/check_setup_completion", tags=['multion'])

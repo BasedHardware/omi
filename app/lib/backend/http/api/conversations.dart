@@ -6,8 +6,6 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart';
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
@@ -90,6 +88,9 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   if (response == null) return null;
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
+  } else if (response.statusCode == 402) {
+    debugPrint('Unlimited Plan Required for conversation: $conversationId');
+    throw Exception('Unlimited Plan Required');
   }
   return null;
 }
@@ -300,15 +301,12 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
 
 //this is expected to return complete memories
 Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDateTimeString) async {
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$sdCardDateTimeString'),
-  );
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}sdcard_memory?date_time=$sdCardDateTimeString',
+      files: [file],
+      fileFieldName: 'file',
+    );
 
     if (response.statusCode == 200) {
       debugPrint('storageSend Response body: ${jsonDecode(response.body)}');
@@ -330,18 +328,11 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
 }
 
 Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/sync-local-files'),
-  );
-  for (var file in files) {
-    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
-  }
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/sync-local-files',
+      files: files,
+    );
 
     if (response.statusCode == 200) {
       debugPrint('syncLocalFile Response body: ${jsonDecode(response.body)}');

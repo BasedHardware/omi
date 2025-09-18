@@ -50,7 +50,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                 style: TextStyle(fontSize: 16, color: Colors.grey.shade400, height: 1.5),
                 children: [
                   const TextSpan(
-                    text: 'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used. ',
+                    text:
+                        'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used. ',
                   ),
                   TextSpan(
                     text: 'Learn more...',
@@ -156,7 +157,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   const SizedBox(height: 24),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
-                      final appsWithDataAccess = appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
+                      final appsWithDataAccess =
+                          appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

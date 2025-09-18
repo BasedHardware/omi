@@ -79,7 +79,10 @@ class UserReviewCard extends StatelessWidget {
                         const SizedBox(
                           width: 8,
                         ),
-                        review.respondedAt != null ? Text(timeago.format(review.respondedAt!), style: const TextStyle(color: Colors.grey, fontSize: 12)) : const SizedBox(),
+                        review.respondedAt != null
+                            ? Text(timeago.format(review.respondedAt!),
+                                style: const TextStyle(color: Colors.grey, fontSize: 12))
+                            : const SizedBox(),
                       ],
                     ),
                     const SizedBox(

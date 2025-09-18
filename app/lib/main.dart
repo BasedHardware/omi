@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:ui';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/material.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/prod_env.dart';
@@ -18,48 +21,60 @@ import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/core/app_shell.dart';
+import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/developer_mode_provider.dart';
-import 'package:omi/providers/mcp_provider.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/providers/people_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/pages/payments/payment_method_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
-Future<bool> _init() async {
-  // Service manager
-  ServiceManager.init();
+Future _init() async {
+  // Env
+  if (PlatformService.isWindows) {
+    // Windows does not support flavors`
+    Env.init(ProdEnv());
+  } else {
+    if (F.env == Environment.prod) {
+      Env.init(ProdEnv());
+    } else {
+      Env.init(DevEnv());
+    }
+  }
 
+  FlutterForegroundTask.initCommunicationPort();
+
+  // Service manager
+  await ServiceManager.init();
+
+  // Firebase
   if (PlatformService.isWindows) {
     // Windows does not support flavors
     await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
@@ -75,10 +90,7 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
 
-  // TODO: thinh, move to app start
-  await ServiceManager.instance().start();
-
-  bool isAuth = (await getIdToken()) != null;
+  bool isAuth = (await AuthService.instance.getIdToken()) != null;
   if (isAuth) PlatformManager.instance.mixpanel.identify();
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
@@ -86,50 +98,7 @@ Future<bool> _init() async {
   if (!PlatformService.isWindows) {
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
-  return isAuth;
-}
 
-Future<void> initPostHog() async {
-  final config = PostHogConfig(Env.posthogApiKey!);
-  config.debug = true;
-  config.captureApplicationLifecycleEvents = true;
-  config.host = 'https://us.i.posthog.com';
-  await Posthog().setup(config);
-}
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  if (PlatformService.isDesktop) {
-    await windowManager.ensureInitialized();
-    windowManager.waitUntilReadyToShow().then((_) async {
-      await windowManager.setAsFrameless();
-      // Enforce a minimum window size so the desktop layout doesn't collapse into the mobile view
-      // Width chosen slightly above the small-screen breakpoint (1000px) used in ResponsiveHelper.
-      // Height is set to a sensible value to keep vertical content usable.
-      await windowManager.setMinimumSize(const Size(1100, 600));
-      await windowManager.setSize(const Size(1100, 700));
-    });
-  }
-
-  if (PlatformService.isWindows) {
-    // Windows does not support flavors`
-    Env.init(ProdEnv());
-  } else {
-    if (F.env == Environment.prod) {
-      Env.init(ProdEnv());
-    } else {
-      Env.init(DevEnv());
-    }
-  }
-
-  FlutterForegroundTask.initCommunicationPort();
-  if (Env.posthogApiKey != null && !PlatformService.isDesktop) {
-    await initPostHog();
-  }
-  // _setupAudioSession();
-
-  bool isAuth = await _init();
   await CrashlyticsManager.init();
   if (isAuth) {
     PlatformManager.instance.crashReporter.identifyUser(
@@ -147,9 +116,35 @@ void main() async {
     return true;
   };
 
+  await ServiceManager.instance().start();
+  return;
+}
+
+void main() {
   runZonedGuarded(
-    () => runApp(const MyApp()),
-    (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true),
+    () async {
+      // Ensure
+      WidgetsFlutterBinding.ensureInitialized();
+      if (PlatformService.isDesktop) {
+        await windowManager.ensureInitialized();
+        windowManager.waitUntilReadyToShow().then((_) async {
+          await windowManager.setAsFrameless();
+          // Enforce a minimum window size so the desktop layout doesn't collapse into the mobile view
+          // Width chosen slightly above the small-screen breakpoint (1000px) used in ResponsiveHelper.
+          // Height is set to a sensible value to keep vertical content usable.
+          await windowManager.setMinimumSize(const Size(1100, 600));
+          await windowManager.setSize(const Size(1100, 700));
+        });
+      }
+
+      await _init();
+      runApp(const MyApp());
+    },
+    (error, stack) => FirebaseCrashlytics.instance.recordError(
+      error,
+      stack,
+      fatal: true,
+    ),
   );
 }
 
@@ -180,6 +175,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _deinit() {
     debugPrint("App > _deinit");
     ServiceManager.instance().deinit();
+    ApiClient.dispose();
   }
 
   @override
@@ -200,21 +196,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
-          ListenableProvider(create: (context) => AppProvider()),
-          ChangeNotifierProxyProvider<AppProvider, ChatSessionProvider>(
-            create: (context) => ChatSessionProvider(),
-            update: (BuildContext context, app, ChatSessionProvider? previous) =>
-                (previous?..updateAppProvider(app)) ?? (ChatSessionProvider()..updateAppProvider(app)),
-          ),
-          ChangeNotifierProxyProvider2<AppProvider, ChatSessionProvider, MessageProvider>(
+          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
-            update: (BuildContext context, app, sessions, MessageProvider? previous) =>
-                (previous
-                  ?..updateAppProvider(app)
-                  ..updateChatSessionProvider(sessions)) ??
-                (MessageProvider()
-                  ..updateAppProvider(app)
-                  ..updateChatSessionProvider(sessions)),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
           ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
               CaptureProvider>(
@@ -254,16 +239,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
           ChangeNotifierProvider(create: (context) => UserProvider()),
-          ChangeNotifierProvider(create: (context) => UsageProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
             child: MaterialApp(
-              navigatorObservers: [
-                if (Env.posthogApiKey != null) PosthogObserver(),
-              ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,
               navigatorKey: MyApp.navigatorKey,
@@ -313,17 +294,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               },
               home: TalkerWrapper(
                 talker: Logger.instance.talker,
-                options: TalkerWrapperOptions(
-                  enableErrorAlerts: true,
-                  enableExceptionAlerts: true,
-                  errorAlertBuilder: (context, data) {
-                    return LoggerSnackbar(error: data);
-                  },
-                  exceptionAlertBuilder: (context, data) {
-                    return LoggerSnackbar(exception: data);
-                  },
+                options: const TalkerWrapperOptions(
+                  enableErrorAlerts: false,
+                  enableExceptionAlerts: false,
                 ),
-                child: const AppShell(), // Use AppShell instead of DeciderWidget
+                child: const AppShell(),
               ),
             ),
           );

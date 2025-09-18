@@ -4,8 +4,13 @@ from fastapi import HTTPException, Request, APIRouter, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from db import get_zapier_user_status, store_zapier_user_status, store_zapier_subscribes, get_zapier_subscribes, \
-    remove_zapier_subscribes
+from db import (
+    get_zapier_user_status,
+    store_zapier_user_status,
+    store_zapier_subscribes,
+    get_zapier_subscribes,
+    remove_zapier_subscribes,
+)
 from models import Memory, ExternalIntegrationCreateMemory, EndpointResponse
 from .client import get_zapier, get_friend
 from .models import ZapierSubcribeModel, ZapierCreateMemory, ZapierActionCreateMemory
@@ -16,8 +21,9 @@ templates = Jinja2Templates(directory="templates")
 
 
 def response_setup_page(request: Request, uid: str, status: str):
-    return templates.TemplateResponse("setup_zapier.html",
-                                      {"request": request, "uid": uid, "status": status if status is not None else ""})
+    return templates.TemplateResponse(
+        "setup_zapier.html", {"request": request, "uid": uid, "status": status if status is not None else ""}
+    )
 
 
 @router.get('/setup-zapier', response_class=HTMLResponse, tags=['zapier'])
@@ -142,10 +148,7 @@ async def get_trigger_memory_sample(request: Request, uid: str):
     if "error" in ok:
         err = ok["error"]
         print(err)
-        raise HTTPException(
-            status_code=err["status"] if "status" in err else 500,
-            detail='Can not create memory'
-        )
+        raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
 
     memory = ok["result"]
     if memory is not None:
@@ -155,16 +158,13 @@ async def get_trigger_memory_sample(request: Request, uid: str):
             emoji = memory.structured.emoji
 
         sample = ZapierCreateMemory(
-            icon={
-                "type": "emoji",
-                "emoji": f"{emoji}"
-            },
+            icon={"type": "emoji", "emoji": f"{emoji}"},
             title=f'{memory.structured.title}',
-            speakers=len(
-                set(map(lambda x: x.speaker, memory.transcript_segments))),
+            speakers=len(set(map(lambda x: x.speaker, memory.transcript_segments))),
             category=memory.structured.category,
-            duration=int((memory.finished_at -
-                          memory.started_at).total_seconds() if memory.finished_at is not None else 0),
+            duration=int(
+                (memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0
+            ),
             overview=memory.structured.overview,
             transcript=memory.get_transcript(),
         )
@@ -178,7 +178,11 @@ async def auth_zapier_me(request: Request, uid: str):
     User - Zapier authentication status.
     """
 
-    print({'uid': uid, })
+    print(
+        {
+            'uid': uid,
+        }
+    )
     status = get_zapier_user_status(uid)
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -234,8 +238,7 @@ def zapier_action_memories(create_memory: ZapierActionCreateMemory, uid: str):
     if "error" in ok:
         err = ok["error"]
         print(err)
-        raise HTTPException(status_code=err["status"] if "status" in err else 500,
-                            detail='Can not create memory')
+        raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
         return
     result = ok["result"]
     print(result)
@@ -255,16 +258,13 @@ def create_zapier_memory(uid: str, memory: Memory):
             emoji = memory.structured.emoji
 
         data = ZapierCreateMemory(
-            icon={
-                "type": "emoji",
-                "emoji": f"{emoji}"
-            },
+            icon={"type": "emoji", "emoji": f"{emoji}"},
             title=f'{memory.structured.title}',
-            speakers=len(
-                set(map(lambda x: x.speaker, memory.transcript_segments))),
+            speakers=len(set(map(lambda x: x.speaker, memory.transcript_segments))),
             category=memory.structured.category,
-            duration=int((memory.finished_at -
-                          memory.started_at).total_seconds() if memory.finished_at is not None else 0),
+            duration=int(
+                (memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0
+            ),
             overview=memory.structured.overview,
             transcript=memory.get_transcript(),
         )

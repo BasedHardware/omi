@@ -34,6 +34,7 @@ llm_persona_medium_stream = ChatOpenAI(
     default_headers={"X-Title": "Omi Chat"},
     streaming=True,
 )
+
 llm_title_generator = ChatOpenAI(
     model='gpt-4o-mini',
     temperature=0.3,
@@ -49,6 +50,7 @@ llm_tool_decision = ChatOpenAI(
     temperature=0.1,  # Low temperature for consistent decision making
     max_tokens=50,  # We only need a simple structured response
 )
+
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)

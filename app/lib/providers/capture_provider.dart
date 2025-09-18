@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -21,20 +19,21 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/sdcard_socket.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:omi/utils/debug_log_manager.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
@@ -59,10 +58,10 @@ class CaptureProvider extends ChangeNotifier
 
   bool get isWalSupported => _isWalSupported;
 
-  StreamSubscription<InternetStatus>? _internetStatusListener;
-  InternetStatus? _internetStatus;
+  StreamSubscription<bool>? _connectionStateListener;
+  bool _isConnected = ConnectivityService().isConnected;
 
-  get internetStatus => _internetStatus;
+  get isConnected => _isConnected;
 
   String? microphoneName;
   double microphoneLevel = 0.0;
@@ -85,8 +84,8 @@ class CaptureProvider extends ChangeNotifier
   bool _systemAudioCaching = true;
 
   CaptureProvider() {
-    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
-      onInternetSatusChanged(status);
+    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
+      onConnectionStateChanged(isConnected);
     });
 
     // Add app lifecycle listener to detect sleep/wake cycles
@@ -165,50 +164,7 @@ class CaptureProvider extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
-  // Audio level tracking for waveform visualization
-  final List<double> _audioLevels = List.generate(8, (_) => 0.15);
-  List<double> get audioLevels => List.from(_audioLevels);
-
-  void _processAudioBytesForVisualization(List<int> bytes) {
-    if (bytes.isEmpty) return;
-
-    double rms = 0;
-
-    // Process bytes as 16-bit samples (2 bytes per sample)
-    for (int i = 0; i < bytes.length - 1; i += 2) {
-      // Convert two bytes to a 16-bit signed integer
-      int sample = bytes[i] | (bytes[i + 1] << 8);
-
-      // Convert to signed value (if high bit is set)
-      if (sample > 32767) {
-        sample = sample - 65536;
-      }
-
-      // Square the sample and add to sum
-      rms += sample * sample;
-    }
-
-    // Calculate RMS and normalize to 0.0-1.0 range
-    int sampleCount = bytes.length ~/ 2;
-    if (sampleCount > 0) {
-      rms = math.sqrt(rms / sampleCount) / 32768.0;
-    } else {
-      rms = 0;
-    }
-
-    // Apply non-linear scaling for better dynamic range - quieter on silence, same on noise
-    final level = (math.pow(rms, 0.3).toDouble() * 2.1).clamp(0.15, 1.6);
-
-    // Shift all values left and add new level
-    for (int i = 0; i < _audioLevels.length - 1; i++) {
-      _audioLevels[i] = _audioLevels[i + 1];
-    }
-    _audioLevels[_audioLevels.length - 1] = level;
-
-    notifyListeners(); // Notify UI to update waveform
-  }
-
-  bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
+  bool get transcriptServiceReady => _transcriptServiceReady && _isConnected;
 
   // having a connected device or using the phone's mic for recording
   bool get recordingDeviceServiceReady =>
@@ -528,9 +484,10 @@ class CaptureProvider extends ChangeNotifier
     if (connection == null) return;
 
     await connection.performCameraStartPhotoController();
-    _blePhotoStream = await connection.performGetImageListener(onImageReceived: (photoBytes) async {
+    _blePhotoStream = await connection.performGetImageListener(onImageReceived: (orientedImage) async {
+      final rotatedImageBytes = rotateImage(orientedImage);
       final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-      final String base64Image = base64Encode(photoBytes);
+      final String base64Image = base64Encode(rotatedImageBytes);
 
       // Add placeholder to UI for immediate feedback
       photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
@@ -587,7 +544,7 @@ class CaptureProvider extends ChangeNotifier
     _blePhotoStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
-    _internetStatusListener?.cancel();
+    _connectionStateListener?.cancel();
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
@@ -1153,9 +1110,9 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void onInternetSatusChanged(InternetStatus status) {
-    debugPrint("[SocketService] Internet connection changed $status");
-    _internetStatus = status;
+  void onConnectionStateChanged(bool isConnected) {
+    debugPrint("[CaptureProvider] Internet connection changed $isConnected");
+    _isConnected = isConnected;
     notifyListeners();
   }
 

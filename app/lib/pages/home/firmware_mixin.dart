@@ -4,8 +4,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/http/api/device.dart';
+import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/manifest/manifest.dart';
@@ -226,9 +227,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       return;
     }
 
-    var httpClient = http.Client();
-    var request = http.Request('GET', Uri.parse(zipUrl));
-    var response = httpClient.send(request);
+    var response = makeRawApiCall(method: 'GET', url: zipUrl);
     String dir = (await getApplicationDocumentsDirectory()).path;
 
     List<List<int>> chunks = [];

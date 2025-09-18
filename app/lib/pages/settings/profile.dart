@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
+import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
@@ -275,6 +276,15 @@ class _ProfilePageState extends State<ProfilePage> {
                     routeToPage(context, const UserPeoplePage());
                   },
                 ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Conversation Timeout',
+                  subtitle: 'Set silence duration before auto-end',
+                  icon: const FaIcon(FontAwesomeIcons.clock, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    ConversationTimeoutDialog.show(context);
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -320,7 +330,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),

@@ -3,14 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
-import 'package:omi/pages/settings/about.dart';
-import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/desktop/pages/settings/desktop_about_page.dart';
+import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'apps/desktop_apps_page.dart';
 import 'apps/desktop_add_app_page.dart';
@@ -20,7 +20,6 @@ import 'memories/desktop_memories_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -253,9 +252,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 selectedApp = await appProvider.getAppFromId(appId);
               }
               appProvider.setSelectedChatAppId(appId);
-              // Clear any selected threads to show welcome screen
-              await context.read<ChatSessionProvider>().switchToApp(appId);
               await messageProvider.refreshMessages();
+              if (messageProvider.messages.isEmpty) {
+                messageProvider.sendInitialAppMessage(selectedApp);
+              }
             }
           } else {
             if (mounted) {
@@ -1193,7 +1193,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         );
         break;
       case 'developer':
-        routeToPage(context, const DeveloperSettingsPage());
+        routeToPage(context, const DesktopDeveloperSettingsPage());
         break;
       case 'help':
         if (PlatformService.isIntercomSupported) {
@@ -1201,7 +1201,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         }
         break;
       case 'about':
-        routeToPage(context, const AboutOmiPage());
+        routeToPage(context, const DesktopAboutOmiPage());
         break;
       case 'signout':
         _showSignOutDialog();
@@ -1244,9 +1244,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           ),
           TextButton(
             onPressed: () async {
-              await SharedPreferencesUtil().clearUserPreferences();
+              await SharedPreferencesUtil().clear();
               Navigator.of(context).pop();
-              await signOut();
+              await AuthService.instance.signOut();
               if (mounted) {
                 routeToPage(context, const DesktopOnboardingWrapper(), replace: true);
               }

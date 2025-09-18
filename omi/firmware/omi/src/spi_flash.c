@@ -1,10 +1,10 @@
-#include <zephyr/kernel.h>
+#include "spi_flash.h"
+
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
-#include <zephyr/pm/device.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-
-#include "spi_flash.h"
+#include <zephyr/pm/device.h>
 
 LOG_MODULE_REGISTER(spi_flash, CONFIG_LOG_DEFAULT_LEVEL);
 

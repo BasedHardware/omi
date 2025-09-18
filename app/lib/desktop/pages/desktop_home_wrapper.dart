@@ -19,7 +19,7 @@ class _DesktopHomePageWrapperState extends State<DesktopHomePageWrapper> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from DesktopHomePageWrapper');
+        context.read<DeviceProvider>().periodicConnect('coming from DesktopHomePageWrapper', boundDeviceOnly: true);
       }
       if (mounted) {
         await context.read<ConversationProvider>().getInitialConversations();

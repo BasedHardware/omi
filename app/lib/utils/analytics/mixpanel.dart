@@ -368,7 +368,6 @@ class MixpanelManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-    String? chatSessionId,
   }) =>
       track('Chat Message Sent', properties: {
         'message_length': message.length,
@@ -378,14 +377,12 @@ class MixpanelManager {
         'chat_target_id': chatTargetId,
         'is_persona_chat': isPersonaChat,
         'is_voice_input': isVoiceInput,
-        if (chatSessionId != null) 'chat_session_id': chatSessionId,
       });
 
-  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat, String? chatSessionId}) {
+  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
     track('Chat Voice Input Used', properties: {
       'chat_target_id': chatTargetId,
       'is_persona_chat': isPersonaChat,
-      if (chatSessionId != null) 'chat_session_id': chatSessionId,
     });
   }
 
@@ -442,6 +439,15 @@ class MixpanelManager {
 
   void deletedActionItem(ServerConversation conversation) =>
       track('Deleted Action Item', properties: getConversationEventProperties(conversation));
+
+  void paywallOpened(String source) => track('Paywall Opened', properties: {'source': source});
+
+  void upgradePlanSelected({required String plan, required String source}) =>
+      track('Upgrade Plan Selected', properties: {'plan': plan, 'source': source});
+
+  void upgradeSucceeded() => track('Upgrade Succeeded');
+
+  void upgradeCancelled() => track('Upgrade Cancelled');
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 

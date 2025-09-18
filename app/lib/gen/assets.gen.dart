@@ -53,15 +53,15 @@ class $AssetsFontsGen {
 
   /// List of all assets
   List<String> get values => [
-        sfprodisplayblackitalic,
-        sfprodisplaybold,
-        sfprodisplayheavyitalic,
-        sfprodisplaylightitalic,
-        sfprodisplaymedium,
-        sfprodisplayregular,
-        sfprodisplaysemibolditalic,
-        sfprodisplaythinitalic
-      ];
+    sfprodisplayblackitalic,
+    sfprodisplaybold,
+    sfprodisplayheavyitalic,
+    sfprodisplaylightitalic,
+    sfprodisplaymedium,
+    sfprodisplayregular,
+    sfprodisplaysemibolditalic,
+    sfprodisplaythinitalic,
+  ];
 }
 
 class $AssetsImagesGen {
@@ -92,14 +92,6 @@ class $AssetsImagesGen {
   /// File path: assets/images/app_launcher_icon.png
   AssetGenImage get appLauncherIcon =>
       const AssetGenImage('assets/images/app_launcher_icon.png');
-
-  /// File path: assets/images/app_launcher_icon_v1.png
-  AssetGenImage get appLauncherIconV1 =>
-      const AssetGenImage('assets/images/app_launcher_icon_v1.png');
-
-  /// File path: assets/images/app_launcher_icon_v2.png
-  AssetGenImage get appLauncherIconV2 =>
-      const AssetGenImage('assets/images/app_launcher_icon_v2.png');
 
   /// File path: assets/images/apple-reminders-logo.png
   AssetGenImage get appleRemindersLogo =>
@@ -150,18 +142,6 @@ class $AssetsImagesGen {
   AssetGenImage get herologo =>
       const AssetGenImage('assets/images/herologo.png');
 
-  /// File path: assets/images/herologo_v1.png
-  AssetGenImage get herologoV1 =>
-      const AssetGenImage('assets/images/herologo_v1.png');
-
-  /// File path: assets/images/herologo_v3.png
-  AssetGenImage get herologoV3 =>
-      const AssetGenImage('assets/images/herologo_v3.png');
-
-  /// File path: assets/images/herologo_v4.png
-  AssetGenImage get herologoV4 =>
-      const AssetGenImage('assets/images/herologo_v4.png');
-
   /// File path: assets/images/ic_chart.svg
   String get icChart => 'assets/images/ic_chart.svg';
 
@@ -210,10 +190,6 @@ class $AssetsImagesGen {
   AssetGenImage get logoTransparent =>
       const AssetGenImage('assets/images/logo_transparent.png');
 
-  /// File path: assets/images/logo_transparent_v1.png
-  AssetGenImage get logoTransparentV1 =>
-      const AssetGenImage('assets/images/logo_transparent_v1.png');
-
   /// File path: assets/images/logo_transparent_v2.png
   AssetGenImage get logoTransparentV2 =>
       const AssetGenImage('assets/images/logo_transparent_v2.png');
@@ -234,13 +210,13 @@ class $AssetsImagesGen {
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
 
-  /// File path: assets/images/omi-without-rope-turned-off.webp
+  /// File path: assets/images/omi-without-rope-turned-off.png
   AssetGenImage get omiWithoutRopeTurnedOff =>
-      const AssetGenImage('assets/images/omi-without-rope-turned-off.webp');
+      const AssetGenImage('assets/images/omi-without-rope-turned-off.png');
 
-  /// File path: assets/images/omi-without-rope.webp
+  /// File path: assets/images/omi-without-rope.png
   AssetGenImage get omiWithoutRope =>
-      const AssetGenImage('assets/images/omi-without-rope.webp');
+      const AssetGenImage('assets/images/omi-without-rope.png');
 
   /// File path: assets/images/onboarding-bg-1.jpg
   AssetGenImage get onboardingBg1 =>
@@ -296,22 +272,6 @@ class $AssetsImagesGen {
   AssetGenImage get splashIcon =>
       const AssetGenImage('assets/images/splash_icon.png');
 
-  /// File path: assets/images/splash_icon_v1.png
-  AssetGenImage get splashIconV1 =>
-      const AssetGenImage('assets/images/splash_icon_v1.png');
-
-  /// File path: assets/images/splash_icon_v2.png
-  AssetGenImage get splashIconV2 =>
-      const AssetGenImage('assets/images/splash_icon_v2.png');
-
-  /// File path: assets/images/splash_v1.png
-  AssetGenImage get splashV1 =>
-      const AssetGenImage('assets/images/splash_v1.png');
-
-  /// File path: assets/images/splash_v2.png
-  AssetGenImage get splashV2 =>
-      const AssetGenImage('assets/images/splash_v2.png');
-
   /// File path: assets/images/stars.png
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
 
@@ -339,106 +299,70 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
-        a1,
-        a2,
-        a3,
-        a4,
-        a5,
-        logoTextWhite,
-        aiMagic,
-        appLauncherIcon,
-        appLauncherIconV1,
-        appLauncherIconV2,
-        appleRemindersLogo,
-        appleLogo,
-        background,
-        blob,
-        calendarLogo,
-        checkbox,
-        clone,
-        emailLogo,
-        emotionalFeedback1,
-        facebookLogo,
-        googleLogo,
-        gradientCard,
-        herologo,
-        herologoV1,
-        herologoV3,
-        herologoV4,
-        icChart,
-        icCloneChat,
-        icClonePlus,
-        icDollar,
-        icPersonaProfile,
-        icSettingPersona,
-        imessageLogo,
-        instagramLogo,
-        instruction1,
-        instruction2,
-        instruction3,
-        linkIcon,
-        linkedinLogo,
-        logoTransparent,
-        logoTransparentV1,
-        logoTransparentV2,
-        newBackground,
-        notionLogo,
-        omiDevkitWithoutRope,
-        omiGlass,
-        omiWithoutRopeTurnedOff,
-        omiWithoutRope,
-        onboardingBg1,
-        onboardingBg2,
-        onboardingBg3,
-        onboardingBg4,
-        onboardingBg51,
-        onboardingBg52,
-        onboardingBg6,
-        onboarding,
-        recordingGreenCircleIcon,
-        slackLogo,
-        speaker0Icon,
-        speaker1Icon,
-        splash,
-        splashIcon,
-        splashIconV1,
-        splashIconV2,
-        splashV1,
-        splashV2,
-        stars,
-        stripeLogo,
-        telegramLogo,
-        whatsappLogo,
-        xLogo,
-        xLogoMini,
-        youtubeLogo
-      ];
-}
-
-class $AssetsLottieAnimationsGen {
-  const $AssetsLottieAnimationsGen();
-
-  /// File path: assets/lottie_animations/no_internet.json
-  String get noInternet => 'assets/lottie_animations/no_internet.json';
-
-  /// File path: assets/lottie_animations/server_error.json
-  String get serverError => 'assets/lottie_animations/server_error.json';
-
-  /// File path: assets/lottie_animations/wave.json
-  String get wave => 'assets/lottie_animations/wave.json';
-
-  /// List of all assets
-  List<String> get values => [noInternet, serverError, wave];
-}
-
-class $AssetsPdfsGen {
-  const $AssetsPdfsGen();
-
-  /// File path: assets/pdfs/favicon.png
-  AssetGenImage get favicon => const AssetGenImage('assets/pdfs/favicon.png');
-
-  /// List of all assets
-  List<AssetGenImage> get values => [favicon];
+    a1,
+    a2,
+    a3,
+    a4,
+    a5,
+    logoTextWhite,
+    aiMagic,
+    appLauncherIcon,
+    appleRemindersLogo,
+    appleLogo,
+    background,
+    blob,
+    calendarLogo,
+    checkbox,
+    clone,
+    emailLogo,
+    emotionalFeedback1,
+    facebookLogo,
+    googleLogo,
+    gradientCard,
+    herologo,
+    icChart,
+    icCloneChat,
+    icClonePlus,
+    icDollar,
+    icPersonaProfile,
+    icSettingPersona,
+    imessageLogo,
+    instagramLogo,
+    instruction1,
+    instruction2,
+    instruction3,
+    linkIcon,
+    linkedinLogo,
+    logoTransparent,
+    logoTransparentV2,
+    newBackground,
+    notionLogo,
+    omiDevkitWithoutRope,
+    omiGlass,
+    omiWithoutRopeTurnedOff,
+    omiWithoutRope,
+    onboardingBg1,
+    onboardingBg2,
+    onboardingBg3,
+    onboardingBg4,
+    onboardingBg51,
+    onboardingBg52,
+    onboardingBg6,
+    onboarding,
+    recordingGreenCircleIcon,
+    slackLogo,
+    speaker0Icon,
+    speaker1Icon,
+    splash,
+    splashIcon,
+    stars,
+    stripeLogo,
+    telegramLogo,
+    whatsappLogo,
+    xLogo,
+    xLogoMini,
+    youtubeLogo,
+  ];
 }
 
 class Assets {
@@ -447,23 +371,14 @@ class Assets {
   static const $AssetsDeviceAssetsGen deviceAssets = $AssetsDeviceAssetsGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
-  static const $AssetsLottieAnimationsGen lottieAnimations =
-      $AssetsLottieAnimationsGen();
-  static const $AssetsPdfsGen pdfs = $AssetsPdfsGen();
-  static const String sileroVad = 'assets/silero_vad.onnx';
-  static const String sileroVadV5 = 'assets/silero_vad.v5.onnx';
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets
-  static List<String> get values => [sileroVad, sileroVadV5, shorebird];
+  static List<String> get values => [shorebird];
 }
 
 class AssetGenImage {
-  const AssetGenImage(
-    this._assetName, {
-    this.size,
-    this.flavors = const {},
-  });
+  const AssetGenImage(this._assetName, {this.size, this.flavors = const {}});
 
   final String _assetName;
 
@@ -523,15 +438,8 @@ class AssetGenImage {
     );
   }
 
-  ImageProvider provider({
-    AssetBundle? bundle,
-    String? package,
-  }) {
-    return AssetImage(
-      _assetName,
-      bundle: bundle,
-      package: package,
-    );
+  ImageProvider provider({AssetBundle? bundle, String? package}) {
+    return AssetImage(_assetName, bundle: bundle, package: package);
   }
 
   String get path => _assetName;

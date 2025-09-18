@@ -3,26 +3,33 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/molecules/omi_popup_menu.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class DesktopActionItem extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
   final VoidCallback? onChanged;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSelectionToggle;
 
   const DesktopActionItem({
     super.key,
     required this.actionItem,
     this.onChanged,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onLongPress,
+    this.onSelectionToggle,
   });
 
   @override
@@ -299,84 +306,117 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+          color: widget.isSelected
+              ? ResponsiveHelper.purplePrimary.withOpacity(0.1)
+              : ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _isEditing
+            color: widget.isSelected
                 ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
-                : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-            width: 1,
+                : (_isEditing
+                    ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
+                    : ResponsiveHelper.backgroundTertiary.withOpacity(0.3)),
+            width: widget.isSelected ? 2 : 1,
           ),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            OmiCheckbox(
-              value: widget.actionItem.completed,
-              onChanged: (v) {
-                if (_isEditing) return;
-                _toggleCompletion(context);
-              },
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _isEditing
-                      ? TextField(
-                          controller: _textController,
-                          focusNode: _focusNode,
-                          style: const TextStyle(
-                              color: ResponsiveHelper.textPrimary,
-                              fontSize: 15,
-                              height: 1.4,
-                              fontWeight: FontWeight.w500),
-                          decoration: const InputDecoration(
-                              border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
-                          maxLines: null,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _saveChanges(),
-                          onChanged: (_) => setState(() {}),
-                        )
-                      : GestureDetector(
-                          onTap: _startEditing,
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeInOut,
-                            style: TextStyle(
-                              color: widget.actionItem.completed
-                                  ? ResponsiveHelper.textTertiary
-                                  : ResponsiveHelper.textPrimary,
-                              decoration:
-                                  widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
-                              decorationColor: ResponsiveHelper.textTertiary,
-                              decorationThickness: 1.5,
-                              fontSize: 15,
-                              height: 1.4,
-                              fontWeight: FontWeight.w500,
+        child: GestureDetector(
+          onLongPress: widget.onLongPress,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Selection checkbox when in selection mode
+              if (widget.isSelectionMode)
+                GestureDetector(
+                  onTap: widget.onSelectionToggle,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: widget.isSelected ? ResponsiveHelper.purplePrimary : Colors.grey.shade600,
+                        width: 2,
+                      ),
+                      color: widget.isSelected ? ResponsiveHelper.purplePrimary : Colors.transparent,
+                    ),
+                    child: widget.isSelected
+                        ? const Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 14,
+                          )
+                        : null,
+                  ),
+                )
+              // Completion checkbox when not in selection mode
+              else
+                OmiCheckbox(
+                  value: widget.actionItem.completed,
+                  onChanged: (v) {
+                    if (_isEditing) return;
+                    _toggleCompletion(context);
+                  },
+                  size: 20,
+                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _isEditing
+                        ? TextField(
+                            controller: _textController,
+                            focusNode: _focusNode,
+                            style: const TextStyle(
+                                color: ResponsiveHelper.textPrimary,
+                                fontSize: 15,
+                                height: 1.4,
+                                fontWeight: FontWeight.w500),
+                            decoration: const InputDecoration(
+                                border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                            maxLines: null,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _saveChanges(),
+                            onChanged: (_) => setState(() {}),
+                          )
+                        : GestureDetector(
+                            onTap: _startEditing,
+                            child: AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeInOut,
+                              style: TextStyle(
+                                color: widget.actionItem.completed
+                                    ? ResponsiveHelper.textTertiary
+                                    : ResponsiveHelper.textPrimary,
+                                decoration:
+                                    widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
+                                decorationColor: ResponsiveHelper.textTertiary,
+                                decorationThickness: 1.5,
+                                fontSize: 15,
+                                height: 1.4,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              child: Text(widget.actionItem.description),
                             ),
-                            child: Text(widget.actionItem.description),
                           ),
-                        ),
-                  const SizedBox(height: 8),
-                  if (widget.actionItem.dueAt != null) _buildDueDateChip(),
-                ],
+                    const SizedBox(height: 8),
+                    if (widget.actionItem.dueAt != null) _buildDueDateChip(),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            _isEditing
-                ? OmiIconButton(
-                    icon: _hasChanges ? FontAwesomeIcons.check : FontAwesomeIcons.xmark,
-                    onPressed: _hasChanges ? _saveChanges : _cancelEditing,
-                    style: OmiIconButtonStyle.outline,
-                    color: _hasChanges ? Colors.green.shade600 : ResponsiveHelper.textSecondary,
-                    size: 32,
-                  )
-                : _buildQuickActions(context),
-          ],
+              const SizedBox(width: 12),
+              _isEditing
+                  ? OmiIconButton(
+                      icon: _hasChanges ? FontAwesomeIcons.check : FontAwesomeIcons.xmark,
+                      onPressed: _hasChanges ? _saveChanges : _cancelEditing,
+                      style: OmiIconButtonStyle.outline,
+                      color: _hasChanges ? Colors.green.shade600 : ResponsiveHelper.textSecondary,
+                      size: 32,
+                    )
+                  : _buildQuickActions(context),
+            ],
+          ),
         ),
       ),
     );
@@ -514,10 +554,35 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   }
 
   void _showDeleteConfirmation(BuildContext context) {
-    OmiConfirmDialog.show(context,
-            title: 'Delete Action Item', message: 'Are you sure you want to delete this action item?')
-        .then((confirmed) {
-      if (confirmed == true) {
+    final prefs = SharedPreferencesUtil();
+
+    // Check if user has opted out of delete confirmations
+    if (!prefs.showActionItemDeleteConfirmation) {
+      // Skip confirmation and proceed with deletion
+      context.read<ActionItemsProvider>().deleteActionItem(widget.actionItem);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Action item deleted'),
+          backgroundColor: ResponsiveHelper.backgroundTertiary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    OmiConfirmDialog.showWithSkipOption(
+      context,
+      title: 'Delete Action Item',
+      message: 'Are you sure you want to delete this action item?',
+    ).then((result) {
+      if (result?.confirmed == true) {
+        // Update preference if user chose to skip future confirmations
+        if (result!.skipFutureConfirmations) {
+          prefs.showActionItemDeleteConfirmation = false;
+        }
+
         context.read<ActionItemsProvider>().deleteActionItem(widget.actionItem);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

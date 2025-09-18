@@ -212,42 +212,23 @@ class DeviceService implements IDeviceService {
     await _mutex.acquire();
     try {
       debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+
       // Not force
       if (!force && _connection != null) {
         if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
           return null;
         }
 
-        // connected
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 30))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
+        // Connected
         return _connection;
       }
 
       // Force
       if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 30))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
         return _connection;
       }
 
-      // connect
+      // Connect
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {

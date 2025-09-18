@@ -190,6 +190,7 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             ai_message.chat_session_id = chat_session_id
             chat_db.add_message_to_chat_session(uid, chat_session_id, ai_message.id)
 
+
         chat_db.add_message(uid, ai_message.dict())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 

@@ -11,7 +11,6 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/gen/fonts.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
@@ -23,9 +22,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/pages/chat/widgets/welcome_screen.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -101,10 +98,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       if (provider.messages.isEmpty) {
         provider.refreshMessages();
       }
-
-      // Load all sessions across all apps on initialization
-      await context.read<ChatSessionProvider>().loadSessions();
-
       scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
@@ -136,7 +129,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          endDrawer: _buildSessionsDrawer(context),
+          // endDrawer: _buildSessionsDrawer(context),
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -174,19 +167,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 ),
                               ],
                             )
-                          : provider.messages.isEmpty
-                              ? (connectivityProvider.isConnected
-                                  ? WelcomeScreen(
-                                      sendMessage: _sendMessageUtil,
-                                      appName: context.read<AppProvider>().getSelectedApp()?.name,
-                                    )
-                                  : Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(bottom: 32.0),
-                                        child: Text('Please check your internet connection and try again',
-                                            textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
-                                      ),
-                                    ))
+                          : (provider.messages.isEmpty)
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 32.0),
+                                    child: Text(
+                                        connectivityProvider.isConnected
+                                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
+                                            : 'Please check your internet connection and try again',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.white)),
+                                  ),
+                                )
                               : ListView.builder(
                                   shrinkWrap: false,
                                   reverse: true,
@@ -744,12 +736,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);
 
-    // Clear any selected threads to show welcome screen
-    final chatSessionProvider = mounted ? context.read<ChatSessionProvider>() : null;
-    if (chatSessionProvider != null) {
-      await chatSessionProvider.switchToApp(appId);
-    }
-
     // Add a small delay to let the keyboard animation complete
     // This prevents the widget from being unmounted during the keyboard transition
     await Future.delayed(const Duration(milliseconds: 100));
@@ -757,16 +743,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     // Check if widget is still mounted after delay
     if (!mounted) return;
 
-    // Load sessions for the new app
-    if (chatSessionProvider != null) {
-      await chatSessionProvider.loadSessions();
-    }
-
     // Perform async operation
     await messageProvider.refreshMessages(dropdownSelected: true);
 
     // Check if widget is still mounted before proceeding
     if (!mounted) return;
+
+    // Get the selected app and send initial message if needed
+    var app = appProvider.getSelectedApp();
+    if (messageProvider.messages.isEmpty) {
+      messageProvider.sendInitialAppMessage(app);
+    }
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
@@ -783,6 +770,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         },
       ),
       centerTitle: true,
+
       actions: [
         // Chat threads button
         Container(
@@ -804,6 +792,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             },
           ),
         ),
+
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
@@ -821,196 +810,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               ),
             )
           : null,
-    );
-  }
-
-  Widget _buildSessionsDrawer(BuildContext context) {
-    return Drawer(
-      backgroundColor: const Color(0xFF1F1F25),
-      child: SafeArea(
-        child: Consumer3<AppProvider, ChatSessionProvider, MessageProvider>(
-          builder: (context, appProvider, sessions, messageProvider, _) {
-            final appId = appProvider.selectedChatAppId;
-            // AppProvider provides clean state - no conversion needed
-            final effectiveAppId = appId;
-
-            final selectedId = sessions.selectedSessionId;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Text('Threads',
-                      style: TextStyle(
-                          fontFamily: FontFamily.sFProDisplay,
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.white24),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () async {
-                        final created = await sessions.createSession(appId: effectiveAppId);
-                        if (created != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('New thread created')),
-                          );
-                          await messageProvider.refreshMessages(dropdownSelected: true);
-                          if (mounted) Navigator.of(context).maybePop();
-                        }
-                      },
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('New Thread'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (sessions.isLoading)
-                  const Expanded(
-                    child: Center(
-                        child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
-                  )
-                else if (sessions.sessions.isEmpty)
-                  const Expanded(
-                    child: Center(
-                      child: Text('No threads yet', style: TextStyle(color: Colors.white60)),
-                    ),
-                  )
-                else
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: sessions.sessions.length,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      itemBuilder: (ctx, idx) {
-                        final s = sessions.sessions[idx];
-                        // Only highlight threads that belong to the current app (including OMI)
-                        final isSelected = s.id == selectedId && s.appId == effectiveAppId;
-                        final appName = _getAppNameById(s.appId);
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border:
-                                isSelected ? Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1) : null,
-                          ),
-                          child: ListTile(
-                            dense: true,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            title: Text(
-                              s.title?.isNotEmpty == true ? s.title! : 'New Chat',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontFamily: FontFamily.sFProDisplay,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  appName,
-                                  style: const TextStyle(
-                                      fontFamily: FontFamily.sFProDisplay,
-                                      color: Colors.white70,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(FontAwesomeIcons.trash, color: Colors.white70, size: 16),
-                              onPressed: () async {
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (dCtx) => AlertDialog(
-                                    backgroundColor: const Color(0xFF1F1F25),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    title: const Text(
-                                      'Delete thread?',
-                                      style: TextStyle(
-                                        fontFamily: FontFamily.sFProDisplay,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    content: const Text(
-                                      'This cannot be undone.',
-                                      style: TextStyle(
-                                        fontFamily: FontFamily.sFProDisplay,
-                                        color: Colors.white60,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(dCtx, false),
-                                        child: const Text(
-                                          'Cancel',
-                                          style: TextStyle(
-                                            fontFamily: FontFamily.sFProDisplay,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(dCtx, true),
-                                        child: const Text(
-                                          'Delete',
-                                          style: TextStyle(
-                                            fontFamily: FontFamily.sFProDisplay,
-                                            color: Colors.red,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (confirmed == true) {
-                                  final ok = await sessions.deleteSession(sessionId: s.id);
-                                  if (ok) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Thread deleted')),
-                                    );
-                                    await messageProvider.refreshMessages(dropdownSelected: true);
-                                  }
-                                }
-                              },
-                            ),
-                            onTap: () async {
-                              // Select the thread and switch to its app context
-                              final appProvider = context.read<AppProvider>();
-                              await sessions.selectSession(s.id, s.appId, appProvider: appProvider);
-                              await messageProvider.refreshMessages(dropdownSelected: true);
-                              if (mounted) Navigator.of(context).maybePop();
-                            },
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
     );
   }
 
@@ -1056,14 +855,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       },
       color: const Color(0xFF1F1F25),
     );
-  }
-
-  String _getAppNameById(String? appId) {
-    if (appId == null || appId == 'omi') {
-      return 'Omi';
-    }
-    final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
-    return app?.name ?? 'Unknown App';
   }
 
   Widget _getAppAvatar(App app) {
@@ -1178,7 +969,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       PopupMenuItem<String>(
         height: 40,
-        value: 'omi',
+        value: 'no_selected',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [

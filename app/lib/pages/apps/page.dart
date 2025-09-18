@@ -110,7 +110,9 @@ class EmptyAppsWidget extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 64, left: 14, right: 14),
                   child: Center(
                     child: Text(
-                      state.isConnected ? 'No apps found' : 'Unable to fetch apps :(\n\nPlease check your internet connection and try again.',
+                      state.isConnected
+                          ? 'No apps found'
+                          : 'Unable to fetch apps :(\n\nPlease check your internet connection and try again.',
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       textAlign: TextAlign.center,
                     ),

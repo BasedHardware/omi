@@ -1,12 +1,14 @@
-#include <zephyr/logging/log.h>
-#include <zephyr/kernel.h>
+#include "mic.h"
+
+#include <haly/nrfy_gpio.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <haly/nrfy_gpio.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "config.h"
 #include "nrfx_clock.h"
 #include "nrfx_pdm.h"
-#include "config.h"
-#include "mic.h"
 #include "utils.h"
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
@@ -24,23 +26,18 @@ static int16_t _buffer_1[MIC_BUFFER_SAMPLES];
 static volatile uint8_t _next_buffer_index = 0;
 static volatile mix_handler _callback = NULL;
 
-static nrfx_pdm_t pdm_instance = {
-    .p_reg = NRF_PDM0,
-    .drv_inst_idx = 0
-};
+static nrfx_pdm_t pdm_instance = {.p_reg = NRF_PDM0, .drv_inst_idx = 0};
 
 static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
 {
     // Ignore error (how to handle?)
-    if (event->error)
-    {
+    if (event->error) {
         LOG_ERR("PDM error: %d", event->error);
         return;
     }
 
     // Assign buffer
-    if (event->buffer_requested)
-    {
+    if (event->buffer_requested) {
         LOG_DBG("Audio buffer requested");
         int16_t *currentBuffer = _next_buffer_index == 0 ? _buffer_0 : _buffer_1;
         _next_buffer_index = _next_buffer_index == 0 ? 1 : 0;
@@ -48,11 +45,9 @@ static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
     }
 
     // Release buffer
-    if (event->buffer_released)
-    {
+    if (event->buffer_released) {
         LOG_DBG("Audio buffer requested");
-        if (_callback)
-        {
+        if (_callback) {
             _callback(event->buffer_released);
         }
     }
@@ -62,8 +57,7 @@ int mic_start()
 {
 
     // Start the high frequency clock
-    if (!nrf_clock_hf_is_running(NRF_CLOCK, NRF_CLOCK_HFCLK_HIGH_ACCURACY))
-    {
+    if (!nrf_clock_hf_is_running(NRF_CLOCK, NRF_CLOCK_HFCLK_HIGH_ACCURACY)) {
         nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_HFCLKSTART);
     }
 
@@ -71,7 +65,7 @@ int mic_start()
     // PDM CLK is on P1.1 and PDM DIN is on P1.0 as defined in omi-pinctrl.dtsi
     uint32_t pdm_clk_pin = NRF_GPIO_PIN_MAP(1, 1);
     uint32_t pdm_din_pin = NRF_GPIO_PIN_MAP(1, 0);
-    
+
     // Configure PDM
     nrfx_pdm_config_t pdm_config = NRFX_PDM_DEFAULT_CONFIG(pdm_clk_pin, pdm_din_pin);
     pdm_config.gain_l = MIC_GAIN;
@@ -82,8 +76,7 @@ int mic_start()
     pdm_config.edge = NRF_PDM_EDGE_LEFTFALLING;
     pdm_config.ratio = NRF_PDM_RATIO_80X;
     IRQ_DIRECT_CONNECT(PDM0_IRQn, 5, nrfx_pdm_0_irq_handler, 0); // IMPORTANT!
-    if (nrfx_pdm_init(&pdm_instance, &pdm_config, pdm_irq_handler) != NRFX_SUCCESS)
-    {
+    if (nrfx_pdm_init(&pdm_instance, &pdm_config, pdm_irq_handler) != NRFX_SUCCESS) {
         LOG_ERR("Audio unable to initialize PDM");
         return -1;
     }
@@ -93,15 +86,14 @@ int mic_start()
         gpio_pin_configure_dt(&mic_en, GPIO_OUTPUT);
         gpio_pin_set_dt(&mic_en, 1);
     }
-    
+
     if (mic_thsel.port) {
         gpio_pin_configure_dt(&mic_thsel, GPIO_OUTPUT);
         gpio_pin_set_dt(&mic_thsel, 1);
     }
 
     // Start PDM
-    if (nrfx_pdm_start(&pdm_instance) != NRFX_SUCCESS)
-    {
+    if (nrfx_pdm_start(&pdm_instance) != NRFX_SUCCESS) {
         LOG_ERR("Audio unable to start PDM");
         return -1;
     }
@@ -110,7 +102,7 @@ int mic_start()
     return 0;
 }
 
-void set_mic_callback(mix_handler callback) 
+void set_mic_callback(mix_handler callback)
 {
     _callback = callback;
 }
@@ -121,13 +113,12 @@ void mic_off()
         gpio_pin_configure_dt(&mic_en, GPIO_OUTPUT);
         gpio_pin_set_dt(&mic_en, 0);
     }
-    
+
     if (mic_thsel.port) {
         gpio_pin_configure_dt(&mic_thsel, GPIO_OUTPUT);
         gpio_pin_set_dt(&mic_thsel, 0);
     }
 }
-
 
 void mic_on()
 {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -8,7 +9,6 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:omi/widgets/custom_refresh_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -38,7 +38,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
       }
-      
+
       // Check if we should show the app review prompt for first conversation
       if (mounted && conversationProvider.conversations.isNotEmpty) {
         await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
@@ -137,14 +137,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     debugPrint('building conversations page');
     super.build(context);
     return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-      return CustomRefreshIndicator(
+      return RefreshIndicator(
         onRefresh: () async {
+          HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
           await convoProvider.getInitialConversations();
           return;
         },
+        color: Colors.deepPurpleAccent,
+        backgroundColor: Colors.white,
         child: CustomScrollView(
           controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),

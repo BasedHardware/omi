@@ -1,7 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/services/wals.dart';
 
 class ConversationSyncUtils {
   static const Duration _fetchTimeout = Duration(seconds: 30);

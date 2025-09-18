@@ -22,4 +22,17 @@ if [ -n "$STAGED_PYTHON_FILES" ]; then
   echo "$STAGED_PYTHON_FILES" | xargs git add
 fi
 
+# C/C++ formatting for firmware/
+STAGED_C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx|h|hpp)$' | grep -E '^(omi/|omiGlass/)')
+
+if [ -n "$STAGED_C_FILES" ]; then
+  echo "Formatting staged C/C++ files in firmware..."
+  if ! command -v clang-format >/dev/null 2>&1; then
+    echo "clang-format is not installed. Please install it first" >&2
+    exit 1
+  fi
+  echo "$STAGED_C_FILES" | xargs clang-format -i
+  echo "$STAGED_C_FILES" | xargs git add
+fi
+
 exit 0

@@ -1,12 +1,13 @@
-#include <zephyr/kernel.h>
+#include "lib/dk2/lib/battery/battery.h"
+
+#include <hal/nrf_saadc.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
-#include <zephyr/drivers/adc.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <hal/nrf_saadc.h>
-#include "lib/dk2/lib/battery/battery.h"
 
 LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -89,8 +90,7 @@ struct adc_sequence sequence = {
 static void battery_charging_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     int err = battery_charging_state_read();
-    if (err)
-    {
+    if (err) {
         LOG_ERR("Failed to read charging state (%d)", err);
     }
 }
@@ -164,9 +164,9 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     // Calculate median
     int32_t adc_raw_val;
     if (ADC_TOTAL_SAMPLES % 2 == 0) {
-        adc_raw_val = (sorted_samples[ADC_TOTAL_SAMPLES/2 - 1] + sorted_samples[ADC_TOTAL_SAMPLES/2]) / 2;
+        adc_raw_val = (sorted_samples[ADC_TOTAL_SAMPLES / 2 - 1] + sorted_samples[ADC_TOTAL_SAMPLES / 2]) / 2;
     } else {
-        adc_raw_val = sorted_samples[ADC_TOTAL_SAMPLES/2];
+        adc_raw_val = sorted_samples[ADC_TOTAL_SAMPLES / 2];
     }
 
     LOG_INF("Median ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, adc_raw_val);
@@ -180,7 +180,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
         k_mutex_unlock(&battery_mut);
         return err;
     }
-    LOG_INF("ADC mV at pin (after conversion): %d, charging: %s", adc_raw_val, is_charging?"true":"false");
+    LOG_INF("ADC mV at pin (after conversion): %d, charging: %s", adc_raw_val, is_charging ? "true" : "false");
 
     // Sub 16mV when charging to correct voltage skew
     // based on practical measurements adjusted on the omi device
@@ -189,7 +189,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     }
 
     // Calculate battery voltage using the voltage divider formula
-    uint16_t raw_battery_millivolt = (uint16_t)(adc_raw_val * ((float)(R1 + R2) / R2));
+    uint16_t raw_battery_millivolt = (uint16_t) (adc_raw_val * ((float) (R1 + R2) / R2));
 
     // Apply moving average filter for smoother readings
     voltage_history[history_index] = raw_battery_millivolt;
@@ -208,7 +208,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     for (int i = 0; i < 5; i++) {
         sum += voltage_history[i];
     }
-    *battery_millivolt = (uint16_t)(sum / 5);
+    *battery_millivolt = (uint16_t) (sum / 5);
 
     LOG_INF("Raw battery millivolt: %u mV, Filtered: %u mV", raw_battery_millivolt, *battery_millivolt);
 
@@ -233,23 +233,21 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
         return 0;
     }
 
-    if (battery_millivolt <= battery_states[BATTERY_STATES_COUNT-1].millivolts) {
-        *battery_percentage = battery_states[BATTERY_STATES_COUNT-1].percentage;
+    if (battery_millivolt <= battery_states[BATTERY_STATES_COUNT - 1].millivolts) {
+        *battery_percentage = battery_states[BATTERY_STATES_COUNT - 1].percentage;
         return 0;
     }
 
     // Find the appropriate range in the battery profile
     for (int i = 0; i < BATTERY_STATES_COUNT - 1; i++) {
-        if (battery_millivolt <= battery_states[i].millivolts &&
-            battery_millivolt > battery_states[i+1].millivolts) {
+        if (battery_millivolt <= battery_states[i].millivolts && battery_millivolt > battery_states[i + 1].millivolts) {
 
             // Linear interpolation between the two closest points
-            uint16_t voltage_range = battery_states[i].millivolts - battery_states[i+1].millivolts;
-            uint8_t percentage_range = battery_states[i].percentage - battery_states[i+1].percentage;
+            uint16_t voltage_range = battery_states[i].millivolts - battery_states[i + 1].millivolts;
+            uint8_t percentage_range = battery_states[i].percentage - battery_states[i + 1].percentage;
             uint16_t voltage_diff = battery_states[i].millivolts - battery_millivolt;
 
-            *battery_percentage = battery_states[i].percentage -
-                                 (voltage_diff * percentage_range) / voltage_range;
+            *battery_percentage = battery_states[i].percentage - (voltage_diff * percentage_range) / voltage_range;
             break;
         }
     }
@@ -279,7 +277,7 @@ int battery_set_slow_charge()
 
 int battery_charging_state_read()
 {
-    if(gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
+    if (gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
         is_charging = true;
     } else {
         is_charging = false;
@@ -336,7 +334,6 @@ int battery_enable_read()
 
     return 0;
 }
-
 
 int battery_init()
 {
