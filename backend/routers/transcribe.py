@@ -676,9 +676,8 @@ async def _listen(
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
             nonlocal pusher_ws
-            nonlocal websocket_active
             async with pusher_connect_lock:
-                if pusher_connected or not websocket_active:
+                if pusher_connected:
                     return
                 # drain
                 if pusher_ws:
