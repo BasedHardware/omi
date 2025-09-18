@@ -942,7 +942,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
       ),
       child: TextField(
         style: const TextStyle(color: Colors.white, fontSize: 14),
@@ -951,7 +950,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           hintStyle: TextStyle(color: Colors.white60, fontSize: 14),
           prefixIcon: Icon(Icons.search_rounded, color: Colors.white70, size: 20),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          contentPadding: EdgeInsets.symmetric(horizontal: 5, vertical: 13),
         ),
         textAlign: TextAlign.left,
         textAlignVertical: TextAlignVertical.center,

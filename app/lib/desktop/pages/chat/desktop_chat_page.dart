@@ -266,7 +266,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
       ),
       child: TextField(
         style: const TextStyle(color: Colors.white, fontSize: 14),
