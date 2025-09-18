@@ -70,7 +70,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
+        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
       }
       if (mounted) {
         await context.read<ConversationProvider>().getInitialConversations();
@@ -173,7 +173,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool? previousConnection;
 
   void _onReceiveTaskData(dynamic data) async {
-    debugPrint('_onReceiveTaskData $data');
     if (data is! Map<String, dynamic>) return;
     if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
     await updateUserGeolocation(

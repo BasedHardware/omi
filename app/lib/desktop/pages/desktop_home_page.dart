@@ -1244,7 +1244,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           ),
           TextButton(
             onPressed: () async {
-              await SharedPreferencesUtil().clearUserPreferences();
+              await SharedPreferencesUtil().clear();
               Navigator.of(context).pop();
               await AuthService.instance.signOut();
               if (mounted) {
