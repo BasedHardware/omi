@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart';
 
 Future<bool> userHasSpeakerProfile() async {
   var response = await makeApiCall(
@@ -36,16 +34,12 @@ Future<String?> getUserSpeechProfile() async {
 }
 
 Future<bool> uploadProfile(File file) async {
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}v3/upload-audio'),
-  );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v3/upload-audio',
+      files: [file],
+      fileFieldName: 'file',
+    );
 
     if (response.statusCode == 200) {
       debugPrint('uploadProfile Response body: ${jsonDecode(response.body)}');

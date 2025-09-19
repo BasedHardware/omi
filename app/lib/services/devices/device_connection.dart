@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
@@ -94,6 +95,9 @@ abstract class DeviceConnection {
 
     // Discover services
     _services = await bleDevice.discoverServices();
+
+    // Update device info
+    device = await device.getDeviceInfo(this);
   }
 
   void _onBleConnectionStateChanged(BluetoothConnectionState state) async {
@@ -293,7 +297,7 @@ abstract class DeviceConnection {
   Future<bool> performHasPhotoStreamingCharacteristic();
 
   Future<StreamSubscription?> getImageListener({
-    required void Function(Uint8List base64JpgData) onImageReceived,
+    required void Function(OrientedImage orientedImage) onImageReceived,
   }) async {
     if (await isConnected()) {
       return await performGetImageListener(onImageReceived: onImageReceived);
@@ -303,7 +307,7 @@ abstract class DeviceConnection {
   }
 
   Future<StreamSubscription?> performGetImageListener({
-    required void Function(Uint8List base64JpgData) onImageReceived,
+    required void Function(OrientedImage orientedImage) onImageReceived,
   });
 
   Future<StreamSubscription<List<int>>?> getAccelListener({

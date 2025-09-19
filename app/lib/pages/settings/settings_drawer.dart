@@ -440,13 +440,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         ctx,
                         () => Navigator.of(ctx).pop(),
                         () async {
-                          Navigator.of(ctx).pop(); // Close dialog first
-                          await SharedPreferencesUtil().clearUserPreferences();
-                          personaProvider.setRouting(PersonaProfileRouting.no_device);
+                          Navigator.of(ctx).pop();
+                          await SharedPreferencesUtil().clear();
                           await AuthService.instance.signOut();
-                          if (context.mounted) {
-                            routeToPage(context, const AppShell(), replace: true);
-                          }
+                          personaProvider.setRouting(PersonaProfileRouting.no_device);
+                          routeToPage(context, const AppShell(), replace: true);
                         },
                         "Sign Out?",
                         "Are you sure you want to sign out?",

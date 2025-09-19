@@ -70,7 +70,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
       if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
+        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
       }
       if (mounted) {
         await context.read<ConversationProvider>().getInitialConversations();
@@ -101,12 +101,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
 
-  PageController? _controller;
-
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
+  late final List<Widget> _pages;
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -174,7 +173,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool? previousConnection;
 
   void _onReceiveTaskData(dynamic data) async {
-    debugPrint('_onReceiveTaskData $data');
     if (data is! Map<String, dynamic>) return;
     if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
     await updateUserGeolocation(
@@ -190,6 +188,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
+    _pages = [
+      ConversationsPage(key: _conversationsPageKey),
+      ActionItemsPage(key: _actionItemsPageKey),
+      MemoriesPage(key: _memoriesPageKey),
+      AppsPage(key: _appsPageKey),
+    ];
     SharedPreferencesUtil().onboardingCompleted = true;
 
     // Navigate uri
@@ -220,11 +224,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
 
     // Home controller
-    _controller = PageController(initialPage: homePageIdx);
     context.read<HomeProvider>().selectedIndex = homePageIdx;
-    context.read<HomeProvider>().onSelectedIndexChanged = (index) {
-      _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-    };
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -427,7 +427,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
                 length: 4,
-                initialIndex: _controller?.initialPage ?? 0,
+                initialIndex: homeProvider.selectedIndex,
                 child: GestureDetector(
                   onTap: () {
                     primaryFocus?.unfocus();
@@ -439,15 +439,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       Column(
                         children: [
                           Expanded(
-                            child: PageView(
-                              controller: _controller,
-                              physics: const NeverScrollableScrollPhysics(),
-                              children: [
-                                ConversationsPage(key: _conversationsPageKey),
-                                ActionItemsPage(key: _actionItemsPageKey),
-                                MemoriesPage(key: _memoriesPageKey),
-                                AppsPage(key: _appsPageKey),
-                              ],
+                            child: IndexedStack(
+                              index: context.watch<HomeProvider>().selectedIndex,
+                              children: _pages,
                             ),
                           ),
                         ],
@@ -490,8 +484,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(0);
-                                              _controller?.animateToPage(0,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: SizedBox(
                                               height: 90,
@@ -523,8 +515,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(1);
-                                              _controller?.animateToPage(1,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: SizedBox(
                                               height: 90,
@@ -558,8 +548,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(2);
-                                              _controller?.animateToPage(2,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: SizedBox(
                                               height: 90,
@@ -591,8 +579,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 return;
                                               }
                                               home.setIndex(3);
-                                              _controller?.animateToPage(3,
-                                                  duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: SizedBox(
                                               height: 90,
@@ -833,10 +819,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ForegroundUtil.stopForegroundTask();
-    if (_controller != null) {
-      _controller!.dispose();
-      _controller = null;
-    }
     super.dispose();
   }
 }
