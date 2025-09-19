@@ -90,9 +90,7 @@ class FlutterCommunicatorPigeonCodec: FlutterStandardMessageCodec, @unchecked Se
 }
 
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
-protocol WatchCounterHostAPI {
-  func increment() throws
-  func decrement() throws
+protocol WatchRecorderHostAPI {
   func startRecording() throws
   func stopRecording() throws
   func sendAudioData(audioData: FlutterStandardTypedData) throws
@@ -101,41 +99,22 @@ protocol WatchCounterHostAPI {
   func isWatchReachable() throws -> Bool
   func isWatchSessionSupported() throws -> Bool
   func isWatchAppInstalled() throws -> Bool
+  func requestWatchMicrophonePermission() throws
+  func requestMainAppMicrophonePermission() throws
+  func checkMainAppMicrophonePermission() throws -> Bool
+  func getWatchBatteryLevel() throws -> Double
+  func getWatchBatteryState() throws -> Int64
+  func requestWatchBatteryUpdate() throws
+  func getWatchInfo() throws -> [String: String]
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
-class WatchCounterHostAPISetup {
+class WatchRecorderHostAPISetup {
   static var codec: FlutterStandardMessageCodec { FlutterCommunicatorPigeonCodec.shared }
-  /// Sets up an instance of `WatchCounterHostAPI` to handle messages through the `binaryMessenger`.
-  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: WatchCounterHostAPI?, messageChannelSuffix: String = "") {
+  /// Sets up an instance of `WatchRecorderHostAPI` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: WatchRecorderHostAPI?, messageChannelSuffix: String = "") {
     let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
-    let incrementChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.increment\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      incrementChannel.setMessageHandler { _, reply in
-        do {
-          try api.increment()
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
-        }
-      }
-    } else {
-      incrementChannel.setMessageHandler(nil)
-    }
-    let decrementChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.decrement\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      decrementChannel.setMessageHandler { _, reply in
-        do {
-          try api.decrement()
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
-        }
-      }
-    } else {
-      decrementChannel.setMessageHandler(nil)
-    }
-    let startRecordingChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.startRecording\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let startRecordingChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.startRecording\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       startRecordingChannel.setMessageHandler { _, reply in
         do {
@@ -148,7 +127,7 @@ class WatchCounterHostAPISetup {
     } else {
       startRecordingChannel.setMessageHandler(nil)
     }
-    let stopRecordingChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.stopRecording\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let stopRecordingChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.stopRecording\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       stopRecordingChannel.setMessageHandler { _, reply in
         do {
@@ -161,7 +140,7 @@ class WatchCounterHostAPISetup {
     } else {
       stopRecordingChannel.setMessageHandler(nil)
     }
-    let sendAudioDataChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.sendAudioData\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let sendAudioDataChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.sendAudioData\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       sendAudioDataChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
@@ -176,7 +155,7 @@ class WatchCounterHostAPISetup {
     } else {
       sendAudioDataChannel.setMessageHandler(nil)
     }
-    let sendAudioChunkChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.sendAudioChunk\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let sendAudioChunkChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.sendAudioChunk\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       sendAudioChunkChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
@@ -194,7 +173,7 @@ class WatchCounterHostAPISetup {
     } else {
       sendAudioChunkChannel.setMessageHandler(nil)
     }
-    let isWatchPairedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchPaired\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let isWatchPairedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchPaired\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isWatchPairedChannel.setMessageHandler { _, reply in
         do {
@@ -207,7 +186,7 @@ class WatchCounterHostAPISetup {
     } else {
       isWatchPairedChannel.setMessageHandler(nil)
     }
-    let isWatchReachableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchReachable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let isWatchReachableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchReachable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isWatchReachableChannel.setMessageHandler { _, reply in
         do {
@@ -220,7 +199,7 @@ class WatchCounterHostAPISetup {
     } else {
       isWatchReachableChannel.setMessageHandler(nil)
     }
-    let isWatchSessionSupportedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchSessionSupported\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let isWatchSessionSupportedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchSessionSupported\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isWatchSessionSupportedChannel.setMessageHandler { _, reply in
         do {
@@ -233,7 +212,7 @@ class WatchCounterHostAPISetup {
     } else {
       isWatchSessionSupportedChannel.setMessageHandler(nil)
     }
-    let isWatchAppInstalledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchAppInstalled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    let isWatchAppInstalledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchAppInstalled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isWatchAppInstalledChannel.setMessageHandler { _, reply in
         do {
@@ -246,18 +225,111 @@ class WatchCounterHostAPISetup {
     } else {
       isWatchAppInstalledChannel.setMessageHandler(nil)
     }
+    let requestWatchMicrophonePermissionChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.requestWatchMicrophonePermission\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      requestWatchMicrophonePermissionChannel.setMessageHandler { _, reply in
+        do {
+          try api.requestWatchMicrophonePermission()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      requestWatchMicrophonePermissionChannel.setMessageHandler(nil)
+    }
+    let requestMainAppMicrophonePermissionChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.requestMainAppMicrophonePermission\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      requestMainAppMicrophonePermissionChannel.setMessageHandler { _, reply in
+        do {
+          try api.requestMainAppMicrophonePermission()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      requestMainAppMicrophonePermissionChannel.setMessageHandler(nil)
+    }
+    let checkMainAppMicrophonePermissionChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.checkMainAppMicrophonePermission\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      checkMainAppMicrophonePermissionChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.checkMainAppMicrophonePermission()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      checkMainAppMicrophonePermissionChannel.setMessageHandler(nil)
+    }
+    let getWatchBatteryLevelChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.getWatchBatteryLevel\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getWatchBatteryLevelChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getWatchBatteryLevel()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getWatchBatteryLevelChannel.setMessageHandler(nil)
+    }
+    let getWatchBatteryStateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.getWatchBatteryState\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getWatchBatteryStateChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getWatchBatteryState()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getWatchBatteryStateChannel.setMessageHandler(nil)
+    }
+    let requestWatchBatteryUpdateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.requestWatchBatteryUpdate\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      requestWatchBatteryUpdateChannel.setMessageHandler { _, reply in
+        do {
+          try api.requestWatchBatteryUpdate()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      requestWatchBatteryUpdateChannel.setMessageHandler(nil)
+    }
+    let getWatchInfoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.watch.WatchRecorderHostAPI.getWatchInfo\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getWatchInfoChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getWatchInfo()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getWatchInfoChannel.setMessageHandler(nil)
+    }
   }
 }
 /// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
-protocol WatchCounterFlutterAPIProtocol {
-  func increment(completion: @escaping (Result<Void, PigeonError>) -> Void)
-  func decrement(completion: @escaping (Result<Void, PigeonError>) -> Void)
+protocol WatchRecorderFlutterAPIProtocol {
   func onRecordingStarted(completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onRecordingStopped(completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onAudioData(audioData audioDataArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onAudioChunk(audioChunk audioChunkArg: FlutterStandardTypedData, chunkIndex chunkIndexArg: Int64, isLast isLastArg: Bool, sampleRate sampleRateArg: Double, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onRecordingError(error errorArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onMicrophonePermissionResult(granted grantedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onMainAppMicrophonePermissionResult(granted grantedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onWatchBatteryUpdate(batteryLevel batteryLevelArg: Double, batteryState batteryStateArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
-class WatchCounterFlutterAPI: WatchCounterFlutterAPIProtocol {
+class WatchRecorderFlutterAPI: WatchRecorderFlutterAPIProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
   private let messageChannelSuffix: String
   init(binaryMessenger: FlutterBinaryMessenger, messageChannelSuffix: String = "") {
@@ -267,44 +339,8 @@ class WatchCounterFlutterAPI: WatchCounterFlutterAPIProtocol {
   var codec: FlutterCommunicatorPigeonCodec {
     return FlutterCommunicatorPigeonCodec.shared
   }
-  func increment(completion: @escaping (Result<Void, PigeonError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.watch.WatchCounterFlutterAPI.increment\(messageChannelSuffix)"
-    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage(nil) { response in
-      guard let listResponse = response as? [Any?] else {
-        completion(.failure(createConnectionError(withChannelName: channelName)))
-        return
-      }
-      if listResponse.count > 1 {
-        let code: String = listResponse[0] as! String
-        let message: String? = nilOrValue(listResponse[1])
-        let details: String? = nilOrValue(listResponse[2])
-        completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else {
-        completion(.success(()))
-      }
-    }
-  }
-  func decrement(completion: @escaping (Result<Void, PigeonError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.watch.WatchCounterFlutterAPI.decrement\(messageChannelSuffix)"
-    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage(nil) { response in
-      guard let listResponse = response as? [Any?] else {
-        completion(.failure(createConnectionError(withChannelName: channelName)))
-        return
-      }
-      if listResponse.count > 1 {
-        let code: String = listResponse[0] as! String
-        let message: String? = nilOrValue(listResponse[1])
-        let details: String? = nilOrValue(listResponse[2])
-        completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else {
-        completion(.success(()))
-      }
-    }
-  }
   func onRecordingStarted(completion: @escaping (Result<Void, PigeonError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onRecordingStarted\(messageChannelSuffix)"
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingStarted\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage(nil) { response in
       guard let listResponse = response as? [Any?] else {
@@ -322,7 +358,7 @@ class WatchCounterFlutterAPI: WatchCounterFlutterAPIProtocol {
     }
   }
   func onRecordingStopped(completion: @escaping (Result<Void, PigeonError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onRecordingStopped\(messageChannelSuffix)"
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingStopped\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage(nil) { response in
       guard let listResponse = response as? [Any?] else {
@@ -340,7 +376,7 @@ class WatchCounterFlutterAPI: WatchCounterFlutterAPIProtocol {
     }
   }
   func onAudioData(audioData audioDataArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioData\(messageChannelSuffix)"
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioData\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([audioDataArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
@@ -358,9 +394,81 @@ class WatchCounterFlutterAPI: WatchCounterFlutterAPIProtocol {
     }
   }
   func onAudioChunk(audioChunk audioChunkArg: FlutterStandardTypedData, chunkIndex chunkIndexArg: Int64, isLast isLastArg: Bool, sampleRate sampleRateArg: Double, completion: @escaping (Result<Void, PigeonError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioChunk\(messageChannelSuffix)"
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioChunk\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([audioChunkArg, chunkIndexArg, isLastArg, sampleRateArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onRecordingError(error errorArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingError\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([errorArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onMicrophonePermissionResult(granted grantedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMicrophonePermissionResult\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([grantedArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onMainAppMicrophonePermissionResult(granted grantedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([grantedArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onWatchBatteryUpdate(batteryLevel batteryLevelArg: Double, batteryState batteryStateArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onWatchBatteryUpdate\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([batteryLevelArg, batteryStateArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

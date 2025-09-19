@@ -47,11 +47,11 @@ class _PigeonCodec extends StandardMessageCodec {
   }
 }
 
-class WatchCounterHostAPI {
-  /// Constructor for [WatchCounterHostAPI].  The [binaryMessenger] named argument is
+class WatchRecorderHostAPI {
+  /// Constructor for [WatchRecorderHostAPI].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
-  WatchCounterHostAPI({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
+  WatchRecorderHostAPI({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
       : pigeonVar_binaryMessenger = binaryMessenger,
         pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
   final BinaryMessenger? pigeonVar_binaryMessenger;
@@ -60,54 +60,8 @@ class WatchCounterHostAPI {
 
   final String pigeonVar_messageChannelSuffix;
 
-  Future<void> increment() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.increment$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
-  Future<void> decrement() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.decrement$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
   Future<void> startRecording() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.startRecording$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.startRecording$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -130,7 +84,7 @@ class WatchCounterHostAPI {
   }
 
   Future<void> stopRecording() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.stopRecording$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.stopRecording$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -153,7 +107,7 @@ class WatchCounterHostAPI {
   }
 
   Future<void> sendAudioData(Uint8List audioData) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.sendAudioData$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.sendAudioData$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -176,7 +130,7 @@ class WatchCounterHostAPI {
   }
 
   Future<void> sendAudioChunk(Uint8List audioChunk, int chunkIndex, bool isLast, double sampleRate) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.sendAudioChunk$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.sendAudioChunk$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -199,7 +153,7 @@ class WatchCounterHostAPI {
   }
 
   Future<bool> isWatchPaired() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchPaired$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchPaired$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -227,7 +181,7 @@ class WatchCounterHostAPI {
   }
 
   Future<bool> isWatchReachable() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchReachable$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchReachable$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -255,7 +209,7 @@ class WatchCounterHostAPI {
   }
 
   Future<bool> isWatchSessionSupported() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchSessionSupported$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchSessionSupported$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -283,7 +237,7 @@ class WatchCounterHostAPI {
   }
 
   Future<bool> isWatchAppInstalled() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchCounterHostAPI.isWatchAppInstalled$pigeonVar_messageChannelSuffix';
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.isWatchAppInstalled$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -309,14 +263,191 @@ class WatchCounterHostAPI {
       return (pigeonVar_replyList[0] as bool?)!;
     }
   }
+
+  Future<void> requestWatchMicrophonePermission() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.requestWatchMicrophonePermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> requestMainAppMicrophonePermission() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.requestMainAppMicrophonePermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<bool> checkMainAppMicrophonePermission() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.checkMainAppMicrophonePermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as bool?)!;
+    }
+  }
+
+  Future<double> getWatchBatteryLevel() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.getWatchBatteryLevel$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as double?)!;
+    }
+  }
+
+  Future<int> getWatchBatteryState() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.getWatchBatteryState$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as int?)!;
+    }
+  }
+
+  Future<void> requestWatchBatteryUpdate() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.requestWatchBatteryUpdate$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<Map<String, String>> getWatchInfo() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.watch.WatchRecorderHostAPI.getWatchInfo$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as Map<Object?, Object?>?)!.cast<String, String>();
+    }
+  }
 }
 
-abstract class WatchCounterFlutterAPI {
+abstract class WatchRecorderFlutterAPI {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
-
-  void increment();
-
-  void decrement();
 
   void onRecordingStarted();
 
@@ -326,49 +457,19 @@ abstract class WatchCounterFlutterAPI {
 
   void onAudioChunk(Uint8List audioChunk, int chunkIndex, bool isLast, double sampleRate);
 
-  static void setUp(WatchCounterFlutterAPI? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
+  void onRecordingError(String error);
+
+  void onMicrophonePermissionResult(bool granted);
+
+  void onMainAppMicrophonePermissionResult(bool granted);
+
+  void onWatchBatteryUpdate(double batteryLevel, int batteryState);
+
+  static void setUp(WatchRecorderFlutterAPI? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.watch.WatchCounterFlutterAPI.increment$messageChannelSuffix', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        pigeonVar_channel.setMessageHandler(null);
-      } else {
-        pigeonVar_channel.setMessageHandler((Object? message) async {
-          try {
-            api.increment();
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.watch.WatchCounterFlutterAPI.decrement$messageChannelSuffix', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        pigeonVar_channel.setMessageHandler(null);
-      } else {
-        pigeonVar_channel.setMessageHandler((Object? message) async {
-          try {
-            api.decrement();
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onRecordingStarted$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingStarted$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -387,7 +488,7 @@ abstract class WatchCounterFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onRecordingStopped$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingStopped$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -406,18 +507,18 @@ abstract class WatchCounterFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioData$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioData$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioData was null.');
+          'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioData was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final Uint8List? arg_audioData = (args[0] as Uint8List?);
           assert(arg_audioData != null,
-              'Argument for dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioData was null, expected non-null Uint8List.');
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioData was null, expected non-null Uint8List.');
           try {
             api.onAudioData(arg_audioData!);
             return wrapResponse(empty: true);
@@ -431,29 +532,132 @@ abstract class WatchCounterFlutterAPI {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioChunk$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioChunk$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioChunk was null.');
+          'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioChunk was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final Uint8List? arg_audioChunk = (args[0] as Uint8List?);
           assert(arg_audioChunk != null,
-              'Argument for dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioChunk was null, expected non-null Uint8List.');
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioChunk was null, expected non-null Uint8List.');
           final int? arg_chunkIndex = (args[1] as int?);
           assert(arg_chunkIndex != null,
-              'Argument for dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioChunk was null, expected non-null int.');
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioChunk was null, expected non-null int.');
           final bool? arg_isLast = (args[2] as bool?);
           assert(arg_isLast != null,
-              'Argument for dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioChunk was null, expected non-null bool.');
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioChunk was null, expected non-null bool.');
           final double? arg_sampleRate = (args[3] as double?);
           assert(arg_sampleRate != null,
-              'Argument for dev.flutter.pigeon.watch.WatchCounterFlutterAPI.onAudioChunk was null, expected non-null double.');
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onAudioChunk was null, expected non-null double.');
           try {
             api.onAudioChunk(arg_audioChunk!, arg_chunkIndex!, arg_isLast!, arg_sampleRate!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingError$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingError was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_error = (args[0] as String?);
+          assert(arg_error != null,
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onRecordingError was null, expected non-null String.');
+          try {
+            api.onRecordingError(arg_error!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMicrophonePermissionResult$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMicrophonePermissionResult was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final bool? arg_granted = (args[0] as bool?);
+          assert(arg_granted != null,
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMicrophonePermissionResult was null, expected non-null bool.');
+          try {
+            api.onMicrophonePermissionResult(arg_granted!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final bool? arg_granted = (args[0] as bool?);
+          assert(arg_granted != null,
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onMainAppMicrophonePermissionResult was null, expected non-null bool.');
+          try {
+            api.onMainAppMicrophonePermissionResult(arg_granted!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onWatchBatteryUpdate$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onWatchBatteryUpdate was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final double? arg_batteryLevel = (args[0] as double?);
+          assert(arg_batteryLevel != null,
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onWatchBatteryUpdate was null, expected non-null double.');
+          final int? arg_batteryState = (args[1] as int?);
+          assert(arg_batteryState != null,
+              'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onWatchBatteryUpdate was null, expected non-null int.');
+          try {
+            api.onWatchBatteryUpdate(arg_batteryLevel!, arg_batteryState!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

@@ -3,84 +3,11 @@ import Flutter
 import UserNotifications
 import app_links
 import WatchConnectivity
+import AVFoundation
 
 
 extension FlutterError: Error {}
 
-
-private class WatchCounterHostApiImpl: WatchCounterHostAPI {
-    let session: WCSession
-
-    init(session: WCSession = .default) {
-        self.session = session
-    }
-
-
-    func increment() {
-        session.sendMessage(["method": "increment"], replyHandler: nil, errorHandler: nil)
-    }
-
-    func decrement() {
-        session.sendMessage(["method": "decrement"], replyHandler: nil, errorHandler: nil)
-    }
-
-    func startRecording() {
-        // Try sendMessage first (requires reachable), fallback to updateApplicationContext
-        if session.isReachable {
-            session.sendMessage(["method": "startRecording"], replyHandler: nil, errorHandler: { error in
-                print("sendMessage failed, using fallback: \(error)")
-                // Fallback for background/unreachable scenarios
-                try? self.session.updateApplicationContext(["method": "startRecording"])
-            })
-        } else {
-            // Use updateApplicationContext when not reachable
-            try? session.updateApplicationContext(["method": "startRecording"])
-        }
-    }
-
-    func stopRecording() {
-        if session.isReachable {
-            session.sendMessage(["method": "stopRecording"], replyHandler: nil, errorHandler: { error in
-                print("sendMessage failed, using fallback: \(error)")
-                try? self.session.updateApplicationContext(["method": "stopRecording"])
-            })
-        } else {
-            try? session.updateApplicationContext(["method": "stopRecording"])
-        }
-    }
-
-    func sendAudioData(audioData: FlutterStandardTypedData) {
-        let data = audioData.data as Data
-        session.sendMessage(["method": "sendAudioData", "audioData": data], replyHandler: nil, errorHandler: nil)
-    }
-
-    func sendAudioChunk(audioChunk: FlutterStandardTypedData, chunkIndex: Int64, isLast: Bool, sampleRate: Double) {
-        let data = audioChunk.data as Data
-        session.sendMessage([
-            "method": "sendAudioChunk",
-            "audioChunk": data,
-            "chunkIndex": chunkIndex,
-            "isLast": isLast,
-            "sampleRate": sampleRate
-        ], replyHandler: nil, errorHandler: nil)
-    }
-
-    func isWatchPaired() -> Bool {
-        return session.isPaired
-    }
-
-    func isWatchReachable() -> Bool {
-        return session.isReachable
-    }
-
-    func isWatchSessionSupported() -> Bool {
-        return WCSession.isSupported()
-    }
-
-    func isWatchAppInstalled() -> Bool {
-        return session.isWatchAppInstalled
-    }
-}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -92,9 +19,10 @@ private class WatchCounterHostApiImpl: WatchCounterHostAPI {
   private var notificationBodyOnKill: String?
 
   var session: WCSession?
-  var flutterWatchAPI: WatchCounterFlutterAPI?
+    var flutterWatchAPI: WatchRecorderFlutterAPI?
   private var audioChunks: [Int: (Data, Double)] = [:] // (audioData, sampleRate)
   private var nextExpectedChunkIndex: Int = 0
+  private var isRecordingActive: Bool = false // Track recording state to handle app restarts
 
   override func application(
     _ application: UIApplication,
@@ -109,10 +37,10 @@ private class WatchCounterHostApiImpl: WatchCounterHostAPI {
           session?.activate();
 
           let controller = window?.rootViewController as? FlutterViewController
-          let api: WatchCounterHostAPI = WatchCounterHostApiImpl(session: session!)
+            flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: controller!.binaryMessenger)
+            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: session!, flutterWatchAPI: flutterWatchAPI)
 
-          WatchCounterHostAPISetup.setUp(binaryMessenger: controller!.binaryMessenger, api: api)
-          flutterWatchAPI = WatchCounterFlutterAPI(binaryMessenger: controller!.binaryMessenger)
+            WatchRecorderHostAPISetup.setUp(binaryMessenger: controller!.binaryMessenger, api: api)
       }
 
       // Retrieve the link from parameters
@@ -193,6 +121,12 @@ private class WatchCounterHostApiImpl: WatchCounterHostAPI {
     }
 
     private func handleAudioChunk(_ message: [String: Any]) {
+        // Only process audio chunks if recording is actually active
+        guard isRecordingActive else {
+            print("Ignoring audio chunk - recording not active (likely buffered message after app restart)")
+            return
+        }
+
         guard let audioChunk = message["audioChunk"] as? Data,
               let chunkIndex = message["chunkIndex"] as? Int,
               let isLast = message["isLast"] as? Bool,
@@ -275,7 +209,7 @@ extension AppDelegate: WCSessionDelegate {
         print("Session Watch Deactivate")
     }
     
-    // Receive a message from watch
+    // Receive a message from watch (foreground/active)
     func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
         Task {
             guard let method = message["method"] as? String else {
@@ -283,34 +217,24 @@ extension AppDelegate: WCSessionDelegate {
             }
 
             switch method {
-            case "increment":
-                self.flutterWatchAPI?.increment() { result in
-                    switch result {
-                    case .success(_):
-                        print("Increment on Flutter - Success")
-                    case .failure(let error):
-                        print("Increment on Flutter - Error: \(error.message)")
-                    }
-                }
-            case "decrement":
-                self.flutterWatchAPI?.decrement() { result in
-                    switch result {
-                    case .success(_):
-                        print("Decrement on Flutter - Success")
-                    case .failure(let error):
-                        print("Decrement on Flutter - Error: \(error.message)")
-                    }
-                }
             case "startRecording":
-                self.flutterWatchAPI?.onRecordingStarted() { result in
-                    switch result {
-                    case .success(_):
-                        print("Recording started on Flutter - Success")
-                    case .failure(let error):
-                        print("Recording started on Flutter - Error: \(error.message)")
+                self.isRecordingActive = true
+                self.audioChunks.removeAll() // Clear any buffered chunks from previous sessions
+                self.nextExpectedChunkIndex = 0
+                
+                // Notify Flutter app that recording is starting (this helps prevent crash)
+                DispatchQueue.main.async {
+                    self.flutterWatchAPI?.onRecordingStarted() { result in
+                        switch result {
+                        case .success(_):
+                            print("iOS: Recording started notification sent to Flutter - Success")
+                        case .failure(let error):
+                            print("iOS: Recording started notification sent to Flutter - Error: \(error.message)")
+                        }
                     }
                 }
             case "stopRecording":
+                self.isRecordingActive = false
                 self.flutterWatchAPI?.onRecordingStopped() { result in
                     switch result {
                     case .success(_):
@@ -320,7 +244,6 @@ extension AppDelegate: WCSessionDelegate {
                     }
                 }
             case "sendAudioData":
-                print("Received sendAudioData message from watch")
                 if let audioData = message["audioData"] as? Data {
                     print("Audio data received, size: \(audioData.count) bytes")
                     let flutterData = FlutterStandardTypedData(bytes: audioData)
@@ -337,10 +260,151 @@ extension AppDelegate: WCSessionDelegate {
                     print("Failed to cast audioData as Data - received type: \(type(of: message["audioData"]))")
                 }
             case "sendAudioChunk":
-                print("Received sendAudioChunk message from watch")
                 self.handleAudioChunk(message)
+            case "recordingError":
+                print("Received recording error from watch")
+                if let error = message["error"] as? String {
+                    print("Recording error: \(error)")
+                    // Forward error to Flutter
+                    self.flutterWatchAPI?.onRecordingError(error: error) { result in
+                        switch result {
+                        case .success(_):
+                            print("Recording error sent to Flutter - Success")
+                        case .failure(let error):
+                            print("Recording error sent to Flutter - Error: \(error.message)")
+                        }
+                    }
+                }
+            case "microphonePermissionResult":
+                if let granted = message["granted"] as? Bool {
+                    print("Microphone permission granted: \(granted)")
+                    // Forward result to Flutter
+                    self.flutterWatchAPI?.onMicrophonePermissionResult(granted: granted) { result in
+                        switch result {
+                        case .success(_):
+                            print("Microphone permission result sent to Flutter - Success")
+                        case .failure(let error):
+                            print("Microphone permission result sent to Flutter - Error: \(error.message)")
+                        }
+                    }
+                }
+            case "batteryUpdate":
+                if let batteryLevel = message["batteryLevel"] as? Double,
+                   let batteryState = message["batteryState"] as? Int {
+                    print("iOS: Watch battery - Level: \(batteryLevel)%, State: \(batteryState)")
+                    // Store battery info for Flutter to access
+                    UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
+                    UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
+                    UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
+                    
+                    // Forward to Flutter
+                    DispatchQueue.main.async {
+                        self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
+                            switch result {
+                            case .success(_):
+                                print("iOS: Battery update sent to Flutter - Success")
+                            case .failure(let error):
+                                print("iOS: Battery update sent to Flutter - Error: \(error.message)")
+                            }
+                        }
+                    }
+                }
+            case "watchInfoUpdate":
+                if let name = message["name"] as? String,
+                   let model = message["model"] as? String,
+                   let systemVersion = message["systemVersion"] as? String,
+                   let localizedModel = message["localizedModel"] as? String {
+
+                    UserDefaults.standard.set(name, forKey: "watch_device_name")
+                    UserDefaults.standard.set(model, forKey: "watch_device_model")
+                    UserDefaults.standard.set(systemVersion, forKey: "watch_system_version")
+                    UserDefaults.standard.set(localizedModel, forKey: "watch_localized_model")
+                    UserDefaults.standard.set(Date(), forKey: "watch_info_last_updated")
+                }
             default:
                 print("Unknown method: \(method)")
+            }
+        }
+    }
+    
+    // Receive user info from watch (background/offline reliable transfer)
+    // Now used for 1-second audio chunks when screen is off or app is backgrounded
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
+        
+        Task {
+            guard let method = userInfo["method"] as? String else {
+                print("No method in userInfo")
+                return
+            }
+            
+            print("Processing background userInfo method: \(method)")
+            
+            switch method {
+            case "sendAudioChunk":
+                print("Processing background 1-second audio chunk")
+                self.handleAudioChunk(userInfo)
+            case "stopRecording":
+                print("Processing background stop recording")
+                self.isRecordingActive = false
+                self.flutterWatchAPI?.onRecordingStopped() { result in
+                    switch result {
+                    case .success(_):
+                        print("Stop recording (background) sent to Flutter - Success")
+                    case .failure(let error):
+                        print("Stop recording (background) sent to Flutter - Error: \(error.message)")
+                    }
+                }
+            case "recordingError":
+                print("Processing background recording error")
+                if let error = userInfo["error"] as? String {
+                    print("Background recording error: \(error)")
+                    self.flutterWatchAPI?.onRecordingError(error: error) { result in
+                        switch result {
+                        case .success(_):
+                            print("Recording error (background) sent to Flutter - Success")
+                        case .failure(let error):
+                            print("Recording error (background) sent to Flutter - Error: \(error.message)")
+                        }
+                    }
+                }
+            case "batteryUpdate":
+                print("Processing background battery update")
+                if let batteryLevel = userInfo["batteryLevel"] as? Double,
+                   let batteryState = userInfo["batteryState"] as? Int {
+                    print("Background watch battery - Level: \(batteryLevel)%, State: \(batteryState)")
+                    // Store battery info for Flutter to access
+                    UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
+                    UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
+                    UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
+                    
+                    // Forward to Flutter
+                    DispatchQueue.main.async {
+                        self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
+                            switch result {
+                            case .success(_):
+                                print("iOS: Background battery update sent to Flutter - Success")
+                            case .failure(let error):
+                                print("iOS: Background battery update sent to Flutter - Error: \(error.message)")
+                            }
+                        }
+                    }
+                }
+            case "watchInfoUpdate":
+                print("Processing background watch info update")
+                if let name = userInfo["name"] as? String,
+                   let model = userInfo["model"] as? String,
+                   let systemVersion = userInfo["systemVersion"] as? String,
+                   let localizedModel = userInfo["localizedModel"] as? String {
+                    print("Background watch info - Name: \(name), Model: \(model), System: \(systemVersion)")
+                    // Store watch info for Flutter to access
+                    UserDefaults.standard.set(name, forKey: "watch_device_name")
+                    UserDefaults.standard.set(model, forKey: "watch_device_model")
+                    UserDefaults.standard.set(systemVersion, forKey: "watch_system_version")
+                    UserDefaults.standard.set(localizedModel, forKey: "watch_localized_model")
+                    UserDefaults.standard.set(Date(), forKey: "watch_info_last_updated")
+                }
+            default:
+                print("Unknown background method: \(method)")
             }
         }
     }

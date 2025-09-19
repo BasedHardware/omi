@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/models.dart';
@@ -137,6 +138,7 @@ enum DeviceType {
   omi,
   openglass,
   frame,
+  appleWatch,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -252,6 +254,8 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.frame) {
       return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
+    } else if (type == DeviceType.appleWatch) {
+      return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
@@ -323,6 +327,27 @@ class BtDevice {
       manufacturerName: conn.manufacturerName,
       type: DeviceType.frame,
     );
+  }
+
+  Future _getDeviceInfoFromAppleWatch(AppleWatchDeviceConnection conn) async {
+    try {
+      final deviceInfo = await conn.getWatchInfo();
+      return copyWith(
+        modelNumber: deviceInfo['model'] ?? 'Apple Watch',
+        firmwareRevision: deviceInfo['systemVersion'] ?? 'Unknown',
+        hardwareRevision: deviceInfo['localizedModel'] ?? 'Unknown',
+        manufacturerName: 'Apple',
+        type: DeviceType.appleWatch,
+      );
+    } catch (e) {
+      return copyWith(
+        modelNumber: 'Apple Watch',
+        firmwareRevision: 'Unknown',
+        hardwareRevision: 'Unknown',
+        manufacturerName: 'Apple',
+        type: DeviceType.appleWatch,
+      );
+    }
   }
 
   // from BluetoothDevice

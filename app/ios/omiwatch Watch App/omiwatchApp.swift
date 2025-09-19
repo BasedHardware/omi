@@ -11,7 +11,7 @@ import SwiftUI
 struct omiwatch_Watch_AppApp: App {
     var body: some Scene {
         WindowGroup {
-            CounterView(viewModel: CounterViewModel())
+            WatchRecorderView(viewModel: WatchAudioRecorderViewModel())
         }
     }
 }

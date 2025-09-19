@@ -8,11 +8,7 @@ import 'package:pigeon/pigeon.dart';
   dartPackageName: 'watch',
 ))
 @HostApi()
-abstract class WatchCounterHostAPI {
-  @SwiftFunction('increment()')
-  void increment();
-  @SwiftFunction('decrement()')
-  void decrement();
+abstract class WatchRecorderHostAPI {
   @SwiftFunction('startRecording()')
   void startRecording();
   @SwiftFunction('stopRecording()')
@@ -29,14 +25,30 @@ abstract class WatchCounterHostAPI {
   bool isWatchSessionSupported();
   @SwiftFunction('isWatchAppInstalled()')
   bool isWatchAppInstalled();
+  @SwiftFunction('requestWatchMicrophonePermission()')
+  void requestWatchMicrophonePermission();
+  @SwiftFunction('requestMainAppMicrophonePermission()')
+  void requestMainAppMicrophonePermission();
+  @SwiftFunction('checkMainAppMicrophonePermission()')
+  bool checkMainAppMicrophonePermission();
+  @SwiftFunction('getWatchBatteryLevel()')
+  double getWatchBatteryLevel();
+  @SwiftFunction('getWatchBatteryState()')
+  int getWatchBatteryState();
+  @SwiftFunction('requestWatchBatteryUpdate()')
+  void requestWatchBatteryUpdate();
+  @SwiftFunction('getWatchInfo()')
+  Map<String, String> getWatchInfo();
 }
 
 @FlutterApi()
-abstract class WatchCounterFlutterAPI {
-  void increment();
-  void decrement();
+abstract class WatchRecorderFlutterAPI {
   void onRecordingStarted();
   void onRecordingStopped();
   void onAudioData(Uint8List audioData);
   void onAudioChunk(Uint8List audioChunk, int chunkIndex, bool isLast, double sampleRate);
+  void onRecordingError(String error);
+  void onMicrophonePermissionResult(bool granted);
+  void onMainAppMicrophonePermissionResult(bool granted);
+  void onWatchBatteryUpdate(double batteryLevel, int batteryState);
 }

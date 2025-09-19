@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/frame_connection.dart';
+import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
@@ -16,18 +17,15 @@ class DeviceConnectionFactory {
     BtDevice device,
     BluetoothDevice bleDevice,
   ) {
-    if (device.type == null) {
-      return null;
-    }
-    switch (device.type!) {
+    switch (device.type) {
       case DeviceType.omi:
         return OmiDeviceConnection(device, bleDevice);
       case DeviceType.openglass:
         return OmiDeviceConnection(device, bleDevice);
       case DeviceType.frame:
         return FrameDeviceConnection(device, bleDevice);
-      default:
-        return null;
+      case DeviceType.appleWatch:
+        return AppleWatchDeviceConnection(device, bleDevice);
     }
   }
 }
@@ -50,6 +48,9 @@ abstract class DeviceConnection {
   DeviceConnectionState get status => _connectionState;
 
   DeviceConnectionState get connectionState => _connectionState;
+
+  @protected
+  set connectionState(DeviceConnectionState state) => _connectionState = state;
 
   Function(String deviceId, DeviceConnectionState state)? _connectionStateChangedCallback;
 
