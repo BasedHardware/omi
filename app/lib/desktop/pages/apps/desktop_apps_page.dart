@@ -40,7 +40,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   bool _isInitialized = false;
   bool _isLoadingData = false;
   bool _isReloading = false;
-  final FocusNode _focusNode = FocusNode();
+  late FocusNode _focusNode;
 
   final ValueNotifier<App?> _selectedAppNotifier = ValueNotifier<App?>(null);
 
@@ -56,6 +56,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     _searchController = TextEditingController();
     _searchFocusNode = FocusNode();
     _scrollController = ScrollController();
+    _focusNode = FocusNode();
 
     _initializeDataSequentially();
 

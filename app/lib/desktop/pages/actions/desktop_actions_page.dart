@@ -129,7 +129,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     return VisibilityDetector(
         key: const Key('desktop-actions-page'),
         onVisibilityChanged: (visibilityInfo) {
