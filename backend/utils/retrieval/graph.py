@@ -41,6 +41,13 @@ from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
 
+# IMPORTS: ADDING process human messages into memories and action items
+from models.transcript_segment import TranscriptSegment
+from models.conversation import ConversationStatus, ConversationSource
+from utils.conversations.process_conversation import _extract_memories, _save_action_items, _extract_trends
+import database.conversations as conversations_db
+from utils.llm.conversation_processing import get_transcript_structure
+
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 
@@ -110,6 +117,11 @@ class GraphState(TypedDict):
     ask_for_nps: Optional[bool]
 
     chat_session: Optional[ChatSession]
+
+    # ADDING process human messages into memories and action items
+    should_process_insights: Optional[bool] = False
+    pseudo_conversation: Optional[Conversation] = None
+    insights_processed: Optional[bool] = False
 
 
 def determine_conversation(state: GraphState):
@@ -394,6 +406,132 @@ def file_chat_question(state: GraphState):
     return {'answer': answer, 'ask_for_nps': True}
 
 
+# ADDING process human messages into memories and action items
+def should_process_chat_insights(state: GraphState) -> str:
+    """Decide if the last message needs insights processing."""
+    messages = state.get("messages", [])
+    if not messages:
+        return "continue"
+
+    last_message = messages[-1]
+    # Only process human messages for insights
+    if last_message.sender == "human":
+        return "process_insights"
+    return "continue"
+
+
+def create_pseudo_conversation_node(state: GraphState) -> GraphState:
+    """Convert chat message to conversation format for pipeline reuse."""
+
+    messages = state.get("messages", [])
+    if not messages:
+        return state
+
+    last_message = messages[-1]
+    uid = state.get("uid")
+    tz = state.get("tz", "UTC")
+
+    # Get user language preference
+    language_code = users_db.get_user_language_preference(uid) or 'en'
+
+    try:
+        # Use existing conversation processing to get structured data
+        structured = get_transcript_structure(last_message.text, last_message.created_at, language_code, tz)
+
+        # Create pseudo transcript segment
+        transcript_segment = TranscriptSegment(
+            id=str(uuid.uuid4()),
+            text=last_message.text,
+            speaker='SPEAKER_01',
+            speaker_id=1,
+            is_user=True,
+            person_id=uid,
+            start=0.0,
+            end=1.0,
+            translations=[],
+            speech_profile_processed=True,
+        )
+
+        # Create pseudo conversation
+        pseudo_conversation = Conversation(
+            id=f"chat_message_{last_message.id}",
+            uid=uid,
+            created_at=last_message.created_at,
+            started_at=last_message.created_at,
+            finished_at=last_message.created_at,
+            structured=structured,
+            transcript_segments=[transcript_segment],
+            language=language_code,
+            status=ConversationStatus.completed,
+            source=ConversationSource.omi,
+            discarded=False,
+            postprocessing=None,
+            geolocation=None,
+            photos=[],
+            plugins_results=[],
+            apps_results=[],
+            external_data={},
+            analysis_results=[],
+        )
+
+        print(f"Created pseudo conversation for message {last_message.id}")
+        return {**state, "pseudo_conversation": pseudo_conversation}
+
+    except Exception as e:
+        print(f"Error creating pseudo conversation: {e}")
+        return state
+
+
+def extract_memories_node(state: GraphState) -> GraphState:
+    """Extract memories from pseudo conversation."""
+    pseudo_conversation = state.get("pseudo_conversation")
+    uid = state.get("uid")
+
+    if pseudo_conversation and uid:
+        try:
+            _extract_memories(uid, pseudo_conversation)
+            print(f"Extracted memories for pseudo conversation {pseudo_conversation.id}")
+        except Exception as e:
+            print(f"Error extracting memories: {e}")
+
+    return state
+
+
+def save_action_items_node(state: GraphState) -> GraphState:
+    """Save action items from pseudo conversation."""
+    pseudo_conversation = state.get("pseudo_conversation")
+    uid = state.get("uid")
+
+    if pseudo_conversation and uid:
+        try:
+            _save_action_items(uid, pseudo_conversation)
+            print(f"Saved action items for pseudo conversation {pseudo_conversation.id}")
+        except Exception as e:
+            print(f"Error saving action items: {e}")
+
+    return state
+
+
+def extract_trends_node(state: GraphState) -> GraphState:
+    """Extract trends from pseudo conversation."""
+    pseudo_conversation = state.get("pseudo_conversation")
+    uid = state.get("uid")
+
+    if pseudo_conversation and uid:
+        try:
+            _extract_trends(uid, pseudo_conversation)
+            print(f"Extracted trends for pseudo conversation {pseudo_conversation.id}")
+        except Exception as e:
+            print(f"Error extracting trends: {e}")
+
+    return {**state, "insights_processed": True}
+
+
+def continue_chat_node(state: GraphState) -> GraphState:
+    """Continue with normal chat flow."""
+    return state
+
+
 workflow = StateGraph(GraphState)
 
 workflow.add_edge(START, "determine_conversation")
@@ -408,10 +546,49 @@ workflow.add_node("context_dependent_conversation", context_dependent_conversati
 workflow.add_node("file_chat_question", file_chat_question)
 workflow.add_node("persona_question", persona_question)
 
-workflow.add_edge("no_context_conversation", END)
-workflow.add_edge("omi_question", END)
-workflow.add_edge("persona_question", END)
-workflow.add_edge("file_chat_question", END)
+# ADDING process human messages into memories and action items
+workflow.add_node("continue_chat", continue_chat_node)
+workflow.add_node("create_pseudo_conversation", create_pseudo_conversation_node)
+workflow.add_node("extract_memories", extract_memories_node)
+workflow.add_node("save_action_items", save_action_items_node)
+workflow.add_node("extract_trends", extract_trends_node)
+
+# workflow.add_edge("no_context_conversation", END)
+# workflow.add_edge("omi_question", END)
+# workflow.add_edge("persona_question", END)
+# workflow.add_edge("file_chat_question", END)
+
+# ADDING process human messages into memories and action items
+workflow.add_conditional_edges(
+    "no_context_conversation",
+    should_process_chat_insights,
+    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
+)
+workflow.add_conditional_edges(
+    "omi_question",
+    should_process_chat_insights,
+    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
+)
+workflow.add_conditional_edges(
+    "persona_question",
+    should_process_chat_insights,
+    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
+)
+workflow.add_conditional_edges(
+    "file_chat_question",
+    should_process_chat_insights,
+    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
+)
+
+# Insights processing pipeline
+workflow.add_edge("create_pseudo_conversation", "extract_memories")
+workflow.add_edge("extract_memories", "save_action_items")
+workflow.add_edge("save_action_items", "extract_trends")
+workflow.add_edge("extract_trends", "continue_chat")
+
+# All paths converge to continue_chat, then END
+workflow.add_edge("continue_chat", END)
+
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
