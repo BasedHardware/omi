@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -33,6 +34,10 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   @override
   bool get wantKeepAlive => true;
 
+  bool _isReloading = false;
+  late FocusNode _focusNode;
+  late ScrollController _scrollController;
+
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
@@ -47,6 +52,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   @override
   void initState() {
     super.initState();
+
+    _focusNode = FocusNode();
+    _scrollController = ScrollController();
 
     // Initialize animations
     _fadeController = AnimationController(
@@ -70,10 +78,61 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     });
   }
 
+  Future<void> _handleReload() async {
+    if (_isReloading) return;
+
+    setState(() {
+      _isReloading = true;
+    });
+
+    // Scroll to top
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+
+    if (mounted) {
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+
+      if (conversationProvider.previousQuery.isNotEmpty) {
+        conversationProvider.previousQuery = "";
+        conversationProvider.resetGroupedConvos();
+        await conversationProvider.getInitialConversations();
+      } else {
+        await conversationProvider.forceRefreshConversations();
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isReloading = false;
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _requestFocusIfPossible();
+  }
+
+  void _requestFocusIfPossible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusNode.canRequestFocus) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
   @override
   void dispose() {
     _fadeController.dispose();
     _conversationDetailProvider?.dispose();
+    _focusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -128,14 +187,34 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer3<ConversationProvider, CaptureProvider, DeviceProvider>(
-      builder: (context, convoProvider, captureProvider, deviceProvider, child) {
-        final recordingState = captureProvider.recordingState;
-        final isRecording = recordingState == RecordingState.systemAudioRecord;
-        final isInitializing = recordingState == RecordingState.initialising;
-        final isRecordingOrInitializing = isRecording || isInitializing || captureProvider.isPaused;
-        final isSearchActive = convoProvider.previousQuery.isNotEmpty;
-        final hasAnyConversationsInSystem = convoProvider.conversations.isNotEmpty;
+    return VisibilityDetector(
+        key: const Key('desktop_conversations_page'),
+        onVisibilityChanged: (visibilityInfo) {
+          if (visibilityInfo.visibleFraction > 0.1) {
+            _requestFocusIfPossible();
+          }
+        },
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+          },
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            child: GestureDetector(
+              onTap: () {
+                if (!_focusNode.hasFocus) {
+                  _focusNode.requestFocus();
+                }
+              },
+              child: Consumer3<ConversationProvider, CaptureProvider, DeviceProvider>(
+                builder: (context, convoProvider, captureProvider, deviceProvider, child) {
+                  final recordingState = captureProvider.recordingState;
+                  final isRecording = recordingState == RecordingState.systemAudioRecord;
+                  final isInitializing = recordingState == RecordingState.initialising;
+                  final isRecordingOrInitializing = isRecording || isInitializing || captureProvider.isPaused;
+                  final isSearchActive = convoProvider.previousQuery.isNotEmpty;
+                  final hasAnyConversationsInSystem = convoProvider.conversations.isNotEmpty;
 
         // Auto-hide expanded recording when recording stops
         if (!isRecordingOrInitializing && _showExpandedRecording) {
@@ -151,6 +230,30 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
             child: _buildConversationDetailView(),
           );
         }
+        
+        if (_isReloading) {
+                    return Container(
+                      color: ResponsiveHelper.backgroundSecondary.withOpacity(0.85),
+                      child: const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'Reloading conversations...',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: ResponsiveHelper.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
 
         // Main View: Determine what to show based on state
         return Container(
@@ -335,13 +438,16 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                     onBack: _hideExpandedRecordingView,
                     showTranscript: true,
                     hasConversations: true,
+                    ),
+                    ),
+                    ],
                   ),
-                ),
-            ],
+                );
+                },
+              ),
+            ),
           ),
-        );
-      },
-    );
+        ));
   }
 
   Widget _buildConversationDetailView() {

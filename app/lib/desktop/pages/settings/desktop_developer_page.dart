@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -28,15 +29,53 @@ class DesktopDeveloperSettingsPage extends StatefulWidget {
 }
 
 class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsPage> {
+  bool _isReloading = false;
+  late ScrollController _scrollController;
+
   @override
   void initState() {
+    super.initState();
+    _scrollController = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
       if (mounted) {
         context.read<McpProvider>().fetchKeys();
       }
     });
-    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleReload() async {
+    if (_isReloading) return;
+
+    setState(() {
+      _isReloading = true;
+    });
+
+    // Scroll to top
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+
+    await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
+    if (mounted) {
+      await context.read<McpProvider>().fetchKeys();
+    }
+
+    if (mounted) {
+      setState(() {
+        _isReloading = false;
+      });
+    }
   }
 
   Widget _buildHeader(ResponsiveHelper responsive) {
@@ -65,13 +104,19 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
 
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Consumer<DeveloperModeProvider>(
-        builder: (context, provider, child) {
-          return Scaffold(
-            backgroundColor: ResponsiveHelper.backgroundPrimary,
-            body: Stack(
+    return CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+        },
+        child: Focus(
+          autofocus: true,
+          child: GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: Consumer<DeveloperModeProvider>(
+              builder: (context, provider, child) {
+                return Scaffold(
+                  backgroundColor: ResponsiveHelper.backgroundPrimary,
+                  body: Stack(
               children: [
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: responsive.spacing(baseSpacing: 24)),
@@ -761,7 +806,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
           );
         },
       ),
-    );
+    )));
   }
 
   _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
