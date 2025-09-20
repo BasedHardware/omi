@@ -44,7 +44,7 @@ more commands can be found in the [Nordic Wi-Fi shell](https://docs.nordicsemi.c
 
 | Command | Description |
 | --- | --- |
-| `charger get` | Get battery voltage |
+| `bat get` | Get battery voltage/charger status |
 
 ### Flash
 
