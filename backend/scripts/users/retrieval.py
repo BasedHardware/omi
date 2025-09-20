@@ -6,7 +6,12 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from models.conversation import Conversation
 
-llm_mini = ChatOpenAI(model='gpt-4o-mini')
+# Import from clients.py for consistent model usage
+from utils.llm.clients import llm_mini
+
+# ===== ORIGINAL LOCAL MODEL DEFINITION (COMMENTED OUT FOR ROLLBACK) =====
+# llm_mini = ChatOpenAI(model='gpt-4o-mini')
+
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
 load_dotenv('../../.env')
