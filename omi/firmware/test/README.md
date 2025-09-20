@@ -19,36 +19,6 @@ To build the firmware, you can use VS Code.
 
 4.Scroll to the bottom and click "Build Configuration." This will start the nRFConnect SDK building your firmware file. A VSCode notification popup will notify you of the progress of your build.
 
-## Debugging Tips
-
-### Flashing
-For a simpler flashing experience with verbose output, use the provided flash script:
-```
-./omi/firmware/devkit/flash.sh
-```
-
-### Monitoring Device Logs
-There's a convenient script that auto-detects the device and logs the output to a file:
-```
-# Run the monitoring script
-omi/firmware/scripts/monitor_device.sh
-
-# View the logs in real-time
-tail -f logs/device.log
-```
-
-## OTA
-
-The firmware can be updated over the air (OTA) using the nRF Connect app. The firmware file is located in the `build/dfu_application.zip` directory after building the firmware. To perform an OTA update, follow these steps:
-1. Open the nRF Connect app on your mobile device.
-2. Connect to the OMI_shell device using the app.
-3. Navigate to the DFU (Device Firmware Update) section in the app.
-4. Select the `dfu_application.zip` file from your build directory and upload it to the device.
-
-## BLE Throughput Test
-
-This test allows you to measure the BLE throughput performance of your device. For detailed instructions on setting up and running the test, see [BLE_THROUGHPUT_TEST.md](./BLE_THROUGHPUT_TEST.md).
-
 ## Commands
 
 ### BLE
@@ -122,14 +92,45 @@ more commands can be found in the [Nordic Wi-Fi shell](https://docs.nordicsemi.c
 
 | Command | Description |
 | --- | --- |
-| `sdcard mount` | Mount SD card filesystem |
-| `sdcard unmount` | Unmount SD card filesystem |
-| `sdcard ls $path` | List files in `$path` on the SD card |
-| `sdcard read $path ` | Read from file at `$path` |
-| `sdcard write $path $data` | Write to file at `$path` with data `$data` |
+| `sd mount` | Mount SD card filesystem |
+| `sd unmount` | Unmount SD card filesystem |
+| `sd ls $path` | List files in `$path` on the SD card |
+| `sd read $path ` | Read from file at `$path` |
+| `sd write $path $data` | Write to file at `$path` with data `$data` |
 
 ###  System off
 
 | Command | Description |
 | --- | --- |
-| `System off` | Turn OFF the device |
+| `system off` | Turn OFF the device |
+
+
+## Debugging Tips
+
+### Flashing
+For a simpler flashing experience with verbose output, use the provided flash script:
+```
+./omi/firmware/devkit/flash.sh
+```
+
+### Monitoring Device Logs
+There's a convenient script that auto-detects the device and logs the output to a file:
+```
+# Run the monitoring script
+omi/firmware/scripts/monitor_device.sh
+
+# View the logs in real-time
+tail -f logs/device.log
+```
+
+## OTA
+
+The firmware can be updated over the air (OTA) using the nRF Connect app. The firmware file is located in the `build/dfu_application.zip` directory after building the firmware. To perform an OTA update, follow these steps:
+1. Open the nRF Connect app on your mobile device.
+2. Connect to the OMI_shell device using the app.
+3. Navigate to the DFU (Device Firmware Update) section in the app.
+4. Select the `dfu_application.zip` file from your build directory and upload it to the device.
+
+## BLE Throughput Test
+
+This test allows you to measure the BLE throughput performance of your device. For detailed instructions on setting up and running the test, see [BLE_THROUGHPUT_TEST.md](./BLE_THROUGHPUT_TEST.md).
