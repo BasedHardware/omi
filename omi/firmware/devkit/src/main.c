@@ -312,12 +312,19 @@ int main(void)
     k_msleep(1000);
     set_led_blue(false);
 
+    // Mark boot as complete to enable chunking
+    set_system_boot_complete();
+
     // Main loop
     LOG_PRINTK("\n");
     LOG_INF("Entering main loop...\n");
 
     while (1) {
         set_led_state();
+        
+        //Check chunk rotation timing every 500ms
+        check_chunk_rotation_timing();
+        
         k_msleep(500);
     }
 

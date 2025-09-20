@@ -196,3 +196,7 @@ omiGlass/.expo
 /backend/logs/
 app/.fvm/
 app/android/.kotlin/
+
+# Miscellaneous
+*tags
+*cscope.out

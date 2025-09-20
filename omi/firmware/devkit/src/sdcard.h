@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "sdcard_config.h"
 
 /**
  * @brief Mount the SD Card. Initializes the audio files
@@ -103,4 +104,94 @@ void sd_on();
 void sd_off();
 
 bool is_sd_on();
+
+/**
+ * @brief Global variable indicating if chunk recording is active
+ */
+extern bool chunk_active;
+
+/**
+ * @brief Global flag to enable/disable chunking system
+ * Controlled by CONFIG_OMI_ENABLE_AUDIO_CHUNKING in project configuration
+ * Set to false to use legacy file system, true for chunking
+ */
+extern bool chunking_enabled;
+
+/**
+ * @brief Generate a unique audio file name
+ *
+ * Creates a file name with persistent counter and timestamp for chunked recording
+ * Format: audio/chunk_NNNNN_HHMMSS.bin (where NNNNN is persistent counter)
+ * 
+ * @return dynamically allocated string with file path, must be freed with k_free()
+ */
+char* generate_timestamp_audio_filename(void);
+
+/**
+ * @brief Initialize a new chunk file for recording
+ *
+ * Creates a new audio file with chunk_HHMMSS.bin naming for 5-minute chunks
+ * 
+ * @return 0 if successful, negative errno code if error
+ */
+int initialize_chunk_file(void);
+
+/**
+ * @brief Check if current chunk should be rotated
+ *
+ * 
+ * @return true if chunk should be rotated, false otherwise
+ */
+bool should_rotate_chunk(void);
+
+/**
+ * @brief Check chunk rotation timing using cycle counter
+ *
+ * Should be called every 500ms from main loop.
+ * Uses simple counter instead of k_uptime_get() for maximum efficiency.
+ * Counts 500ms cycles and rotates after 600 cycles (5 minutes).
+ */
+void check_chunk_rotation_timing(void);
+
+/**
+ * @brief Start a new recording chunk
+ *
+ * Finalizes current chunk and starts a new one with timestamp-based naming
+ * 
+ * @return 0 if successful, negative errno code if error
+ */
+int start_new_chunk(void);
+
+/**
+ * @brief Mark system boot as complete to enable chunking
+ *
+ * Should be called after all system initialization is complete
+ */
+void set_system_boot_complete(void);
+
+/**
+ * @brief Save chunk counter to persistent storage
+ *
+ * Saves the current chunk counter value to SD card for persistence across reboots
+ * 
+ * @param counter The counter value to save
+ * @return 0 if successful, negative errno code if error
+ */
+int save_chunk_counter(uint32_t counter);
+
+/**
+ * @brief Load chunk counter from persistent storage
+ *
+ * Loads the chunk counter value from SD card, returns 0 if file doesn't exist
+ * 
+ * @return The loaded counter value, or 0 if file doesn't exist or on error
+ */
+/**
+ * @brief Get the persistent chunk counter value
+ * 
+ * @param counter Pointer to store the counter value
+ * @return 0 if successful, negative errno code if error
+ */
+int get_chunk_counter(uint32_t *counter);
+
 #endif
