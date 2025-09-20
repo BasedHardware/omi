@@ -267,9 +267,9 @@ class SDCardWalSync implements IWalSync {
       storageOffset = 0;
     }
 
-    //> 10s
+    // > ~1s (lowered from 10s) to enable SD sync discovery more aggressively during CV1 bring-up
     BleAudioCodec codec = await _getAudioCodec(deviceId);
-    if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
+    if (totalBytes - storageOffset > 1 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
       var seconds = ((totalBytes - storageOffset) / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
       var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
 
@@ -361,7 +361,6 @@ class SDCardWalSync implements IWalSync {
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
     int timerStart = wal.timerStart;
-    await _writeToStorage(deviceId, fileNum, 0, offset);
 
     debugPrint("_readStorageBytesToFile ${offset}");
 
@@ -373,6 +372,7 @@ class SDCardWalSync implements IWalSync {
     final completer = Completer<bool>();
     bool hasError = false;
 
+    // Subscribe to notifications FIRST, before sending command
     _storageStream = await _getBleStorageBytesListener(deviceId, onStorageBytesReceived: (List<int> value) async {
       if (value.isEmpty || hasError) return;
 
@@ -447,6 +447,9 @@ class SDCardWalSync implements IWalSync {
         }
       }
     });
+
+    debugPrint("Sending storage READ command after subscription setup");
+    await _writeToStorage(deviceId, fileNum, 0, offset);
 
     try {
       await completer.future;
