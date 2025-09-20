@@ -105,31 +105,7 @@ more commands can be found in the [Nordic Wi-Fi shell](https://docs.nordicsemi.c
 | `system off` | Turn OFF the device |
 
 
-## Debugging Tips
-
-### Flashing
-For a simpler flashing experience with verbose output, use the provided flash script:
-```
-./omi/firmware/devkit/flash.sh
-```
-
-### Monitoring Device Logs
-There's a convenient script that auto-detects the device and logs the output to a file:
-```
-# Run the monitoring script
-omi/firmware/scripts/monitor_device.sh
-
-# View the logs in real-time
-tail -f logs/device.log
-```
-
-## OTA
-
-The firmware can be updated over the air (OTA) using the nRF Connect app. The firmware file is located in the `build/dfu_application.zip` directory after building the firmware. To perform an OTA update, follow these steps:
-1. Open the nRF Connect app on your mobile device.
-2. Connect to the OMI_shell device using the app.
-3. Navigate to the DFU (Device Firmware Update) section in the app.
-4. Select the `dfu_application.zip` file from your build directory and upload it to the device.
+## Tests
 
 ## BLE Throughput Test
 
