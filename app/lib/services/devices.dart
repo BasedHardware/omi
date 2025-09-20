@@ -10,6 +10,7 @@ import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/src/flutter_communicator.g.dart';
 
 abstract class IDeviceService {
   void start();
@@ -114,6 +115,9 @@ class DeviceService implements IDeviceService {
     _bleDevices = results.cast<ScanResult>().where((r) => r.device.platformName.isNotEmpty).toList();
     _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
     _devices = _bleDevices.map<BtDevice>((e) => BtDevice.fromScanResult(e)).toList();
+
+    // Also discover Apple Watch
+    await _discoverAppleWatch();
     onDevices(devices);
 
     // Check desirable device
@@ -128,6 +132,12 @@ class DeviceService implements IDeviceService {
       await _connection?.disconnect();
     }
     _connection = null;
+
+    // Handle Apple Watch logical device separately
+    if (id == 'apple-watch') {
+      await _connectToAppleWatch();
+      return;
+    }
 
     var bleDevice = _bleDevices.firstWhereOrNull((f) => f.device.remoteId.str == id);
     var device = _devices.firstWhereOrNull((f) => f.id == id);
@@ -145,6 +155,76 @@ class DeviceService implements IDeviceService {
     _connection = DeviceConnectionFactory.create(device, bleDevice.device);
     await _connection?.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     return;
+  }
+
+  Future<void> _discoverAppleWatch() async {
+    try {
+      final host = WatchRecorderHostAPI();
+      final supported = await host.isWatchSessionSupported();
+      final paired = await host.isWatchPaired();
+      final reachable = await host.isWatchReachable();
+
+      debugPrint('Apple Watch discovery: supported=$supported, paired=$paired, reachable=$reachable');
+
+      if (supported && paired) {
+        final appleWatch = BtDevice(
+          name: 'Apple Watch',
+          id: 'apple-watch',
+          type: DeviceType.appleWatch,
+          rssi: reachable ? 0 : -100,
+        );
+        _devices.removeWhere((d) => d.type == DeviceType.appleWatch);
+        _devices.add(appleWatch);
+        debugPrint('Added Apple Watch to device list (reachable: $reachable)');
+        onDevices(_devices);
+      } else {
+        // Remove Apple Watch if not supported/paired
+        _devices.removeWhere((d) => d.type == DeviceType.appleWatch);
+        onDevices(_devices);
+      }
+    } catch (e) {
+      debugPrint('Apple Watch discover error: $e');
+    }
+  }
+
+  Future<void> _connectToAppleWatch() async {
+    // Build a pseudo BLE device wrapper for factory (not used by AW connection)
+    final device = _devices.firstWhereOrNull((f) => f.id == 'apple-watch');
+    if (device == null) {
+      debugPrint('Apple Watch device not found in list');
+      return;
+    }
+
+    // Create a dummy BluetoothDevice to satisfy factory signature
+    // We reuse the first BLE device or create a fake handle; AppleWatchDeviceConnection doesn't use it
+    final fakeBle = _bleDevices.isNotEmpty ? _bleDevices.first.device : await _createFakeBleDevice();
+
+    // Drop any existing connection
+    if (_connection?.status == DeviceConnectionState.connected) {
+      await _connection?.disconnect();
+    }
+    _connection = DeviceConnectionFactory.create(device, fakeBle);
+    try {
+      await _connection?.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
+      // For Apple Watch, verify connection state after connect attempt
+      if (_connection != null && await _connection!.isConnected()) {
+        debugPrint('Apple Watch connected successfully');
+      } else {
+        debugPrint('Apple Watch connection failed - not reachable');
+      }
+    } catch (e) {
+      debugPrint('Error connecting to Apple Watch: $e');
+      onDeviceConnectionStateChanged('apple-watch', DeviceConnectionState.disconnected);
+    }
+  }
+
+  Future<BluetoothDevice> _createFakeBleDevice() async {
+    try {
+      return BluetoothDevice.fromId('00:00:00:00:00:00');
+    } catch (_) {
+      // This should rarely happen; in worst case throw to surface
+      throw Exception('No BLE context available to create Apple Watch connection');
+    }
   }
 
   @override
@@ -212,6 +292,11 @@ class DeviceService implements IDeviceService {
     await _mutex.acquire();
     try {
       debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+      if (_connection?.device.id == 'apple-watch') {
+        final isActuallyConnected = await _connection?.isConnected();
+        debugPrint(
+            "Apple Watch actual connection status: $isActuallyConnected vs stored status: ${_connection?.status}");
+      }
 
       // Not force
       if (!force && _connection != null) {
