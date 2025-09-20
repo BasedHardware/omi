@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -7,12 +8,10 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/device_widget.dart';
-
 import 'package:provider/provider.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'firmware_update.dart';
 import '../conversations/sync_page.dart';
+import 'firmware_update.dart';
 
 class ConnectedDevice extends StatefulWidget {
   const ConnectedDevice({super.key});
@@ -37,28 +36,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       await context.read<DeviceProvider>().getDeviceInfo();
     });
     super.initState();
-  }
-
-  String _formatStorageInfo(DeviceProvider provider) {
-    if (!provider.isDeviceV2Connected) {
-      return 'Not Available';
-    }
-
-    final totalBytes = provider.captureProvider?.totalStorageFileBytes ?? 0;
-    final usedBytes = provider.captureProvider?.totalBytesReceived ?? 0;
-
-    if (totalBytes == 0) {
-      return 'Unknown capacity';
-    }
-
-    final usedMB = usedBytes / 1024.0 / 1024.0;
-    final totalMB = totalBytes / 1024.0 / 1024.0;
-
-    if (usedMB < 1) {
-      return '${(usedBytes / 1024.0).toStringAsFixed(1)} KB of ${totalMB.toStringAsFixed(1)} MB used';
-    } else {
-      return '${usedMB.toStringAsFixed(1)} MB of ${totalMB.toStringAsFixed(1)} MB used';
-    }
   }
 
   IconData _getBatteryIcon(int batteryLevel) {
@@ -302,7 +279,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                                       }
                                     : null,
                               ),
-                              if (provider.isDeviceV2Connected)
+                              if (provider.isDeviceStorageSupport)
                                 _buildSectionRow(
                                   'SD Card Sync',
                                   'Import audio files from SD Card',
@@ -391,13 +368,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                                     'Unknown',
                                 hasArrow: false,
                               ),
-                              if (provider.isDeviceV2Connected)
-                                _buildSectionRow(
-                                  'Storage',
-                                  _formatStorageInfo(provider),
-                                  hasArrow: false,
-                                  isLast: true,
-                                ),
                             ],
                           ),
                         ),

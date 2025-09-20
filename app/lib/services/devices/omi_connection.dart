@@ -326,7 +326,6 @@ class OmiDeviceConnection extends DeviceConnection {
       debugPrint('storage list called');
       return await performGetStorageList();
     }
-    // _showDeviceDisconnectedNotification();
     debugPrint('storage list error');
     return Future.value(<int>[]);
   }
@@ -335,10 +334,6 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetStorageList() async {
     debugPrint(' perform storage list called');
     if (_storageService == null) {
-      if (device.name == 'Omi DevKit 2') {
-        // Should only report incase of DevKit 2 because only DevKit 2 has storage service
-        logServiceNotFoundError('Storage', deviceId);
-      }
       return Future.value(<int>[]);
     }
 
@@ -464,7 +459,6 @@ class OmiDeviceConnection extends DeviceConnection {
         .write([command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
     return true;
   }
-  // Future<List<int>> performGetStorageList();
 
   @override
   Future performCameraStartPhotoController() async {
