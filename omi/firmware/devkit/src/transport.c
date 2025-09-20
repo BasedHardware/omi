@@ -30,6 +30,8 @@ extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
 extern uint32_t file_num_array[2];
+extern bool chunk_active;
+extern bool chunking_enabled;
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
@@ -646,6 +648,23 @@ bool write_to_storage(void)
         return false;
     }
 
+    // Check if we need to rotate to a new chunk (only if chunking enabled)
+    if (chunking_enabled && should_rotate_chunk()) {
+        // Flush any remaining data in the buffer before rotating
+        if (buffer_offset > 0) {
+            uint8_t *write_ptr = storage_temp_data;
+            write_to_file(write_ptr, buffer_offset);
+            buffer_offset = 0;
+        }
+        
+        // Start a new chunk
+        int ret = start_new_chunk();
+        if (ret != 0) {
+            LOG_ERR("Failed to start new chunk: %d", ret);
+            return false;
+        }
+    }
+
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
 
@@ -731,6 +750,11 @@ void pusher(void)
             if (file_num_array[1] < MAX_STORAGE_BYTES) {
                 k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
                 if (is_sd_on()) {
+                    // Initialize first chunk if needed (only if chunking enabled)
+                    if (chunking_enabled && !chunk_active) {
+                        LOG_INF("Starting offline recording with chunking");
+                        start_new_chunk();
+                    }
                     result = write_to_storage();
                 }
                 k_mutex_unlock(&write_sdcard_mutex);
