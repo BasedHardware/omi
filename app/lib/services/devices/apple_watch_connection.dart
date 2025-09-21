@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/src/flutter_communicator.g.dart';
 import 'package:omi/services/bridges/apple_watch_bridge.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -430,13 +431,6 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetImageListener({
-    required void Function(Uint8List base64JpgData) onImageReceived,
-  }) async {
-    return null;
-  }
-
-  @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({
     void Function(int p1)? onAccelChange,
   }) async {
@@ -465,6 +459,12 @@ class AppleWatchDeviceConnection extends DeviceConnection {
 
   @override
   Future performCameraStopPhotoController() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<StreamSubscription?> performGetImageListener(
+      {required void Function(OrientedImage orientedImage) onImageReceived}) {
     throw UnimplementedError();
   }
 }
