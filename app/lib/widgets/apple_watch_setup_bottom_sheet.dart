@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/src/flutter_communicator.g.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AppleWatchSetupBottomSheet extends StatefulWidget {
   final String deviceId;
@@ -18,134 +21,218 @@ class AppleWatchSetupBottomSheet extends StatefulWidget {
 
 class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet> {
   bool _isChecking = false;
+  bool? _isAppInstalled;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAppInstallationStatus();
+  }
+
+  Future<void> _checkAppInstallationStatus() async {
+    try {
+      final hostAPI = WatchRecorderHostAPI();
+      final bool isInstalled = await hostAPI.isWatchAppInstalled();
+
+      if (mounted) {
+        setState(() {
+          _isAppInstalled = isInstalled;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isAppInstalled = false;
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final responsive = ResponsiveHelper(context);
+
     return Container(
       decoration: const BoxDecoration(
-        color: Colors.black,
+        color: ResponsiveHelper.backgroundSecondary,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white30,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.textTertiary,
+              borderRadius: BorderRadius.circular(2),
             ),
-            const SizedBox(height: 24),
+          ),
 
-            // Watch icon
-            const Icon(
-              Icons.watch,
-              size: 60,
-              color: Colors.white,
-            ),
-            const SizedBox(height: 16),
-
-            // Title
-            const Text(
-              'Apple Watch Not Found',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-
-            // Instructions
-            const Text(
-              'To use your Apple Watch with Omi:\n\n'
-              '1. Install the Omi app on your Apple Watch\n'
-              '2. Open the Omi app on your watch\n'
-              '3. Make sure your watch is connected to your phone\n'
-              '4. Tap "I\'ve Connected" below',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
-                height: 1.4,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-
-            // Action buttons
-            Row(
+          // Main content
+          Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
               children: [
-                // Cancel button
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: Colors.white70),
+                // Apple Watch image
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  height: 120,
+                  width: 120,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: responsive.mediumShadow,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.asset(
+                      Assets.images.appleWatch.path,
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(height: 32),
 
-                // I've Connected button
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: _isChecking ? null : _checkConnection,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: _isChecking
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text(
-                            'I\'ve Connected',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                if (_isLoading) ...[
+                  Text(
+                    'Checking Apple Watch...',
+                    style: responsive.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                    strokeWidth: 2,
+                  ),
+                ] else if (_isAppInstalled == false) ...[
+                  // App not installed
+                  Text(
+                    'Install Omi on your\nApple Watch',
+                    style: responsive.titleLarge.copyWith(height: 1.2),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'To use your Apple Watch with Omi, you need to install the Omi app on your watch first.',
+                    style: responsive.bodyLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                ] else ...[
+                  // App installed but not reachable (not open)
+                  Text(
+                    'Open Omi on your\nApple Watch',
+                    style: responsive.titleLarge.copyWith(height: 1.2),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'The Omi app is installed on your Apple Watch. Open it and tap Start to begin.',
+                    style: responsive.bodyLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+
+                const SizedBox(height: 32),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: _isChecking ? null : _handlePrimaryAction,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: ResponsiveHelper.purplePrimary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          elevation: 0,
+                        ),
+                        child: _isChecking
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Text(
+                                _getPrimaryButtonText(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+                InkWell(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
+
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
               ],
             ),
-
-            // Help text
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: _showHelpDialog,
-              child: const Text(
-                'Need help installing the watch app?',
-                style: TextStyle(
-                  color: Colors.blue,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-
-            // Bottom padding for safe area
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  String _getPrimaryButtonText() {
+    if (_isAppInstalled == false) {
+      return 'Open Watch App';
+    } else {
+      return 'I\'ve Installed & Opened the App';
+    }
+  }
+
+  Future<void> _handlePrimaryAction() async {
+    if (_isAppInstalled == false) {
+      await _launchWatchApp();
+    } else {
+      await _checkConnection();
+    }
+  }
+
+  Future<void> _launchWatchApp() async {
+    try {
+      final url = Uri.parse("itms-watchs://");
+
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url);
+
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbar(
+        'Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the "Available Apps" section.',
+        duration: const Duration(seconds: 6),
+      );
+
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _checkConnection() async {
@@ -154,7 +241,6 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
     });
 
     try {
-      // Check if the watch is now reachable
       final hostAPI = WatchRecorderHostAPI();
       final bool isReachable = await hostAPI.isWatchReachable();
 
@@ -183,34 +269,5 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
         _isChecking = false;
       });
     }
-  }
-
-  void _showHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text(
-          'Installing Omi on Apple Watch',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'To install Omi on your Apple Watch:\n\n'
-          '1. Open the Watch app on your iPhone\n'
-          '2. Scroll down to "Available Apps"\n'
-          '3. Find "Omi" and tap "Install"\n'
-          '4. Wait for installation to complete\n'
-          '5. Open the Omi app on your Apple Watch\n'
-          '6. Come back and tap "I\'ve Connected"',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -32,16 +32,12 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     if (_bridge == null) {
       _bridge = AppleWatchFlutterBridge(
         onChunk: (Uint8List bytes, int chunkIndex, bool isLast, double sampleRate) {
-          debugPrint(
-              'Apple Watch: Received audio chunk ${bytes.length} bytes, active controllers: ${_audioControllers.length}');
-
           _audioControllers.removeWhere((controller) => controller.isClosed);
 
           if (_audioControllers.isNotEmpty) {
             for (final controller in _audioControllers) {
               try {
                 controller.add(bytes);
-                debugPrint('Apple Watch: Forwarded ${bytes.length} bytes to controller');
               } catch (e) {
                 debugPrint('Apple Watch: Error forwarding to controller: $e');
               }
@@ -66,8 +62,6 @@ class AppleWatchDeviceConnection extends DeviceConnection {
           debugPrint('Main app mic permission: $granted');
         },
         onBatteryUpdateCb: (double batteryLevel, int batteryState) {
-          debugPrint('Apple Watch battery update: ${batteryLevel.toStringAsFixed(1)}%, state: $batteryState');
-
           _batteryControllers.removeWhere((controller) => controller.isClosed);
 
           if (_batteryControllers.isNotEmpty) {

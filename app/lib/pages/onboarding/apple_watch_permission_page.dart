@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class AppleWatchPermissionPage extends StatefulWidget {
   final AppleWatchDeviceConnection connection;
@@ -22,121 +23,151 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final responsive = ResponsiveHelper(context);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: ResponsiveHelper.backgroundPrimary,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: ResponsiveHelper.backgroundPrimary,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: ResponsiveHelper.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Apple Watch Setup',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: ResponsiveHelper.textPrimary),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Watch icon
-            const Icon(
-              Icons.watch,
-              size: 80,
-              color: Colors.white,
-            ),
-            const SizedBox(height: 32),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            children: [
+              const Spacer(),
 
-            // Title
-            const Text(
-              'Microphone Permission Required',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-
-            // Instructions
-            Text(
-              _permissionRequested
-                  ? 'Great! Now follow these steps:\n\n1. Check your Apple Watch for the permission popup\n2. Tap "Allow" to grant microphone access\n3. The watch app will close automatically\n4. Open the Omi app on your watch again\n5. Tap "Continue" below to start recording'
-                  : 'To record audio from your Apple Watch, we need microphone permission.\n\nTap "Grant Permission" below to get started.',
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.white70,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 40),
-
-            // Action buttons
-            if (!_permissionRequested) ...[
-              // Grant Permission Button
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isRequestingPermission ? null : _requestPermission,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
+              // Apple Watch image
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                height: 160,
+                width: 160,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: responsive.mediumShadow,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Image.asset(
+                    'assets/images/apple_watch.png',
+                    fit: BoxFit.cover,
                   ),
-                  child: _isRequestingPermission
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text(
-                          'Grant Permission',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
                 ),
               ),
-            ] else ...[
-              // Continue Button (after permission was requested)
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _continueAndStartRecording,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
+              const SizedBox(height: 48),
+
+              // Title
+              Text(
+                _permissionRequested ? 'Permission Requested!' : 'Microphone Permission',
+                style: responsive.titleLarge.copyWith(
+                  fontSize: 28,
+                  height: 1.2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+
+              // Instructions
+              Text(
+                _permissionRequested
+                    ? 'Permission granted! Now:\n\n1. Check your Apple Watch for the popup\n2. Tap "Allow" on your watch\n3. App will close - reopen it\n4. Tap "Continue" below'
+                    : 'We need microphone permission.\n\n1. Tap "Grant Permission"\n2. Allow on your iPhone\n3. Watch app will close\n4. Reopen and tap "Continue"',
+                style: responsive.bodyLarge.copyWith(
+                  height: 1.6,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 48),
+
+              // Action buttons
+              if (!_permissionRequested) ...[
+                // Grant Permission Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isRequestingPermission ? null : _requestPermission,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ResponsiveHelper.purplePrimary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
                     ),
+                    child: _isRequestingPermission
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text(
+                            'Grant Permission',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                ),
+              ] else ...[
+                // Continue Button (after permission was requested)
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _continueAndStartRecording,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ResponsiveHelper.purplePrimary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Continue',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Need Help Button
+                TextButton(
+                  onPressed: _showHelpDialog,
+                  style: TextButton.styleFrom(
+                    foregroundColor: ResponsiveHelper.purplePrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   ),
                   child: const Text(
-                    'Continue',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    'Need Help?',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
+              ],
 
-              // Need Help Button
-              TextButton(
-                onPressed: _showHelpDialog,
-                child: const Text(
-                  'Need Help?',
-                  style: TextStyle(color: Colors.white70),
-                ),
-              ),
+              const Spacer(),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -201,29 +232,40 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
   }
 
   void _showHelpDialog() {
+    final responsive = ResponsiveHelper(context);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text(
-          'Need Help?',
-          style: TextStyle(color: Colors.white),
+        backgroundColor: ResponsiveHelper.backgroundSecondary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
         ),
-        content: const Text(
-          'If you\'re having trouble:\n\n'
-          '1. Make sure the Omi app is installed on your Apple Watch\n'
+        title: Text(
+          'Need Help?',
+          style: responsive.titleLarge.copyWith(fontSize: 20),
+        ),
+        content: Text(
+          'Troubleshooting:\n\n'
+          '1. Ensure Omi is installed on your watch\n'
           '2. Open the Omi app on your watch\n'
-          '3. Look for the microphone permission popup\n'
+          '3. Look for the permission popup\n'
           '4. Tap "Allow" when prompted\n'
-          '5. The app will close - this is normal\n'
-          '6. Open the Omi app on your watch again\n'
-          '7. Come back and tap "Continue"',
-          style: TextStyle(color: Colors.white70),
+          '5. App will close - reopen it\n'
+          '6. Come back and tap "Continue"',
+          style: responsive.bodyMedium,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
+            style: TextButton.styleFrom(
+              foregroundColor: ResponsiveHelper.purplePrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text(
+              'Got it',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),

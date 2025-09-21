@@ -101,6 +101,10 @@ class $AssetsImagesGen {
   AssetGenImage get appleLogo =>
       const AssetGenImage('assets/images/apple_logo.png');
 
+  /// File path: assets/images/apple_watch.png
+  AssetGenImage get appleWatch =>
+      const AssetGenImage('assets/images/apple_watch.png');
+
   /// File path: assets/images/background.png
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
@@ -309,6 +313,7 @@ class $AssetsImagesGen {
     appLauncherIcon,
     appleRemindersLogo,
     appleLogo,
+    appleWatch,
     background,
     blob,
     calendarLogo,

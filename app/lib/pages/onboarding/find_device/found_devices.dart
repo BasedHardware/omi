@@ -45,7 +45,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       return Assets.images.omiDevkitWithoutRope.path;
     }
     if (deviceName.contains('Apple Watch')) {
-      return Assets.images.omiWithoutRope.path; // TODO: Add Apple Watch icon
+      return Assets.images.appleWatch.path;
     }
     return Assets.images.omiWithoutRope.path;
   }
