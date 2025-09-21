@@ -25,7 +25,7 @@ To build the firmware, you can use VS Code.
 
 | Command | Description |
 | --- | --- |
-| `ble on` | Turn ON BLE and advertising as `OMI shell` |
+| `ble on` | Turn ON BLE and advertising as `Omi EVT` |
 | `ble off` | Turn OFF BLE |
 
 ### Wifi
