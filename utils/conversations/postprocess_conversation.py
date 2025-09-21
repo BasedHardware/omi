@@ -72,51 +72,6 @@ def postprocess_conversation(
 
         speakers_count = len(set([segment.speaker for segment in conversation.transcript_segments]))
         
-        # Enhanced Speaker Diarization with Pyannote
-        # This addresses the TODO comment on line 18 about "groq+pyannote diarization 3.1"
-        enhanced_segments = conversation.transcript_segments
-        enhancement_metrics = {"status": "disabled"}
-        
-        try:
-            from utils.stt.enhanced_diarization import get_enhanced_diarization, is_enhanced_diarization_enabled
-            
-            if is_enhanced_diarization_enabled():
-                print(f'🎯 Applying enhanced diarization to conversation {conversation.id}')
-                enhanced_diarizer = get_enhanced_diarization()
-                
-                # Convert segments to dict format for processing
-                original_segments = [segment.model_dump() for segment in conversation.transcript_segments]
-                
-                # Apply Pyannote enhanced diarization while preserving Deepgram transcription
-                improved_segments, enhancement_metrics = enhanced_diarizer.improve_diarization(
-                    file_path, 
-                    original_segments,
-                    min_speakers=max(1, speakers_count - 1),  # Allow flexibility
-                    max_speakers=min(8, speakers_count + 2)   # Reasonable upper bound
-                )
-                
-                # Update conversation with improved segments
-                enhanced_segments = [TranscriptSegment(**seg) for seg in improved_segments]
-                conversation.transcript_segments = enhanced_segments
-                
-                # Recalculate speaker count after enhancement
-                new_speakers_count = len(set([segment.speaker for segment in enhanced_segments]))
-                
-                print(f'✅ Enhanced diarization completed for conversation {conversation.id}:')
-                print(f'   - Original speakers: {speakers_count}')
-                print(f'   - Enhanced speakers: {new_speakers_count}')
-                print(f'   - Consistency improvement: {enhancement_metrics.get("consistency_improvement", 0):.1f}%')
-                print(f'   - Processing time: {enhancement_metrics.get("processing_time", 0):.2f}s')
-                
-                speakers_count = new_speakers_count
-                
-        except ImportError:
-            print('⚠️  Enhanced diarization dependencies not available - using original segments')
-        except Exception as e:
-            print(f'❌ Enhanced diarization failed: {e} - using original segments')
-            conversation.transcript_segments = enhanced_segments  # Restore original segments
-            enhancement_metrics = {"status": "error", "error": str(e)}
-        
         words = fal_whisperx(signed_url, speakers_count)
         fal_segments = fal_postprocessing(words, aseg.duration_seconds)
 

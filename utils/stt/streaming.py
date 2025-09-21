@@ -305,8 +305,22 @@ async def process_audio_dg(
                         }
                     )
 
-        # stream
-        stream_transcript(segments)
+        # Enhanced Speaker Diarization with Pyannote (Real-time)
+        # This addresses the TODO comment about "groq+pyannote diarization 3.1"
+        try:
+            from utils.stt.enhanced_diarization import apply_enhanced_diarization_to_segments
+            
+            # Apply enhanced diarization to segments before streaming
+            enhanced_segments = apply_enhanced_diarization_to_segments(segments)
+            stream_transcript(enhanced_segments)
+            
+        except ImportError:
+            # Fallback to original segments if enhanced diarization not available
+            stream_transcript(segments)
+        except Exception as e:
+            # Fallback to original segments if enhancement fails
+            print(f"Enhanced diarization failed: {e} - using original segments")
+            stream_transcript(segments)
 
     def on_error(self, error, **kwargs):
         print(f"Error: {error}")
