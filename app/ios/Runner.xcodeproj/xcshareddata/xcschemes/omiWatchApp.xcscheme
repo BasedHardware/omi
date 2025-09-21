@@ -16,8 +16,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "42A7BA332E788BD300138969"
-               BuildableName = "omiwatch Watch App.app"
-               BlueprintName = "omiwatch Watch App"
+               BuildableName = "omiWatchApp.app"
+               BlueprintName = "omiWatchApp"
                ReferencedContainer = "container:Runner.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -59,8 +59,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "42A7BA332E788BD300138969"
-            BuildableName = "omiwatch Watch App.app"
-            BlueprintName = "omiwatch Watch App"
+            BuildableName = "omiWatchApp.app"
+            BlueprintName = "omiWatchApp"
             ReferencedContainer = "container:Runner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -76,8 +76,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "42A7BA332E788BD300138969"
-            BuildableName = "omiwatch Watch App.app"
-            BlueprintName = "omiwatch Watch App"
+            BuildableName = "omiWatchApp.app"
+            BlueprintName = "omiWatchApp"
             ReferencedContainer = "container:Runner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

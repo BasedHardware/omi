@@ -17,7 +17,7 @@
 		422906C92E75B0A100F49E67 /* FlutterCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422906C82E75B0A100F49E67 /* FlutterCommunicator.g.swift */; };
 		4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
-		42A7BA3E2E788BD400138969 /* omiwatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiwatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -39,7 +39,7 @@
 			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 42A7BA332E788BD300138969;
-			remoteInfo = "omiwatch Watch App";
+			remoteInfo = omiWatchApp;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -60,7 +60,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				42A7BA3E2E788BD400138969 /* omiwatch Watch App.app in Embed Watch Content */,
+				42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -93,7 +93,7 @@
 		42476A832C5E369200426330 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderHostApiImpl.swift; sourceTree = "<group>"; };
 		426B89AC2C46919D00E24442 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
-		42A7BA342E788BD300138969 /* omiwatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "omiwatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		42A7BA342E788BD300138969 /* omiWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = omiWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
@@ -132,7 +132,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		42A7BA352E788BD300138969 /* omiwatch Watch App */ = {
+		42A7BA352E788BD300138969 /* omiWatchApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 			);
@@ -140,7 +140,7 @@
 			};
 			explicitFolders = (
 			);
-			path = "omiwatch Watch App";
+			path = omiWatchApp;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -219,7 +219,7 @@
 				426B89AC2C46919D00E24442 /* Config */,
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
-				42A7BA352E788BD300138969 /* omiwatch Watch App */,
+				42A7BA352E788BD300138969 /* omiWatchApp */,
 				97C146EF1CF9000F007C117D /* Products */,
 				68E21E60C4FBF7F520F1D656 /* Pods */,
 				20C35A59F6DEFF5646F302D3 /* Frameworks */,
@@ -233,7 +233,7 @@
 			isa = PBXGroup;
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
-				42A7BA342E788BD300138969 /* omiwatch Watch App.app */,
+				42A7BA342E788BD300138969 /* omiWatchApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -267,9 +267,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		42A7BA332E788BD300138969 /* omiwatch Watch App */ = {
+		42A7BA332E788BD300138969 /* omiWatchApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiwatch Watch App" */;
+			buildConfigurationList = 42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiWatchApp" */;
 			buildPhases = (
 				42A7BA302E788BD300138969 /* Sources */,
 				42A7BA312E788BD300138969 /* Frameworks */,
@@ -280,11 +280,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				42A7BA352E788BD300138969 /* omiwatch Watch App */,
+				42A7BA352E788BD300138969 /* omiWatchApp */,
 			);
-			name = "omiwatch Watch App";
-			productName = "omiwatch Watch App";
-			productReference = 42A7BA342E788BD300138969 /* omiwatch Watch App.app */;
+			name = omiWatchApp;
+			productName = omiWatchApp;
+			productReference = 42A7BA342E788BD300138969 /* omiWatchApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
@@ -347,7 +347,7 @@
 			projectRoot = "";
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
-				42A7BA332E788BD300138969 /* omiwatch Watch App */,
+				42A7BA332E788BD300138969 /* omiWatchApp */,
 			);
 		};
 /* End PBXProject section */
@@ -518,7 +518,7 @@
 /* Begin PBXTargetDependency section */
 		42A7BA3D2E788BD400138969 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 42A7BA332E788BD300138969 /* omiwatch Watch App */;
+			target = 42A7BA332E788BD300138969 /* omiWatchApp */;
 			targetProxy = 42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -773,8 +773,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -827,8 +827,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -880,8 +880,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -932,8 +932,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -986,8 +986,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1038,8 +1038,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1090,8 +1090,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1143,8 +1143,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1195,8 +1195,8 @@
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
-				INFOPLIST_FILE = "omiwatch-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omiwatch;
+				INFOPLIST_FILE = "omiWatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = omi;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.friend-app-with-wearable.ios12";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1863,7 +1863,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiwatch Watch App" */ = {
+		42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiWatchApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				42A7BA402E788BD400138969 /* Debug */,

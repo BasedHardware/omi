@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  omiwatch Watch App
+//  omiWatchApp
 //
 //  Created by Mohammed Mohsin on 13/09/25.
 //
