@@ -50,7 +50,7 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] Charging
     - [x] BLE connected
     - [x] BLE disconnected
-    - [ ] Fix the issue: The led during charging + device off ~ green only, does not provide correct feedback. charging still works.
+    - [x] Fix the issue: The led during charging + device off ~ green only, does not provide correct feedback. charging still works.
   - [x] Buttons
     - [x] Turn the device on/off(entering the deepsleep mode)
     - [x] Long press to chat with omi
@@ -62,9 +62,8 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
   - [x] Haptic (2/3)
     - [x] Haptic on turning on/off
     - [x] Long press to chat with omi
-    - [ ] Recheck the mass production version, since the current motor is not good https://github.com/BasedHardware/omi/pull/2281#issuecomment-2841105447
+    - [x] Recheck the mass production version, since the current motor is not good https://github.com/BasedHardware/omi/pull/2281#issuecomment-2841105447
   - [x] Battery (1/2)
     - [x] Percentage feedbacks via BLE
     - [ ] Fix in-accurated battery level, especially on charging
   - [x] Charger
-  - [ ] Update the OMI devkit firmware dependencies to be compatible with NCS 2.9.0
