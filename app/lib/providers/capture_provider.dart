@@ -20,10 +20,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/devices.dart';
-import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/sdcard_socket.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -44,7 +41,6 @@ class CaptureProvider extends ChangeNotifier
   UsageProvider? usageProvider;
 
   TranscriptSegmentSocketService? _socket;
-  SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
 
@@ -53,7 +49,6 @@ class CaptureProvider extends ChangeNotifier
 
   IWalService get _wal => ServiceManager.instance().wal;
 
-  IDeviceService get _deviceService => ServiceManager.instance().device;
   bool _isWalSupported = false;
 
   bool get isWalSupported => _isWalSupported;
@@ -70,7 +65,6 @@ class CaptureProvider extends ChangeNotifier
   bool _isAutoReconnecting = false;
   bool get isAutoReconnecting => _isAutoReconnecting;
 
-  DateTime? _lastUsageLimitDialogShown;
   bool get outOfCredits => usageProvider?.isOutOfCredits ?? false;
 
   Timer? _reconnectTimer;
@@ -215,7 +209,6 @@ class CaptureProvider extends ChangeNotifier
     int? channels,
     bool? isPcm,
   }) async {
-    print("changeAudioRecordProfile");
     await _resetState();
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm);
   }
@@ -376,7 +369,6 @@ class CaptureProvider extends ChangeNotifier
       }
     }
 
-    await initiateStorageBytesStreaming();
     notifyListeners();
   }
 
@@ -385,7 +377,6 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  // TODO: use connection directly
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
@@ -400,17 +391,6 @@ class CaptureProvider extends ChangeNotifier
       return false;
     }
     return connection.performPlayToSpeakerHaptic(level);
-  }
-
-  Future<StreamSubscription?> _getBleStorageBytesListener(
-    String deviceId, {
-    required void Function(List<int>) onStorageBytesReceived,
-  }) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
   }
 
   Future<StreamSubscription?> _getBleAudioBytesListener(
@@ -1119,126 +1099,6 @@ class CaptureProvider extends ChangeNotifier
   void setIsWalSupported(bool value) {
     _isWalSupported = value;
     notifyListeners();
-  }
-
-  /*
-  *
-  *
-  *
-  *
-  *
-  * */
-
-  List<int> currentStorageFiles = <int>[];
-  int sdCardFileNum = 1;
-
-// To show the progress of the download in the UI
-  int currentTotalBytesReceived = 0;
-  double currentSdCardSecondsReceived = 0.0;
-//--------------------------------------------
-
-  int totalStorageFileBytes = 0; // how much in storage
-  int totalBytesReceived = 0; // how much already received
-  double sdCardSecondsTotal = 0.0; // time to send the next chunk
-  double sdCardSecondsReceived = 0.0;
-  bool sdCardDownloadDone = false;
-  bool sdCardReady = false;
-  bool sdCardIsDownloading = false;
-  String btConnectedTime = "";
-  Timer? sdCardReconnectionTimer;
-
-  void setSdCardIsDownloading(bool value) {
-    sdCardIsDownloading = value;
-    notifyListeners();
-  }
-
-  Future<void> updateStorageList() async {
-    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty) {
-      debugPrint('No storage files found');
-      SharedPreferencesUtil().deviceIsV2 = false;
-      debugPrint('Device is not V2');
-      return;
-    }
-    totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
-    totalBytesReceived = storageOffset;
-    notifyListeners();
-  }
-
-  Future<void> initiateStorageBytesStreaming() async {
-    debugPrint('initiateStorageBytesStreaming');
-    if (_recordingDevice == null) return;
-    String deviceId = _recordingDevice!.id;
-    var storageFiles = await _getStorageList(deviceId);
-    if (storageFiles.isEmpty) {
-      return;
-    }
-    var totalBytes = storageFiles[0];
-    if (totalBytes <= 0) {
-      return;
-    }
-    var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
-    if (storageOffset > totalBytes) {
-      // bad state?
-      debugPrint("SDCard bad state, offset > total");
-      storageOffset = 0;
-    }
-
-    // 80: frame length, 100: frame per seconds
-    BleAudioCodec codec = await _getAudioCodec(deviceId);
-    sdCardSecondsTotal = totalBytes / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
-    sdCardSecondsReceived = storageOffset / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
-
-    // > 10s
-    if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
-      sdCardReady = true;
-    }
-
-    notifyListeners();
-  }
-
-  Future _getFileFromDevice(int fileNum, int offset) async {
-    sdCardFileNum = fileNum;
-    int command = 0;
-    _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, offset);
-  }
-
-  Future _clearFileFromDevice(int fileNum) async {
-    sdCardFileNum = fileNum;
-    int command = 1;
-    _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, 0);
-  }
-
-  Future _pauseFileFromDevice(int fileNum) async {
-    sdCardFileNum = fileNum;
-    int command = 3;
-    _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, 0);
-  }
-
-  void _notifySdCardComplete() {
-    NotificationService.instance.clearNotification(8);
-    NotificationService.instance.createNotification(
-      notificationId: 8,
-      title: 'Sd Card Processing Complete',
-      body: 'Your Sd Card data is now processed! Enter the app to see.',
-    );
-  }
-
-  Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return Future.value(false);
-    }
-    return connection.writeToStorage(numFile, command, offset);
-  }
-
-  Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return [];
-    }
-    return connection.getStorageList();
   }
 
   void _processSystemAudioByteReceived(Uint8List bytes) {

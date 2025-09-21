@@ -5,7 +5,6 @@
 #include <zephyr/shell/shell.h>
 
 #include "battery.h"
-#include "ble_throughput.h"
 #include "button.h"
 #include "mic.h"
 #include "sd.h"
@@ -36,10 +35,6 @@ static int init_module(void)
         printk("Failed to initialize battery module (%d)\n", ret);
     }
 
-    ret = ble_throughput_init();
-    if (ret < 0) {
-        printk("Failed to initialize ble throughput module (%d)\n", ret);
-    }
     gpio_pin_configure_dt(&rfsw_en, (GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1));
     gpio_pin_set_dt(&rfsw_en, 1);
     return 0;
