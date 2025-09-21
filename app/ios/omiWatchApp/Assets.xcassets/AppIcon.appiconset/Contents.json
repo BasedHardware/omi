@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "OmiAppIcon-1024@1x 1.png",
       "idiom" : "universal",
       "platform" : "watchos",
       "size" : "1024x1024"
