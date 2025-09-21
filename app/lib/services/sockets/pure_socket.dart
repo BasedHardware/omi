@@ -120,7 +120,7 @@ class PureSocket implements IPureSocket {
     _channel?.stream.listen(
       (message) {
         if (message == "ping") {
-          debugPrint(message);
+          // debugPrint(message);
           // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
           _channel?.sink.add([0x8A, 0x00]);
           return;
@@ -180,7 +180,7 @@ class PureSocket implements IPureSocket {
 
   @override
   void onMessage(dynamic message) {
-    debugPrint("[Socket] Message $message");
+    // debugPrint("[Socket] Message $message");
     _listener?.onMessage(message);
   }
 

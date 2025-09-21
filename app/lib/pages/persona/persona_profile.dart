@@ -552,7 +552,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                await SharedPreferencesUtil().clearUserPreferences();
+                await SharedPreferencesUtil().clear();
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                 await AuthService.instance.signOut();
                 Navigator.of(context).pop();

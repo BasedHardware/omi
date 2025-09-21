@@ -503,10 +503,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           onTap: () {
             if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
               widget.onTapWhenSearchEmpty!();
-            } else {
-              widget.editSegment?.call(data.id, data.speakerId);
-              MixpanelManager().tagSheetOpened();
             }
+            widget.editSegment?.call(data.id, data.speakerId);
+            MixpanelManager().tagSheetOpened();
           },
           child: Padding(
             padding: EdgeInsetsDirectional.fromSTEB(

@@ -22,7 +22,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool isConnecting = false;
   bool isConnected = false;
-  bool isDeviceV2Connected = false;
+  bool isDeviceStorageSupport = false;
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
@@ -146,11 +146,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  Future periodicConnect(String printer) async {
+  Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
     _reconnectionTimer?.cancel();
     scan(t) async {
       debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");
       if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
+        return;
+      }
+      if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
+        t.cancel();
         return;
       }
       Logger.debug("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
@@ -206,7 +210,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       var cDevice = await _getConnectedDevice();
       if (cDevice != null) {
         setConnectedDevice(cDevice);
-        setIsDeviceV2Connected();
+        setisDeviceStorageSupport();
         SharedPreferencesUtil().deviceName = cDevice.name;
         MixpanelManager().deviceConnected();
         setIsConnected(true);
@@ -245,7 +249,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     setConnectedDevice(null);
-    setIsDeviceV2Connected();
+    setisDeviceStorageSupport();
     setIsConnected(false);
     updateConnectingStatus(false);
 
@@ -297,7 +301,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       captureProvider?.updateRecordingDevice(device);
     }
 
-    setIsDeviceV2Connected();
+    setisDeviceStorageSupport();
     setIsConnected(true);
 
     await initiateBleBatteryListener();
@@ -404,12 +408,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
   }
 
-  Future setIsDeviceV2Connected() async {
+  Future setisDeviceStorageSupport() async {
     if (connectedDevice == null) {
-      isDeviceV2Connected = false;
+      isDeviceStorageSupport = false;
     } else {
       var storageFiles = await _getStorageList(connectedDevice!.id);
-      isDeviceV2Connected = storageFiles.isNotEmpty;
+      isDeviceStorageSupport = storageFiles.isNotEmpty;
     }
     notifyListeners();
   }

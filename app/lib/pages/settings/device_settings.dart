@@ -295,7 +295,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
     ),
     GestureDetector(
       onTap: () {
-        if (!provider.isDeviceV2Connected) {
+        if (!provider.isDeviceStorageSupport) {
           showDialog(
             context: context,
             builder: (c) => getDialog(

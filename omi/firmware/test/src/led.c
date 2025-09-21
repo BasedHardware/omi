@@ -1,17 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pwm.h>
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
 
-static const struct gpio_dt_spec led_red = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(led_red), gpios, {0});
-static const struct gpio_dt_spec led_green = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(led_green), gpios, {0});
-static const struct gpio_dt_spec led_blue = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(led_blue), gpios, {0});
+static const struct pwm_dt_spec led_red = PWM_DT_SPEC_GET(DT_NODELABEL(led_red));
+static const struct pwm_dt_spec led_green = PWM_DT_SPEC_GET(DT_NODELABEL(led_green));
+static const struct pwm_dt_spec led_blue = PWM_DT_SPEC_GET(DT_NODELABEL(led_blue));
 
 static int led_control(int led_num, int state)
 {
     int ret;
-    const struct gpio_dt_spec *led_spec;
+    const struct pwm_dt_spec *led_spec;
     switch (led_num) {
     case 0:
         led_spec = &led_red;
@@ -26,12 +26,17 @@ static int led_control(int led_num, int state)
         return -EINVAL;
     }
 
-    ret = gpio_pin_configure_dt(led_spec, GPIO_OUTPUT);
-    if (ret < 0) {
-        return ret;
+    if (!pwm_is_ready_dt(led_spec)) {
+        return -ENODEV;
     }
 
-    ret = gpio_pin_set_dt(led_spec, state);
+    uint32_t pulse_width_ns = 0;
+    if (state) {
+        // Set to full brightness when on
+        pulse_width_ns = led_spec->period;
+    }
+
+    ret = pwm_set_pulse_dt(led_spec, pulse_width_ns);
     if (ret < 0) {
         return ret;
     }
