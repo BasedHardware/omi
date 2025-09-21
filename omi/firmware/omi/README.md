@@ -20,18 +20,19 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
 
 ## WIP
 
-- Status: DEV
+- Status: 80%, running on production.
 
 - TODOs:
-  - [x] Testing new modules in the omi device (5/6)
+  - [x] Testing new modules in the omi device (7/9)
     - [x] Mic
     - [x] BLE
     - [x] Buttons
     - [x] LEDs
     - [ ] Wi-Fi, partially
     - [x] Motors
-    - [ ] Qspi flash
-    - [ ] Sd Card
+    - [x] Qspi flash
+    - [ ] IMU
+    - [x] Sd Card
   - [x] Add support for MCUBoot
     - [x] Add basic MCUBoot
     - [x] Test with the OMI app (iOS/Android)
