@@ -1,0 +1,142 @@
+grafana:
+  enabled: true
+  serviceAccount:
+    create: true
+    annotations:
+      iam.gke.io/gcp-service-account: "prod-omi-grafana-gsa@based-hardware.iam.gserviceaccount.com"
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: "gce"
+      kubernetes.io/ingress.global-static-ip-name: "prod-omi-grafana-alb-ip-address"
+      networking.gke.io/managed-certificates: "prod-omi-grafana-alb-cert"
+      kubernetes.io/ingress.allow-http: "false"
+    hosts:
+      - monitor.omi.me
+    path: /
+  persistence:
+    enabled: true
+    type: sts
+    storageClassName: standard-rwo
+    accessModes:
+      - ReadWriteOnce
+    size: 20Gi
+    finalizers:
+      - kubernetes.io/pvc-protection
+  imageRenderer:
+    enabled: true
+  grafana.ini:
+    rendering:
+      server_url: http://prod-omi-kube-prometheus-stack-grafana-image-renderer:8081/render
+      callback_url: http://prod-omi-kube-prometheus-stack-grafana:80/
+    unified_alerting.screenshots:
+      capture: true
+    server:
+      root_url: https://monitor.omi.me/
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: service
+                operator: In
+                values:
+                  - monitoring
+              - key: env
+                operator: In
+                values:
+                  - prod
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Delete
+    # Define metrics retention period
+    retention: 10d
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2G
+      limits:
+        cpu: "2"
+        memory: 4Gi
+    storageSpec:
+    # Using PersistentVolumeClaim
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard-rwo
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    additionalScrapeConfigs:
+      # Additional scrape configs for Deepgram Engine metrics
+      - job_name: "dg_engine_metrics"
+        scrape_interval: "2s"
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - "prod-omi-dg-self-hosted"
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: "(.*)-metrics"
+            action: keep
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            regex: "metrics"
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: service
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      - job_name: gpu-metrics
+        scrape_interval: 1s
+        metrics_path: /metrics
+        scheme: http
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+            - gke-managed-system
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_node_name]
+          action: replace
+          target_label: kubernetes_node
+      - job_name: prometheus-stackdriver-metrics
+        scrape_interval: 1s
+        metrics_path: /metrics
+        scheme: http
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+              - "prod-omi-monitoring"
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: "(.*)-prometheus-stackdriver-exporter"
+            action: keep
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: service
+                  operator: In
+                  values:
+                    - monitoring
+                - key: env
+                  operator: In
+                  values:
+                    - prod
+
+kube-state-metrics:
+  enabled: true
+  metricLabelsAllowlist:
+    - namespaces=[{{ .Release.Namespace }}],deployments=[app]
+
+nodeExporter:
+  enabled: true

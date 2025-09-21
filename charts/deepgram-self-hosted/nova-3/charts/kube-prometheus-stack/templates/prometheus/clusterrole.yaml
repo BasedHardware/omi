@@ -1,0 +1,37 @@
+{{- if and .Values.prometheus.enabled .Values.global.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+rules:
+# This permission are not in the kube-prometheus repo
+# they're grabbed from https://github.com/prometheus/prometheus/blob/master/documentation/examples/rbac-setup.yml
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/metrics
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - "networking.k8s.io"
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+  verbs: ["get"]
+{{/* fix(#3338): add required rules to use node-exporter with the RBAC proxy */}}
+{{- if and .Values.nodeExporter.enabled (index .Values "prometheus-node-exporter").kubeRBACProxy.enabled }}
+- apiGroups: [ "" ]
+  resources:
+  - services/{{ include "prometheus-node-exporter.fullname" (index .Subcharts "prometheus-node-exporter") }}
+  verbs: [ "get", "list", "watch" ]
+{{- end }}
+{{- if .Values.prometheus.additionalRulesForClusterRole }}
+{{ toYaml .Values.prometheus.additionalRulesForClusterRole | indent 0 }}
+{{- end }}
+{{- end }}

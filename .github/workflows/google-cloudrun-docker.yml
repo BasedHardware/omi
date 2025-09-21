@@ -1,0 +1,68 @@
+name: Build and Deploy to Cloud Run
+
+#on:
+#  push:
+#    branches: [ "master" ]
+
+on:
+  workflow_dispatch:
+
+env:
+  SERVICE: api-based-hardware
+  REGION: us-central1
+
+jobs:
+  deploy:
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v0'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - run: gcloud auth configure-docker
+      - name: Build and Push Docker image
+        run: |
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v0
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+
+      # If required, use the Cloud Run url output in later steps
+      - name: Show Output
+        run: echo ${{ steps.deploy.outputs.url }}
+  upload_image: # for instances
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v0'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - run: gcloud auth configure-docker
+      - name: Build and Push Docker image
+        run: |
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/whisper-x Dockerfile2
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/whisper-x Dockerfile2

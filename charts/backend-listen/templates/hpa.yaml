@@ -1,0 +1,54 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "backend-listen.fullname" . }}
+  labels:
+    {{- include "backend-listen.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "backend-listen.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  {{- if .Values.autoscaling.behavior }}
+  behavior:
+    {{- toYaml .Values.autoscaling.behavior | nindent 4 }}
+  {{- end }}
+  metrics:
+    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.requestsPerPod }}
+    - type: External
+      external:
+        metric:
+          name: backend_listen_requests_per_pod
+        target:
+          type: Value
+          value: {{ .Values.autoscaling.requestsPerPod }}
+    {{- end }}
+    {{- if .Values.autoscaling.failedResponseCode }}
+    - type: External
+      external:
+        metric:
+          name: backend_listen_response_code_500
+        target:
+          type: Value
+          value: {{ .Values.autoscaling.failedResponseCode }}
+    {{- end }}
+{{- end }}

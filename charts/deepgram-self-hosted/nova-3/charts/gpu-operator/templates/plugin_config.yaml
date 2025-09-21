@@ -1,0 +1,11 @@
+{{- if and (.Values.devicePlugin.config.create) (not (empty .Values.devicePlugin.config.data)) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.devicePlugin.config.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gpu-operator.labels" . | nindent 4 }}
+data: {{ toYaml .Values.devicePlugin.config.data | nindent 2 }}
+{{- end }}
+  

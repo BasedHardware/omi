@@ -1,0 +1,13 @@
+apiVersion: v2
+appVersion: 1.32.0
+description: Scales Kubernetes worker nodes within autoscaling groups.
+home: https://github.com/kubernetes/autoscaler
+icon: https://github.com/kubernetes/kubernetes/raw/master/logo/logo.png
+maintainers:
+- email: guyjtempleton@googlemail.com
+  name: gjtempleton
+name: cluster-autoscaler
+sources:
+- https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler
+type: application
+version: 9.46.3

@@ -1,0 +1,20 @@
+{{- if and .Values.kubeProxy.enabled .Values.kubeProxy.endpoints .Values.kubernetesServiceMonitors.enabled }}
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-kube-proxy
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-kube-proxy
+    k8s-app: kube-proxy
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+  namespace: kube-system
+subsets:
+  - addresses:
+      {{- range .Values.kubeProxy.endpoints }}
+      - ip: {{ . }}
+      {{- end }}
+    ports:
+      - name: {{ .Values.kubeProxy.serviceMonitor.port }}
+        port: {{ .Values.kubeProxy.service.port }}
+        protocol: TCP
+{{- end }}

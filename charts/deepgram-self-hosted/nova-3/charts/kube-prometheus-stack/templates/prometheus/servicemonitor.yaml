@@ -1,0 +1,86 @@
+{{- if and .Values.prometheus.enabled .Values.prometheus.serviceMonitor.selfMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+{{- with .Values.prometheus.serviceMonitor.additionalLabels }}
+{{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  {{- include "servicemonitor.scrapeLimits" .Values.prometheus.serviceMonitor | nindent 2 }}
+  selector:
+    matchLabels:
+      app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+      release: {{ $.Release.Name | quote }}
+      self-monitor: "true"
+  namespaceSelector:
+    matchNames:
+      - {{ printf "%s" (include "kube-prometheus-stack.namespace" .) | quote }}
+  endpoints:
+  - port: {{ .Values.prometheus.prometheusSpec.portName }}
+    {{- if .Values.prometheus.serviceMonitor.interval }}
+    interval: {{ .Values.prometheus.serviceMonitor.interval }}
+    {{- end }}
+    {{- if .Values.prometheus.serviceMonitor.scheme }}
+    scheme: {{ .Values.prometheus.serviceMonitor.scheme }}
+    {{- end }}
+    {{- if .Values.prometheus.serviceMonitor.tlsConfig }}
+    tlsConfig: {{- toYaml .Values.prometheus.serviceMonitor.tlsConfig | nindent 6 }}
+    {{- end }}
+    {{- if .Values.prometheus.serviceMonitor.bearerTokenFile }}
+    bearerTokenFile: {{ .Values.prometheus.serviceMonitor.bearerTokenFile }}
+    {{- end }}
+    path: "{{ trimSuffix "/" .Values.prometheus.prometheusSpec.routePrefix }}/metrics"
+    {{- if .Values.prometheus.serviceMonitor.metricRelabelings }}
+    metricRelabelings: {{- tpl (toYaml .Values.prometheus.serviceMonitor.metricRelabelings | nindent 6) . }}
+    {{- end }}
+    {{- if .Values.prometheus.serviceMonitor.relabelings }}
+    relabelings: {{- toYaml .Values.prometheus.serviceMonitor.relabelings | nindent 6 }}
+    {{- end }}
+  - port: reloader-web
+    {{- if .Values.prometheus.serviceMonitor.interval }}
+    interval: {{ .Values.prometheus.serviceMonitor.interval }}
+    {{- end }}
+    {{- if .Values.prometheus.serviceMonitor.scheme }}
+    scheme: {{ .Values.prometheus.serviceMonitor.scheme }}
+    {{- end }}
+    {{- if .Values.prometheus.serviceMonitor.tlsConfig }}
+    tlsConfig: {{- toYaml .Values.prometheus.serviceMonitor.tlsConfig | nindent 6 }}
+    {{- end }}
+    path: "/metrics"
+    {{- if .Values.prometheus.serviceMonitor.metricRelabelings }}
+    metricRelabelings: {{- tpl (toYaml .Values.prometheus.serviceMonitor.metricRelabelings | nindent 6) . }}
+    {{- end }}
+    {{- if .Values.prometheus.serviceMonitor.relabelings }}
+    relabelings: {{- toYaml .Values.prometheus.serviceMonitor.relabelings | nindent 6 }}
+    {{- end }}
+  {{- range .Values.prometheus.serviceMonitor.additionalEndpoints }}
+  - port: {{ .port }}
+    {{- if or $.Values.prometheus.serviceMonitor.interval .interval }}
+    interval: {{ default $.Values.prometheus.serviceMonitor.interval .interval }}
+    {{- end }}
+    {{- if or $.Values.prometheus.serviceMonitor.proxyUrl .proxyUrl }}
+    proxyUrl: {{ default $.Values.prometheus.serviceMonitor.proxyUrl .proxyUrl }}
+    {{- end }}
+    {{- if or $.Values.prometheus.serviceMonitor.scheme .scheme }}
+    scheme: {{ default $.Values.prometheus.serviceMonitor.scheme .scheme }}
+    {{- end }}
+    {{- if or $.Values.prometheus.serviceMonitor.bearerTokenFile .bearerTokenFile }}
+    bearerTokenFile: {{ default $.Values.prometheus.serviceMonitor.bearerTokenFile .bearerTokenFile }}
+    {{- end }}
+    {{- if or $.Values.prometheus.serviceMonitor.tlsConfig .tlsConfig }}
+    tlsConfig: {{- default $.Values.prometheus.serviceMonitor.tlsConfig .tlsConfig | toYaml | nindent 6 }}
+    {{- end }}
+    path: {{ .path }}
+    {{- if or $.Values.prometheus.serviceMonitor.metricRelabelings .metricRelabelings }}
+    metricRelabelings: {{- tpl (default $.Values.prometheus.serviceMonitor.metricRelabelings .metricRelabelings | toYaml | nindent 6) . }}
+    {{- end }}
+    {{- if or $.Values.prometheus.serviceMonitor.relabelings .relabelings }}
+    relabelings: {{- default $.Values.prometheus.serviceMonitor.relabelings .relabelings | toYaml | nindent 6 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

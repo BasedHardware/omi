@@ -1,0 +1,57 @@
+{{- /*
+Generated from 'config-reloaders' group from https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/65922b9fd8c3869c06686b44f5f3aa9f96560666/manifests/prometheusOperator-prometheusRule.yaml
+Do not change in-place! In order to change this file first read following link:
+https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack/hack
+*/ -}}
+{{- $kubeTargetVersion := default .Capabilities.KubeVersion.GitVersion .Values.kubeTargetVersionOverride }}
+{{- if and (semverCompare ">=1.14.0-0" $kubeTargetVersion) (semverCompare "<9.9.9-9" $kubeTargetVersion) .Values.defaultRules.create .Values.defaultRules.rules.configReloaders }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ printf "%s-%s" (include "kube-prometheus-stack.fullname" .) "config-reloaders" | trunc 63 | trimSuffix "-" }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+{{- if .Values.defaultRules.labels }}
+{{ toYaml .Values.defaultRules.labels | indent 4 }}
+{{- end }}
+{{- if .Values.defaultRules.annotations }}
+  annotations:
+{{ toYaml .Values.defaultRules.annotations | indent 4 }}
+{{- end }}
+spec:
+  groups:
+  - name: config-reloaders
+    rules:
+{{- if not (.Values.defaultRules.disabled.ConfigReloaderSidecarErrors | default false) }}
+    - alert: ConfigReloaderSidecarErrors
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.configReloaders }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.configReloaders | indent 8 }}
+{{- end }}
+        description: 'Errors encountered while the {{`{{`}}$labels.pod{{`}}`}} config-reloader sidecar attempts to sync config in {{`{{`}}$labels.namespace{{`}}`}} namespace.
+
+          As a result, configuration for service running in {{`{{`}}$labels.pod{{`}}`}} may be stale and cannot be updated anymore.'
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus-operator/configreloadersidecarerrors
+        summary: config-reloader sidecar has not had a successful reload for 10m
+      expr: max_over_time(reloader_last_reload_successful{namespace=~".+"}[5m]) == 0
+      for: {{ dig "ConfigReloaderSidecarErrors" "for" "10m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "ConfigReloaderSidecarErrors" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.configReloaders }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.configReloaders }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}

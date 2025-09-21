@@ -1,0 +1,93 @@
+{{- /*
+Generated from 'kube-prometheus-node-recording.rules' group from https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/65922b9fd8c3869c06686b44f5f3aa9f96560666/manifests/kubePrometheus-prometheusRule.yaml
+Do not change in-place! In order to change this file first read following link:
+https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack/hack
+*/ -}}
+{{- $kubeTargetVersion := default .Capabilities.KubeVersion.GitVersion .Values.kubeTargetVersionOverride }}
+{{- if and (semverCompare ">=1.14.0-0" $kubeTargetVersion) (semverCompare "<9.9.9-9" $kubeTargetVersion) .Values.defaultRules.create .Values.defaultRules.rules.kubePrometheusNodeRecording }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ printf "%s-%s" (include "kube-prometheus-stack.fullname" .) "kube-prometheus-node-recording.rules" | trunc 63 | trimSuffix "-" }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+{{- if .Values.defaultRules.labels }}
+{{ toYaml .Values.defaultRules.labels | indent 4 }}
+{{- end }}
+{{- if .Values.defaultRules.annotations }}
+  annotations:
+{{ toYaml .Values.defaultRules.annotations | indent 4 }}
+{{- end }}
+spec:
+  groups:
+  - name: kube-prometheus-node-recording.rules
+    rules:
+    - expr: sum(rate(node_cpu_seconds_total{mode!="idle",mode!="iowait",mode!="steal"}[3m])) BY (instance)
+      record: instance:node_cpu:rate:sum
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+      labels:
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    - expr: sum(rate(node_network_receive_bytes_total[3m])) BY (instance)
+      record: instance:node_network_receive_bytes:rate:sum
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+      labels:
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    - expr: sum(rate(node_network_transmit_bytes_total[3m])) BY (instance)
+      record: instance:node_network_transmit_bytes:rate:sum
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+      labels:
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    - expr: sum(rate(node_cpu_seconds_total{mode!="idle",mode!="iowait",mode!="steal"}[5m])) WITHOUT (cpu, mode) / ON(instance) GROUP_LEFT() count(sum(node_cpu_seconds_total) BY (instance, cpu)) BY (instance)
+      record: instance:node_cpu:ratio
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+      labels:
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    - expr: sum(rate(node_cpu_seconds_total{mode!="idle",mode!="iowait",mode!="steal"}[5m]))
+      record: cluster:node_cpu:sum_rate5m
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+      labels:
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    - expr: cluster:node_cpu:sum_rate5m / count(sum(node_cpu_seconds_total) BY (instance, cpu))
+      record: cluster:node_cpu:ratio
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+      labels:
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.kubePrometheusNodeRecording }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}

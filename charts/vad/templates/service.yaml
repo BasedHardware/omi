@@ -1,0 +1,30 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: vad-backend-config
+spec:
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    port: {{ .Values.service.port }}
+    type: HTTP
+    requestPath: /health  # Ensure this path returns 200 OK
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vad.fullname" . }}
+  labels:
+    {{- include "vad.labels" . | nindent 4 }}
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "vad-backend-config"}'  # Link to BackendConfig
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "vad.selectorLabels" . | nindent 4 }}

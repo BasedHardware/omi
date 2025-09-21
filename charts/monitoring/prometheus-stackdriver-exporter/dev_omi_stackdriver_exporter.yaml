@@ -1,0 +1,22 @@
+stackdriver:
+  projectIds:
+    - "based-hardware-dev"
+  metrics:
+    prefixes:
+      - 'loadbalancing.googleapis.com/https/backend_request_count'
+    # The filters to refine the metrics query by using Filter objects that Google provides.
+    # Filter objects: project, group.id, resource.type, resource.labels.[KEY], metric.type, metric.labels.[KEY]
+    # https://cloud.google.com/monitoring/api/v3/filters
+    filters:
+      - 'loadbalancing.googleapis.com/https/backend_request_count:resource.labels.backend_target_name="dev-backend-listen"'
+    interval: '1m'
+    offset: '1m'
+    # ingestDelay: true
+
+# extraArgs:
+#   log.level: debug
+
+serviceAccount:
+  create: true
+  annotations:
+    iam.gke.io/gcp-service-account: "dev-omi-prom-stackdriver-gsa@based-hardware-dev.iam.gserviceaccount.com"

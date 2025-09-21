@@ -1,0 +1,61 @@
+{{- if .Values.prometheusOperator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "kube-prometheus-stack.operator.fullname" . }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    {{- include "kube-prometheus-stack.prometheus-operator.labels" . | nindent 4 }}
+{{- if .Values.prometheusOperator.service.labels }}
+{{ toYaml .Values.prometheusOperator.service.labels | indent 4 }}
+{{- end }}
+{{- if .Values.prometheusOperator.service.annotations }}
+  annotations:
+{{ toYaml .Values.prometheusOperator.service.annotations | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.prometheusOperator.service.clusterIP }}
+  clusterIP: {{ .Values.prometheusOperator.service.clusterIP }}
+{{- end }}
+{{- if .Values.prometheusOperator.service.ipDualStack.enabled }}
+  ipFamilies: {{ toYaml .Values.prometheusOperator.service.ipDualStack.ipFamilies | nindent 4 }}
+  ipFamilyPolicy: {{ .Values.prometheusOperator.service.ipDualStack.ipFamilyPolicy }}
+{{- end }}
+{{- if .Values.prometheusOperator.service.externalIPs }}
+  externalIPs:
+{{ toYaml .Values.prometheusOperator.service.externalIPs | indent 4 }}
+{{- end }}
+{{- if .Values.prometheusOperator.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.prometheusOperator.service.loadBalancerIP }}
+{{- end }}
+{{- if .Values.prometheusOperator.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+  {{- range $cidr := .Values.prometheusOperator.service.loadBalancerSourceRanges }}
+    - {{ $cidr }}
+  {{- end }}
+{{- end }}
+{{- if ne .Values.prometheusOperator.service.type "ClusterIP" }}
+  externalTrafficPolicy: {{ .Values.prometheusOperator.service.externalTrafficPolicy }}
+{{- end }}
+  ports:
+  {{- if not .Values.prometheusOperator.tls.enabled }}
+  - name: http
+    {{- if eq .Values.prometheusOperator.service.type "NodePort" }}
+    nodePort: {{ .Values.prometheusOperator.service.nodePort }}
+    {{- end }}
+    port: 8080
+    targetPort: http
+  {{- end }}
+  {{- if .Values.prometheusOperator.tls.enabled }}
+  - name: https
+    {{- if eq .Values.prometheusOperator.service.type "NodePort"}}
+    nodePort: {{ .Values.prometheusOperator.service.nodePortTls }}
+    {{- end }}
+    port: 443
+    targetPort: https
+  {{- end }}
+  selector:
+    app: {{ template "kube-prometheus-stack.name" . }}-operator
+    release: {{ $.Release.Name | quote }}
+  type: "{{ .Values.prometheusOperator.service.type }}"
+{{- end }}

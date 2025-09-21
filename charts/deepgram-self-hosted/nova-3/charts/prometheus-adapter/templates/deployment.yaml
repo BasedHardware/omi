@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- if or .Values.customAnnotations .Values.deploymentAnnotations }}
+  annotations:
+    {{- with .Values.customAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.deploymentAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  labels:
+    {{- include "k8s-prometheus-adapter.labels" . | indent 4 }}
+  name: {{ template "k8s-prometheus-adapter.fullname" . }}
+  namespace: {{ include "k8s-prometheus-adapter.namespace" . }}
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy: {{ toYaml .Values.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "k8s-prometheus-adapter.selectorLabels" . | indent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "k8s-prometheus-adapter.labels" . | indent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | trim | nindent 8 }}
+        {{- end }}
+      name: {{ template "k8s-prometheus-adapter.name" . }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.customAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+      serviceAccountName: {{ template "k8s-prometheus-adapter.serviceAccountName" . }}
+      {{- if .Values.hostNetwork.enabled }}
+      hostNetwork: true
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end}}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.env }}
+        env:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        args:
+        - /adapter
+        - --secure-port={{ .Values.listenPort }}
+        {{- if or .Values.tls.enable .Values.certManager.enabled }}
+        - --tls-cert-file=/var/run/serving-cert/tls.crt
+        - --tls-private-key-file=/var/run/serving-cert/tls.key
+        {{- end }}
+        - --cert-dir=/tmp/cert
+        - --prometheus-url={{ tpl .Values.prometheus.url . }}{{ if .Values.prometheus.port }}:{{ .Values.prometheus.port }}{{end}}{{ .Values.prometheus.path }}
+        - --metrics-relist-interval={{ .Values.metricsRelistInterval }}
+        - --v={{ .Values.logLevel }}
+        - --config=/etc/adapter/config.yaml
+        {{- if .Values.extraArguments }}
+        {{- toYaml .Values.extraArguments | trim | nindent 8 }}
+        {{- end }}
+        ports:
+        - containerPort: {{ .Values.listenPort }}
+          name: https
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if .Values.resources }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- end }}
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        {{- if .Values.extraVolumeMounts }}
+        {{ toYaml .Values.extraVolumeMounts | trim | nindent 8 }}
+        {{ end }}
+        - mountPath: /etc/adapter/
+          name: config
+          readOnly: true
+        - mountPath: /tmp
+          name: tmp
+        {{- if or .Values.tls.enable .Values.certManager.enabled }}
+        - mountPath: /var/run/serving-cert
+          name: volume-serving-cert
+          readOnly: true
+        {{- end }}
+      {{- with .Values.extraContainers }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      volumes:
+      {{- if .Values.extraVolumes  }}
+      {{ toYaml .Values.extraVolumes | trim | nindent 6 }}
+      {{ end }}
+      - name: config
+        configMap:
+          name: {{ .Values.rules.existing | default (include "k8s-prometheus-adapter.fullname" . ) }}
+      - name: tmp
+        emptyDir: {}
+      {{- if or .Values.tls.enable .Values.certManager.enabled }}
+      - name: volume-serving-cert
+        secret:
+          secretName: {{ template "k8s-prometheus-adapter.fullname" . }}
+      {{- end }}
