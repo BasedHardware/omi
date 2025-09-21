@@ -534,10 +534,33 @@ def continue_chat_node(state: GraphState) -> GraphState:
 
 workflow = StateGraph(GraphState)
 
-workflow.add_edge(START, "determine_conversation")
+# TODO: could be optimized using parallization or subgraphs.
+# Start with insights check
+workflow.add_edge(START, "check_insights")
 
+workflow.add_node("check_insights", lambda state: state)  # Pass-through for routing
+workflow.add_conditional_edges(
+    "check_insights",
+    should_process_chat_insights,
+    {
+        "process_insights": "create_pseudo_conversation",
+        "continue": "determine_conversation",  # Skip insights, go to normal flow
+    },
+)
+
+# Insights processing pipeline (runs BEFORE conversation processing)
+workflow.add_node("create_pseudo_conversation", create_pseudo_conversation_node)
+workflow.add_node("extract_memories", extract_memories_node)
+workflow.add_node("save_action_items", save_action_items_node)
+workflow.add_node("extract_trends", extract_trends_node)
+
+workflow.add_edge("create_pseudo_conversation", "extract_memories")
+workflow.add_edge("extract_memories", "save_action_items")
+workflow.add_edge("save_action_items", "extract_trends")
+workflow.add_edge("extract_trends", "determine_conversation")  # After insights, continue to conversation
+
+# Normal conversation flow (unchanged)
 workflow.add_node("determine_conversation", determine_conversation)
-
 workflow.add_conditional_edges("determine_conversation", determine_conversation_type)
 
 workflow.add_node("no_context_conversation", no_context_conversation)
@@ -546,69 +569,26 @@ workflow.add_node("context_dependent_conversation", context_dependent_conversati
 workflow.add_node("file_chat_question", file_chat_question)
 workflow.add_node("persona_question", persona_question)
 
-# ADDING process human messages into memories and action items
-workflow.add_node("continue_chat", continue_chat_node)
-workflow.add_node("create_pseudo_conversation", create_pseudo_conversation_node)
-workflow.add_node("extract_memories", extract_memories_node)
-workflow.add_node("save_action_items", save_action_items_node)
-workflow.add_node("extract_trends", extract_trends_node)
+# Simple edges to END (like before)
+workflow.add_edge("no_context_conversation", END)
+workflow.add_edge("omi_question", END)
+workflow.add_edge("persona_question", END)
+workflow.add_edge("file_chat_question", END)
 
-# workflow.add_edge("no_context_conversation", END)
-# workflow.add_edge("omi_question", END)
-# workflow.add_edge("persona_question", END)
-# workflow.add_edge("file_chat_question", END)
-
-# ADDING process human messages into memories and action items
-workflow.add_conditional_edges(
-    "no_context_conversation",
-    should_process_chat_insights,
-    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
-)
-workflow.add_conditional_edges(
-    "omi_question",
-    should_process_chat_insights,
-    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
-)
-workflow.add_conditional_edges(
-    "persona_question",
-    should_process_chat_insights,
-    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
-)
-workflow.add_conditional_edges(
-    "file_chat_question",
-    should_process_chat_insights,
-    {"process_insights": "create_pseudo_conversation", "continue": "continue_chat"},
-)
-
-# Insights processing pipeline
-workflow.add_edge("create_pseudo_conversation", "extract_memories")
-workflow.add_edge("extract_memories", "save_action_items")
-workflow.add_edge("save_action_items", "extract_trends")
-workflow.add_edge("extract_trends", "continue_chat")
-
-# All paths converge to continue_chat, then END
-workflow.add_edge("continue_chat", END)
-
+# RAG pipeline
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
-
 workflow.add_node("retrieve_topics_filters", retrieve_topics_filters)
 workflow.add_node("retrieve_date_filters", retrieve_date_filters)
-
 workflow.add_edge("retrieve_topics_filters", "query_vectors")
 workflow.add_edge("retrieve_date_filters", "query_vectors")
-
 workflow.add_node("query_vectors", query_vectors)
-
 workflow.add_edge("query_vectors", "qa_handler")
-
 workflow.add_node("qa_handler", qa_handler)
-
 workflow.add_edge("qa_handler", END)
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
-
 graph_stream = workflow.compile()
 
 
