@@ -79,7 +79,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
               // Instructions
               Text(
                 _permissionRequested
-                    ? 'Permission granted! Now:\n\n1. Check your Apple Watch for the popup\n2. Tap "Allow" on your watch\n3. App will close - reopen it\n4. Tap "Continue" below'
+                    ? 'Permission granted! Now:\n\nOpen the Omi app on your watch and tap "Continue" below'
                     : 'We need microphone permission.\n\n1. Tap "Grant Permission"\n2. Allow on your iPhone\n3. Watch app will close\n4. Reopen and tap "Continue"',
                 style: responsive.bodyLarge.copyWith(
                   height: 1.6,
