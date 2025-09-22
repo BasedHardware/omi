@@ -1,0 +1,346 @@
+[
+  {
+    "question": "How do I update my Friend Device firmware from version 1.0.2?",
+    "answer": "Connect your device to your computer via USB-C, locate the small hole on your device, press the tiny button twice quickly using a pin, verify your computer recognizes the device as '/Volumes/XIAO-SENSE', download bootloader0.9.0.uf2 and firmware1.0.4.uf2 files, drag and drop the bootloader file first, wait for automatic ejection, double-tap the button again, then drag and drop the firmware file. Restart the app after completion."
+  },
+  {
+    "question": "How do I charge my Friend device?",
+    "answer": "Make sure your device is turned on (red or blue light visible), connect the device to any compatible charger. The charging indicator in the app may not always be accurate. Note: The off/on switch physically disconnects the battery, so the device must be on to charge properly."
+  },
+  {
+    "question": "Why won't my Friend device charge when it's switched off?",
+    "answer": "The off/on switch of the device physically disconnects the battery. If you plug the device with the switch off, the board will never be able to send power to the battery as it's disconnected."
+  },
+  {
+    "question": "How long does order processing take?",
+    "answer": "Orders placed on weekends typically take about 48 hours to be fulfilled. Orders placed on weekdays are usually fulfilled within 24 hours."
+  },
+  {
+    "question": "How do I track my Omi device shipment?",
+    "answer": "After your order ships, you'll receive an email with a tracking link. Click the link to see real-time updates, carrier information, estimated delivery date, and you can subscribe to email notifications for key updates."
+  },
+  {
+    "question": "What should I do if my tracking hasn't updated for several days?",
+    "answer": "It's normal for tracking to pause for 6-7 days, especially between carriers or countries. Allow at least 10 days for updates. If no update after 10 days, contact help@omi.me for a replacement or refund."
+  },
+  {
+    "question": "What does it mean when tracking shows my package arrived in my country but no further updates?",
+    "answer": "Once your package arrives in your country, it's often handed over to your local carrier for last-mile delivery. Contact your local carrier with the tracking number for more details."
+  },
+  {
+    "question": "How do conversations work in Omi?",
+    "answer": "When you speak with the Omi device connected to your app, communications are recorded and summarized. Important action items and events are highlighted to form a 'Conversation'. The app waits 2 minutes after no sound to finalize the communication and create a Conversation."
+  },
+  {
+    "question": "What are Omi Apps and what can they do?",
+    "answer": "Omi apps are modular extensions that enhance core features. They can modify app behavior, analyze conversations, connect with external services, chat with memories, extract specific information, automate tasks, and analyze conversations in real-time for insights."
+  },
+  {
+    "question": "What are the three types of Omi Apps?",
+    "answer": "The three types are: 1) External Integrations (connect third-party services like Zapier, Notion, BookWatch), 2) Chat Apps (mimic personalities or provide advice), and 3) Memory Apps (triggered when memories are created, like Insight Extractor)."
+  },
+  {
+    "question": "How do I update DevKit2 firmware?",
+    "answer": "Open the case from the USB side, locate the reset button (red-colored), connect via USB-C cable, press reset button twice quickly, verify '/Volumes/XIAO-SENSE' appears, download bootloader 0.9.0.uf2 and Omi_DK2_v2.0.10.uf2 files, drag bootloader first, wait for ejection, double-tap reset again, drag firmware file, then restart the app."
+  },
+  {
+    "question": "How do I charge DevKit2?",
+    "answer": "For first-time users, press and hold the center for 2-3 seconds until you hear a buzzer and feel vibration with red light. Connect to any compatible charger - a blinking green light should appear indicating charging. If already connected to app, you'll see green light alongside red or blue light."
+  },
+  {
+    "question": "What are the limitations of Friend V1 compared to DevKit2?",
+    "answer": "Friend V1 limitations: always needed app connection, no onboard memory, no speaker or dedicated button. DevKit2 overcomes these with onboard SD card storage, programmable button, and small speaker."
+  },
+  {
+    "question": "How do I use DevKit2's SD card sync feature?",
+    "answer": "Since DevKit2 has inbuilt SD card, recordings are stored when not connected to app. To convert to memories, connect device to app, navigate to Settings > Device Settings > SD Card Sync, then import audio files and convert them to memories."
+  },
+  {
+    "question": "How do I power on my Omi device?",
+    "answer": "Simply press the device once. If you see a light or feel a small buzz, it's ready. If nothing happens, the battery might be empty - connect to charger and a light should appear within seconds."
+  },
+  {
+    "question": "What do the different colored lights mean on my Omi device?",
+    "answer": "Red light: device is on but not connected to Omi AI app. Light red/orange light: device is charging. Blue light: device is connected to Omi AI app and ready."
+  },
+  {
+    "question": "How do I connect my Omi device to the app?",
+    "answer": "Download the Omi AI app from App Store (iOS) or Play Store (Android), open the app and follow on-screen instructions to pair your device. When successful, the device light will turn blue."
+  },
+  {
+    "question": "How do I talk with my Omi device?",
+    "answer": "Once connected, tap and hold the device, ask any question or share a thought, release your finger when done speaking. Omi will reply via phone notification and save the response in the chat inside the app."
+  },
+  {
+    "question": "How do I charge my Omi device?",
+    "answer": "Make sure device is functioning properly and turned on (red or blue light visible), place it on the charger and connect charger to power adapter or laptop. Orange light should appear indicating charging. First-time charging may take a few seconds to 2-3 minutes for light to appear."
+  },
+  {
+    "question": "What languages does Omi support?",
+    "answer": "Omi supports Bulgarian, Catalan, Chinese, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Latvian, Lithuanian, Malay, Norwegian, Polish, Portuguese, Romanian, Russian, Slovak, Spanish, Swedish, Thai, Turkish, Ukrainian, and Vietnamese. English offers the best accuracy."
+  },
+  {
+    "question": "Can Omi automatically switch between languages during a conversation?",
+    "answer": "No, Omi cannot automatically switch between languages during a conversation. If you switch languages, you need to manually change the language in settings. Omi also cannot detect multiple languages in a single conversation."
+  },
+  {
+    "question": "What should I do if my Omi device is not responding?",
+    "answer": "First, press the device button to initiate response. Place device on charger correctly until lights turn on. Check charging cables, adapter, and power outlet functionality. Inspect charging port for debris. If still unresponsive, contact Omi support team for return or replacement options."
+  },
+  {
+    "question": "Why is English the most recommended language for Omi?",
+    "answer": "English is the most stable and well-supported language in Omi, ensuring highly accurate transcripts. Other languages may occasionally miss a few words due to stability issues."
+  },
+  {
+    "question": "How does the DevKit2 programmable button work?",
+    "answer": "DevKit2 includes a programmable button that can be configured for various commands, such as 'Hey Omi, turn on the lights' for home automation. While this functionality is not fully available yet, developers can contribute features and earn bounties."
+  },
+  {
+    "question": "What makes DevKit2 different from Friend V1?",
+    "answer": "DevKit2 doesn't need constant app connection, has onboard SD card memory, includes a programmable button, features a small speaker for audio feedback, and uses a custom PCB designed specifically for the product's requirements."
+  },
+  {
+    "question": "When will I receive tracking information for my order?",
+    "answer": "You'll receive an email confirmation with a tracking link after your order has shipped. This link allows you to follow your package in real time and view the estimated delivery date."
+  },
+  {
+    "question": "What should I expect for delivery times?",
+    "answer": "Delivery times vary by region and carrier. Use the tracking link for the most accurate updates. You can subscribe to email notifications on the tracking page for key updates like arrival at local facilities or delivery status."
+  },
+  {
+    "question": "What happens if my package is delayed in customs?",
+    "answer": "Some shipments take longer depending on customs and local delivery processes. Allow at least 10 days for updates. After 10 days with no update, contact help@omi.me with order details for replacement or refund."
+  },
+  {
+    "question": "How do I know if my Friend device firmware needs updating?",
+    "answer": "If you're seeing error messages in the app and your current firmware version is 1.0.2, you need to manually update to the latest version. Future updates will be available through the app with just a button press."
+  },
+  {
+    "question": "What files do I need to update Friend device firmware?",
+    "answer": "You need two files: bootloader0.9.0.uf2 and firmware1.0.4.uf2. Download both files to your computer before starting the update process."
+  },
+  {
+    "question": "How do I know if my Friend device entered reset mode successfully?",
+    "answer": "After pressing the reset button twice, your computer should recognize the device and you should see a drive named '/Volumes/XIAO-SENSE'. This indicates the device has successfully entered reset mode."
+  },
+  {
+    "question": "What is the proper order for installing firmware files?",
+    "answer": "First drag and drop the bootloader .uf2 file, wait for automatic ejection, then set device back to reset mode by double-tapping the button, and finally drag and drop the firmware file."
+  },
+  {
+    "question": "Why does my Friend device automatically eject during firmware update?",
+    "answer": "The device automatically ejects itself once the bootloader flashing process is complete. This is normal behavior - you need to set it back to reset mode for the firmware installation."
+  },
+  {
+    "question": "What should I do after successfully updating firmware?",
+    "answer": "As a final step, restart the app and you should be good to go with the latest device update. Future updates will be available through the app interface."
+  },
+  {
+    "question": "Why doesn't my charging indicator show accurate percentage?",
+    "answer": "The charging indicator in the app may not always be accurate. If you notice the percentage doesn't change while connected to charger, don't worry - this is a known issue and doesn't affect actual charging."
+  },
+  {
+    "question": "What should I do if my DevKit2 doesn't show green charging light?",
+    "answer": "If device is completely new and firmware version is 1.0.5, you might not see green light. Instead, a red light may appear, which is expected behavior for this firmware version."
+  },
+  {
+    "question": "How long should I hold the DevKit2 center button for first use?",
+    "answer": "For first-time users, press and hold at the center of the device for at least 2-3 seconds. You should hear a buzzer sound and feel vibration with a red light appearing."
+  },
+  {
+    "question": "What does it mean when DevKit2 shows both green and red/blue lights?",
+    "answer": "If the device is already connected to the app or turned on (red or blue light), you will see a green blinking light alongside the red or blue light when charging."
+  },
+  {
+    "question": "How do I access DevKit2's SD card recordings?",
+    "answer": "Connect DevKit2 to the app, navigate to Settings > Device Settings > SD Card Sync to import all audio files stored on the onboard SD card and convert them into memories."
+  },
+  {
+    "question": "What are External Integration apps in Omi?",
+    "answer": "External Integrations connect third-party services to Omi. Currently supported platforms include Zapier (automate actions triggered by specific words), Notion (save conversation details), and BookWatch."
+  },
+  {
+    "question": "What are Chat Apps in Omi?",
+    "answer": "Chat apps are designed to mimic specific personalities (like Elon Musk) or perform functions like giving feedback, offering advice, and answering questions through conversational interface."
+  },
+  {
+    "question": "What are Memory Apps in Omi?",
+    "answer": "Memory apps use prompts to mimic personalities or perform specific tasks, but are triggered when a memory is created. Example: Insight Extractor analyzes conversations and extracts valuable insights after memory formation."
+  },
+  {
+    "question": "How can developers create custom Omi apps?",
+    "answer": "Developers interested in creating custom plugins can check the documentation on how to create apps. There are opportunities to earn bounties for contributing features, especially for DevKit2 functionalities."
+  },
+  {
+    "question": "What is the Insight Extractor app?",
+    "answer": "The Insight Extractor is a Memory App that analyzes conversations and extracts valuable insights after a memory is formed, helping you understand important patterns and information from your conversations."
+  },
+  {
+    "question": "How does Zapier integration work with Omi?",
+    "answer": "The Zapier integration allows you to automate actions triggered by specific words or phrases in a memory, enabling you to connect Omi conversations with hundreds of other applications and services."
+  },
+  {
+    "question": "How does Notion integration work with Omi?",
+    "answer": "The Notion integration allows you to save key details from conversations directly into your Notion workspace, making it easy to organize and reference important information from your Omi memories."
+  },
+  {
+    "question": "What happens when I stop talking during an Omi conversation?",
+    "answer": "When you stop talking, the app waits for 2 minutes to check if the communication has ended. If there's no voice after that time, the app finalizes that communication is over and begins creating a Conversation."
+  },
+  {
+    "question": "Can I continue talking after a pause in Omi conversations?",
+    "answer": "Yes, you can continue talking as much as you like. The app will keep recording for as long as there's active communication without interrupting your ongoing conversations."
+  },
+  {
+    "question": "What information is highlighted in Omi Conversations?",
+    "answer": "Important action items and events are highlighted to form a 'Conversation' in Omi. These help you revisit past communications or discussions whenever you need to recall something important."
+  },
+  {
+    "question": "What should I do if my Omi device firmware version is 1.0.2?",
+    "answer": "If your firmware version is 1.0.2, you need to manually update as this was shipped before app-based updates were available. Follow the manual firmware update process, and future updates will be available through the app."
+  },
+  {
+    "question": "What USB cable do I need for DevKit2 firmware updates?",
+    "answer": "You need a USB-C cable that supports data transfer (not just charging) to connect DevKit2 to your computer for firmware updates."
+  },
+  {
+    "question": "How do I open the DevKit2 case for firmware updates?",
+    "answer": "Open the case by pulling up the top, starting from the USB side makes it easier. Then locate the reset button on the board highlighted by a white circle around the red-colored reset button."
+  },
+  {
+    "question": "What files do I need for DevKit2 firmware update?",
+    "answer": "You need bootloader 0.9.0.uf2 and Omi_DK2_v2.0.10.uf2 files. Download both files to your computer before starting the update process."
+  },
+  {
+    "question": "What is the latest DevKit2 firmware version?",
+    "answer": "The latest DevKit2 firmware version mentioned is 2.0.10 (Omi_DK2_v2.0.10.uf2), which should be installed after the bootloader update."
+  },
+  {
+    "question": "Why do I need to press the reset button twice?",
+    "answer": "Pressing the reset button twice in quick succession puts the device into reset mode, which is necessary for the computer to recognize it as a drive for firmware installation."
+  },
+  {
+    "question": "What should I do if my computer doesn't recognize the device after reset?",
+    "answer": "Make sure you're using a USB-C cable that supports data transfer, not just charging. Try pressing the reset button twice quickly again, and ensure the device is properly connected."
+  },
+  {
+    "question": "Can I use Omi in multiple languages during one conversation?",
+    "answer": "No, Omi cannot detect or switch between multiple languages in a single conversation. If speakers use different languages, you'll need to manually adjust the language settings accordingly."
+  },
+  {
+    "question": "What should I do if my Omi device doesn't vibrate when pressed?",
+    "answer": "If the device doesn't vibrate or show a light when pressed, the battery may have discharged during transit. Connect it directly to a charger and wait for the charging light to appear."
+  },
+  {
+    "question": "How do I know if my Omi device is properly paired with the app?",
+    "answer": "When pairing is successful, the device's light will turn blue, indicating it's connected to the Omi AI app and ready for use."
+  },
+  {
+    "question": "What should I check if my Omi device won't charge?",
+    "answer": "Check the charging cables, adapter, power outlet functionality, and inspect the charging port for debris. Ensure the device is turned on and properly positioned on the charger."
+  },
+  {
+    "question": "How long does it take for the charging light to appear on Omi device?",
+    "answer": "For first-time charging, the light may take a few seconds to up to 2-3 minutes to appear. An orange light indicates the device is charging properly."
+  },
+  {
+    "question": "What platforms support the Omi AI app?",
+    "answer": "The Omi AI app is available on App Store for iOS devices and Play Store for Android devices."
+  },
+  {
+    "question": "What should I do if I can't find the reset button on my device?",
+    "answer": "On Friend V1, locate the small hole on your device. On DevKit2, open the case from the USB side and look for the red-colored reset button highlighted by a white circle on the board."
+  },
+  {
+    "question": "What happens during the bootloader flashing process?",
+    "answer": "During bootloader flashing, the device will automatically eject itself once the process is complete. This is normal behavior and indicates the bootloader installation was successful."
+  },
+  {
+    "question": "Can I use any pin to press the reset button?",
+    "answer": "Yes, find a small pin or similar thin tool to press the tiny reset button. The tool should be thin enough to fit into the small hole or press the button accurately."
+  },
+  {
+    "question": "What does XIAO-SENSE mean when updating firmware?",
+    "answer": "XIAO-SENSE is the name of the drive that appears when your Omi device successfully enters reset mode. Look for '/Volumes/XIAO-SENSE' on your computer to confirm reset mode."
+  },
+  {
+    "question": "Why can't I see my order tracking updates immediately?",
+    "answer": "Tracking updates may pause, especially when packages move between carriers or countries. This is normal and doesn't indicate a problem with your shipment."
+  },
+  {
+    "question": "How can I get updates about my shipment status?",
+    "answer": "You can subscribe to email notifications on the tracking page to receive regular updates about key milestones like arrival at local facilities, out-for-delivery status, or successful delivery."
+  },
+  {
+    "question": "What information can I find on the tracking page?",
+    "answer": "The tracking page shows which carrier is handling your order, shipment progress monitoring, carrier contact details including customer service phone number, and estimated delivery date based on your location."
+  },
+  {
+    "question": "When should I be concerned about shipping delays?",
+    "answer": "Allow at least 10 days for tracking updates before being concerned. Some shipments take longer due to customs and local delivery processes, which is normal."
+  },
+  {
+    "question": "What are my options if my package is lost or significantly delayed?",
+    "answer": "If tracking hasn't updated after 10 days, contact help@omi.me with your order details. Omi will arrange either a replacement shipment or issue a refund, whichever you prefer."
+  },
+  {
+    "question": "How do I contact Omi support for shipping issues?",
+    "answer": "For shipping issues after 10 days of no tracking updates, reach out to help@omi.me with your order details. The support team will help resolve the issue promptly."
+  },
+  {
+    "question": "What should I do if my local carrier has my package but tracking stopped?",
+    "answer": "If tracking shows your package arrived in your country but isn't updating, contact your local carrier directly with the tracking number for more specific delivery details."
+  },
+  {
+    "question": "Can I track my package through multiple carriers?",
+    "answer": "Yes, the tracking page will show which carrier is currently handling your order and provide their contact details. Packages may transfer between international and local carriers during delivery."
+  },
+  {
+    "question": "What does it mean when my package is 'in transit'?",
+    "answer": "When a package is in transit, it's moving between facilities or awaiting its next scan. This can cause gaps in tracking updates, which is normal behavior in the shipping process."
+  },
+  {
+    "question": "How can I prepare for DevKit2 firmware updates?",
+    "answer": "Before starting, ensure you have a data-capable USB-C cable, download the required bootloader and firmware files, and have a small pin or tool ready to press the reset button."
+  },
+  {
+    "question": "What happens if I drag the firmware file before the bootloader?",
+    "answer": "Always drag the bootloader file first, wait for automatic ejection, then set the device back to reset mode before dragging the firmware file. The correct order is crucial for successful updates."
+  },
+  {
+    "question": "How do I know when DevKit2 firmware update is complete?",
+    "answer": "After dragging the firmware file onto the XIAO-SENSE drive, the update process will complete automatically. Restart the Omi app as the final step to confirm the update was successful."
+  },
+  {
+    "question": "Can I use DevKit2 while it's charging?",
+    "answer": "Yes, you can use DevKit2 while charging. If the device is connected to the app, you'll see both the green charging light and the blue connection light simultaneously."
+  },
+  {
+    "question": "What should I do if DevKit2 doesn't respond after firmware update?",
+    "answer": "After firmware update, restart the Omi app completely. If the device still doesn't respond, try the reset process again or contact support for assistance."
+  },
+  {
+    "question": "Why does DevKit2 have better features than Friend V1?",
+    "answer": "DevKit2 was developed to address Friend V1's limitations. It includes onboard memory storage, doesn't require constant app connection, has a programmable button, includes a speaker, and uses a custom PCB design."
+  },
+  {
+    "question": "What can I do with DevKit2's programmable button in the future?",
+    "answer": "Future versions will allow the programmable button to control various smart home functions, voice commands, and custom actions. Developers can contribute to these features and earn bounties."
+  },
+  {
+    "question": "How does DevKit2's speaker enhance the experience?",
+    "answer": "The small speaker allows DevKit2 to provide audio feedback, confirmations, and responses directly from the device, making interactions more intuitive and immediate."
+  },
+  {
+    "question": "What is SD Card Sync in DevKit2?",
+    "answer": "SD Card Sync is a feature that allows you to import audio recordings stored on DevKit2's onboard SD card when the device wasn't connected to the app, then convert them into memories."
+  },
+  {
+    "question": "How much storage does DevKit2's SD card provide?",
+    "answer": "The documentation doesn't specify the exact storage capacity, but DevKit2 includes an inbuilt SD card for storing audio recordings when not connected to the app."
+  },
+  {
+    "question": "Can I record conversations with DevKit2 without the app?",
+    "answer": "Yes, unlike Friend V1, DevKit2 can record conversations independently using its onboard SD card storage. Later, you can sync these recordings with the app to create memories."
+  }
+]
