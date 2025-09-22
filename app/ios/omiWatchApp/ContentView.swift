@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  omiWatchApp
-//
-//  Created by Mohammed Mohsin on 13/09/25.
-//
-
 import SwiftUI
 
 struct WatchRecorderView: View {

@@ -179,18 +179,12 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
     });
 
     try {
-      // Request permission - this will cause the watch app to close
       await widget.connection.requestPermissionAndStartRecording();
 
       setState(() {
         _isRequestingPermission = false;
         _permissionRequested = true;
       });
-
-      AppSnackbar.showSnackbar(
-        'Permission request sent to your Apple Watch. Check your watch for the popup.',
-        duration: const Duration(seconds: 3),
-      );
     } catch (e) {
       setState(() {
         _isRequestingPermission = false;
@@ -205,7 +199,6 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
 
   Future<void> _continueAndStartRecording() async {
     try {
-      // Check if permission was granted and start recording
       final bool recordingStarted = await widget.connection.checkPermissionAndStartRecording();
 
       if (recordingStarted) {
@@ -214,12 +207,11 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
           duration: const Duration(seconds: 3),
         );
 
-        // Call the callback and close the page
         widget.onPermissionGranted?.call();
         Navigator.of(context).pop();
       } else {
         AppSnackbar.showSnackbar(
-          'Permission not granted yet. Please make sure you allowed microphone access on your watch and reopened the app.',
+          'Permission not granted yet. Please make sure you allowed microphone access and reopened the app on your watch.',
           duration: const Duration(seconds: 5),
         );
       }
@@ -251,8 +243,8 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
           '2. Open the Omi app on your watch\n'
           '3. Look for the permission popup\n'
           '4. Tap "Allow" when prompted\n'
-          '5. App will close - reopen it\n'
-          '6. Come back and tap "Continue"',
+          '5. App on your watch will close - reopen it\n'
+          '6. Come back and tap "Continue" on your iPhone',
           style: responsive.bodyMedium,
         ),
         actions: [

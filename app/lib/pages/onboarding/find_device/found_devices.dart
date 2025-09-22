@@ -75,10 +75,8 @@ class _FoundDevicesState extends State<FoundDevices> {
       final bool recordingStarted = await connection.checkPermissionAndStartRecording();
 
       if (!recordingStarted) {
-        // Permission not granted - show permission page
         await _showMicrophonePermissionPage(connection);
       } else {
-        // Recording started successfully - complete the onboarding
         await _completeAppleWatchOnboarding(device, provider);
       }
     } catch (e) {
@@ -111,14 +109,12 @@ class _FoundDevicesState extends State<FoundDevices> {
     );
   }
 
-  /// Show permission page when microphone permission is needed
   Future<void> _showMicrophonePermissionPage(AppleWatchDeviceConnection connection) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AppleWatchPermissionPage(
           connection: connection,
           onPermissionGranted: () async {
-            // Permission granted and recording started - complete onboarding
             final provider = Provider.of<OnboardingProvider>(context, listen: false);
             final device = provider.deviceList.firstWhere((d) => d.id == connection.device.id);
             await _completeAppleWatchOnboarding(device, provider);
@@ -128,20 +124,16 @@ class _FoundDevicesState extends State<FoundDevices> {
     );
   }
 
-  /// Complete Apple Watch onboarding after successful connection and recording
   Future<void> _completeAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
     try {
-      // Set device as connected in provider
       provider.deviceId = device.id;
       provider.deviceName = device.name;
       provider.isConnected = true;
       provider.isClicked = false;
       provider.connectingToDeviceId = null;
 
-      // Save device preferences
       await provider.deviceProvider?.scanAndConnectToDevice();
 
-      // Complete the onboarding flow
       if (widget.isFromOnboarding) {
         widget.goNext();
       } else {

@@ -69,7 +69,6 @@ class AppleWatchDeviceConnection extends DeviceConnection {
             for (final controller in _batteryControllers) {
               try {
                 controller.add([batteryLevelInt]);
-                debugPrint('Apple Watch: Forwarded battery level $batteryLevelInt% to controller');
               } catch (e) {
                 debugPrint('Apple Watch: Error forwarding battery to controller: $e');
               }
@@ -80,9 +79,6 @@ class AppleWatchDeviceConnection extends DeviceConnection {
         },
       );
       WatchRecorderFlutterAPI.setUp(_bridge!);
-      debugPrint('Apple Watch: Pigeon bridge setup completed');
-    } else {
-      debugPrint('Apple Watch: Pigeon bridge already exists');
     }
   }
 
@@ -90,7 +86,6 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
   }) async {
-    // No BLE connect for Apple Watch. Treat paired+reachable as connected.
     _ensurePigeonSetup();
 
     final bool supported = await _hostAPI.isWatchSessionSupported();
@@ -106,13 +101,11 @@ class AppleWatchDeviceConnection extends DeviceConnection {
       throw DeviceConnectionException('Apple Watch not paired');
     }
 
-    // Only call the callback once with the final state
     if (reachable) {
       debugPrint('Apple Watch is reachable - setting connected state');
       connectionState = DeviceConnectionState.connected;
       onConnectionStateChanged?.call(device.id, DeviceConnectionState.connected);
 
-      // Check if we should start recording after app relaunch
       await checkAndStartRecordingOnRelaunch();
     } else {
       debugPrint('Apple Watch is not reachable - setting disconnected state');
@@ -150,45 +143,31 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     try {
       debugPrint('Apple Watch: Requesting microphone permission...');
 
-      // Set flag indicating we're waiting for permission (watch app will close)
       await _setWaitingForPermissionFlag(true);
 
-      // Request microphone permission - this will cause the watch app to close
       await _hostAPI.requestMainAppMicrophonePermission();
-
-      debugPrint('Apple Watch: Permission requested - watch app will close and reopen');
     } catch (e) {
       debugPrint('Apple Watch: Error requesting permission: $e');
       await _setWaitingForPermissionFlag(false);
     }
   }
 
-  /// Check if we should start recording on app launch (after permission was granted)
   Future<void> checkAndStartRecordingOnRelaunch() async {
     try {
-      // Check if we were waiting for permission
       final bool wasWaitingForPermission = await _getWaitingForPermissionFlag();
       if (!wasWaitingForPermission) {
-        debugPrint('Apple Watch: Not waiting for permission - no action needed');
         return;
       }
 
-      debugPrint('Apple Watch: App relaunched - checking if permission was granted...');
-
-      // Check if permission is now granted
       final bool hasPermission = await _hostAPI.checkMainAppMicrophonePermission();
-      debugPrint('Apple Watch: Permission status after relaunch: $hasPermission');
 
       if (hasPermission) {
         // Clear the flag and start recording
         await _setWaitingForPermissionFlag(false);
-        debugPrint('Apple Watch: Permission granted after relaunch - starting recording...');
         await _hostAPI.startRecording();
-        debugPrint('Apple Watch: Recording started successfully after relaunch');
       } else {
         // Permission still not granted
         await _setWaitingForPermissionFlag(false);
-        debugPrint('Apple Watch: Permission still not granted after relaunch');
       }
     } catch (e) {
       debugPrint('Apple Watch: Error checking permission on relaunch: $e');
@@ -196,19 +175,15 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     }
   }
 
-  /// Set flag to indicate we're waiting for permission (stored in SharedPreferences)
   Future<void> _setWaitingForPermissionFlag(bool waiting) async {
     try {
-      // Use SharedPreferences to persist across app restarts
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('apple_watch_waiting_for_permission', waiting);
-      debugPrint('Apple Watch: Set waiting for permission flag: $waiting');
     } catch (e) {
       debugPrint('Apple Watch: Error setting permission flag: $e');
     }
   }
 
-  /// Get flag indicating if we're waiting for permission
   Future<bool> _getWaitingForPermissionFlag() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -222,58 +197,38 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   @override
   Future<bool> isConnected() async {
     final supported = await _hostAPI.isWatchSessionSupported();
-    print('Apple Watch isSupported: $supported');
     if (!supported) return false;
     final paired = await _hostAPI.isWatchPaired();
-    print('Apple Watch isPaired: $paired');
     if (!paired) return false;
     final reachable = await _hostAPI.isWatchReachable();
-    print('Apple Watch isConnected: $reachable');
     return reachable;
   }
 
   @override
   Future<void> disconnect() async {
-    // For Apple Watch, avoid calling BLE disconnect. Just notify and cleanup.
     connectionState = DeviceConnectionState.disconnected;
 
-    // Clean up audio controller
     if (_audioBytesController != null) {
       _audioControllers.remove(_audioBytesController);
       _audioBytesController?.close();
       _audioBytesController = null;
-      debugPrint('Apple Watch: Cleaned up audio controller on disconnect');
     }
 
-    // Clean up battery controller
     if (_batteryController != null) {
       _batteryControllers.remove(_batteryController);
       _batteryController?.close();
       _batteryController = null;
-      debugPrint('Apple Watch: Cleaned up battery controller on disconnect');
     }
   }
 
   @override
   Future<int> performRetrieveBatteryLevel() async {
-    // Get battery level from Apple Watch via Pigeon
     try {
       final batteryLevel = await _hostAPI.getWatchBatteryLevel();
-      print('Apple Watch battery level: $batteryLevel');
       return batteryLevel.round();
     } catch (e) {
       debugPrint('Apple Watch: Error getting battery level: $e');
       return -1;
-    }
-  }
-
-  /// Get Apple Watch battery level as percentage (0-100)
-  Future<double> getWatchBatteryLevel() async {
-    try {
-      return await _hostAPI.getWatchBatteryLevel();
-    } catch (e) {
-      debugPrint('Apple Watch: Error getting battery level: $e');
-      return 0.0;
     }
   }
 
@@ -287,21 +242,17 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     }
   }
 
-  /// Request immediate battery update from Apple Watch
   Future<void> requestWatchBatteryUpdate() async {
     try {
       await _hostAPI.requestWatchBatteryUpdate();
-      debugPrint('Apple Watch: Requested battery update');
     } catch (e) {
       debugPrint('Apple Watch: Error requesting battery update: $e');
     }
   }
 
-  /// Get Apple Watch device information (name, model, system version, etc.)
   Future<Map<String, String>> getWatchInfo() async {
     try {
       final deviceInfo = await _hostAPI.getWatchInfo();
-      debugPrint('Apple Watch: Device info: $deviceInfo');
       return deviceInfo;
     } catch (e) {
       debugPrint('Apple Watch: Error getting device info: $e');
@@ -313,32 +264,25 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
     void Function(int p1)? onBatteryLevelChange,
   }) async {
-    debugPrint('Apple Watch: Setting up battery level listener');
     _ensurePigeonSetup();
 
-    // Clean up any existing battery controller
     if (_batteryController != null) {
       _batteryControllers.remove(_batteryController);
       _batteryController?.close();
     }
 
-    // Create a new battery controller and register it globally
     _batteryController = StreamController<List<int>>.broadcast();
     _batteryControllers.add(_batteryController!);
 
     final subscription = _batteryController!.stream.listen((batteryData) {
       if (batteryData.isNotEmpty) {
         final batteryLevel = batteryData[0];
-        debugPrint('Apple Watch: Battery stream received $batteryLevel% - forwarding to callback');
         onBatteryLevelChange?.call(batteryLevel);
       }
     });
 
-    // Request initial battery update
     await requestWatchBatteryUpdate();
 
-    debugPrint(
-        'Apple Watch: Battery listener setup completed, registered controller (${_batteryControllers.length} total)');
     return subscription;
   }
 
@@ -346,26 +290,20 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int> p1) onAudioBytesReceived,
   }) async {
-    debugPrint('Apple Watch: Setting up audio bytes listener');
     _ensurePigeonSetup();
 
-    // Clean up any existing controller
     if (_audioBytesController != null) {
       _audioControllers.remove(_audioBytesController);
       _audioBytesController?.close();
     }
 
-    // Create a new controller and register it globally
     _audioBytesController = StreamController<List<int>>.broadcast();
     _audioControllers.add(_audioBytesController!);
 
     final subscription = _audioBytesController!.stream.listen((bytes) {
-      debugPrint('Apple Watch: Audio stream received ${bytes.length} bytes - forwarding to WebSocket');
       onAudioBytesReceived(bytes);
     });
 
-    debugPrint(
-        'Apple Watch: Audio listener setup completed, registered controller (${_audioControllers.length} total)');
     return subscription;
   }
 
@@ -378,7 +316,6 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetBleButtonListener({
     required void Function(List<int> p1) onButtonReceived,
   }) async {
-    // Not supported for Apple Watch via this path.
     return null;
   }
 

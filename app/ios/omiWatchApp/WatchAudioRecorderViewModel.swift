@@ -33,31 +33,21 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
     }
 
     func startRecording() {
-        print("Watch: startRecording called, current isRecording: \(isRecording)")
         guard !isRecording else {
-            print("Watch: Already recording, ignoring startRecording")
             return
         }
-
-        print("Watch: Starting audio recording...")
 
         // Check microphone permissions and setup audio session
         checkMicrophonePermissionAndSetup { [weak self] success in
             guard let self = self else {
-                print("Watch: self is nil in permission check completion")
                 return
             }
 
             if success {
-                print("Watch: Permission check successful, setting up audio streaming")
-                // Setup audio streaming
                 self.setupAudioStreaming()
                 self.isRecording = true
                 self.session.sendMessage(["method": "startRecording"], replyHandler: nil)
-                print("Watch: Recording started successfully")
             } else {
-                print("Watch: Failed to start recording - microphone permission denied or setup failed")
-                // Send error message to Flutter app
                 self.session.sendMessage(["method": "recordingError", "error": "Microphone permission denied"], replyHandler: nil)
             }
         }
@@ -65,7 +55,6 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
 
     func stopRecording() {
         guard isRecording else {
-            print("stopRecording called but not currently recording")
             return
         }
 
@@ -129,12 +118,9 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         
         if session.isReachable {
             session.sendMessage(messageData, replyHandler: nil) { error in
-                print("sendMessage failed for chunk \(self.chunkIndex): \(error.localizedDescription)")
                 // Fallback to transferUserInfo for background reliability
                 self.session.transferUserInfo(messageData)
-                print("Fallback: Sent chunk \(self.chunkIndex) via transferUserInfo (\(self.chunkBuffer.count) bytes)")
             }
-            print("Sent chunk \(chunkIndex) via sendMessage (\(chunkBuffer.count) bytes)")
         } else {
             // Use transferUserInfo when not reachable (background/screen off)
             session.transferUserInfo(messageData)
@@ -144,7 +130,6 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
     }
     
     private func sendFinalAudioChunk() {
-        // Send any remaining buffered data
         if !chunkBuffer.isEmpty {
             sendBufferedAudioChunk()
         }
@@ -160,48 +145,38 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         if session.isReachable {
             session.sendMessage(finalMessageData, replyHandler: nil) { error in
                 self.session.transferUserInfo(finalMessageData)
-                print("Final chunk sent via transferUserInfo fallback")
             }
         } else {
             session.transferUserInfo(finalMessageData)
         }
         
-        print("Sent final audio chunk \(chunkIndex)")
     }
 
     private func checkMicrophonePermissionAndSetup(completion: @escaping (Bool) -> Void) {
         let audioSession = AVAudioSession.sharedInstance()
         
-        // First check current permission status
         let permissionStatus = audioSession.recordPermission
-        print("Watch: Current microphone permission status: \(permissionStatus.rawValue)")
         
         switch permissionStatus {
         case .granted:
-            print("Watch: Microphone permission already granted")
             setupAudioSessionAfterPermission(completion: completion)
             
         case .denied:
-            print("Watch: Microphone permission denied")
             completion(false)
             
         case .undetermined:
-            print("Watch: Microphone permission undetermined, requesting permission")
-            // Request permission - this will show the permission dialog
+            // Request permission
             audioSession.requestRecordPermission { [weak self] granted in
                 DispatchQueue.main.async {
                     if granted {
-                        print("Watch: Microphone permission granted by user")
                         self?.setupAudioSessionAfterPermission(completion: completion)
                     } else {
-                        print("Watch: Microphone permission denied by user")
                         completion(false)
                     }
                 }
             }
             
         @unknown default:
-            print("Watch: Unknown microphone permission status")
             completion(false)
         }
     }
@@ -214,10 +189,8 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
                                        mode: .default,
                                        options: [.mixWithOthers, .allowBluetooth])
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            print("Watch: Audio session configured successfully for background recording")
             completion(true)
         } catch {
-            print("Watch: Audio session setup failed even with permission: \(error.localizedDescription)")
             completion(false)
         }
     }
@@ -229,19 +202,15 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         
         switch permissionStatus {
         case .granted:
-            print("Watch: Microphone permission already granted")
             session.sendMessage(["method": "microphonePermissionResult", "granted": true], replyHandler: nil)
             
         case .denied:
-            print("Watch: Microphone permission denied")
             session.sendMessage(["method": "microphonePermissionResult", "granted": false], replyHandler: nil)
             
         case .undetermined:
-            print("Watch: Microphone permission undetermined, requesting permission")
             // Request permission - this will show the permission dialog
             audioSession.requestRecordPermission { [weak self] granted in
                 DispatchQueue.main.async {
-                    print("Watch: Microphone permission request result: \(granted)")
                     self?.session.sendMessage([
                         "method": "microphonePermissionResult", 
                         "granted": granted
@@ -250,14 +219,12 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             }
             
         @unknown default:
-            print("Watch: Unknown microphone permission status")
             // Send failure result to main app
             session.sendMessage(["method": "microphonePermissionResult", "granted": false], replyHandler: nil)
         }
     }
 
     private func setupAudioStreaming() {
-        print("Setting up audio streaming...")
 
         do {
             audioEngine = AVAudioEngine()
@@ -291,7 +258,6 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
                 return
             }
             self.audioConverter = converter
-            print("Audio converter created: \(hardwareSampleRate)Hz -> 16000Hz")
 
             let bufferSize: AVAudioFrameCount = 512
 
@@ -302,10 +268,8 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             try audioEngine?.start()
             isStreaming = true
             chunkIndex = 0
-            print("Audio streaming started successfully (hardware rate: \(hardwareSampleRate)Hz -> 16kHz resampled)")
 
         } catch {
-            print("Failed to setup audio streaming: \(error)")
             print("Error details: \(error.localizedDescription)")
         }
     }
@@ -320,7 +284,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             return
         }
 
-        // Resample audio to 16kHz if converter is available
+        // Resample audio to 16kHz
         let processedBuffer: AVAudioPCMBuffer
         if let converter = audioConverter, let targetFormat = targetFormat {
             let outputFrameCapacity = AVAudioFrameCount(ceil(Double(frameLength) * 16000.0 / detectedSampleRate))
@@ -343,10 +307,8 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             }
 
             processedBuffer = outputBuffer
-            print("Resampled \(frameLength) frames at \(detectedSampleRate)Hz to \(outputBuffer.frameLength) frames at 16000Hz")
         } else {
             processedBuffer = buffer
-            print("Using original buffer without resampling (converter not available)")
         }
 
         // Convert resampled buffer to 16-bit PCM data
@@ -374,7 +336,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             return Data(buffer: buffer)
         }
 
-        // Buffer audio data for target-duration chunks instead of sending immediately
+        // Buffer audio data for target-duration chunks
         bufferAndSendAudioData(byteData)
     }
 }
@@ -391,19 +353,14 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
             guard let method = message["method"] as? String else { return }
             switch method {
             case "startRecording":
-                print("Received startRecording message from iOS app")
                 self.startRecording()
             case "stopRecording":
-                print("Received stopRecording message from iOS app")
                 self.stopRecording()
             case "requestMicrophonePermission":
-                print("Received requestMicrophonePermission message from iOS app")
                 self.requestMicrophonePermissionOnly()
             case "requestBattery":
-                print("WatchAudioRecorderViewModel: Received battery request from iPhone")
                 BatteryManager.shared.sendBatteryLevel()
             case "requestWatchInfo":
-                print("WatchAudioRecorderViewModel: Received watch info request from iPhone")
                 BatteryManager.shared.sendWatchInfo()
             default:
                 print("Unknown method: \(method)")
@@ -416,10 +373,8 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
             guard let method = userInfo["method"] as? String else { return }
             switch method {
             case "requestBattery":
-                print("WatchAudioRecorderViewModel: Received background battery request from iPhone")
                 BatteryManager.shared.sendBatteryLevel()
             case "requestWatchInfo":
-                print("WatchAudioRecorderViewModel: Received background watch info request from iPhone")
                 BatteryManager.shared.sendWatchInfo()
             default:
                 print("Unknown background method: \(method)")

@@ -15,28 +15,21 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
     func startRecording() {
 
         if session.isReachable {
-            print("Host API: Sending startRecording via sendMessage")
             session.sendMessage(["method": "startRecording"], replyHandler: nil, errorHandler: { error in
-                print("Host API: sendMessage failed, using fallback: \(error)")
                 try? self.session.updateApplicationContext(["method": "startRecording"])
             })
         } else {
-            print("Host API: Session not reachable, using updateApplicationContext")
             try? session.updateApplicationContext(["method": "startRecording"])
         }
     }
 
     func stopRecording() {
-        print("Host API: stopRecording called")
 
         if session.isReachable {
-            print("Host API: Sending stopRecording via sendMessage")
             session.sendMessage(["method": "stopRecording"], replyHandler: nil, errorHandler: { error in
-                print("Host API: sendMessage failed, using fallback: \(error)")
                 try? self.session.updateApplicationContext(["method": "stopRecording"])
             })
         } else {
-            print("Host API: Session not reachable, using updateApplicationContext")
             try? session.updateApplicationContext(["method": "stopRecording"])
         }
     }
@@ -63,51 +56,40 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
     func isWatchAppInstalled() -> Bool { session.isWatchAppInstalled }
 
     func requestWatchMicrophonePermission() {
-        print("Host API: requestWatchMicrophonePermission called")
         if session.isReachable {
-            print("Host API: Sending requestMicrophonePermission via sendMessage")
             session.sendMessage(["method": "requestMicrophonePermission"], replyHandler: nil, errorHandler: { error in
-                print("Host API: sendMessage failed for requestMicrophonePermission: \(error)")
                 try? self.session.updateApplicationContext(["method": "requestMicrophonePermission"])
             })
         } else {
-            print("Host API: Session not reachable, using updateApplicationContext for requestMicrophonePermission")
             try? session.updateApplicationContext(["method": "requestMicrophonePermission"])
         }
     }
 
     func requestMainAppMicrophonePermission() {
-        print("Host API: requestMainAppMicrophonePermission called")
         let audioSession = AVAudioSession.sharedInstance()
         let permissionStatus = audioSession.recordPermission
-        print("Host API: Current microphone permission status: \(permissionStatus.rawValue)")
 
         switch permissionStatus {
         case .granted:
             DispatchQueue.main.async {
                 self.flutterWatchAPI?.onMainAppMicrophonePermissionResult(granted: true) { _ in
-                    print("Host API: Permission result sent to Flutter - Success")
                 }
             }
         case .denied:
             DispatchQueue.main.async {
                 self.flutterWatchAPI?.onMainAppMicrophonePermissionResult(granted: false) { _ in
-                    print("Host API: Permission result sent to Flutter - Success")
                 }
             }
         case .undetermined:
             audioSession.requestRecordPermission { [weak self] granted in
-                print("Host API: Microphone permission request result: \(granted)")
                 DispatchQueue.main.async {
                     self?.flutterWatchAPI?.onMainAppMicrophonePermissionResult(granted: granted) { _ in
-                        print("Host API: Permission result sent to Flutter - Success")
                     }
                 }
             }
         @unknown default:
             DispatchQueue.main.async {
                 self.flutterWatchAPI?.onMainAppMicrophonePermissionResult(granted: false) { _ in
-                    print("Host API: Permission result sent to Flutter - Success")
                 }
             }
         }
@@ -116,40 +98,32 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
     func checkMainAppMicrophonePermission() -> Bool {
         let audioSession = AVAudioSession.sharedInstance()
         let hasPermission = audioSession.recordPermission == .granted
-        print("Host API: checkMainAppMicrophonePermission result: \(hasPermission)")
         return hasPermission
     }
     
     func getWatchBatteryLevel() -> Double {
         let batteryLevel = UserDefaults.standard.double(forKey: "watch_battery_level")
-        print("Host API: getWatchBatteryLevel result: \(batteryLevel)")
         return batteryLevel
     }
     
     func getWatchBatteryState() -> Int64 {
         let batteryState = UserDefaults.standard.integer(forKey: "watch_battery_state")
-        print("Host API: getWatchBatteryState result: \(batteryState)")
         return Int64(batteryState)
     }
     
     func requestWatchBatteryUpdate() {
-        print("Host API: requestWatchBatteryUpdate called")
         
         if session.isReachable {
-            print("Host API: Sending battery request via sendMessage")
             session.sendMessage(["method": "requestBattery"], replyHandler: nil, errorHandler: { error in
-                print("Host API: sendMessage failed for battery request: \(error)")
                 // Fallback for background/unreachable scenarios
                 self.session.transferUserInfo(["method": "requestBattery"])
             })
         } else {
-            print("Host API: Session not reachable, using transferUserInfo for battery request")
             session.transferUserInfo(["method": "requestBattery"])
         }
     }
     
     func getWatchInfo() -> [String: String] {
-        print("Host API: getWatchInfo called - requesting from watch")
         
         // Get cached watch info from UserDefaults (updated by watch messages)
         let name = UserDefaults.standard.string(forKey: "watch_device_name") ?? "Apple Watch"
@@ -166,18 +140,14 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
         
         // Also request fresh info from watch
         if session.isReachable {
-            print("Host API: Sending watch info request via sendMessage")
             session.sendMessage(["method": "requestWatchInfo"], replyHandler: nil, errorHandler: { error in
-                print("Host API: sendMessage failed for watch info request: \(error)")
                 // Fallback for background/unreachable scenarios
                 self.session.transferUserInfo(["method": "requestWatchInfo"])
             })
         } else {
-            print("Host API: Session not reachable, using transferUserInfo for watch info request")
             session.transferUserInfo(["method": "requestWatchInfo"])
         }
         
-        print("Host API: getWatchInfo result: \(deviceInfo)")
         return deviceInfo
     }
 }

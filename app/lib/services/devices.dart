@@ -164,8 +164,6 @@ class DeviceService implements IDeviceService {
       final paired = await host.isWatchPaired();
       final reachable = await host.isWatchReachable();
 
-      debugPrint('Apple Watch discovery: supported=$supported, paired=$paired, reachable=$reachable');
-
       if (supported && paired) {
         final appleWatch = BtDevice(
           name: 'Apple Watch',
@@ -175,7 +173,6 @@ class DeviceService implements IDeviceService {
         );
         _devices.removeWhere((d) => d.type == DeviceType.appleWatch);
         _devices.add(appleWatch);
-        debugPrint('Added Apple Watch to device list (reachable: $reachable)');
         onDevices(_devices);
       } else {
         // Remove Apple Watch if not supported/paired
@@ -191,7 +188,6 @@ class DeviceService implements IDeviceService {
     // Build a pseudo BLE device wrapper for factory (not used by AW connection)
     final device = _devices.firstWhereOrNull((f) => f.id == 'apple-watch');
     if (device == null) {
-      debugPrint('Apple Watch device not found in list');
       return;
     }
 
@@ -206,12 +202,6 @@ class DeviceService implements IDeviceService {
     _connection = DeviceConnectionFactory.create(device, fakeBle);
     try {
       await _connection?.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
-      // For Apple Watch, verify connection state after connect attempt
-      if (_connection != null && await _connection!.isConnected()) {
-        debugPrint('Apple Watch connected successfully');
-      } else {
-        debugPrint('Apple Watch connection failed - not reachable');
-      }
     } catch (e) {
       debugPrint('Error connecting to Apple Watch: $e');
       onDeviceConnectionStateChanged('apple-watch', DeviceConnectionState.disconnected);
@@ -292,11 +282,6 @@ class DeviceService implements IDeviceService {
     await _mutex.acquire();
     try {
       debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
-      if (_connection?.device.id == 'apple-watch') {
-        final isActuallyConnected = await _connection?.isConnected();
-        debugPrint(
-            "Apple Watch actual connection status: $isActuallyConnected vs stored status: ${_connection?.status}");
-      }
 
       // Not force
       if (!force && _connection != null) {

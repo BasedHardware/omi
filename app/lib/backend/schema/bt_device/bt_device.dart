@@ -218,6 +218,9 @@ class BtDevice {
 
   static shortId(String id) {
     try {
+      if (id == 'apple-watch') {
+        return 'watchOS';
+      }
       return id.replaceAll(':', '').split('-').last.substring(0, 6);
     } catch (e) {
       return id.length > 6 ? id.substring(0, 6) : id;

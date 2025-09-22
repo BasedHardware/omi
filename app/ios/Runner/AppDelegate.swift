@@ -121,9 +121,8 @@ extension FlutterError: Error {}
     }
 
     private func handleAudioChunk(_ message: [String: Any]) {
-        // Only process audio chunks if recording is actually active
         guard isRecordingActive else {
-            print("Ignoring audio chunk - recording not active (likely buffered message after app restart)")
+            print("Ignoring audio chunk - recording not active") // probably started recording with main omi app closed
             return
         }
 
@@ -131,27 +130,22 @@ extension FlutterError: Error {}
               let chunkIndex = message["chunkIndex"] as? Int,
               let isLast = message["isLast"] as? Bool,
               let sampleRate = message["sampleRate"] as? Double else {
-            print("Invalid audio chunk message format")
             return
         }
 
-        print("Received audio chunk \(chunkIndex), size: \(audioChunk.count) bytes, isLast: \(isLast), rate: \(sampleRate)Hz")
-
-        // Store the chunk with sample rate
         audioChunks[chunkIndex] = (audioChunk, sampleRate)
 
         if isLast {
-            // All chunks received, reassemble and send to Flutter
             reassembleAndSendAudioData()
         } else {
-            // Send individual chunk to Flutter immediately
-            let flutterData = FlutterStandardTypedData(bytes: audioChunk)
+            // Prepend 3 dummy bytes so downstream can uniformly strip headers
+            var prefixedChunk = Data([0x00, 0x00, 0x00])
+            prefixedChunk.append(audioChunk)
+            let flutterData = FlutterStandardTypedData(bytes: prefixedChunk)
             self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
                 switch result {
-                case .success(_):
-                    if chunkIndex % 10 == 0 { // Only log every 10th chunk
-                        print("Audio chunk \(chunkIndex) sent to Flutter - Success")
-                    }
+                case .success:
+                    break
                 case .failure(let error):
                     print("Audio chunk \(chunkIndex) sent to Flutter - Error: \(error.message)")
                 }
@@ -160,8 +154,6 @@ extension FlutterError: Error {}
     }
 
     private func reassembleAndSendAudioData() {
-        print("Reassembling audio data from \(audioChunks.count) chunks")
-
         // Sort chunks by index and combine them
         let sortedChunks = audioChunks.sorted(by: { $0.key < $1.key })
         var combinedData = Data()
@@ -170,29 +162,27 @@ extension FlutterError: Error {}
         for (_, chunkTuple) in sortedChunks {
             let (chunkData, chunkSampleRate) = chunkTuple
             combinedData.append(chunkData)
-            sampleRate = chunkSampleRate // Use the sample rate from the last chunk
+            sampleRate = chunkSampleRate
         }
 
-        print("Combined audio data size: \(combinedData.count) bytes, sample rate: \(sampleRate)Hz")
-
-        // Send the complete audio data to Flutter
-        let flutterData = FlutterStandardTypedData(bytes: combinedData)
+        // Prepend 3 dummy bytes for full buffer as well
+        var prefixed = Data([0x00, 0x00, 0x00])
+        prefixed.append(combinedData)
+        let flutterData = FlutterStandardTypedData(bytes: prefixed)
         self.flutterWatchAPI?.onAudioData(audioData: flutterData) { result in
             switch result {
-            case .success(_):
-                print("Complete audio data sent to Flutter - Success")
+            case .success:
+                break
             case .failure(let error):
                 print("Complete audio data sent to Flutter - Error: \(error.message)")
             }
         }
 
-        // Clear the buffer for next recording
         audioChunks.removeAll()
         nextExpectedChunkIndex = 0
     }
 }
 
-// here
 func registerPlugins(registry: FlutterPluginRegistry) {
   GeneratedPluginRegistrant.register(with: registry)
 }
@@ -219,15 +209,14 @@ extension AppDelegate: WCSessionDelegate {
             switch method {
             case "startRecording":
                 self.isRecordingActive = true
-                self.audioChunks.removeAll() // Clear any buffered chunks from previous sessions
+                self.audioChunks.removeAll()
                 self.nextExpectedChunkIndex = 0
                 
-                // Notify Flutter app that recording is starting (this helps prevent crash)
                 DispatchQueue.main.async {
                     self.flutterWatchAPI?.onRecordingStarted() { result in
                         switch result {
-                        case .success(_):
-                            print("iOS: Recording started notification sent to Flutter - Success")
+                        case .success:
+                            break
                         case .failure(let error):
                             print("iOS: Recording started notification sent to Flutter - Error: \(error.message)")
                         }
@@ -237,21 +226,22 @@ extension AppDelegate: WCSessionDelegate {
                 self.isRecordingActive = false
                 self.flutterWatchAPI?.onRecordingStopped() { result in
                     switch result {
-                    case .success(_):
-                        print("Recording stopped on Flutter - Success")
+                    case .success:
+                        break
                     case .failure(let error):
                         print("Recording stopped on Flutter - Error: \(error.message)")
                     }
                 }
             case "sendAudioData":
                 if let audioData = message["audioData"] as? Data {
-                    print("Audio data received, size: \(audioData.count) bytes")
-                    let flutterData = FlutterStandardTypedData(bytes: audioData)
-                    print("Converted to FlutterStandardTypedData")
+                    // Prepend 3 dummy bytes for single-shot audio data
+                    var prefixed = Data([0x00, 0x00, 0x00])
+                    prefixed.append(audioData)
+                    let flutterData = FlutterStandardTypedData(bytes: prefixed)
                     self.flutterWatchAPI?.onAudioData(audioData: flutterData) { result in
                         switch result {
-                        case .success(_):
-                            print("Audio data sent to Flutter - Success")
+                        case .success:
+                            break
                         case .failure(let error):
                             print("Audio data sent to Flutter - Error: \(error.message)")
                         }
@@ -262,14 +252,11 @@ extension AppDelegate: WCSessionDelegate {
             case "sendAudioChunk":
                 self.handleAudioChunk(message)
             case "recordingError":
-                print("Received recording error from watch")
                 if let error = message["error"] as? String {
-                    print("Recording error: \(error)")
-                    // Forward error to Flutter
                     self.flutterWatchAPI?.onRecordingError(error: error) { result in
                         switch result {
-                        case .success(_):
-                            print("Recording error sent to Flutter - Success")
+                        case .success:
+                            break
                         case .failure(let error):
                             print("Recording error sent to Flutter - Error: \(error.message)")
                         }
@@ -277,12 +264,10 @@ extension AppDelegate: WCSessionDelegate {
                 }
             case "microphonePermissionResult":
                 if let granted = message["granted"] as? Bool {
-                    print("Microphone permission granted: \(granted)")
-                    // Forward result to Flutter
                     self.flutterWatchAPI?.onMicrophonePermissionResult(granted: granted) { result in
                         switch result {
-                        case .success(_):
-                            print("Microphone permission result sent to Flutter - Success")
+                        case .success:
+                            break
                         case .failure(let error):
                             print("Microphone permission result sent to Flutter - Error: \(error.message)")
                         }
@@ -291,18 +276,15 @@ extension AppDelegate: WCSessionDelegate {
             case "batteryUpdate":
                 if let batteryLevel = message["batteryLevel"] as? Double,
                    let batteryState = message["batteryState"] as? Int {
-                    print("iOS: Watch battery - Level: \(batteryLevel)%, State: \(batteryState)")
-                    // Store battery info for Flutter to access
                     UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
                     UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
                     UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
                     
-                    // Forward to Flutter
                     DispatchQueue.main.async {
                         self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
                             switch result {
-                            case .success(_):
-                                print("iOS: Battery update sent to Flutter - Success")
+                            case .success:
+                                break
                             case .failure(let error):
                                 print("iOS: Battery update sent to Flutter - Error: \(error.message)")
                             }
@@ -327,62 +309,51 @@ extension AppDelegate: WCSessionDelegate {
         }
     }
     
-    // Receive user info from watch (background/offline reliable transfer)
-    // Now used for 1-second audio chunks when screen is off or app is backgrounded
+    // Receive user info from watch (background/offline)
+    // Used for 1.5 second audio chunks when screen is off or app is backgrounded
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
         
         Task {
             guard let method = userInfo["method"] as? String else {
-                print("No method in userInfo")
                 return
             }
             
-            print("Processing background userInfo method: \(method)")
-            
             switch method {
             case "sendAudioChunk":
-                print("Processing background 1-second audio chunk")
                 self.handleAudioChunk(userInfo)
             case "stopRecording":
-                print("Processing background stop recording")
                 self.isRecordingActive = false
-                self.flutterWatchAPI?.onRecordingStopped() { result in
+                    self.flutterWatchAPI?.onRecordingStopped() { result in
                     switch result {
-                    case .success(_):
-                        print("Stop recording (background) sent to Flutter - Success")
+                    case .success:
+                        break
                     case .failure(let error):
                         print("Stop recording (background) sent to Flutter - Error: \(error.message)")
                     }
                 }
             case "recordingError":
-                print("Processing background recording error")
                 if let error = userInfo["error"] as? String {
-                    print("Background recording error: \(error)")
                     self.flutterWatchAPI?.onRecordingError(error: error) { result in
                         switch result {
-                        case .success(_):
-                            print("Recording error (background) sent to Flutter - Success")
+                        case .success:
+                            break
                         case .failure(let error):
                             print("Recording error (background) sent to Flutter - Error: \(error.message)")
                         }
                     }
                 }
             case "batteryUpdate":
-                print("Processing background battery update")
                 if let batteryLevel = userInfo["batteryLevel"] as? Double,
                    let batteryState = userInfo["batteryState"] as? Int {
-                    print("Background watch battery - Level: \(batteryLevel)%, State: \(batteryState)")
-                    // Store battery info for Flutter to access
                     UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
                     UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
                     UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
                     
-                    // Forward to Flutter
                     DispatchQueue.main.async {
                         self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
                             switch result {
-                            case .success(_):
-                                print("iOS: Background battery update sent to Flutter - Success")
+                            case .success:
+                                break
                             case .failure(let error):
                                 print("iOS: Background battery update sent to Flutter - Error: \(error.message)")
                             }
@@ -390,13 +361,10 @@ extension AppDelegate: WCSessionDelegate {
                     }
                 }
             case "watchInfoUpdate":
-                print("Processing background watch info update")
                 if let name = userInfo["name"] as? String,
                    let model = userInfo["model"] as? String,
                    let systemVersion = userInfo["systemVersion"] as? String,
                    let localizedModel = userInfo["localizedModel"] as? String {
-                    print("Background watch info - Name: \(name), Model: \(model), System: \(systemVersion)")
-                    // Store watch info for Flutter to access
                     UserDefaults.standard.set(name, forKey: "watch_device_name")
                     UserDefaults.standard.set(model, forKey: "watch_device_model")
                     UserDefaults.standard.set(systemVersion, forKey: "watch_system_version")
