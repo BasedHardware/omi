@@ -12,21 +12,11 @@ import os
 import time
 import logging
 import tempfile
+import wave
 from typing import List, Dict, Optional, Tuple
-from collections import defaultdict, Counter
+from collections import defaultdict
 
-# Handle NumPy compatibility
-try:
-    import numpy as np
-    # Handle NumPy 2.0 compatibility
-    if hasattr(np, 'nan'):
-        np_nan = np.nan
-    else:
-        np_nan = np.NaN
-except ImportError:
-    np = None
-    np_nan = None
-
+# Handle Pyannote imports with proper error handling
 try:
     import torch
     import torchaudio
@@ -51,6 +41,9 @@ class EnhancedDiarization:
     def __init__(self):
         self.pipeline = None
         self.is_initialized = False
+        self.audio_buffer = []
+        self.segment_buffer = []
+        self.speaker_mapping = {}
         self._initialize_pipeline()
     
     def _initialize_pipeline(self):
@@ -65,7 +58,7 @@ class EnhancedDiarization:
                 logger.warning("HUGGINGFACE_ACCESS_TOKEN not set - enhanced diarization disabled")
                 return
                 
-            # Use the working Pyannote model
+            # Use the latest Pyannote model
             model_name = os.getenv('PYANNOTE_MODEL', 'pyannote/speaker-diarization-3.0')
             
             logger.info(f"Initializing Pyannote pipeline: {model_name}")
@@ -77,7 +70,7 @@ class EnhancedDiarization:
             except Exception as e:
                 logger.warning(f"Main model failed ({e}), trying alternative...")
                 self.pipeline = Pipeline.from_pretrained(
-                    "pyannote/speaker-diarization@2.1",
+                    "pyannote/speaker-diarization@3.0",
                     use_auth_token=hf_token
                 )
             
@@ -95,63 +88,79 @@ class EnhancedDiarization:
             logger.error(f"Failed to initialize Pyannote pipeline: {e}")
             self.is_initialized = False
     
-    def improve_diarization(
-        self, 
-        audio_path: str, 
-        deepgram_segments: List[Dict],
-        min_speakers: int = None,
-        max_speakers: int = None
-    ) -> Tuple[List[Dict], Dict]:
+    def add_audio_chunk(self, audio_chunk: bytes, segments: List[Dict]) -> List[Dict]:
         """
-        Improve Deepgram's diarization using Pyannote while preserving transcription.
+        Add audio chunk and segments to buffer for processing.
         
         Args:
-            audio_path: Path to audio file
-            deepgram_segments: Original segments from Deepgram with transcription
-            min_speakers: Minimum number of speakers (optional)
-            max_speakers: Maximum number of speakers (optional)
+            audio_chunk: Raw audio bytes
+            segments: List of segment dictionaries from Deepgram
             
         Returns:
-            Tuple of (improved_segments, metrics)
+            List of enhanced segment dictionaries
         """
-        if not self.is_initialized:
-            logger.warning("Enhanced diarization not available - returning original segments")
-            return deepgram_segments, {"status": "disabled", "improvement": 0}
+        # Add to buffers
+        self.audio_buffer.append(audio_chunk)
+        self.segment_buffer.extend(segments)
         
-        if not deepgram_segments:
-            logger.warning("No segments provided for enhancement")
-            return deepgram_segments, {"status": "no_segments", "improvement": 0}
+        # Process if buffer is full enough (every 5 chunks or 10 seconds)
+        if len(self.audio_buffer) >= 5:
+            return self._process_buffered_audio()
+        
+        # Return original segments for now
+        return segments
+    
+    def _process_buffered_audio(self) -> List[Dict]:
+        """
+        Process buffered audio with Pyannote for enhanced diarization.
+        
+        Returns:
+            List of enhanced segment dictionaries
+        """
+        if not self.is_initialized or not self.audio_buffer or not self.segment_buffer:
+            return self.segment_buffer
         
         try:
-            start_time = time.time()
+            # Combine audio chunks
+            combined_audio = b''.join(self.audio_buffer)
             
-            # Run Pyannote diarization on the audio file
-            logger.info(f"Running enhanced diarization on {audio_path}")
-            diarization = self.pipeline(
-                audio_path, 
-                min_speakers=min_speakers, 
-                max_speakers=max_speakers
-            )
-            
-            # Map Pyannote results to Deepgram segments
-            improved_segments = self._map_pyannote_to_deepgram(deepgram_segments, diarization)
-            
-            # Apply post-processing for consistency
-            improved_segments = self._post_process_consistency(improved_segments)
-            
-            # Calculate improvement metrics
-            metrics = self._calculate_metrics(deepgram_segments, improved_segments)
-            metrics["processing_time"] = time.time() - start_time
-            metrics["status"] = "success"
-            
-            logger.info(f"Enhanced diarization completed in {metrics['processing_time']:.2f}s")
-            logger.info(f"Speaker consistency improved by {metrics.get('consistency_improvement', 0):.1f}%")
-            
-            return improved_segments, metrics
-            
+            # Save to temporary file
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+                self._save_audio_to_wav(combined_audio, tmp_file.name)
+                
+                # Process with Pyannote
+                logger.info("Processing buffered audio with Pyannote")
+                diarization = self.pipeline(tmp_file.name)
+                
+                # Map Pyannote results to Deepgram segments
+                enhanced_segments = self._map_pyannote_to_deepgram(self.segment_buffer, diarization)
+                
+                # Clear buffers
+                self.audio_buffer.clear()
+                self.segment_buffer.clear()
+                
+                logger.info(f"Enhanced {len(enhanced_segments)} segments with Pyannote")
+                return enhanced_segments
+                
         except Exception as e:
-            logger.error(f"Enhanced diarization failed: {e}")
-            return deepgram_segments, {"status": "error", "error": str(e), "improvement": 0}
+            logger.error(f"Pyannote processing failed: {e}")
+            # Return original segments on failure
+            return self.segment_buffer
+        finally:
+            # Clean up temporary file
+            if 'tmp_file' in locals():
+                try:
+                    os.unlink(tmp_file.name)
+                except:
+                    pass
+    
+    def _save_audio_to_wav(self, audio_data: bytes, file_path: str):
+        """Save raw audio bytes to WAV file."""
+        with wave.open(file_path, 'wb') as wav_file:
+            wav_file.setnchannels(1)  # Mono
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(16000)  # 16kHz
+            wav_file.writeframes(audio_data)
     
     def _map_pyannote_to_deepgram(self, segments: List[Dict], diarization) -> List[Dict]:
         """
@@ -159,8 +168,7 @@ class EnhancedDiarization:
         
         This preserves Deepgram's excellent transcription while improving speaker assignments.
         """
-        improved_segments = []
-        speaker_mapping = {}  # Map Pyannote speakers to SPEAKER_XX format
+        enhanced_segments = []
         next_speaker_id = 0
         
         for segment in segments:
@@ -184,98 +192,79 @@ class EnhancedDiarization:
                 dominant_speaker = max(overlapping_speakers.items(), key=lambda x: x[1])[0]
                 
                 # Create consistent speaker mapping
-                if dominant_speaker not in speaker_mapping:
-                    speaker_mapping[dominant_speaker] = f"SPEAKER_{next_speaker_id:02d}"
+                if dominant_speaker not in self.speaker_mapping:
+                    self.speaker_mapping[dominant_speaker] = f"SPEAKER_{next_speaker_id:02d}"
                     next_speaker_id += 1
                 
-                new_speaker = speaker_mapping[dominant_speaker]
+                new_speaker = self.speaker_mapping[dominant_speaker]
             else:
                 # No overlap found, keep original assignment
                 new_speaker = segment.get('speaker', 'SPEAKER_00')
             
-            # Create improved segment preserving all Deepgram data
-            improved_segment = segment.copy()
-            improved_segment['speaker'] = new_speaker
+            # Create enhanced segment preserving all Deepgram data
+            enhanced_segment = segment.copy()
+            enhanced_segment['speaker'] = new_speaker
             
-            # Update speaker_id for consistency (if not already present)
-            if 'speaker_id' not in improved_segment:
+            # Update speaker_id for consistency
+            if 'speaker_id' not in enhanced_segment:
                 try:
-                    improved_segment['speaker_id'] = int(new_speaker.split('_')[1])
+                    enhanced_segment['speaker_id'] = int(new_speaker.split('_')[1])
                 except (IndexError, ValueError):
-                    improved_segment['speaker_id'] = 0
+                    enhanced_segment['speaker_id'] = 0
             
-            improved_segments.append(improved_segment)
+            enhanced_segments.append(enhanced_segment)
         
-        return improved_segments
+        return enhanced_segments
     
-    def _improve_segments_realtime(self, segments: List[Dict]) -> List[Dict]:
+    def process_audio_file(self, audio_path: str, segments: List[Dict]) -> Tuple[List[Dict], Dict]:
         """
-        Improve segments in real-time without requiring audio files.
-        
-        This method applies Pyannote's segment-based improvements using
-        only the segment information from Deepgram.
+        Process complete audio file with Pyannote for post-processing.
         
         Args:
-            segments: List of segment dictionaries from Deepgram
+            audio_path: Path to audio file
+            segments: Original segments from Deepgram
             
         Returns:
-            List of enhanced segment dictionaries
+            Tuple of (enhanced_segments, metrics)
         """
+        if not self.is_initialized:
+            logger.warning("Enhanced diarization not available - returning original segments")
+            return segments, {"status": "disabled", "improvement": 0}
+        
         if not segments:
-            return segments
+            logger.warning("No segments provided for enhancement")
+            return segments, {"status": "no_segments", "improvement": 0}
         
         try:
-            # Apply consistency improvements
-            improved_segments = self._post_process_consistency(segments)
+            start_time = time.time()
             
-            # Apply speaker transition optimization
-            improved_segments = self._optimize_speaker_transitions(improved_segments)
+            # Run Pyannote diarization on the audio file
+            logger.info(f"Running enhanced diarization on {audio_path}")
+            diarization = self.pipeline(audio_path)
             
-            logger.info(f"Real-time enhanced {len(segments)} segments")
-            return improved_segments
+            # Map Pyannote results to Deepgram segments
+            enhanced_segments = self._map_pyannote_to_deepgram(segments, diarization)
+            
+            # Apply post-processing for consistency
+            enhanced_segments = self._post_process_consistency(enhanced_segments)
+            
+            # Calculate improvement metrics
+            metrics = self._calculate_metrics(segments, enhanced_segments)
+            metrics["processing_time"] = time.time() - start_time
+            metrics["status"] = "success"
+            
+            logger.info(f"Enhanced diarization completed in {metrics['processing_time']:.2f}s")
+            logger.info(f"Speaker consistency improved by {metrics.get('consistency_improvement', 0):.1f}%")
+            
+            return enhanced_segments, metrics
             
         except Exception as e:
-            logger.error(f"Real-time segment improvement failed: {e}")
-            return segments
-    
-    def _optimize_speaker_transitions(self, segments: List[Dict]) -> List[Dict]:
-        """
-        Optimize speaker transitions to reduce brief speaker switches.
-        
-        Args:
-            segments: List of segment dictionaries
-            
-        Returns:
-            List of segments with optimized speaker assignments
-        """
-        if len(segments) < 3:
-            return segments
-        
-        optimized_segments = segments.copy()
-        
-        for i in range(1, len(optimized_segments) - 1):
-            current = optimized_segments[i]
-            prev = optimized_segments[i - 1]
-            next_seg = optimized_segments[i + 1]
-            
-            # If current segment is very short and different from neighbors
-            current_duration = current['end'] - current['start']
-            if (current_duration < 0.5 and  # Less than 500ms
-                current['speaker'] != prev['speaker'] and
-                current['speaker'] != next_seg['speaker'] and
-                prev['speaker'] == next_seg['speaker']):  # Neighbors are same speaker
-                
-                # Assign current segment to the same speaker as neighbors
-                optimized_segments[i]['speaker'] = prev['speaker']
-                logger.debug(f"Optimized speaker transition: {current['speaker']} -> {prev['speaker']}")
-        
-        return optimized_segments
+            logger.error(f"Enhanced diarization failed: {e}")
+            return segments, {"status": "error", "error": str(e), "improvement": 0}
     
     def _post_process_consistency(self, segments: List[Dict]) -> List[Dict]:
         """
         Post-process segments to fix brief speaker switches and improve consistency.
-        
-        This addresses common diarization errors like brief mis-assignments.
         """
         if len(segments) < 3:
             return segments
@@ -301,31 +290,31 @@ class EnhancedDiarization:
         
         return processed_segments
     
-    def _calculate_metrics(self, original: List[Dict], improved: List[Dict]) -> Dict:
-        """Calculate improvement metrics comparing original vs improved diarization."""
-        if not original or not improved:
+    def _calculate_metrics(self, original: List[Dict], enhanced: List[Dict]) -> Dict:
+        """Calculate improvement metrics comparing original vs enhanced diarization."""
+        if not original or not enhanced:
             return {"improvement": 0}
         
         # Count speaker transitions
         original_transitions = self._count_speaker_transitions(original)
-        improved_transitions = self._count_speaker_transitions(improved)
+        enhanced_transitions = self._count_speaker_transitions(enhanced)
         
         # Count unique speakers
         original_speakers = len(set(seg.get('speaker', 'SPEAKER_00') for seg in original))
-        improved_speakers = len(set(seg.get('speaker', 'SPEAKER_00') for seg in improved))
+        enhanced_speakers = len(set(seg.get('speaker', 'SPEAKER_00') for seg in enhanced))
         
         # Calculate consistency improvement
         consistency_improvement = 0
         if original_transitions > 0:
-            consistency_improvement = max(0, (original_transitions - improved_transitions) / original_transitions * 100)
+            consistency_improvement = max(0, (original_transitions - enhanced_transitions) / original_transitions * 100)
         
         return {
             "original_speakers": original_speakers,
-            "improved_speakers": improved_speakers,
+            "enhanced_speakers": enhanced_speakers,
             "original_transitions": original_transitions,
-            "improved_transitions": improved_transitions,
+            "enhanced_transitions": enhanced_transitions,
             "consistency_improvement": consistency_improvement,
-            "improvement": consistency_improvement  # Overall improvement score
+            "improvement": consistency_improvement
         }
     
     def _count_speaker_transitions(self, segments: List[Dict]) -> int:
@@ -351,54 +340,36 @@ def get_enhanced_diarization() -> EnhancedDiarization:
         _enhanced_diarization_instance = EnhancedDiarization()
     return _enhanced_diarization_instance
 
-
 def is_enhanced_diarization_enabled() -> bool:
     """Check if enhanced diarization is enabled via environment variable."""
     return os.getenv('ENHANCED_DIARIZATION_ENABLED', 'false').lower() in ('true', '1', 'yes')
 
-
 def apply_enhanced_diarization_to_segments(segments: List[Dict]) -> List[Dict]:
     """
     Apply enhanced diarization to real-time segments.
-
-    This function is designed for real-time processing where we don't have audio files,
-    so we use Pyannote's segment-based improvements without requiring audio input.
-
-    Args:
-        segments: List of segment dictionaries from Deepgram
-
-    Returns:
-        List of enhanced segment dictionaries with improved speaker assignments
-    """
-    # Handle None input gracefully
-    if segments is None:
-        logger.warning("None segments provided - returning empty list")
-        return []
     
-    # Handle empty segments
-    if not segments:
-        logger.info("Enhanced 0 segments in real-time")
-        return segments
-
+    This function provides a simple interface for real-time processing.
+    """
     if not is_enhanced_diarization_enabled():
         return segments
-
+    
     if not PYANNOTE_AVAILABLE:
         logger.warning("Pyannote not available - returning original segments")
         return segments
-
+    
     try:
         enhanced_diarizer = get_enhanced_diarization()
         if not enhanced_diarizer.is_initialized:
             logger.warning("Enhanced diarization not initialized - returning original segments")
             return segments
-
-        # Apply real-time enhancements without audio file
-        enhanced_segments = enhanced_diarizer._improve_segments_realtime(segments)
-
-        logger.info(f"Enhanced {len(segments)} segments in real-time")
+        
+        # For real-time, we can only do basic post-processing
+        # Full Pyannote processing requires audio buffering
+        enhanced_segments = enhanced_diarizer._post_process_consistency(segments)
+        
+        logger.info(f"Applied basic enhanced diarization to {len(segments)} segments")
         return enhanced_segments
-
+    
     except Exception as e:
-        logger.error(f"Real-time enhanced diarization failed: {e}")
+        logger.error(f"Enhanced diarization failed: {e}")
         return segments
