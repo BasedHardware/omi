@@ -4,19 +4,19 @@
 # from fastapi import APIRouter
 # from mem0 import MemoryClient
 #
-# from models import Memory, EndpointResponse
+# from models import Conversation, EndpointResponse
 #
 # router = APIRouter()
 #
 #
 # # **************************************************
-# # ************ On Memory Created Plugin ************
+# # ************ On Conversation Created Plugin ************
 # # **************************************************
 #
 #
 # @router.post("/mem0", response_model=EndpointResponse, tags=["mem0"])
-# def mem0_add(memory: Memory, uid: str):
-#     transcript_segments = memory.transcriptSegments
+# def mem0_add(conversation: Conversation, uid: str):
+#     transcript_segments = conversation.transcript_segments
 #     messages = []
 #     for segment in transcript_segments:
 #         messages.append(

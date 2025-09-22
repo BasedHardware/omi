@@ -5,9 +5,9 @@ from modal import Image, Secret, asgi_app
 
 # from _mem0 import router as mem0_router
 from _multion import router as multion_router
-from basic import memory_created as basic_memory_created_router
-from oauth import memory_created as oauth_memory_created_router
-from zapier import memory_created as zapier_memory_created_router
+from basic import conversation_created as basic_conversation_created_router
+from oauth import conversation_created as oauth_conversation_created_router
+from zapier import conversation_created as zapier_conversation_created_router
 from chatgpt import main as chatgpt_router
 from subscription import main as subscription_router
 from notifications import hey_omi
@@ -52,9 +52,9 @@ def api():
     return app
 
 
-app.include_router(basic_memory_created_router.router)
-app.include_router(oauth_memory_created_router.router)
-app.include_router(zapier_memory_created_router.router)
+app.include_router(basic_conversation_created_router.router)
+app.include_router(oauth_conversation_created_router.router)
+app.include_router(zapier_conversation_created_router.router)
 # app.include_router(ahda_realtime_transcription_router.router)
 
 app.include_router(basic_realtime_mentor_router.router)

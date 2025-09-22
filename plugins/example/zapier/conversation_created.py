@@ -11,9 +11,9 @@ from db import (
     get_zapier_subscribes,
     remove_zapier_subscribes,
 )
-from models import Memory, ExternalIntegrationCreateMemory, EndpointResponse
-from .client import get_zapier, get_friend
-from .models import ZapierSubcribeModel, ZapierCreateMemory, ZapierActionCreateMemory
+from models import Conversation, ExternalIntegrationCreateConversation, EndpointResponse
+from .client import get_zapier, get_omi
+from .models import ZapierSubcribeModel, ZapierCreateConversation, ZapierActionCreateConversation
 
 router = APIRouter()
 # noinspection PyRedeclaration
@@ -119,17 +119,17 @@ async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     return {}
 
 
-@router.get('/zapier/trigger/memory/sample', tags=['zapier'], response_model=List[ZapierCreateMemory])
-async def get_trigger_memory_sample(request: Request, uid: str):
+@router.get('/zapier/trigger/memory/sample', tags=['zapier'], response_model=List[ZapierCreateConversation])
+async def get_trigger_conversation_sample(request: Request, uid: str):
     """
-    Get the latest memory or a sample to fullfill the triggers On memory created
+    Get the latest conversation or a sample to fullfill the triggers On conversation created
     """
 
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
 
     # Genrate sample
-    sample = ZapierCreateMemory(
+    sample = ZapierCreateConversation(
         icon={
             "type": "emoji",
             "emoji": "🧠",
@@ -143,30 +143,30 @@ async def get_trigger_memory_sample(request: Request, uid: str):
     )
 
     # Get latest from Omi
-    ok = get_friend().get_latest_memory(uid)
+    ok = get_omi().get_latest_conversation(uid)
     print(ok)
     if "error" in ok:
         err = ok["error"]
         print(err)
         raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
 
-    memory = ok["result"]
-    if memory is not None:
+    conversation = ok["result"]
+    if conversation is not None:
         try:
-            emoji = memory.structured.emoji.encode('latin1').decode('utf-8')
+            emoji = conversation.structured.emoji.encode('latin1').decode('utf-8')
         except UnicodeEncodeError:
-            emoji = memory.structured.emoji
+            emoji = conversation.structured.emoji
 
-        sample = ZapierCreateMemory(
+        sample = ZapierCreateConversation(
             icon={"type": "emoji", "emoji": f"{emoji}"},
-            title=f'{memory.structured.title}',
-            speakers=len(set(map(lambda x: x.speaker, memory.transcript_segments))),
-            category=memory.structured.category,
+            title=f'{conversation.structured.title}',
+            speakers=len(set(map(lambda x: x.speaker, conversation.transcript_segments))),
+            category=conversation.structured.category,
             duration=int(
-                (memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0
+                (conversation.finished_at - conversation.started_at).total_seconds() if conversation.finished_at is not None else 0
             ),
-            overview=memory.structured.overview,
-            transcript=memory.get_transcript(),
+            overview=conversation.structured.overview,
+            transcript=conversation.get_transcript(),
         )
 
     return [sample]
@@ -200,9 +200,9 @@ def is_setup_completed(uid: str):
 
 
 @router.post('/zapier/memories', tags=['zapier'], response_model=EndpointResponse)
-def zapier_memories(memory: Memory, uid: str):
+def zapier_conversations(conversation: Conversation, uid: str):
     """
-    The actual plugin that gets triggered when a memory gets created, and adds the memory to the Zapier.
+    The actual plugin that gets triggered when a conversation gets created, and adds the conversation to the Zapier.
     """
 
     # Not enabled Zapier plugin
@@ -211,7 +211,7 @@ def zapier_memories(memory: Memory, uid: str):
         return {}
 
     # Send to Zapier
-    ok = create_zapier_memory(uid, memory)
+    ok = create_zapier_conversation(uid, conversation)
     if not ok:
         return {}
 
@@ -219,21 +219,21 @@ def zapier_memories(memory: Memory, uid: str):
 
 
 @router.post('/zapier/action/memories', tags=['zapier'], response_model=EndpointResponse)
-def zapier_action_memories(create_memory: ZapierActionCreateMemory, uid: str):
+def zapier_action_conversations(create_conversation: ZapierActionCreateConversation, uid: str):
     """
-    Create new memory by action from Zapier.
+    Create new conversation by action from Zapier.
     """
 
-    memory = ExternalIntegrationCreateMemory(
-        text=create_memory.text,
-        text_source=create_memory.source,
-        started_at=create_memory.started_at,
-        finished_at=create_memory.finished_at,
-        language=create_memory.language,
-        geolocation=create_memory.geolocation,
+    conversation = ExternalIntegrationCreateConversation(
+        text=create_conversation.text,
+        text_source=create_conversation.source,
+        started_at=create_conversation.started_at,
+        finished_at=create_conversation.finished_at,
+        language=create_conversation.language,
+        geolocation=create_conversation.geolocation,
     )
 
-    ok = get_friend().create_memory(memory, uid)
+    ok = get_omi().create_conversation(conversation, uid)
     print(ok)
     if "error" in ok:
         err = ok["error"]
@@ -246,29 +246,29 @@ def zapier_action_memories(create_memory: ZapierActionCreateMemory, uid: str):
     return EndpointResponse(message="Your memories are synced with Omi.")
 
 
-def create_zapier_memory(uid: str, memory: Memory):
+def create_zapier_conversation(uid: str, conversation: Conversation):
     subscribes = get_zapier_subscribes(uid)
     for sub in subscribes:
         target_url = sub.decode()
 
         # modeling
         try:
-            emoji = memory.structured.emoji.encode('latin1').decode('utf-8')
+            emoji = conversation.structured.emoji.encode('latin1').decode('utf-8')
         except UnicodeEncodeError:
-            emoji = memory.structured.emoji
+            emoji = conversation.structured.emoji
 
-        data = ZapierCreateMemory(
+        data = ZapierCreateConversation(
             icon={"type": "emoji", "emoji": f"{emoji}"},
-            title=f'{memory.structured.title}',
-            speakers=len(set(map(lambda x: x.speaker, memory.transcript_segments))),
-            category=memory.structured.category,
+            title=f'{conversation.structured.title}',
+            speakers=len(set(map(lambda x: x.speaker, conversation.transcript_segments))),
+            category=conversation.structured.category,
             duration=int(
-                (memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0
+                (conversation.finished_at - conversation.started_at).total_seconds() if conversation.finished_at is not None else 0
             ),
-            overview=memory.structured.overview,
-            transcript=memory.get_transcript(),
+            overview=conversation.structured.overview,
+            transcript=conversation.get_transcript(),
         )
-        ok = get_zapier().send_hook_memory_created(target_url, data)
+        ok = get_zapier().send_hook_conversation_created(target_url, data)
         # with graceful error
         if "error" in ok:
             err = ok["error"]
