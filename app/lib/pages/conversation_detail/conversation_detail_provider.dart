@@ -15,8 +15,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
-class ConversationDetailProvider extends ChangeNotifier
-    with MessageNotifierMixin {
+class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   AppProvider? appProvider;
   ConversationProvider? conversationProvider;
 
@@ -42,16 +41,14 @@ class ConversationDetailProvider extends ChangeNotifier
     if (conversationProvider == null ||
         !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
         conversationProvider!.groupedConversations[selectedDate] == null ||
-        conversationProvider!.groupedConversations[selectedDate]!.length <=
-            conversationIdx) {
+        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
       // Return cached conversation if available, otherwise create an empty one
       if (_cachedConversation == null) {
         throw StateError("No conversation available");
       }
       return _cachedConversation!;
     }
-    _cachedConversation = conversationProvider!
-        .groupedConversations[selectedDate]![conversationIdx];
+    _cachedConversation = conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
     return _cachedConversation!;
   }
 
@@ -85,10 +82,7 @@ class ConversationDetailProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setProviders(
-    AppProvider provider,
-    ConversationProvider conversationProvider,
-  ) {
+  void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
     appProvider = provider;
     notifyListeners();
@@ -148,10 +142,7 @@ class ConversationDetailProvider extends ChangeNotifier
   }
 
   void undoDeleteActionItem(int idx) {
-    conversation.structured.actionItems.insert(
-      idx,
-      deletedActionItems.removeLast(),
-    );
+    conversation.structured.actionItems.insert(idx, deletedActionItems.removeLast());
     notifyListeners();
   }
 
@@ -203,9 +194,7 @@ class ConversationDetailProvider extends ChangeNotifier
       }
     });
 
-    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(
-      conversation.transcriptSegments,
-    );
+    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
@@ -213,10 +202,7 @@ class ConversationDetailProvider extends ChangeNotifier
         notifyListeners();
         if (!hasConversationSummaryRatingSet) {
           _ratingTimer = Timer(const Duration(seconds: 15), () {
-            setConversationSummaryRating(
-              conversation.id,
-              -1,
-            ); // set -1 to indicate is was shown
+            setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
             showRatingUI = true;
             notifyListeners();
           });
@@ -233,10 +219,7 @@ class ConversationDetailProvider extends ChangeNotifier
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
-      var updatedConversation = await reProcessConversationServer(
-        conversation.id,
-        appId: appId,
-      );
+      var updatedConversation = await reProcessConversationServer(conversation.id, appId: appId);
       MixpanelManager().reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
@@ -255,9 +238,7 @@ class ConversationDetailProvider extends ChangeNotifier
 
       // Check if the summarized app is in the apps list
       AppResponse? summaryApp = getSummarizedApp();
-      if (summaryApp != null &&
-          summaryApp.appId != null &&
-          appProvider != null) {
+      if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
         String appId = summaryApp.appId!;
         bool appExists = appProvider!.apps.any((app) => app.id == appId);
         if (!appExists) {
@@ -269,18 +250,11 @@ class ConversationDetailProvider extends ChangeNotifier
       return true;
     } catch (err, stacktrace) {
       print(err);
-      var conversationReporting = MixpanelManager()
-          .getConversationEventProperties(conversation);
-      await PlatformManager.instance.crashReporter.reportCrash(
-        err,
-        stacktrace,
-        userAttributes: {
-          'conversation_transcript_length':
-              conversationReporting['transcript_length'].toString(),
-          'conversation_transcript_word_count':
-              conversationReporting['transcript_word_count'].toString(),
-        },
-      );
+      var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
+      await PlatformManager.instance.crashReporter.reportCrash(err, stacktrace, userAttributes: {
+        'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
+        'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
+      });
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
@@ -289,13 +263,8 @@ class ConversationDetailProvider extends ChangeNotifier
     }
   }
 
-  void unassignConversationTranscriptSegment(
-    String conversationId,
-    String segmentId,
-  ) {
-    final segmentIdx = conversation.transcriptSegments.indexWhere(
-      (s) => s.id == segmentId,
-    );
+  void unassignConversationTranscriptSegment(String conversationId, String segmentId) {
+    final segmentIdx = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
     if (segmentIdx == -1) return;
     conversation.transcriptSegments[segmentIdx].isUser = false;
     conversation.transcriptSegments[segmentIdx].personId = null;
@@ -311,7 +280,10 @@ class ConversationDetailProvider extends ChangeNotifier
     }
     // If no appResults but we have structured overview, create a fake AppResponse
     if (conversation.structured.overview.isNotEmpty) {
-      return AppResponse(conversation.structured.overview, appId: null);
+      return AppResponse(
+        conversation.structured.overview,
+        appId: null,
+      );
     }
     return null;
   }
@@ -327,12 +299,7 @@ class ConversationDetailProvider extends ChangeNotifier
     if (suggestedAppIds.isEmpty || appProvider == null) return [];
 
     return appProvider!.apps
-        .where(
-          (app) =>
-              suggestedAppIds.contains(app.id) &&
-              app.worksWithMemories() &&
-              app.enabled,
-        )
+        .where((app) => suggestedAppIds.contains(app.id) && app.worksWithMemories() && app.enabled)
         .toList();
   }
 
@@ -354,9 +321,7 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Checks if a suggested app is available/enabled for the user
   bool isSuggestedAppAvailable(String appId) {
     if (appProvider == null) return false;
-    return appProvider!.apps.any(
-      (app) => app.id == appId && app.worksWithMemories() && app.enabled,
-    );
+    return appProvider!.apps.any((app) => app.id == appId && app.worksWithMemories() && app.enabled);
   }
 
   void setCachedConversation(ServerConversation conversation) {

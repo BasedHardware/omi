@@ -146,9 +146,7 @@ class MemoryItem extends StatelessWidget {
         MixpanelManager().memoriesPageDeletedMemory(memory);
 
         if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
-          context
-              .findAncestorStateOfType<MemoriesPageState>()!
-              .showDeleteNotification(memoryContent, memory);
+          context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
         }
       },
       background: Container(
@@ -188,13 +186,6 @@ class MemoryItem extends StatelessWidget {
     return DateTime(createdAt.year, createdAt.month, createdAt.day);
   }
 
-  ConversationDetailProvider _createProvider(dynamic conversation) {
-    final provider = ConversationDetailProvider();
-    provider.conversationIdx = 0;
-    provider.selectedDate = _getConversationDate(conversation.createdAt);
-    return provider;
-  }
-
   void _ensureConversationInGroup(
     ConversationProvider conversationProvider,
     dynamic conversation,
@@ -223,31 +214,18 @@ class MemoryItem extends StatelessWidget {
     Navigator.of(context).pop();
 
     if (conversation != null) {
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
+
+      _ensureConversationInGroup(conversationProvider, conversation);
+
+      final conversationDate = _getConversationDate(conversation.createdAt);
+      detailProvider.conversationIdx = 0;
+      detailProvider.selectedDate = conversationDate;
+
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) =>
-              ChangeNotifierProxyProvider2<
-                ConversationProvider,
-                AppProvider,
-                ConversationDetailProvider
-              >(
-                create: (context) => _createProvider(conversation),
-                update: (context, conversationProvider, appProvider, previous) {
-                  final provider = previous ?? _createProvider(conversation);
-                  provider.conversationProvider = conversationProvider;
-                  provider.appProvider = appProvider;
-
-                  if (previous == null) {
-                    _ensureConversationInGroup(
-                      conversationProvider,
-                      conversation,
-                    );
-                  }
-
-                  return provider;
-                },
-                child: ConversationDetailPage(conversation: conversation),
-              ),
+          builder: (context) => ConversationDetailPage(conversation: conversation),
         ),
       );
     } else {
@@ -286,9 +264,7 @@ class MemoryItem extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              memory.visibility == MemoryVisibility.private
-                  ? Icons.lock_outline
-                  : Icons.public,
+              memory.visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,
               size: 16,
               color: Colors.white70,
             ),
@@ -346,14 +322,11 @@ class MemoryItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    visibility.name[0].toUpperCase() +
-                        visibility.name.substring(1),
+                    visibility.name[0].toUpperCase() + visibility.name.substring(1),
                     style: TextStyle(
                       color: isSelected ? Colors.white : Colors.white70,
                       fontSize: 14,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
                   Text(
@@ -365,8 +338,7 @@ class MemoryItem extends StatelessWidget {
                 ],
               ),
             ),
-            if (isSelected)
-              const Icon(Icons.check, size: 18, color: Colors.white),
+            if (isSelected) const Icon(Icons.check, size: 18, color: Colors.white),
           ],
         ),
       ),
