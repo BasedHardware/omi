@@ -4,7 +4,7 @@ from db import *
 from fastapi import HTTPException, Request, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from models import Memory, EndpointResponse
+from models import Conversation, EndpointResponse
 
 from .client import get_notion
 
@@ -106,15 +106,15 @@ def is_setup_completed(uid: str):
 
 
 @router.post('/notion-crm', tags=['notion'], response_model=EndpointResponse)
-def notion_crm(memory: Memory, uid: str):
+def notion_crm(conversation: Conversation, uid: str):
     """
-    The actual plugin that gets triggered when a memory gets created, and adds the memory to the Notion CRM.
+    The actual plugin that gets triggered when a conversation gets created, and adds the conversation to the Notion CRM.
     """
     notion_api_key = get_notion_crm_api_key(uid)
     if not notion_api_key:
         return {'message': 'Your Notion CRM plugin is not setup properly. Check your plugin settings.'}
 
-    create_notion_row(notion_api_key, get_notion_database_id(uid), memory)
+    create_notion_row(notion_api_key, get_notion_database_id(uid), conversation)
 
     return {}
 
@@ -145,7 +145,7 @@ def validate_database(database_id: str, notion_api_key: str):
     return True
 
 
-def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
+def create_notion_row(notion_api_key: str, database_id: str, conversation: Conversation):
     # Validate table exists and has correct fields
     ok = validate_database(database_id, notion_api_key)
     if not ok:
@@ -153,23 +153,23 @@ def create_notion_row(notion_api_key: str, database_id: str, memory: Memory):
         return
 
     try:
-        emoji = memory.structured.emoji.encode('latin1').decode('utf-8')
+        emoji = conversation.structured.emoji.encode('latin1').decode('utf-8')
     except UnicodeEncodeError:
-        emoji = memory.structured.emoji
+        emoji = conversation.structured.emoji
 
     data = {
         "parent": {"database_id": database_id},
         "icon": {"type": "emoji", "emoji": f"{emoji}"},
         "properties": {
-            "Title": {"title": [{"text": {"content": f'{memory.structured.title}'}}]},
-            "Speakers": {'number': len(set(map(lambda x: x.speaker, memory.transcript_segments)))},
-            "Category": {"select": {"name": memory.structured.category}},
+            "Title": {"title": [{"text": {"content": f'{conversation.structured.title}'}}]},
+            "Speakers": {'number': len(set(map(lambda x: x.speaker, conversation.transcript_segments)))},
+            "Category": {"select": {"name": conversation.structured.category}},
             "Duration (seconds)": {
                 'number': (
-                    (memory.finished_at - memory.started_at).total_seconds() if memory.finished_at is not None else 0
+                    (conversation.finished_at - conversation.started_at).total_seconds() if conversation.finished_at is not None else 0
                 )
             },
-            "Overview": {"rich_text": [{"text": {"content": memory.structured.overview}}]},
+            "Overview": {"rich_text": [{"text": {"content": conversation.structured.overview}}]},
         },
     }
     resp = requests.post(

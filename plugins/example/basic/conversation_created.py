@@ -1,15 +1,15 @@
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 
-from models import Memory, EndpointResponse
+from models import Conversation, EndpointResponse
 from utils import num_tokens_from_string
 
 router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 
-@router.post('/conversation-feedback', tags=['memory-created-example'], response_model=EndpointResponse)
-def conversation_feedback(memory: Memory):
+@router.post('/conversation-feedback', tags=['conversation-created-example'], response_model=EndpointResponse)
+def conversation_feedback(conversation: Conversation):
     prompt = f'''
       The following is the structuring from a transcript of a conversation that just finished.
       First determine if there's crucial feedback to notify a busy entrepreneur about it.
@@ -18,10 +18,10 @@ def conversation_feedback(memory: Memory):
       Also, act human-like, friendly, and address the user directly. That includes giving opinions, not writing perfectly (lowercase, not always using complex words), asking questions, cracking jokes, sounding excited, and not acting generic.
 
       Transcript:
-      ${memory.get_transcript()}
+      ${conversation.get_transcript()}
       
       Structured version:
-      ${memory.structured.dict()}
+      ${conversation.structured.dict()}
 
       Answer:
     '''
