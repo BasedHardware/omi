@@ -262,6 +262,198 @@ class EnhancedDiarization:
             logger.error(f"Enhanced diarization failed: {e}")
             return segments, {"status": "error", "error": str(e), "improvement": 0}
     
+    def enhance_with_pyannote(self, deepgram_segments: List[Dict], audio_buffer: bytearray, sample_rate: int) -> List[Dict]:
+        """
+        Enhance Deepgram's diarization with Pyannote as an additional layer.
+        This combines both Deepgram and Pyannote diarization for better accuracy.
+        """
+        if not self.is_initialized or not deepgram_segments:
+            return deepgram_segments
+        
+        try:
+            # Convert audio buffer to numpy array for Pyannote
+            import numpy as np
+            import soundfile as sf
+            import tempfile
+            import os
+            
+            # Convert bytearray to numpy array
+            audio_data = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
+            
+            # Save to temporary file for Pyannote processing
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                sf.write(temp_file.name, audio_data, sample_rate)
+                temp_audio_path = temp_file.name
+            
+            # Run Pyannote diarization
+            pyannote_diarization = self.pipeline(temp_audio_path)
+            
+            # Combine Deepgram + Pyannote results
+            enhanced_segments = self._combine_diarization_results(
+                deepgram_segments, pyannote_diarization
+            )
+            
+            # Clean up temporary file
+            os.unlink(temp_audio_path)
+            
+            return enhanced_segments
+            
+        except Exception as e:
+            logger.error(f"Pyannote enhancement failed: {e}")
+            return deepgram_segments
+    
+    def _combine_diarization_results(self, deepgram_segments: List[Dict], pyannote_diarization) -> List[Dict]:
+        """
+        Combine Deepgram and Pyannote diarization results for better accuracy.
+        Uses both results to make more accurate speaker assignments.
+        """
+        enhanced_segments = []
+        
+        for segment in deepgram_segments:
+            start_time = segment['start']
+            end_time = segment['end']
+            
+            # Get Deepgram's speaker assignment
+            deepgram_speaker = segment['speaker']
+            
+            # Get Pyannote's speaker assignment for this time range
+            pyannote_speaker = self._find_speaker_for_time(pyannote_diarization, start_time, end_time)
+            
+            # Combine both results (use Pyannote if it disagrees with Deepgram)
+            final_speaker = self._decide_final_speaker(
+                deepgram_speaker, pyannote_speaker, start_time, end_time
+            )
+            
+            # Create enhanced segment
+            enhanced_segment = segment.copy()
+            enhanced_segment['speaker'] = final_speaker
+            enhanced_segments.append(enhanced_segment)
+        
+        return enhanced_segments
+    
+    def _decide_final_speaker(self, deepgram_speaker: str, pyannote_speaker: int, start_time: float, end_time: float) -> str:
+        """
+        Decide final speaker assignment by combining Deepgram and Pyannote results.
+        Uses confidence and consistency to make the best decision.
+        """
+        try:
+            # If both agree, use that speaker
+            if deepgram_speaker == f"SPEAKER_{pyannote_speaker}":
+                return deepgram_speaker
+            
+            # If they disagree, use Pyannote (more accurate) but keep Deepgram's format
+            # This is where the "additional layer" improves accuracy
+            return f"SPEAKER_{pyannote_speaker}"
+            
+        except Exception as e:
+            logger.error(f"Error deciding final speaker: {e}")
+            return deepgram_speaker  # Fallback to Deepgram
+
+    def diarize_segments_with_audio(self, segments: List[Dict], audio_buffer: bytearray, sample_rate: int) -> List[Dict]:
+        """
+        Diarize segments using Pyannote on the audio buffer.
+        This is the main method that replaces Deepgram's diarization.
+        """
+        if not self.is_initialized or not segments:
+            return segments
+        
+        try:
+            # Convert audio buffer to numpy array for Pyannote
+            import numpy as np
+            import soundfile as sf
+            import tempfile
+            import os
+            
+            # Convert bytearray to numpy array
+            audio_data = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
+            
+            # Save to temporary file for Pyannote processing
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                sf.write(temp_file.name, audio_data, sample_rate)
+                temp_audio_path = temp_file.name
+            
+            # Run Pyannote diarization
+            diarization = self.pipeline(temp_audio_path)
+            
+            # Map Pyannote results to segments
+            enhanced_segments = self._map_pyannote_to_segments(segments, diarization)
+            
+            # Clean up temporary file
+            os.unlink(temp_audio_path)
+            
+            return enhanced_segments
+            
+        except Exception as e:
+            logger.error(f"Pyannote diarization failed: {e}")
+            return segments
+    
+    def process_audio_buffer(self, audio_buffer: bytearray, sample_rate: int):
+        """
+        Process audio buffer for context (can be used for speaker consistency).
+        This method is called periodically to maintain speaker context.
+        """
+        if not self.is_initialized:
+            return
+        
+        try:
+            # Convert audio buffer to numpy array
+            import numpy as np
+            audio_data = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
+            
+            # Store for context (could be used for speaker consistency)
+            # For now, just log that we're processing
+            logger.debug(f"Processing audio buffer: {len(audio_data)} samples at {sample_rate}Hz")
+            
+        except Exception as e:
+            logger.error(f"Audio buffer processing failed: {e}")
+    
+    def _map_pyannote_to_segments(self, segments: List[Dict], diarization) -> List[Dict]:
+        """
+        Map Pyannote diarization results to Deepgram segments.
+        This is the core method that combines Deepgram STT with Pyannote diarization.
+        """
+        enhanced_segments = []
+        
+        for segment in segments:
+            start_time = segment['start']
+            end_time = segment['end']
+            
+            # Find the speaker for this time segment using Pyannote
+            speaker_id = self._find_speaker_for_time(diarization, start_time, end_time)
+            
+            # Create enhanced segment
+            enhanced_segment = segment.copy()
+            enhanced_segment['speaker'] = f"SPEAKER_{speaker_id}"
+            enhanced_segments.append(enhanced_segment)
+        
+        return enhanced_segments
+    
+    def _find_speaker_for_time(self, diarization, start_time: float, end_time: float) -> int:
+        """
+        Find the speaker ID for a given time range using Pyannote diarization.
+        """
+        try:
+            # Get the midpoint of the segment for speaker identification
+            midpoint = (start_time + end_time) / 2
+            
+            # Find which speaker segment contains this time
+            for turn, _, speaker in diarization.itertracks(yield_label=True):
+                if turn.start <= midpoint <= turn.end:
+                    # Extract speaker number from Pyannote label (e.g., "SPEAKER_00" -> 0)
+                    if isinstance(speaker, str) and speaker.startswith('SPEAKER_'):
+                        try:
+                            return int(speaker.split('_')[1])
+                        except (IndexError, ValueError):
+                            return 0
+                    return 0
+            
+            # Default to speaker 0 if no match found
+            return 0
+            
+        except Exception as e:
+            logger.error(f"Error finding speaker for time {start_time}-{end_time}: {e}")
+            return 0
+
     def _post_process_consistency(self, segments: List[Dict]) -> List[Dict]:
         """
         Post-process segments to fix brief speaker switches and improve consistency.
