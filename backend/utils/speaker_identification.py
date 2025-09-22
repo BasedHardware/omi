@@ -120,6 +120,6 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
-            if name:
+            if name and len(name) >= 2:
                 return name.capitalize()
     return None
