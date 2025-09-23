@@ -264,18 +264,147 @@ async def process_audio_dg(
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
+    # Initialize enhanced diarization if enabled
+    enhanced_diarizer = None
+    if os.getenv('ENHANCED_DIARIZATION_ENABLED', 'false').lower() in ('true', '1', 'yes'):
+        try:
+            from utils.stt.enhanced_diarization import get_enhanced_diarization
+            enhanced_diarizer = get_enhanced_diarization()
+            if enhanced_diarizer.is_initialized:
+                print("Enhanced diarization initialized successfully")
+            else:
+                print("Enhanced diarization not available - using Deepgram only")
+                enhanced_diarizer = None
+        except ImportError as e:
+            print(f"Enhanced diarization not available: {e}")
+            enhanced_diarizer = None
+
+    # Audio buffering for Pyannote processing
+    audio_buffer = bytearray()
+    buffer_duration = 3.0  # 3 seconds buffer
+    buffer_size = int(sample_rate * buffer_duration * 2)  # 2 bytes per sample for 16-bit audio
+    last_processing_time = 0
+
     def on_message(self, result, **kwargs):
-        # print(f"Received message from Deepgram")  # Log when message is received
+        # Get transcription and diarization from Deepgram (base layer)
         sentence = result.channel.alternatives[0].transcript
-        # print(sentence)
         if len(sentence) == 0:
             return
-        # print(sentence)
+        
+        # Get words from Deepgram (with speaker information from base layer)
+        words = result.channel.alternatives[0].words
+        
+        # Create segments from Deepgram (base diarization layer)
+        deepgram_segments = []
+        for word in words:
+            is_user = True if word.speaker == 0 and preseconds > 0 else False
+            if word.start < preseconds:
+                continue
+            
+            if not deepgram_segments:
+                deepgram_segments.append({
+                    'speaker': f"SPEAKER_{word.speaker}",
+                    'start': word.start - preseconds,
+                    'end': word.end - preseconds,
+                    'text': word.punctuated_word,
+                    'is_user': is_user,
+                    'person_id': None,
+                })
+            else:
+                last_segment = deepgram_segments[-1]
+                if last_segment['speaker'] == f"SPEAKER_{word.speaker}":
+                    last_segment['text'] += f" {word.punctuated_word}"
+                    last_segment['end'] = word.end - preseconds
+                else:
+                    deepgram_segments.append({
+                        'speaker': f"SPEAKER_{word.speaker}",
+                        'start': word.start - preseconds,
+                        'end': word.end - preseconds,
+                        'text': word.punctuated_word,
+                        'is_user': is_user,
+                        'person_id': None,
+                    })
+        
+        # Add Pyannote as another layer of diarization on top
+        if enhanced_diarizer and enhanced_diarizer.is_initialized:
+            try:
+                # Use Pyannote to add another layer of diarization
+                enhanced_segments = enhanced_diarizer.enhance_with_pyannote(
+                    deepgram_segments, audio_buffer, sample_rate
+                )
+                stream_transcript(enhanced_segments)
+                
+            except Exception as e:
+                print(f"Pyannote enhancement failed: {e} - using Deepgram only")
+                # Fallback to Deepgram diarization only
+                stream_transcript(deepgram_segments)
+        else:
+            # Use Deepgram diarization only
+            stream_transcript(deepgram_segments)
+
+    def on_error(self, error, **kwargs):
+        print(f"Error: {error}")
+
+    # Add audio buffering for Pyannote
+    def on_audio_data(data):
+        nonlocal audio_buffer, last_processing_time
+        audio_buffer.extend(data)
+        
+        # Process audio buffer every 3 seconds for Pyannote
+        current_time = time.time()
+        if len(audio_buffer) >= buffer_size or (current_time - last_processing_time) >= buffer_duration:
+            if enhanced_diarizer and enhanced_diarizer.is_initialized:
+                # Process audio buffer with Pyannote
+                enhanced_diarizer.process_audio_buffer(audio_buffer, sample_rate)
+                last_processing_time = current_time
+                # Keep only last 1 second of audio for context
+                audio_buffer = audio_buffer[-int(sample_rate * 1.0 * 2):]
+
+    print("Connecting to Deepgram")  # Log before connection attempt
+    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model, on_audio_data, enhanced_diarizer)
+
+
+async def process_audio_dg_with_enhanced_diarization(
+    stream_transcript,
+    language: str,
+    sample_rate: int,
+    channels: int,
+    preseconds: int = 0,
+    model: str = 'nova-2-general',
+):
+    """
+    Process audio with Deepgram STT + Enhanced Pyannote Diarization.
+    
+    This function provides the best of both worlds:
+    - Deepgram's excellent transcription quality
+    - Pyannote's superior speaker diarization
+    """
+    print('process_audio_dg_with_enhanced_diarization', language, sample_rate, channels, preseconds)
+
+    # Initialize enhanced diarization
+    enhanced_diarizer = None
+    if os.getenv('ENHANCED_DIARIZATION_ENABLED', 'false').lower() in ('true', '1', 'yes'):
+        try:
+            from utils.stt.enhanced_diarization import get_enhanced_diarization
+            enhanced_diarizer = get_enhanced_diarization()
+            if enhanced_diarizer.is_initialized:
+                print("Enhanced diarization with Pyannote initialized successfully")
+            else:
+                print("Enhanced diarization not available - falling back to Deepgram only")
+                enhanced_diarizer = None
+        except ImportError as e:
+            print(f"Enhanced diarization not available: {e}")
+            enhanced_diarizer = None
+
+    def on_message(self, result, **kwargs):
+        sentence = result.channel.alternatives[0].transcript
+        if len(sentence) == 0:
+            return
+        
         segments = []
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
             if word.start < preseconds:
-                # print('Skipping word', word.start)
                 continue
             if not segments:
                 segments.append(
@@ -305,13 +434,30 @@ async def process_audio_dg(
                         }
                     )
 
-        # stream
-        stream_transcript(segments)
+        # Enhanced Speaker Diarization with Pyannote
+        if enhanced_diarizer and enhanced_diarizer.is_initialized:
+            try:
+                # Apply enhanced diarization for better speaker accuracy
+                enhanced_segments = enhanced_diarizer._post_process_consistency(segments)
+                
+                # Log improvement metrics
+                if len(enhanced_segments) > 0:
+                    original_speakers = len(set(seg.get('speaker') for seg in segments))
+                    enhanced_speakers = len(set(seg.get('speaker') for seg in enhanced_segments))
+                    print(f"Enhanced diarization: {original_speakers} -> {enhanced_speakers} speakers")
+                
+                stream_transcript(enhanced_segments)
+            except Exception as e:
+                print(f"Enhanced diarization failed: {e} - using original segments")
+                stream_transcript(segments)
+        else:
+            # Fallback to original Deepgram segments
+            stream_transcript(segments)
 
     def on_error(self, error, **kwargs):
         print(f"Error: {error}")
 
-    print("Connecting to Deepgram")  # Log before connection attempt
+    print("Connecting to Deepgram with Enhanced Diarization")
     return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model)
 
 
@@ -323,12 +469,12 @@ def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
 
 
 def connect_to_deepgram_with_backoff(
-    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, retries=3
+    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, on_audio_data=None, enhanced_diarizer=None, retries=3
 ):
     print("connect_to_deepgram_with_backoff")
     for attempt in range(retries):
         try:
-            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model)
+            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model, on_audio_data, enhanced_diarizer)
         except Exception as error:
             print(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
@@ -340,7 +486,7 @@ def connect_to_deepgram_with_backoff(
     raise Exception(f'Could not open socket: All retry attempts failed.')
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int, model: str):
+def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int, model: str, on_audio_data=None, enhanced_diarizer=None):
     try:
         dg_connection = deepgram.listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
@@ -370,6 +516,21 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
         dg_connection.on(LiveTranscriptionEvents.Close, on_close)
         dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
+        
+        # Add audio data callback for Pyannote processing
+        if on_audio_data:
+            original_send = dg_connection.send
+            def enhanced_send(data):
+                # Call the original send method
+                result = original_send(data)
+                # Also send to our audio data callback
+                on_audio_data(data)
+                return result
+            dg_connection.send = enhanced_send
+        # Keep Deepgram diarization as base layer
+        # Pyannote will be added as another layer on top
+        diarize_option = True
+            
         options = LiveOptions(
             punctuate=True,
             no_delay=True,
@@ -378,7 +539,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             interim_results=False,
             smart_format=True,
             profanity_filter=False,
-            diarize=True,
+            diarize=diarize_option,  # Enabled - Deepgram base layer + Pyannote enhancement
             filler_words=False,
             channels=channels,
             multichannel=channels > 1,
