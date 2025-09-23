@@ -20,7 +20,6 @@ python-dotenv==1.1.1
 rank-bm25==0.2.2
 rapidfuzz==3.14.1
 rich==14.1.0
-scikit-learn==1.7.2
 scipy==1.16.2
 thefuzz==0.22.1
 threadpoolctl==3.6.0

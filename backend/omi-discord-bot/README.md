@@ -1,7 +1,6 @@
 # Omi Discord Bot
 
 ## How to run
-    *   Python 3.14+
     *   `uv` package manager
 
 **Installation**
@@ -11,10 +10,11 @@
     *   Install dependencies: `uv pip install -r requirements.txt`
 
 **Configuration**
-    *   Create a `.env` file: `TOKEN=your_bot_token`
+    *   Create a `.env` file: add this line: `TOKEN=your_bot_token`
 
 **Running the bot**
     *   Run the bot: `python main.py`
+            Server: `watchmedo auto-restart --recursive --pattern="*.py" -- python main.py`
 
 **Indexing the knowledge base**
     *   In your Discord server, run the `!index` command.
@@ -24,3 +24,5 @@
 *   `$index`: Indexes the `faq.json` file.
 *   `$reload_index`: Reloads the BM25 index.
 *   `$sync`: to sync slash command 
+
+
