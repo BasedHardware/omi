@@ -9,7 +9,7 @@ import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/src/flutter_communicator.g.dart';
+import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {

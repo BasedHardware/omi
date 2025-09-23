@@ -10,7 +10,7 @@ import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/src/flutter_communicator.g.dart';
+import 'package:omi/gen/flutter_communicator.g.dart';
 
 abstract class IDeviceService {
   void start();

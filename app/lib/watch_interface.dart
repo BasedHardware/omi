@@ -1,7 +1,7 @@
 import 'package:pigeon/pigeon.dart';
 
 @ConfigurePigeon(PigeonOptions(
-  dartOut: 'lib/src/flutter_communicator.g.dart',
+  dartOut: 'lib/gen/flutter_communicator.g.dart',
   dartOptions: DartOptions(),
   swiftOut: 'ios/Runner/FlutterCommunicator.g.swift',
   swiftOptions: SwiftOptions(),
@@ -52,3 +52,5 @@ abstract class WatchRecorderFlutterAPI {
   void onMainAppMicrophonePermissionResult(bool granted);
   void onWatchBatteryUpdate(double batteryLevel, int batteryState);
 }
+
+
