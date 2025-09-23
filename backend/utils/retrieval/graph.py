@@ -1,10 +1,11 @@
 import datetime
 import uuid
 import asyncio
-from typing import List, Optional, Tuple, AsyncGenerator
+from typing import List, Optional, Tuple, AsyncGenerator, Annotated, Any
 
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+import operator
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, AnyMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
@@ -35,6 +36,8 @@ from utils.llm.chat import (
     retrieve_is_file_question,
     select_structured_filters,
     extract_question_from_conversation,
+    final_answer,
+    final_answer_stream,
 )
 from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
@@ -48,8 +51,20 @@ from utils.conversations.process_conversation import _extract_memories, _save_ac
 import database.conversations as conversations_db
 from utils.llm.conversation_processing import get_transcript_structure
 
+# MCP tools
+from langgraph.prebuilt import ToolNode
+from typing_extensions import TypedDict, Literal
+
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
+# This model will be specifically for the agent's decision-making
+# In graph.py
+
+from langchain_core.messages import SystemMessage
+
+# This model will be specifically for the agent's decision-making
+# A system prompt is bound to the model to give it strict instructions.
+agent_model = ChatOpenAI(model="gpt-4o", temperature=0, streaming=True)
 
 
 class StructuredFilters(TypedDict):
@@ -99,7 +114,8 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
 class GraphState(TypedDict):
     uid: str
-    messages: List[Message]
+    messages: List[Any]
+    tool_messages: Annotated[List[AnyMessage], operator.add]
     plugin_selected: Optional[App]
     tz: str
     cited: Optional[bool] = False
@@ -114,6 +130,7 @@ class GraphState(TypedDict):
 
     parsed_question: Optional[str]
     answer: Optional[str]
+    final_answer: Optional[str]
     ask_for_nps: Optional[bool]
 
     chat_session: Optional[ChatSession]
@@ -122,6 +139,140 @@ class GraphState(TypedDict):
     should_process_insights: Optional[bool] = False
     pseudo_conversation: Optional[Conversation] = None
     insights_processed: Optional[bool] = False
+
+
+############################################
+############# MCP TOOLS ####################
+############################################
+
+
+# fucntion to fetch MCP tools
+def get_user_tools(uid: str) -> List[Any]:
+    """
+    Get tools for a specific user from the app_state.
+    This function accesses the global app_state from main.py
+    """
+    # Import here to avoid circular import
+    from main import app_state
+
+    # Get the MCP tools from app state
+    mcp_tools = app_state.get("mcp_tools", [])
+    return mcp_tools
+
+
+# --- Agent Node Definitions ---
+
+
+async def call_agent(state: GraphState):
+    """Invokes the LLM with user-specific tools to decide on an action."""
+    question = state.get("parsed_question", "")
+    uid = state["uid"]
+
+    # Get the real MCP tools for this user
+    tools = get_user_tools(uid)
+
+    if tools:
+        model_with_tools = agent_model.bind_tools(tools)
+    else:
+        model_with_tools = agent_model
+
+    # Use accumulated conversation context instead of starting fresh
+    tool_messages = state.get("tool_messages", [])
+
+    if tool_messages:
+        # Continue existing conversation - agent sees its own history
+        messages = tool_messages
+    else:
+        # First time - start new conversation
+        system_prompt = (
+            """You are an AI assistant with access to tools. When a user asks for information:
+
+1. Use tools when you need external data
+2. Once you get the required information from a tool, analyze it and provide a response
+3. Do NOT repeatedly call the same tool with the same arguments
+4. If you have sufficient information to answer the user's question, provide your response instead of calling more tools
+
+The user is asking: """
+            + question
+        )
+
+        messages = [SystemMessage(content=system_prompt), HumanMessage(content=question)]
+
+    response = await model_with_tools.ainvoke(messages)
+    return {"tool_messages": messages + [response]}
+
+
+async def execute_tools_node(state: GraphState):
+    """Executes the tools requested by the agent."""
+    uid = state["uid"]
+
+    # Get the real MCP tools for this user
+    tools = get_user_tools(uid)
+
+    if not tools:
+        error_message = AIMessage(content="I don't have access to any tools right now. Please try again later.")
+        return {"tool_messages": state["tool_messages"] + [error_message]}
+
+    # Get existing tool_messages and prepare state for ToolNode
+    tool_messages = state.get("tool_messages", [])
+
+    # ToolNode expects the conversation to be in 'messages' field
+    tool_state = {
+        **state,  # Copy all existing state
+        "messages": tool_messages.copy(),  # Put our tool conversation in messages
+    }
+
+    tool_node = ToolNode(tools)
+
+    try:
+        result = await tool_node.ainvoke(tool_state)
+
+        # ToolNode returns ONLY the new tool execution results
+        if isinstance(result, dict) and "messages" in result:
+            tool_result_messages = result["messages"]
+
+            if len(tool_result_messages) > 0:
+                # Return the tool results to be added to tool_messages
+                return {"tool_messages": tool_result_messages}
+            else:
+                return {}
+
+        return {}
+    except Exception as e:
+        print(f"Tool execution error: {e}")
+        error_message = AIMessage(content=f"Tool execution failed: {str(e)}")
+        return {"tool_messages": state["tool_messages"] + [error_message]}
+
+
+# --- Conditional Edge Logic ---
+
+
+def should_use_tools(state: GraphState) -> Literal["tools", "__end__"]:
+    """The router that decides whether to use tools or end the agent's turn."""
+    tool_messages = state.get("tool_messages", [])
+
+    if not tool_messages:
+        return "__end__"
+
+    last_message = tool_messages[-1]
+
+    if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
+        # Check for repetitive tool calls
+        current_calls = [f"{tc['name']}({tc['args']})" for tc in last_message.tool_calls]
+
+        # Look for previous AI messages with tool calls
+        ai_messages_with_tools = [msg for msg in tool_messages if hasattr(msg, 'tool_calls') and msg.tool_calls]
+
+        if len(ai_messages_with_tools) > 1:
+            prev_ai_msg = ai_messages_with_tools[-2]  # Second to last
+            prev_calls = [f"{tc['name']}({tc['args']})" for tc in prev_ai_msg.tool_calls]
+
+            if current_calls == prev_calls:
+                return "__end__"
+
+        return "tools"
+
+    return "__end__"
 
 
 def determine_conversation(state: GraphState):
@@ -186,16 +337,7 @@ def determine_conversation_type(
 def no_context_conversation(state: GraphState):
     print("no_context_conversation node")
 
-    # streaming
-    streaming = state.get("streaming")
-    if streaming:
-        # state['callback'].put_thought_nowait("Reasoning")
-        answer: str = answer_simple_message_stream(
-            state.get("uid"), state.get("messages"), state.get("plugin_selected"), callbacks=[state.get('callback')]
-        )
-        return {"answer": answer, "ask_for_nps": False}
-
-    # no streaming
+    # no streaming - let final_answer_processor handle streaming
     answer: str = answer_simple_message(
         state.get("uid"),
         state.get("messages"),
@@ -210,16 +352,7 @@ def omi_question(state: GraphState):
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
 
-    # streaming
-    streaming = state.get("streaming")
-    if streaming:
-        # state['callback'].put_thought_nowait("Reasoning")
-        answer: str = answer_omi_question_stream(
-            state.get("messages", []), context_str, callbacks=[state.get('callback')]
-        )
-        return {'answer': answer, 'ask_for_nps': True}
-
-    # no streaming
+    # no streaming - let final_answer_processor handle streaming
     answer = answer_omi_question(state.get("messages", []), context_str)
     return {'answer': answer, 'ask_for_nps': True}
 
@@ -227,17 +360,9 @@ def omi_question(state: GraphState):
 def persona_question(state: GraphState):
     print("persona_question node")
 
-    # streaming
-    streaming = state.get("streaming")
-    if streaming:
-        # state['callback'].put_thought_nowait("Reasoning")
-        answer: str = answer_persona_question_stream(
-            state.get("plugin_selected"), state.get("messages", []), callbacks=[state.get('callback')]
-        )
-        return {'answer': answer, 'ask_for_nps': True}
-
-    # no streaming
-    return {'answer': "Oops", 'ask_for_nps': True}
+    # no streaming - let final_answer_processor handle streaming
+    # TODO: Add proper non-streaming persona implementation
+    return {'answer': "Persona response", 'ask_for_nps': True}
 
 
 def context_dependent_conversation_v1(state: GraphState):
@@ -345,23 +470,7 @@ def qa_handler(state: GraphState):
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    # streaming
-    streaming = state.get("streaming")
-    if streaming:
-        # state['callback'].put_thought_nowait("Reasoning")
-        response: str = qa_rag_stream(
-            uid,
-            state.get("parsed_question"),
-            Conversation.conversations_to_string(memories, False, people=people),
-            state.get("plugin_selected"),
-            cited=state.get("cited"),
-            messages=state.get("messages"),
-            tz=state.get("tz"),
-            callbacks=[state.get('callback')],
-        )
-        return {"answer": response, "ask_for_nps": True}
-
-    # no streaming
+    # no streaming - let final_answer_processor handle streaming
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
@@ -397,11 +506,7 @@ def file_chat_question(state: GraphState):
     else:
         file_ids = fc_tool.get_files()
 
-    streaming = state.get("streaming")
-    if streaming:
-        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback=state.get('callback'))
-        return {'answer': answer, 'ask_for_nps': True}
-
+    # no streaming - let final_answer_processor handle streaming
     answer = fc_tool.process_chat_with_file(uid, question, file_ids)
     return {'answer': answer, 'ask_for_nps': True}
 
@@ -418,6 +523,19 @@ def should_process_chat_insights(state: GraphState) -> str:
     if last_message.sender == "human":
         return "process_insights"
     return "continue"
+
+
+def should_run_mcp_tools(state: GraphState) -> str:
+    """Decide if MCP tools should run for this conversation."""
+    uid = state.get("uid")
+    question = state.get("parsed_question", "")
+    tools = get_user_tools(uid)
+
+    # Run MCP tools if user has any available tools and a question
+    if tools and question.strip():
+        return "run_mcp"
+    else:
+        return "continue"
 
 
 def create_pseudo_conversation_node(state: GraphState) -> GraphState:
@@ -532,64 +650,126 @@ def continue_chat_node(state: GraphState) -> GraphState:
     return state
 
 
-workflow = StateGraph(GraphState)
+def final_answer_node(state: GraphState):
+    streaming = state.get("streaming")
+    question = state.get("parsed_question", "")
+    answer = state.get("answer", "")  # Get answer from previous pipeline step
+    tool_messages = state.get("tool_messages", [])
+
+    # Check if we have MCP tool results
+    has_tool_results = len(tool_messages) > 0
+
+    # If no MCP results and no pipeline answer, we need to run the pipeline first
+    if not has_tool_results and not answer:
+        # This shouldn't happen with proper routing, but handle gracefully
+        return {"answer": "I need more information to help you with that request."}
+
+    # Combine MCP results with pipeline answer (or use MCP results if no pipeline answer)
+    if streaming:
+        callback = state.get('callback')
+        callbacks = [callback] if callback else []
+        result = final_answer_stream(question, answer, tool_messages, callbacks=callbacks)
+        return {"final_answer": result}
+
+    # no streaming
+    result = final_answer(question, answer, tool_messages)
+    return {"final_answer": result}
+
 
 # TODO: could be optimized using parallization or subgraphs.
 # Start with insights check
-workflow.add_edge(START, "check_insights")
+def create_agent_graph():
+    workflow = StateGraph(GraphState)
+    workflow.add_edge(START, "check_insights")
 
-workflow.add_node("check_insights", lambda state: state)  # Pass-through for routing
-workflow.add_conditional_edges(
-    "check_insights",
-    should_process_chat_insights,
-    {
-        "process_insights": "create_pseudo_conversation",
-        "continue": "determine_conversation",  # Skip insights, go to normal flow
-    },
-)
+    # Insights check
+    workflow.add_node("check_insights", lambda state: state)  # Pass-through for routing
+    workflow.add_conditional_edges(
+        "check_insights",
+        should_process_chat_insights,
+        {
+            "process_insights": "create_pseudo_conversation",
+            "continue": "determine_conversation",  # Skip insights, extract question first
+        },
+    )
 
-# Insights processing pipeline (runs BEFORE conversation processing)
-workflow.add_node("create_pseudo_conversation", create_pseudo_conversation_node)
-workflow.add_node("extract_memories", extract_memories_node)
-workflow.add_node("save_action_items", save_action_items_node)
-workflow.add_node("extract_trends", extract_trends_node)
+    # Insights processing pipeline (runs BEFORE conversation processing)
+    workflow.add_node("create_pseudo_conversation", create_pseudo_conversation_node)
+    workflow.add_node("extract_memories", extract_memories_node)
+    workflow.add_node("save_action_items", save_action_items_node)
+    workflow.add_node("extract_trends", extract_trends_node)
 
-workflow.add_edge("create_pseudo_conversation", "extract_memories")
-workflow.add_edge("extract_memories", "save_action_items")
-workflow.add_edge("save_action_items", "extract_trends")
-workflow.add_edge("extract_trends", "determine_conversation")  # After insights, continue to conversation
+    workflow.add_edge("create_pseudo_conversation", "extract_memories")
+    workflow.add_edge("extract_memories", "save_action_items")
+    workflow.add_edge("save_action_items", "extract_trends")
+    workflow.add_edge("extract_trends", "determine_conversation")  # After insights, extract question
 
-# Normal conversation flow (unchanged)
-workflow.add_node("determine_conversation", determine_conversation)
-workflow.add_conditional_edges("determine_conversation", determine_conversation_type)
+    # Question extraction happens first (after insights or directly)
+    workflow.add_node("determine_conversation", determine_conversation)
+    workflow.add_edge("determine_conversation", "mcp_or_continue")  # After question extraction, decide MCP
 
-workflow.add_node("no_context_conversation", no_context_conversation)
-workflow.add_node("omi_question", omi_question)
-workflow.add_node("context_dependent_conversation", context_dependent_conversation)
-workflow.add_node("file_chat_question", file_chat_question)
-workflow.add_node("persona_question", persona_question)
+    # MCP decision point
+    workflow.add_node("mcp_or_continue", lambda state: state)
+    workflow.add_conditional_edges(
+        "mcp_or_continue",
+        should_run_mcp_tools,
+        {
+            "run_mcp": "call_agent",  # Start MCP flow with parsed question
+            "continue": "route_conversation",  # Skip MCP, go to conversation routing
+        },
+    )
 
-# Simple edges to END (like before)
-workflow.add_edge("no_context_conversation", END)
-workflow.add_edge("omi_question", END)
-workflow.add_edge("persona_question", END)
-workflow.add_edge("file_chat_question", END)
+    # MCP tools nodes
+    workflow.add_node("call_agent", call_agent)
+    workflow.add_node("tools", execute_tools_node)
+    workflow.add_node("final_answer_processor", final_answer_node)
 
-# RAG pipeline
-workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
-workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
-workflow.add_node("retrieve_topics_filters", retrieve_topics_filters)
-workflow.add_node("retrieve_date_filters", retrieve_date_filters)
-workflow.add_edge("retrieve_topics_filters", "query_vectors")
-workflow.add_edge("retrieve_date_filters", "query_vectors")
-workflow.add_node("query_vectors", query_vectors)
-workflow.add_edge("query_vectors", "qa_handler")
-workflow.add_node("qa_handler", qa_handler)
-workflow.add_edge("qa_handler", END)
+    # MCP flow: call_agent -> tools (if needed) -> route_conversation (always)
+    workflow.add_conditional_edges(
+        "call_agent",
+        should_use_tools,
+        {"tools": "tools", "__end__": "route_conversation"},  # Always go to normal conversation after MCP
+    )
+    workflow.add_edge("tools", "call_agent")  # Loop back to agent after tool use
 
-checkpointer = MemorySaver()
-graph = workflow.compile(checkpointer=checkpointer)
-graph_stream = workflow.compile()
+    # Conversation type routing (runs after MCP completion OR if MCP skipped)
+    workflow.add_node("route_conversation", lambda state: state)
+    workflow.add_conditional_edges("route_conversation", determine_conversation_type)
+
+    workflow.add_node("no_context_conversation", no_context_conversation)
+    workflow.add_node("omi_question", omi_question)
+    workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+    workflow.add_node("file_chat_question", file_chat_question)
+    workflow.add_node("persona_question", persona_question)
+
+    # All conversation types go to final_answer_processor to combine with MCP results
+    workflow.add_edge("no_context_conversation", "final_answer_processor")
+    workflow.add_edge("omi_question", "final_answer_processor")
+    workflow.add_edge("persona_question", "final_answer_processor")
+    workflow.add_edge("file_chat_question", "final_answer_processor")
+
+    # RAG pipeline for context-dependent conversations
+    workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
+    workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
+    workflow.add_node("retrieve_topics_filters", retrieve_topics_filters)
+    workflow.add_node("retrieve_date_filters", retrieve_date_filters)
+    workflow.add_edge("retrieve_topics_filters", "query_vectors")
+    workflow.add_edge("retrieve_date_filters", "query_vectors")
+    workflow.add_node("query_vectors", query_vectors)
+    workflow.add_edge("query_vectors", "qa_handler")
+    workflow.add_node("qa_handler", qa_handler)
+    workflow.add_edge("qa_handler", "final_answer_processor")
+
+    # Final answer processor goes to END
+    workflow.add_edge("final_answer_processor", END)
+
+    checkpointer = MemorySaver()
+    graph = workflow.compile(checkpointer=checkpointer)
+    graph_stream = workflow.compile()
+    return graph, graph_stream
+
+
+graph, graph_stream = create_agent_graph()
 
 
 @timeit
@@ -602,7 +782,11 @@ def execute_graph_chat(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": app},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
-    return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
+    return (
+        result.get("final_answer", result.get("answer", "")),
+        result.get('ask_for_nps', False),
+        result.get("memories_found", []),
+    )
 
 
 async def execute_graph_chat_stream(
@@ -644,7 +828,7 @@ async def execute_graph_chat_stream(
             break
     await task
     result = task.result()
-    callback_data['answer'] = result.get("answer")
+    callback_data['answer'] = result.get("final_answer", result.get("answer", ""))
     callback_data['memories_found'] = result.get("memories_found", [])
     callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
 
