@@ -1,6 +1,37 @@
 import re
 from typing import Optional
 
+# Stanza NER setup (multilingual)
+import stanza
+import threading
+
+# Cache stanza pipelines per language for thread safety and speed
+_stanza_pipelines = {}
+_stanza_lock = threading.Lock()
+
+def get_stanza_pipeline(lang: str):
+    with _stanza_lock:
+        if lang not in _stanza_pipelines:
+            try:
+                stanza.download(lang, processors='tokenize,ner', verbose=False)
+                _stanza_pipelines[lang] = stanza.Pipeline(lang=lang, processors='tokenize,ner', use_gpu=False, verbose=False)
+            except Exception:
+                return None
+        return _stanza_pipelines[lang]
+
+def detect_speaker_from_text_stanza(text: str, lang: str = 'en') -> Optional[str]:
+    pipeline = get_stanza_pipeline(lang)
+    if not pipeline:
+        return None
+    try:
+        doc = pipeline(text)
+        for ent in doc.ents:
+            if ent.type == 'PER' and len(ent.text) >= 2:
+                return ent.text.strip()
+    except Exception:
+        return None
+    return None
+
 # Language-specific patterns for speaker identification from text
 # Each pattern should have a capture group for the name.
 # The name is expected to be the last capture group.
@@ -115,11 +146,16 @@ for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
 
-def detect_speaker_from_text(text: str) -> Optional[str]:
+def detect_speaker_from_text(text: str, lang: str = 'en') -> Optional[str]:
+    # Try NER first
+    name = detect_speaker_from_text_stanza(text, lang)
+    if name:
+        return name
+    # Fallback to regex
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
-            if name:
+            if name and len(name) >= 2:
                 return name.capitalize()
     return None

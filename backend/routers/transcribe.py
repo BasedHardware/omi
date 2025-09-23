@@ -896,7 +896,7 @@ async def _listen(
                             continue
 
                     # Text-based detection
-                    detected_name = detect_speaker_from_text(segment.text)
+                    detected_name = detect_speaker_from_text(segment.text, language)
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         person_id = person['id'] if person else ''
