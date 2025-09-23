@@ -13,6 +13,10 @@ final class DevEnv implements EnvFields {
   final String? openAIAPIKey = _DevEnv.openAIAPIKey;
 
   @override
+  @EnviedField(varName: 'OPENROUTER_API_KEY', obfuscate: true)
+  final String? openRouterAPIKey = _DevEnv.openRouterAPIKey;
+
+  @override
   @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
   final String? mixpanelProjectToken = _DevEnv.mixpanelProjectToken;
 

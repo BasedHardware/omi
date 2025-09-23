@@ -4,7 +4,12 @@ from collections import defaultdict
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-llm_mini = ChatOpenAI(model="gpt-4o-mini")
+# Import from clients.py for consistent model usage
+from utils.llm.clients import llm_mini
+
+# ===== ORIGINAL LOCAL MODEL DEFINITION (COMMENTED OUT FOR ROLLBACK) =====
+# llm_mini = ChatOpenAI(model="gpt-4o-mini")
+
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
 from database.users import get_all_ratings
