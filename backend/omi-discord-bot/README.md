@@ -21,6 +21,6 @@
 
 ## Commands
 
-*   `!index`: Indexes the `faq.json` file.
-*   `!reload_index`: Reloads the BM25 index.
-*   `$mention_test @user`: A test command to mention a user.
+*   `$index`: Indexes the `faq.json` file.
+*   `$reload_index`: Reloads the BM25 index.
+*   `$sync`: to sync slash command 

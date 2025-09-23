@@ -1,12 +1,221 @@
 [
   {
-    "question": "How do I update my Friend Device firmware from version 1.0.2?",
-    "answer": "Connect your device to your computer via USB-C, locate the small hole on your device, press the tiny button twice quickly using a pin, verify your computer recognizes the device as '/Volumes/XIAO-SENSE', download bootloader0.9.0.uf2 and firmware1.0.4.uf2 files, drag and drop the bootloader file first, wait for automatic ejection, double-tap the button again, then drag and drop the firmware file. Restart the app after completion."
+    "question": "What is Omi?",
+    "answer": "Omi is an open-source AI wearable that captures conversations, provides summaries and action items, and can perform actions for you. It connects to a mobile device for high-quality transcriptions of meetings, chats, and voice memos."
   },
   {
-    "question": "what is omi",
-    "answer": "omi is an llm based application"
+    "question": "What are the key features of Omi?",
+    "answer": "Omi is fully open-source and provides live transcription, conversation memory, offline transcription, an app marketplace, and speaker diarization. It offers a low-powered Bluetooth connection that can capture audio for over 24 hours on a small button battery."
   },
+  {
+    "question": "Where can I buy an Omi device?",
+    "answer": "You can buy the Omi Developer Kit or the Omi Glass Dev Kit from the homepage or documentation website. The links are: https://omi.me/products/omi-dev-kit-2 and https://omi.me/glass."
+  },
+  {
+    "question": "How can I get started with Omi in under 2 minutes?",
+    "answer": "First, download the Omi app from the Google Play Store or Apple App Store. Next, create and copy a webhook URL from webhook.site. Then, in the Omi app, go to 'Explore' -> 'Create an App', select a capability, paste the webhook URL, and install the app. Finally, start speaking to see a real-time transcript on webhook.site."
+  },
+  {
+    "question": "What kind of resources are available in the Omi repository?",
+    "answer": "The Omi repository contains the code for the Omi device, Omi Glass, the Omi app, AI personas (web version), and SDKs. It also includes documentation on app setup, building the device, installing firmware, and creating custom apps."
+  },
+  {
+    "question": "How can I contribute to the Omi project?",
+    "answer": "You can contribute by checking the contributions guide, looking for paid bounties, reviewing current issues on GitHub, joining the Discord community, or building your own plugins and integrations."
+  },
+  {
+    "question": "What is the license for Omi?",
+    "answer": "Omi is available under the MIT License."
+  },
+  {
+    "question": "What is the Omi Python SDK and how do I install it?",
+    "answer": "The Omi Python SDK is a pip-installable library for connecting to Omi devices over Bluetooth, decoding Opus-encoded audio, and transcribing it in real time using Deepgram. You must first install the Opus audio codec library on your system (e.g., `brew install opus` on macOS). You can install the SDK from PyPI with `pip install omi-sdk` or from source after cloning the repository with `pip install -e .`."
+  },
+  {
+    "question": "How do I get started with the Omi DevKit 2?",
+    "answer": "To get started with the Omi DevKit 2, you can order an assembled device from the Based Hardware website. Alternatively, you can update the firmware through the Omi AI app, download a pre-built version from the Omi Github repo, or compile it yourself by following the firmware compilation guide."
+  },
+  {
+    "question": "What are the core functionalities of the Omi backend?",
+    "answer": "The Omi backend processes and analyzes data (converting audio to text, extracting meaning, and creating structured information), stores and manages memories, facilitates intelligent conversations, and integrates with external services."
+  },
+  {
+    "question": "How does memory post-processing work in the Omi backend?",
+    "answer": "Memory post-processing is initiated by a POST request from the Omi App to the backend. The backend retrieves the memory from Firestore, uploads the audio to Google Cloud Storage, and then uses FAL.ai WhisperX for high-quality transcription. The new transcript is cleaned and formatted into segments. A speech profile matching function uses a Speechbrain model to identify speakers and update the segments. The memory is then reprocessed to extract new structured data, regenerate embeddings, and optionally perform emotional analysis using the Hume API. Finally, the updated memory is saved back to Firestore and the vector database."
+  },
+  {
+    "question": "How do I set up my environment for Omi backend development?",
+    "answer": "To set up your environment for Omi backend development, you need a Google Cloud Project with Firebase enabled, and API keys for OpenAI, Deepgram, Redis, and Pinecone. You must install the Google Cloud SDK, enable the Cloud Resource Manager API and Firebase Management API, and authenticate with Google Cloud. Python, `git`, `ffmpeg`, and `opus` must be installed. You also need to clone the backend repository, set up a `.env` file with all the required API keys and credentials, and install Python dependencies, preferably in a virtual environment."
+  },
+  {
+    "question": "How do I use the SwiftWhisper package in Xcode?",
+    "answer": "To use the SwiftWhisper package in Xcode, you add the package URL `https://github.com/exPHAT/SwiftWhisper.git` to your project's dependencies and set the dependency rule to the 'master' branch. You then import `SwiftWhisper` into your code and can transcribe audio frames using the `transcribe` method. You can also implement `WhisperDelegate` to get progress updates, new segments, and completion or error notifications."
+  },
+  {
+    "question": "What are the specifications for the omiGlass DevKit hardware components?",
+    "answer": "The omiGlass DevKit hardware components include a Seeed Studio XIAO ESP32 S3 Sense board, six 150mAh batteries or similar, one 250mAh battery, wires, and hinges. The current design does not include a switch, but a switch can be added. A 3D printer is also needed for the hardware components if building your own."
+  },
+  {
+    "question": "How do I install the Omi React Native SDK in my project?",
+    "answer": "To install the Omi React Native SDK, you can run `npm install @omiai/omi-react-native` or `yarn add @omiai/omi-react-native`. The SDK also relies on `react-native-ble-plx`, which you must install separately. After installing these dependencies, you must run `cd ios && pod install` for iOS projects."
+  },
+  {
+    "question": "What is the `omi-scan` command-line tool used for in the Omi Python SDK?",
+    "answer": "The `omi-scan` command-line tool is used to scan for nearby Bluetooth devices. The output shows a list of devices with their names and MAC addresses, which you can then use to connect to a specific Omi device."
+  },
+  {
+    "question": "What is the Omi DevKit 2, and what are its key features?",
+    "answer": "The Omi DevKit 2 is an upgraded version of the DevKit 1, retaining the necklace form factor but adding an 8GB onboard storage and a speaker. It replaces the on/off switch with a programmable button and can operate in standalone mode, but still requires the Omi app for processing. It runs on the Xiao nRF52840 SoC."
+  },
+  {
+    "question": "What are the common issues and solutions for the Omi React Native SDK?",
+    "answer": "Common issues include build failures with native module errors on iOS (solution: run `pod install` in the `ios` directory and open the `.xcworkspace` file), devices not being found during scanning (solution: ensure Bluetooth and permissions are enabled), and connection failures (solution: restart the device and check the battery)."
+  },
+  {
+    "question": "How do I build the Omi firmware with Docker?",
+    "answer": "To build the Omi firmware with Docker, you first need to have Docker installed. Then, from the root of the repository, you can run `./omi/firmware/scripts/build-docker.sh`. The script will start a Docker container, install dependencies, build the firmware, and create an OTA package at `firmware/build/docker_build/zephyr.zip`."
+  },
+  {
+    "question": "What is the purpose of the `docs.json` file in Mintlify documentation?",
+    "answer": "The `docs.json` file is the core configuration file for a Mintlify site. It defines global settings such as the project name, navigation menu structure, logo, favicon, colors, and links. It's updated every time a new page is added to the site."
+  },
+  {
+    "question": "What is the `backend_scripts_rag_README.md` file about?",
+    "answer": "The `backend_scripts_rag_README.md` file provides setup and troubleshooting instructions for a backend script related to RAG (Retrieval-Augmented Generation). The steps involve navigating to the `scripts/rag` directory, replacing a `uid` variable, setting an `OPENAI_API_KEY` environment variable, setting up an `.env` file, and running the `streamlit` app. Troubleshooting tips are also provided for errors related to embeddings."
+  },
+  {
+    "question": "What is the `docs_doc_info_Support.mdx` file about?",
+    "answer": "The `docs_doc_info_Support.mdx` file provides information on how to get support for the Omi project. For open-source support, it suggests opening an issue on GitHub and/or asking in the Discord Community. For commercial support, license inquiries, or other questions, it directs users to contact `team@basedhardware.com`."
+  },
+  {
+    "question": "How do you add a new file to the documentation?",
+    "answer": "To add a new file to the documentation, you create an MDX file and update the `docs.json` file with the new page's path. The new file will not appear in the navigation menu automatically and must be explicitly added to the `navigation` field in `docs.json`."
+  },
+  {
+    "question": "What are Omi's Swift, Python, and React Native SDKs used for?",
+    "answer": "Omi's SDKs are used for building on top of the Omi AI wearable in different languages. They allow you to connect to any Omi device, perform transcription either locally or using Deepgram, and don't depend on Omi's infrastructure."
+  },
+  {
+    "question": "What is the Omi Python SDK used for?",
+    "answer": "The Omi Python SDK is a library for connecting to Omi wearable devices over Bluetooth, decoding Opus-encoded audio, and transcribing it in real time using Deepgram. It provides core functions like `listen_to_omi` for connecting to a device, `OmiOpusDecoder` for audio decoding, and `transcribe` for real-time transcription. It also includes a command-line tool, `omi-scan`, to find nearby devices."
+  },
+  {
+    "question": "How can I contribute to the Omi project?",
+    "answer": "You can contribute to the Omi project by forking the repository, making changes, and creating a Pull Request. There are paid bounties available for some tasks, which can be found by filtering issues with the 'Paid Bounty' label. You can also contribute to the documentation by modifying files in the GitHub docs folder. Significant contributions can earn you rewards like a free DEV KIT device, transcription credits, or a special Contributor role in Discord."
+  },
+  {
+    "question": "How does memory embedding work in the Omi backend?",
+    "answer": "Memory embedding is a process that is triggered when a new or reprocessed memory is created. The `process_memory` function calls `upsert_vector`, which extracts structured data like the memory's title, overview, and category. This data is then used by the `generate_embedding` function to call the OpenAI Embeddings API to create a numerical vector. Finally, the vector, along with metadata such as the memory ID and user ID, is stored in a Pinecone vector database. This process enables semantic search and efficient filtering of memories."
+  },
+  {
+    "question": "What is the `plugins_instructions_gcal_README.md` file about?",
+    "answer": "The `plugins_instructions_gcal_README.md` file describes an OMI and Google Calendar integration. The integration automatically creates Google Calendar events from OMI memories and is synchronized in real-time. It uses secure OAuth2 authentication with Google, and events are organized in a user's chosen Google Calendar. The document provides a link to connect Google Calendar and recommends creating a dedicated calendar for OMI events."
+  },
+  {
+    "question": "What is the `plugins_instructions_notion-crm_README.md` file about?",
+    "answer": "The `plugins_instructions_notion-crm_README.md` file provides instructions for setting up a Notion CRM plugin for Omi. It explains that users need to authenticate 'Notion x Omi' by accepting a template and then selecting it from their available pages."
+  },
+  {
+    "question": "What is the `plugins_instructions_reflect_README.md` file about?",
+    "answer": "The `plugins_instructions_reflect_README.md` file provides instructions for setting up an OMI and Reflect integration. The integration captures OMI memories and transcripts, maps conversations to Reflect Daily notes, and consolidates action items. It uses secure OAuth2 authentication, and notes are searchable in Reflect. The document provides a link to start the authorization process and details the configuration options for the integration."
+  },
+  {
+    "question": "What is the `plugins_instructions_multion-amazon_README.md` file about?",
+    "answer": "The `plugins_instructions_multion-amazon_README.md` file describes a plugin for Omi that allows users to automatically add books mentioned in their conversations to their Amazon cart using MultiOn. The setup process involves opening a link on a desktop, copying a user ID, and then entering that ID into another link to authenticate. The document notes that this is an experimental feature."
+  },
+  {
+    "question": "What is the Omi Simulator?",
+    "answer": "The Omi Simulator is an early-version simulator of the Omi device. A limitation is that on Mac, the advertised name for the BLE Peripheral is the name of the machine. The latest Omi app discovers and connects by service UUID, but older versions of the app looked for a device named 'Friend' or 'Super'."
+  },
+  {
+    "question": "What are the key components of the Omi Triangle v2?",
+    "answer": "The Omi Triangle v2 is an upgraded version of Omi Triangle v1 with added memory, a speaker, and a configurable momentary button. Key components include a Seeed Studio XIAO nRF52840 Sense, an Adafruit 5769 Audio BFF Add-On, an OWS-091630W50A-8 Speaker, a 250mAh LiPo battery, a 4x4x1.5 SMD Button, solid core wires, a micro SD card, and a 3d-printed enclosure."
+  },
+  {
+    "question": "How do you assemble the Omi Triangle v2?",
+    "answer": "The assembly guide for Omi Triangle v2 has 11 steps, with an estimated time of 50 minutes. Key steps include preparing the Adafruit 5769 board, soldering the XIAO nRF52840 Sense board to it, attaching and soldering the button, soldering wires and the speaker, attaching the battery, cleaning the board, and finally assembling the device. There are also optional steps for microphone noise isolation and a specific section for correcting the speaker function for earlier models."
+  },
+  {
+    "question": "What is the `omiGlass_README.md` file about?",
+    "answer": "The `omiGlass_README.md` file provides instructions for setting up the omiGlass DevKit, an open-source smart glasses project. The document covers prerequisites like installing Ollama and the Arduino IDE, lists the necessary hardware components, and details the steps for software setup and firmware installation. It also includes a section on how to contribute to the project."
+  },
+  {
+    "question": "What are the requirements for building the Omi app?",
+    "answer": "The Omi app is a Flutter-based mobile application. To build it, you need the Flutter SDK, Xcode (for iOS), Android Studio (for Android), CocoaPods (for iOS), and the NDK (for building Opus for ARM devices). The `app/setup.sh` script is available for automatic setup for iOS, Android, and macOS."
+  },
+  {
+    "question": "What is the Omi App-device protocol for BLE?",
+    "answer": "The Omi app discovers devices by scanning for BLE devices with the name `Omi`. The device implements a standard Battery Service (UUID 0x180F) and a Device Information Service (UUID 0x180A). It also has a service with UUID `19B10000-E8F2-537E-4F6C-D104768A1214` for streaming audio data. This audio service has two characteristics: one for audio data (UUID `19B10001-E8F2-537E-4F6C-D104768A1214`) and one for codec type (UUID `19B10002-E8F2-537E-4F6C-D104768A1214`)."
+  },
+  {
+    "question": "How do I install the Omi Swift library?",
+    "answer": "To install the Omi Swift library, you need to open an Xcode project, navigate to File -> Swift Packages -> Add Package Dependency, and paste the repository URL `https://github.com/BasedHardware/omi`. You also need to add the `NSBluetoothAlwaysUsageDescription` key with a description to your project's `Info.plist` file."
+  },
+  {
+    "question": "How is the Omi frontend application structured?",
+    "answer": "The Omi frontend is a Next.js application built with the App Router. Its structure includes a `src` directory with subdirectories for `app` (Next.js pages), `components` (reusable UI), `constants` (app configuration), `hooks`, `lib` (utilities), `types` (TypeScript definitions), `utils`, and `actions` (server actions)."
+  },
+  {
+    "question": "What is the purpose of the `docs_doc_developer_apps_Notifications.mdx` file?",
+    "answer": "The `docs_doc_developer_apps_Notifications.mdx` file provides a guide on how to send direct text notifications to OMI users from an application. It details the required headers and query parameters for the `POST /v2/integrations/{app_id}/notification` endpoint, and provides a Node.js code example for implementation. It also includes best practices for rate limiting, content, error handling, and security, as well as a table of common error response codes."
+  },
+  {
+    "question": "What is the purpose of the `docs_doc_info_Disclaimer.mdx` file?",
+    "answer": "The `docs_doc_info_Disclaimer.mdx` file states that the Omi device is a prototype project provided 'as is' without any warranty. It also notes that the use of the device should comply with all local laws and regulations regarding privacy and data protection."
+  },
+  {
+    "question": "What is the `web_personas-open-source_README.md` file about?",
+    "answer": "The `web_personas-open-source_README.md` file describes 'Personas', an open-source AI chat platform built with Next.js, Firebase, and various AI APIs. It supports multiple AI models via OpenRouter, user authentication via Firebase, and has a real-time chat interface. The document lists required API keys (Firebase, OpenRouter, etc.), provides setup instructions for local development and Docker, and gives information on model selection and costs."
+  },
+  {
+    "question": "What is the `omi_firmware_BUILD_AND_OTA_FLASH.md` file about?",
+    "answer": "The `omi_firmware_BUILD_AND_OTA_FLASH.md` file provides a guide for building and flashing OMI firmware over-the-air (OTA) using nRF Connect SDK 2.9.0 and the nRF Connect mobile app. It details hardware and software prerequisites, gives an overview of the dual-core nRF5340 architecture, and provides steps for environment setup, building the firmware, and the OTA flashing process. It also includes a troubleshooting section for common build and flashing issues, as well as technical details on memory layout and security features."
+  },
+  {
+    "question": "How do you manually update the firmware on DevKit versions (DK1 & DK2)?",
+    "answer": "To manually update the firmware on DevKit devices, you must download the bootloader and the correct firmware `.uf2` file for your device. After ensuring the device battery is above 50% and using a direct USB connection, you need to double-click the reset button to enter DFU mode, which will make the device appear as a drive named `/Volumes/XIAO-SENSE`. You then drag the bootloader file onto the drive, wait for it to eject, re-enter DFU mode, and drag the firmware file."
+  },
+  {
+    "question": "What are the different types of Omi Apps?",
+    "answer": "The different types of Omi apps are Prompt-Based Apps and Integration Apps. Prompt-Based Apps include Chat Prompts (altering conversational style) and Memory Prompts (extracting information from conversations). Integration Apps include Memory Creation Triggers (activated when a new memory is created), Real-Time Transcript Processors (process transcripts as they occur), and Integration Actions (perform actions within the Omi ecosystem)."
+  },
+  {
+    "question": "How do you manually update the firmware on the Consumer Version 1 (CV1) of the Omi device?",
+    "answer": "To manually update the firmware on the Omi CV1, you need to use a special flashing cable that connects the device to a J-Link programmer. You must have J-Link software installed and the latest `merged.hex` and `merged_CPUNET.hex` files downloaded. You then navigate to the correct platform folder (`MAC/` or `WINDOWS/`) and run the J-Link command-line tool with a commander script to flash the network core first, and then the application core."
+  },
+  {
+    "question": "What is the purpose of the `docs_doc_info_Privacy.mdx` file?",
+    "answer": "The `docs_doc_info_Privacy.mdx` file is the Privacy Policy for Omi. It outlines the information collected, which includes personal information, conversational data, and usage data. It explains that this data is used for service enhancement, user communication, and innovation. The policy also details data storage and security measures, information sharing practices with third-party providers, and a user's privacy rights, such as access, update, and data deletion. It also mentions a wearable app version that does not collect data and stores everything locally."
+  },
+  {
+    "question": "What is the `docs_doc_developer_apps_Import.mdx` file about?",
+    "answer": "The `docs_doc_developer_apps_Import.mdx` file is a guide for creating integration apps with 'Imports'. Imports are predefined capabilities that allow an app to proactively create or modify data in the OMI ecosystem, unlike triggers which only respond to events. Currently supported imports include creating and reading conversations and memories. The document provides details on how to set up the app, generate API keys, and implement the API endpoints for these actions."
+  },
+  {
+    "question": "What is the purpose of the `docs_doc_developer_backend_transcription.mdx` file?",
+    "answer": "The `docs_doc_developer_backend_transcription.mdx` file outlines the real-time audio transcription process in the Omi application. It explains that audio is streamed via a WebSocket to the `/listen` endpoint, which is handled by the `websocket_endpoint` function in `routers/transcribe.py`. The backend integrates with Deepgram, configuring options like `language`, `sample_rate`, `diarize`, and `model`. The transcribed text is formatted into segments and sent back to the app via the WebSocket."
+  },
+  {
+    "question": "What are the available configuration options for the `prometheus-adapter` Helm chart?",
+    "answer": "The `prometheus-adapter` Helm chart can be configured with `prometheus.url` and `prometheus.port` to point to the correct Prometheus service endpoint. Users can also add custom rules to the `rules.custom` field. It can be configured to serve custom metrics, external metrics, and resource metrics, which can be used by Horizontal Pod Autoscalers. Note that enabling resource metrics will also deploy the resource metrics API, which provides the same functionality as metrics-server, and it is not possible to deploy both in the same cluster."
+  },
+  {
+    "question": "How do you install AudioKit via Swift Package Manager?",
+    "answer": "To install AudioKit via Swift Package Manager, you open Xcode, go to File -> Add Packages..., and enter the package URL `https://github.com/AudioKit/AudioKit/`. It is also recommended to add `https://swiftpackageindex.com/AudioKit/collection.json` as a package collection to get access to other AudioKit libraries. The package includes the `AudioKit`, `AudioKitEX`, and `CAudioKitEX` frameworks."
+  },
+  {
+    "question": "What is the purpose of the `plugins_instructions_map-notes_README.md` file?",
+    "answer": "The `plugins_instructions_map-notes_README.md` file describes a plugin called 'Map Notes' that allows users to create public location-based notes from their conversations. The notes are created using trigger phrases like `Start map note` or `Clip this` to begin and `End map note` or `Clip that` to end a recording. The plugin captures memories that include geolocation and adds them to a global map. The document provides a link to visit Map Notes and lists use cases like collaborative exploration and travel journaling."
+  },
+  {
+    "question": "What is the purpose of the `plugins_instructions_SOS_README.md` file?",
+    "answer": "The `plugins_instructions_SOS_README.md` file describes a plugin for Omi called 'SOS'. The plugin is set up by following authentication steps on a provided link. Once set up, if a user says 'SOS', a memory is created, and the plugin will contact the user's emergency contact."
+  },
+  {
+    "question": "What is the purpose of the `plugins_instructions_heavenorhell_README.md` file?",
+    "answer": "The `plugins_instructions_heavenorhell_README.md` file describes a plugin called 'Heaven or Hell'. The purpose of this plugin is to calculate points based on a user's everyday actions. The document provides a link to visit the leaderboard."
+  },
+
   {
     "question": "How do I charge my Friend device?",
     "answer": "Make sure your device is turned on (red or blue light visible), connect the device to any compatible charger. The charging indicator in the app may not always be accurate. Note: The off/on switch physically disconnects the battery, so the device must be on to charge properly."
