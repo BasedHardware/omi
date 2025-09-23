@@ -3,20 +3,19 @@ from discord.ext import commands
 
 class TestCommand(commands.Cog):
     def __init__(self, bot):
+        self.index = 0 
         self.bot = bot
 
     @commands.command()
-    async def mention_test(self, ctx, member: discord.Member):
+    async def run(self, ctx):
         """Mentions the user provided as an argument."""
-        await ctx.send(f"Hello {member.mention}!")
+        await ctx.reply(f"Hello!")
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author == self.bot.user:
-            return
 
-        if self.bot.user.mentioned_in(message) and not message.content.startswith(self.bot.command_prefix):
-            await message.channel.send("hello")
+    @commands.command()
+    async def called(self, ctx):
+        await ctx.reply(f"hello!")
+
 
 async def setup(bot):
     await bot.add_cog(TestCommand(bot))

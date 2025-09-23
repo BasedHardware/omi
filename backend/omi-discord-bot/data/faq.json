@@ -4,6 +4,10 @@
     "answer": "Connect your device to your computer via USB-C, locate the small hole on your device, press the tiny button twice quickly using a pin, verify your computer recognizes the device as '/Volumes/XIAO-SENSE', download bootloader0.9.0.uf2 and firmware1.0.4.uf2 files, drag and drop the bootloader file first, wait for automatic ejection, double-tap the button again, then drag and drop the firmware file. Restart the app after completion."
   },
   {
+    "question": "what is omi",
+    "answer": "omi is an llm based application"
+  },
+  {
     "question": "How do I charge my Friend device?",
     "answer": "Make sure your device is turned on (red or blue light visible), connect the device to any compatible charger. The charging indicator in the app may not always be accurate. Note: The off/on switch physically disconnects the battery, so the device must be on to charge properly."
   },

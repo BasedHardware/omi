@@ -19,12 +19,5 @@ class MyCog(commands.Cog):
         await interaction.response.send_message(f'Hi, {interaction.user.mention}' , ephemeral=True)
 
 
-    @commands.command()
-    async def ping(self, ctx):
-        await ctx.reply("hello") 
-
-        
-    
-
 async def setup(bot):
     await bot.add_cog(MyCog(bot))
