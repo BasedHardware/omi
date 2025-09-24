@@ -35,6 +35,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -196,10 +197,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
-          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
+          ChangeNotifierProxyProvider<AppProvider, ChatSessionProvider>(
+            create: (context) => ChatSessionProvider(),
+            update: (BuildContext context, app, ChatSessionProvider? previous) =>
+                (previous?..updateAppProvider(app)) ?? (ChatSessionProvider()..updateAppProvider(app)),
+          ),
+          ChangeNotifierProxyProvider2<AppProvider, ChatSessionProvider, MessageProvider>(
             create: (context) => MessageProvider(),
-            update: (BuildContext context, value, MessageProvider? previous) =>
-                (previous?..updateAppProvider(value)) ?? MessageProvider(),
+            update: (BuildContext context, app, sessions, MessageProvider? previous) =>
+                (previous
+                  ?..updateAppProvider(app)
+                  ..updateChatSessionProvider(sessions)) ??
+                (MessageProvider()
+                  ..updateAppProvider(app)
+                  ..updateChatSessionProvider(sessions)),
           ),
           ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
               CaptureProvider>(

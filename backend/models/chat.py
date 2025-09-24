@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, Field, validator
 
 
 class MessageSender(str, Enum):
@@ -146,8 +146,38 @@ class SendMessageRequest(BaseModel):
     file_ids: Optional[List[str]] = []
 
 
+class CreateSessionRequest(BaseModel):
+    app_id: Optional[str] = None
+    title: Optional[str] = None
+
+
+class GenerateTitleRequest(BaseModel):
+    first_message: str = Field(
+        ..., min_length=1, max_length=2000, description="The first message to generate a title from"
+    )
+
+    @validator('first_message')
+    def validate_first_message(cls, v):
+        # Strip whitespace
+        v = v.strip()
+
+        # Check if empty after stripping
+        if not v:
+            raise ValueError('First message cannot be empty or only whitespace')
+
+        # Check for reasonable content (not just special characters)
+        clean_content = (
+            v.replace(' ', '').replace('\n', '').replace('\t', '').replace('.', '').replace('!', '').replace('?', '')
+        )
+        if len(clean_content) < 3:
+            raise ValueError('First message must contain at least 3 meaningful characters')
+
+        return v
+
+
 class ChatSession(BaseModel):
     id: str
+    title: Optional[str] = None
     message_ids: Optional[List[str]] = []
     file_ids: Optional[List[str]] = []
     app_id: Optional[str] = None

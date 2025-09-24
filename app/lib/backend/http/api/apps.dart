@@ -9,8 +9,8 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart';
+// import 'package:http/http.dart' as http;
+// import 'package:path/path.dart';
 
 Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
