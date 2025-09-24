@@ -5,7 +5,11 @@
 Meet Omi, the world’s leading open-source AI wearable that captures conversations, gives summaries, action items and does actions for you. Simply connect Omi to your mobile device and enjoy automatic, high-quality
 transcriptions of meetings, chats, and voice memos wherever you are.
 
-![Omi](https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59" alt="Omi" width="49%" />
+  <img src="https://github.com/user-attachments/assets/fdad4226-e5ce-4c55-b547-9101edfa3203" alt="Image" width="49%" />
+</p>
+
 ![CleanShot 2025-02-08 at 18 22 23](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
 
 [![Discord Follow](https://img.shields.io/discord/1192313062041067520?label=Discord)](http://discord.omi.me) &ensp;&ensp;&ensp;
@@ -59,8 +63,8 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 
 - [Introduction](https://docs.omi.me/)
 - [omi App setup](https://docs.omi.me/doc/developer/AppSetup)
-- [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
-- [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
+- [Buying Guide](https://docs.omi.me/doc/assembly/Buying_Guide/)
+- [Build the device](https://docs.omi.me/doc/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/doc/get_started/Flash_device/)
 - [Create your own app in 1 minute](https://docs.omi.me/doc/developer/apps/Introduction).
 
@@ -75,7 +79,7 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 [//]: # "## More links:"
 [//]: #
 [//]: # "- [Contributing](https://docs.omi.me/doc/developer/Contribution/)"
-[//]: # "- [Support](https://docs.omi.me/docs/info/Support/;"
+[//]: # "- [Support](https://docs.omi.me/doc/info/Support/)"
 [//]: # "- [BLE Protocol](https://docs.omi.me/doc/developer/Protocol/)"
 [//]: # "- [Plugins](https://docs.omi.me/doc/developer/Plugins/)"
 

@@ -1,14 +1,14 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
-from models import ExternalIntegrationMemorySource, Geolocation
+from models import ExternalIntegrationConversationSource, Geolocation
 
 
 class ZapierSubcribeModel(BaseModel):
     target_url: str = Field(description="Target url is the url for web hook calling", default='')
 
 
-class ZapierCreateMemory(BaseModel):
+class ZapierCreateConversation(BaseModel):
     icon: dict
     title: str
     speakers: int
@@ -18,9 +18,9 @@ class ZapierCreateMemory(BaseModel):
     transcript: str
 
 
-class ZapierActionCreateMemory(BaseModel):
+class ZapierActionCreateConversation(BaseModel):
     text: str
-    source: ExternalIntegrationMemorySource  # text_source
+    source: ExternalIntegrationConversationSource  # text_source
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     language: Optional[str] = None

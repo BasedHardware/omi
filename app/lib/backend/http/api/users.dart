@@ -8,7 +8,6 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   var response = await makeApiCall(
@@ -19,8 +18,6 @@ Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   );
   if (response == null) return false;
   if (response.statusCode == 200) return true;
-  PlatformManager.instance.crashReporter.reportCrash(Exception('Failed to update user geolocation'), StackTrace.current,
-      userAttributes: {'response': response.body});
   return false;
 }
 

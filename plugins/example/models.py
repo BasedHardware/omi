@@ -24,7 +24,7 @@ class Event(BaseModel):
     created: bool = False
 
 
-class MemoryPhoto(BaseModel):
+class ConversationPhoto(BaseModel):
     base64: str
     description: str
 
@@ -114,12 +114,12 @@ class TranscriptSegment(BaseModel):
         return True
 
 
-class Memory(BaseModel):
+class Conversation(BaseModel):
     created_at: datetime
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     transcript_segments: List[TranscriptSegment] = []
-    photos: Optional[List[MemoryPhoto]] = []
+    photos: Optional[List[ConversationPhoto]] = []
     # recordingFilePath: Optional[str] = None
     # recordingFileBase64: Optional[str] = None
     structured: Structured
@@ -139,7 +139,7 @@ class Geolocation(BaseModel):
     location_type: Optional[str] = None
 
 
-class MemorySource(str, Enum):
+class ConversationSource(str, Enum):
     friend = 'friend'
     omi = 'omi'
     openglass = 'openglass'
@@ -147,16 +147,16 @@ class MemorySource(str, Enum):
     workflow = 'workflow'
 
 
-class ExternalIntegrationMemorySource(str, Enum):
+class ExternalIntegrationConversationSource(str, Enum):
     audio = 'audio_transcript'
     other = 'other_text'
 
 
-class ExternalIntegrationCreateMemory(BaseModel):
+class ExternalIntegrationCreateConversation(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
-    text_source: ExternalIntegrationMemorySource = ExternalIntegrationMemorySource.audio
+    text_source: ExternalIntegrationConversationSource = ExternalIntegrationConversationSource.audio
     language: Optional[str] = None
     geolocation: Optional[Geolocation] = None
 

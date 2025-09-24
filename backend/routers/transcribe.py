@@ -2,17 +2,19 @@ import asyncio
 import json
 import os
 import struct
+import time
 import uuid
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
-import opuslib
-import webrtcvad
+import opuslib  # type: ignore
+import webrtcvad  # type: ignore
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
-from pydub import AudioSegment
+from pydub import AudioSegment  # type: ignore
 from starlette.websockets import WebSocketState
+from websockets.exceptions import ConnectionClosed
 
 import database.conversations as conversations_db
 import database.users as user_db
@@ -50,7 +52,6 @@ from utils.other.storage import get_profile_audio_if_exists
 from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
 from utils.speaker_identification import detect_speaker_from_text
-from utils.stt.streaming import *
 from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
@@ -67,6 +68,9 @@ from utils.webhooks import get_audio_bytes_webhook_seconds
 router = APIRouter()
 
 
+PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
+
+
 async def _listen(
     websocket: WebSocket,
     uid: str,
@@ -75,8 +79,7 @@ async def _listen(
     codec: str = 'pcm8',
     channels: int = 1,
     include_speech_profile: bool = True,
-    stt_service: STTService = None,
-    including_combined_segments: bool = False,
+    stt_service: Optional[STTService] = None,
     conversation_timeout: int = 120,
 ):
     session_id = str(uuid.uuid4())
@@ -89,7 +92,6 @@ async def _listen(
         codec,
         include_speech_profile,
         stt_service,
-        including_combined_segments,
         conversation_timeout,
     )
 
@@ -103,7 +105,8 @@ async def _listen(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    if not has_transcription_credits(uid):
+    user_has_credits = has_transcription_credits(uid)
+    if not user_has_credits:
         # Send credit limit notification (with Redis caching to prevent spam)
         try:
             await send_credit_limit_notification(uid)
@@ -141,7 +144,7 @@ async def _listen(
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
     speech_profile_processed = False
-    current_session_segments: Dict[str, TranscriptSegment] = {}
+    current_session_segments: Dict[str, bool] = {}  # Store only speech_profile_processed status
     suggested_segments: Set[str] = set()
     first_audio_byte_timestamp: Optional[float] = None
     last_usage_record_timestamp: Optional[float] = None
@@ -150,7 +153,7 @@ async def _listen(
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
-        nonlocal last_audio_received_time, last_transcript_time
+        nonlocal last_audio_received_time, last_transcript_time, user_has_credits
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -171,6 +174,7 @@ async def _listen(
 
             # Send credit limit notification
             if not has_transcription_credits(uid):
+                user_has_credits = False
                 try:
                     await send_credit_limit_notification(uid)
                 except Exception as e:
@@ -183,6 +187,8 @@ async def _listen(
                     print(f"Locking conversation {conversation_id} due to transcription limit.", uid, session_id)
                     conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
                     locked_conversation_ids.add(conversation_id)
+            else:
+                user_has_credits = True
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)
@@ -293,8 +299,8 @@ async def _listen(
         except asyncio.CancelledError:
             pass
 
-    async def _create_conversation(conversation: dict):
-        conversation = Conversation(**conversation)
+    async def _create_conversation(conversation_data: dict):
+        conversation = Conversation(**conversation_data)
         if conversation.status != ConversationStatus.processing:
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
             conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
@@ -360,8 +366,12 @@ async def _listen(
     seconds_to_trim = None
     seconds_to_add = None
 
+    # Conversation timeout (to process the conversation after x seconds of silence)
+    # Max: 4h, min 2m
     conversation_creation_timeout = conversation_timeout
-    if conversation_timeout < 120:
+    if conversation_creation_timeout == -1:
+        conversation_creation_timeout = 4 * 60 * 60
+    if conversation_creation_timeout < 120:
         conversation_creation_timeout = 120
 
     # Process existing conversations
@@ -499,7 +509,7 @@ async def _listen(
     speech_profile_duration = 0
 
     realtime_segment_buffers = []
-    realtime_photo_buffers = []
+    realtime_photo_buffers: list[ConversationPhoto] = []
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
@@ -612,34 +622,39 @@ async def _listen(
             in_progress_conversation_id = conversation_id
             segment_buffers.extend(segments)
 
-        async def transcript_consume():
-            nonlocal websocket_active
+        async def _transcript_flush(auto_reconnect: bool = True):
             nonlocal segment_buffers
             nonlocal in_progress_conversation_id
             nonlocal pusher_ws
             nonlocal pusher_connected
-            while websocket_active or len(segment_buffers) > 0:
-                await asyncio.sleep(1)
-                if pusher_connected and pusher_ws and len(segment_buffers) > 0:
-                    try:
-                        # 102|data
-                        data = bytearray()
-                        data.extend(struct.pack("I", 102))
-                        data.extend(
-                            bytes(
-                                json.dumps({"segments": segment_buffers, "memory_id": in_progress_conversation_id}),
-                                "utf-8",
-                            )
+            if pusher_connected and pusher_ws and len(segment_buffers) > 0:
+                try:
+                    # 102|data
+                    data = bytearray()
+                    data.extend(struct.pack("I", 102))
+                    data.extend(
+                        bytes(
+                            json.dumps({"segments": segment_buffers, "memory_id": in_progress_conversation_id}),
+                            "utf-8",
                         )
-                        segment_buffers = []  # reset
-                        await pusher_ws.send(data)
-                    except websockets.exceptions.ConnectionClosed as e:
-                        print(f"Pusher transcripts Connection closed: {e}", uid, session_id)
-                        pusher_connected = False
-                    except Exception as e:
-                        print(f"Pusher transcripts failed: {e}", uid, session_id)
-                if pusher_connected is False:
-                    await connect()
+                    )
+                    segment_buffers = []  # reset
+                    await pusher_ws.send(data)
+                except ConnectionClosed as e:
+                    print(f"Pusher transcripts Connection closed: {e}", uid, session_id)
+                    pusher_connected = False
+                except Exception as e:
+                    print(f"Pusher transcripts failed: {e}", uid, session_id)
+            if auto_reconnect and pusher_connected is False:
+                await connect()
+
+        async def transcript_consume():
+            nonlocal websocket_active
+            nonlocal segment_buffers
+            while websocket_active:
+                await asyncio.sleep(1)
+                if len(segment_buffers) > 0:
+                    await _transcript_flush(auto_reconnect=True)
 
         # Audio bytes
         audio_buffers = bytearray()
@@ -649,36 +664,46 @@ async def _listen(
             nonlocal audio_buffers
             audio_buffers.extend(audio_bytes)
 
+        async def _audio_bytes_flush(auto_reconnect: bool = True):
+            nonlocal audio_buffers
+            nonlocal pusher_ws
+            nonlocal pusher_connected
+            if pusher_connected and pusher_ws and len(audio_buffers) > 0:
+                try:
+                    # 101|data
+                    data = bytearray()
+                    data.extend(struct.pack("I", 101))
+                    data.extend(audio_buffers.copy())
+                    audio_buffers = bytearray()  # reset
+                    await pusher_ws.send(data)
+                except ConnectionClosed as e:
+                    print(f"Pusher audio_bytes Connection closed: {e}", uid, session_id)
+                    pusher_connected = False
+                except Exception as e:
+                    print(f"Pusher audio_bytes failed: {e}", uid, session_id)
+            if auto_reconnect and pusher_connected is False:
+                await connect()
+
         async def audio_bytes_consume():
             nonlocal websocket_active
             nonlocal audio_buffers
             nonlocal pusher_ws
             nonlocal pusher_connected
-            while websocket_active or len(audio_buffers) > 0:
+            while websocket_active:
                 await asyncio.sleep(1)
-                if pusher_connected and pusher_ws and len(audio_buffers) > 0:
-                    try:
-                        # 101|data
-                        data = bytearray()
-                        data.extend(struct.pack("I", 101))
-                        data.extend(audio_buffers.copy())
-                        audio_buffers = bytearray()  # reset
-                        await pusher_ws.send(data)
-                    except websockets.exceptions.ConnectionClosed as e:
-                        print(f"Pusher audio_bytes Connection closed: {e}", uid, session_id)
-                        pusher_connected = False
-                    except Exception as e:
-                        print(f"Pusher audio_bytes failed: {e}", uid, session_id)
-                if pusher_connected is False:
-                    await connect()
+                if len(audio_buffers) > 0:
+                    await _audio_bytes_flush(auto_reconnect=True)
+
+        async def _flush():
+            await _audio_bytes_flush(auto_reconnect=False)
+            await _transcript_flush(auto_reconnect=False)
 
         async def connect():
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
             nonlocal pusher_ws
-            nonlocal websocket_active
             async with pusher_connect_lock:
-                if pusher_connected or not websocket_active:
+                if pusher_connected:
                     return
                 # drain
                 if pusher_ws:
@@ -695,12 +720,13 @@ async def _listen(
             nonlocal pusher_connected
 
             try:
-                pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
+                pusher_ws = await connect_to_trigger_pusher(uid, sample_rate, retries=5)
                 pusher_connected = True
             except Exception as e:
                 print(f"Exception in connect: {e}")
 
         async def close(code: int = 1000):
+            await _flush()
             if pusher_ws:
                 await pusher_ws.close(code)
 
@@ -723,14 +749,20 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = including_combined_segments and translation_language is not None
+    translation_enabled = translation_language is not None
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
+        if not translation_language:
+            return
+
         try:
             translated_segments = []
             for segment in segments:
+                if not segment or not segment.id:
+                    continue
+
                 segment_text = segment.text.strip()
                 if not segment_text:
                     continue
@@ -750,14 +782,14 @@ async def _listen(
 
                 # Create/Update Translation object
                 translation = Translation(lang=translation_language, text=translated_text)
-                existing_translation_index = next(
-                    (i for i, t in enumerate(segment.translations) if t.lang == language), None
-                )
-
-                if existing_translation_index is not None:
-                    segment.translations[existing_translation_index] = translation
-                else:
-                    segment.translations.append(translation)
+                if segment.translations is not None:
+                    existing_translation_index = next(
+                        (i for i, t in enumerate(segment.translations) if t.lang == language), None
+                    )
+                    if existing_translation_index is not None:
+                        segment.translations[existing_translation_index] = translation
+                    else:
+                        segment.translations.append(translation)
 
                 translated_segments.append(segment)
 
@@ -787,7 +819,7 @@ async def _listen(
 
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
-        nonlocal current_conversation_id, including_combined_segments, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
+        nonlocal current_conversation_id, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
             await asyncio.sleep(0.6)
@@ -830,7 +862,7 @@ async def _listen(
                     words_transcribed_since_last_record += words_transcribed
 
                 for seg in newly_processed_segments:
-                    current_session_segments[seg.id] = seg
+                    current_session_segments[seg.id] = seg.speech_profile_processed
                 transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             result = _upsert_in_progress_conversation(transcript_segments, photos_to_process, finished_at)
@@ -840,13 +872,10 @@ async def _listen(
             current_conversation_id = conversation.id
 
             if transcript_segments:
-                if including_combined_segments:
-                    updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
-                else:
-                    updates_segments = [segment.dict() for segment in transcript_segments]
+                updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
                 await websocket.send_json(updates_segments)
 
-                if transcript_send is not None:
+                if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments], current_conversation_id)
 
                 if translation_enabled:
@@ -887,9 +916,11 @@ async def _listen(
                         )
                         suggested_segments.add(segment.id)
 
-    image_chunks = {}  # A temporary in-memory cache for image chunks
+    image_chunks = {str: any}  # A temporary in-memory cache for image chunks
 
-    async def process_photo(uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer: list):
+    async def process_photo(
+        uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer: list[ConversationPhoto]
+    ):
         from utils.llm.openglass import describe_image
 
         photo_id = str(uuid.uuid4())
@@ -908,14 +939,14 @@ async def _listen(
         await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
 
     async def handle_image_chunk(
-        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer: list
+        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer: list[ConversationPhoto]
     ):
         temp_id = chunk_data.get('id')
         index = chunk_data.get('index')
         total = chunk_data.get('total')
         data = chunk_data.get('data')
 
-        if not all([temp_id, isinstance(index, int), isinstance(total, int), data]):
+        if not temp_id or not isinstance(index, int) or not isinstance(total, int) or not data:
             print(f"Invalid image chunk received: {chunk_data}", uid, session_id)
             return
 
@@ -995,10 +1026,7 @@ async def _listen(
                             can_assign = False
                             if segment_ids:
                                 for sid in segment_ids:
-                                    if (
-                                        sid in current_session_segments
-                                        and current_session_segments[sid].speech_profile_processed
-                                    ):
+                                    if sid in current_session_segments and current_session_segments[sid]:
                                         can_assign = True
                                         break
 
@@ -1038,9 +1066,23 @@ async def _listen(
         await _process_stt()
 
         # Init pusher
-        pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = (
-            create_pusher_task_handler()
-        )
+        pusher_tasks = []
+        if PUSHER_ENABLED:
+            (
+                pusher_connect,
+                pusher_close,
+                transcript_send,
+                transcript_consume,
+                audio_bytes_send,
+                audio_bytes_consume,
+            ) = create_pusher_task_handler()
+
+            # Pusher tasks
+            pusher_tasks.append(asyncio.create_task(pusher_connect()))
+            if transcript_consume is not None:
+                pusher_tasks.append(asyncio.create_task(transcript_consume()))
+            if audio_bytes_consume is not None:
+                pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
         # Tasks
         data_process_task = asyncio.create_task(
@@ -1048,13 +1090,6 @@ async def _listen(
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
-
-        # Pusher tasks
-        pusher_tasks = [asyncio.create_task(pusher_connect())]
-        if transcript_consume is not None:
-            pusher_tasks.append(asyncio.create_task(transcript_consume()))
-        if audio_bytes_consume is not None:
-            pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
@@ -1099,6 +1134,20 @@ async def _listen(
                 await pusher_close()
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid, session_id)
+
+        # Clean up collections to aid garbage collection
+        try:
+            locked_conversation_ids.clear()
+            speaker_to_person_map.clear()
+            segment_person_assignment_map.clear()
+            current_session_segments.clear()
+            suggested_segments.clear()
+            realtime_segment_buffers.clear()
+            realtime_photo_buffers.clear()
+            image_chunks.clear()
+        except NameError as e:
+            # Variables might not be defined if an error occurred early
+            print(f"Cleanup error (safe to ignore): {e}", uid, session_id)
     print("_listen ended", uid, session_id)
 
 
@@ -1111,7 +1160,7 @@ async def listen_handler(
     codec: str = 'pcm8',
     channels: int = 1,
     include_speech_profile: bool = True,
-    stt_service: STTService = None,
+    stt_service: Optional[STTService] = None,
     conversation_timeout: int = 120,
 ):
     await _listen(
@@ -1123,6 +1172,5 @@ async def listen_handler(
         channels,
         include_speech_profile,
         None,
-        including_combined_segments=True,
         conversation_timeout=conversation_timeout,
     )

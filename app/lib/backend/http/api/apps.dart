@@ -7,11 +7,10 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
-
-import 'package:http/http.dart' as http;
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:path/path.dart';
+// import 'package:http/http.dart' as http;
+// import 'package:path/path.dart';
 
 Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
@@ -100,16 +99,12 @@ Future<bool> reviewApp(String appId, AppReview review) async {
 }
 
 Future<Map<String, String>> uploadAppThumbnail(File file) async {
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/app/thumbnails'),
-  );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/app/thumbnails',
+      files: [file],
+      fileFieldName: 'file',
+    );
 
     if (response.statusCode == 200) {
       var data = jsonDecode(response.body);
@@ -210,17 +205,14 @@ Future<bool> isAppSetupCompleted(String? url) async {
 }
 
 Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/apps'),
-  );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.fields.addAll({'app_data': jsonEncode(appData)});
   debugPrint(jsonEncode(appData));
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/apps',
+      files: [file],
+      fileFieldName: 'file',
+      fields: {'app_data': jsonEncode(appData)},
+    );
 
     if (response.statusCode == 200) {
       var respData = jsonDecode(response.body);
@@ -246,19 +238,16 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
 }
 
 Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
-  var request = http.MultipartRequest(
-    'PATCH',
-    Uri.parse('${Env.apiBaseUrl}v1/apps/${appData['id']}'),
-  );
-  if (file != null) {
-    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-  }
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.fields.addAll({'app_data': jsonEncode(appData)});
   debugPrint(jsonEncode(appData));
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    List<File> files = file != null ? [file] : [];
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/${appData['id']}',
+      files: files,
+      fileFieldName: 'file',
+      fields: {'app_data': jsonEncode(appData)},
+      method: 'PATCH',
+    );
 
     if (response.statusCode == 200) {
       debugPrint('updateAppServer Response body: ${jsonDecode(response.body)}');
@@ -480,17 +469,14 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
 }
 
 Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async {
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/personas'),
-  );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.fields.addAll({'persona_data': jsonEncode(personaData)});
   print(jsonEncode(personaData));
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/personas',
+      files: [file],
+      fileFieldName: 'file',
+      fields: {'persona_data': jsonEncode(personaData)},
+    );
 
     if (response.statusCode == 200) {
       debugPrint('createPersonaApp Response body: ${jsonDecode(response.body)}');
@@ -506,19 +492,16 @@ Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async 
 }
 
 Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) async {
-  var request = http.MultipartRequest(
-    'PATCH',
-    Uri.parse('${Env.apiBaseUrl}v1/personas/${personaData['id']}'),
-  );
-  if (file != null) {
-    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-  }
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.fields.addAll({'persona_data': jsonEncode(personaData)});
   debugPrint(jsonEncode(personaData));
   try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
+    List<File> files = file != null ? [file] : [];
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/personas/${personaData['id']}',
+      files: files,
+      fileFieldName: 'file',
+      fields: {'persona_data': jsonEncode(personaData)},
+      method: 'PATCH',
+    );
 
     if (response.statusCode == 200) {
       debugPrint('updatePersonaApp Response body: ${jsonDecode(response.body)}');

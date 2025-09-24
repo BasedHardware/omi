@@ -839,25 +839,6 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/clear-cache', tags=['v1'])
-def clear_app_cache_endpoint(secret_key: str = Header(...)):
-    """Clear all app-related cache to fix potential cache corruption issues."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-
-    try:
-        # Clear generic app caches
-        delete_generic_cache('get_public_approved_apps_data')
-        delete_generic_cache('get_popular_apps_data')
-
-        # Clear all individual app caches (this would require Redis access)
-        # For now, we'll let them expire naturally (10 minutes)
-
-        return {'status': 'ok', 'message': 'App cache cleared successfully'}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Failed to clear cache: {str(e)}')
-
-
 @router.post('/v1/apps/disable')
 def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)

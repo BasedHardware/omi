@@ -399,23 +399,30 @@ def delete_chat_session(session_id: str, uid: str = Depends(auth.get_current_use
 def generate_chat_session_title(
     session_id: str, data: GenerateTitleRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
-    """Generate a title for a chat session based on the first message."""
+    """Generate a title for a chat session with comprehensive input validation."""
     # Verify session exists and belongs to user
     session = chat_db.get_chat_session_by_id(uid, session_id)
     if not session:
         raise HTTPException(status_code=404, detail='Chat session not found')
 
-    # Generate title using LLM
+    # Generate title using enhanced validation function
     try:
         generated_title = generate_thread_title(data.first_message)
+
+        # Final server-side validation before saving
+        if not generated_title or len(generated_title.strip()) < 3:
+            generated_title = "New Chat"
 
         # Update the session with the new title
         success = chat_db.update_chat_session_title(uid, session_id, generated_title)
         if not success:
             raise HTTPException(status_code=500, detail='Failed to update session title')
 
-        return {"title": generated_title, "status": "success"}
+        return {"title": generated_title, "status": "success", "message": "Title generated successfully"}
 
+    except ValueError as e:
+        # Handle validation errors from the Pydantic model
+        raise HTTPException(status_code=400, detail=f"Invalid input: {str(e)}")
     except Exception as e:
         print(f"Error generating title: {e}")
         raise HTTPException(status_code=500, detail='Failed to generate title')

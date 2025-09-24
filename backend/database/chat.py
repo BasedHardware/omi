@@ -375,8 +375,6 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
 
 def create_chat_session(uid: str, app_id: Optional[str], title: Optional[str] = None):
     """Create a new chat session for a specific app."""
-    import uuid
-    from datetime import datetime, timezone
 
     session_data = {
         'id': str(uuid.uuid4()),
@@ -392,18 +390,32 @@ def create_chat_session(uid: str, app_id: Optional[str], title: Optional[str] = 
 
 
 def update_chat_session_title(uid: str, chat_session_id: str, title: str) -> bool:
-    """Update the title of a specific chat session."""
+    """Update the title of a specific chat session with server-side validation."""
     try:
+        # Server-side validation (defense in depth)
+        if not title or not title.strip():
+            print(f"Invalid title provided: '{title}'")
+            return False
+
+        title = title.strip()
+
+        # Database field length protection
+        if len(title) > 100:
+            title = title[:97] + "..."
+            print(f"Title truncated to fit database limit: '{title}'")
+
         user_ref = db.collection('users').document(uid)
         session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
 
         # Check if session exists
         session_doc = session_ref.get()
         if not session_doc.exists:
+            print(f"Session not found: {chat_session_id}")
             return False
 
-        # Update the title
-        session_ref.update({'title': title})
+        # Update the title with timestamp
+        session_ref.update({'title': title, 'updated_at': datetime.now(timezone.utc)})
+        print(f"Successfully updated title for session {chat_session_id}: '{title}'")
         return True
 
     except Exception as e:

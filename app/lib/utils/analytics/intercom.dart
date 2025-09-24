@@ -13,6 +13,8 @@ class IntercomManager {
   IntercomManager._internal();
 
   Intercom get intercom => Intercom.instance;
+  bool get _isIntercomEnabled =>
+      PlatformService.isIntercomSupported && (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty);
 
   factory IntercomManager() {
     return _instance;
@@ -21,7 +23,7 @@ class IntercomManager {
   Future<void> initIntercom() async {
     if (Env.intercomAppId == null) return;
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.initialize(
         Env.intercomAppId!,
         iosApiKey: Env.intercomIOSApiKey,
@@ -32,7 +34,7 @@ class IntercomManager {
 
   Future displayChargingArticle(String device) async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () async {
         if (device == 'Omi DevKit 2') {
           return await intercom.displayArticle('10003257-how-to-charge-devkit2');
@@ -47,49 +49,49 @@ class IntercomManager {
 
   Future loginIdentifiedUser(String uid) async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.loginIdentifiedUser(userId: uid),
     );
   }
 
   Future loginUnidentifiedUser() async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.loginUnidentifiedUser(),
     );
   }
 
   Future displayEarnMoneyArticle() async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.displayArticle('10401566-build-publish-and-earn-with-omi-apps'),
     );
   }
 
   Future displayFirmwareUpdateArticle() async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.displayArticle('9995941-updating-your-devkit2-firmware'),
     );
   }
 
   Future logEvent(String eventName, {Map<String, dynamic>? metaData}) async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.logEvent(eventName, metaData),
     );
   }
 
   Future updateCustomAttributes(Map<String, dynamic> attributes) async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.updateUser(customAttributes: attributes),
     );
   }
 
   Future updateUser(String? email, String? name, String? uid) async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => intercom.updateUser(
         email: email,
         name: name,
@@ -100,7 +102,7 @@ class IntercomManager {
 
   Future<void> setUserAttributes() async {
     return PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported,
+      _isIntercomEnabled,
       () => updateCustomAttributes({
         'Notifications Enabled': _preferences.notificationsEnabled,
         'Location Enabled': _preferences.locationEnabled,
