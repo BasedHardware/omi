@@ -75,6 +75,54 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None):
     return chat_session
 
 
+def _perform_cleanup(uid: str):
+    """Shared cleanup function for file cleanup operations (synchronous)."""
+    try:
+        fc_tool = FileChatTool()
+        fc_tool.cleanup(uid)
+        print(f"Cleanup completed for user {uid}")
+    except Exception as e:
+        print(f"Cleanup error for user {uid}: {str(e)} (non-critical)")
+        # Cleanup failure is non-critical, don't fail the whole operation
+
+
+def _get_chat_session_id_for_clear(uid: str, compat_app_id: Optional[str], chat_session_id: Optional[str]):
+    """Shared logic to get chat session ID for clear operations."""
+    if chat_session_id:
+        # Verify the provided session exists and belongs to the user
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+        return chat_session_id
+    else:
+        # Get default session for the app
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        return chat_session['id'] if chat_session else None
+
+
+def _clear_chat_and_cleanup(uid: str, compat_app_id: Optional[str], chat_session_id: Optional[str]):
+    """Shared logic for clearing chat and cleanup (synchronous)."""
+    err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
+    if err:
+        raise HTTPException(status_code=500, detail='Failed to clear chat')
+
+    # Note: Keep the session/thread alive - only messages are cleared
+
+    # Clean up files synchronously (like the old approach)
+    _perform_cleanup(uid)
+
+    # clear respnose messagge for frontend
+    return {
+        "status": "success",
+        "message": "Messages cleared successfully",
+        "cleared": {
+            "app_id": compat_app_id,
+            "chat_session_id": chat_session_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+
+
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
@@ -218,44 +266,14 @@ def clear_chat_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = normalize_app_id(app_id, plugin_id)
-    # get current chat session - use specific session if provided, otherwise get default for app
-    if chat_session_id:
-        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
-        if not chat_session:
-            raise HTTPException(status_code=404, detail='Chat session not found')
-    else:
-        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-        chat_session_id = chat_session['id'] if chat_session else None
+    # get current chat session ID - use specific session if provided, otherwise get default for app
+    chat_session_id = _get_chat_session_id_for_clear(uid, compat_app_id, chat_session_id)
 
-    err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
-    if err:
-        raise HTTPException(status_code=500, detail='Failed to clear chat')
-
-    # Note: Keep the session/thread alive - only messages are cleared
-
-    # clean thread chat file in background to avoid blocking response
-    import threading
-
-    def cleanup_in_background():
-        try:
-            fc_tool = FileChatTool()
-            fc_tool.cleanup(uid)
-        except Exception as e:
-            print(f"Background cleanup error: {str(e)}")
-
-    threading.Thread(target=cleanup_in_background, daemon=True).start()
-
-    return {
-        "status": "success",
-        "message": "Messages cleared successfully",
-        "cleared": {
-            "app_id": compat_app_id,
-            "chat_session_id": chat_session_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-    }
+    return _clear_chat_and_cleanup(uid, compat_app_id, chat_session_id)
 
 
+# TODO: Clear this after PR is merged for multi chat session threads.
+# Nomore sending initial chat message after user clears the session
 def initial_message_util(uid: str, app_id: Optional[str] = None, target_chat_session_id: Optional[str] = None):
     print('initial_message_util', app_id, target_chat_session_id)
 
@@ -311,6 +329,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, target_chat_ses
     return ai_message
 
 
+# TODO: Clear this after PR is merged for multi chat session threads.
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
     app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
@@ -528,7 +547,7 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
     return response
 
 
-# CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
+# TODO: CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
@@ -595,49 +614,17 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 
 @router.delete('/v1/messages', tags=['chat'])
-def clear_chat_messages(
+def clear_chat_messages_v1(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = normalize_app_id(app_id, plugin_id)
-    # get current chat session - use specific session if provided, otherwise get default for app
-    if chat_session_id:
-        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
-        if not chat_session:
-            raise HTTPException(status_code=404, detail='Chat session not found')
-    else:
-        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-        chat_session_id = chat_session['id'] if chat_session else None
+    # get current chat session ID - use specific session if provided, otherwise get default for app
+    chat_session_id = _get_chat_session_id_for_clear(uid, compat_app_id, chat_session_id)
 
-    err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
-    if err:
-        raise HTTPException(status_code=500, detail='Failed to clear chat')
-
-    # Note: Keep the session/thread alive - only messages are cleared
-
-    # clean thread chat file in background to avoid blocking response
-    import threading
-
-    def cleanup_in_background():
-        try:
-            fc_tool = FileChatTool()
-            fc_tool.cleanup(uid)
-        except Exception as e:
-            print(f"Background cleanup error: {str(e)}")
-
-    threading.Thread(target=cleanup_in_background, daemon=True).start()
-
-    return {
-        "status": "success",
-        "message": "Messages cleared successfully",
-        "cleared": {
-            "app_id": compat_app_id,
-            "chat_session_id": chat_session_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-    }
+    return _clear_chat_and_cleanup(uid, compat_app_id, chat_session_id)
 
 
 @router.post("/v1/voice-message/transcribe")
@@ -688,6 +675,7 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
     raise HTTPException(status_code=400, detail='Failed to transcribe audio')
 
 
+# TODO: Clear this after PR is merged for multi chat session threads.
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(
     plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
