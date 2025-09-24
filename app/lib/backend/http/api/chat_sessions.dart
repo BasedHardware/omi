@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/chat_session.dart';
-import 'package:omi/env/env.dart';
+// import 'package:omi/env/env.dart';
 
 Future<List<ChatSession>> listChatSessions({required String uid, required List<String> appIds}) async {
   // Fetch chat sessions from all provided apps and combine them

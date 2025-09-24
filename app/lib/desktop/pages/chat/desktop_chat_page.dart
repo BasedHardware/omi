@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -354,7 +353,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       } else {
                         cardColor = Colors.transparent; // No highlight
                       }
-                      final appName = _getAppNameById(s.appId);
+                      // final appName = _getAppNameById(s.appId);
                       return Padding(
                         padding: const EdgeInsets.only(
                             left: 8, right: 8, bottom: 2), // Card boundary padding + bottom spacing
@@ -1927,13 +1926,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     }
   }
 
-  String _getAppNameById(String? appId) {
-    if (appId == null || appId == 'omi') {
-      return 'Omi';
-    }
-    final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
-    return app?.name ?? 'Unknown App';
-  }
+  // String _getAppNameById(String? appId) {
+  //   if (appId == null || appId == 'omi') {
+  //     return 'Omi';
+  //   }
+  //   final app = context.read<AppProvider>().apps.firstWhereOrNull((app) => app.id == appId);
+  //   return app?.name ?? 'Unknown App';
+  // }
 
   void _showClearChatDialog(BuildContext context) {
     showDialog(

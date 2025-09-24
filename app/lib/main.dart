@@ -197,7 +197,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
-          ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, ChatSessionProvider>(
             create: (context) => ChatSessionProvider(),
             update: (BuildContext context, app, ChatSessionProvider? previous) =>

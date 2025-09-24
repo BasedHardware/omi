@@ -29,7 +29,7 @@ import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/pages/chat/widgets/welcome_screen.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+// import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -58,7 +58,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool isScrollingDown = false;
 
   bool _showVoiceRecorder = false;
-  bool _isInitialLoad = true;
+  // bool _isInitialLoad = true;
 
   // Notification banner state
   bool _showNotificationBanner = false;
@@ -845,7 +845,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     if (!mounted) return;
 
     // Mark that we're no longer on initial load to prevent auto-focus
-    _isInitialLoad = false;
+    // _isInitialLoad = false;
 
     // Store references before async operation
     final messageProvider = mounted ? context.read<MessageProvider>() : null;
