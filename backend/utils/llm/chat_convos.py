@@ -277,6 +277,16 @@ def analyze_conversation_for_insights(uid: str, conversation_id: str) -> str:
     return llm_medium.invoke(prompt).content
 
 
+# TODO: Future Enhancement - Dynamic Suggestions
+# def suggest_follow_up_questions(uid: str, conversation_id: str) -> List[str]:
+#     """
+#     Future: Make suggestions dynamic based on chat history progression
+#     - Include recent chat messages to avoid repeated questions
+#     - Generate contextual suggestions based on chat evolution
+#     - Avoid suggesting topics already discussed
+#     """
+
+
 def suggest_follow_up_questions(uid: str, conversation_id: str) -> List[str]:
     """Suggest follow-up questions the user might want to ask about the conversation"""
 
