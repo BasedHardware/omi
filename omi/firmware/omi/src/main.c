@@ -32,7 +32,10 @@ static void codec_handler(uint8_t *data, size_t len)
     broadcast_audio_count++;
     int err = broadcast_audio_packets(data, len);
     if (err) {
-        LOG_ERR("Failed to broadcast audio packets: %d", err);
+        static int error_count = 0;
+        if ((error_count++ % 100) == 0) {
+            LOG_DBG("Failed to broadcast audio packets: %d", err);
+        }
     }
 }
 
@@ -210,7 +213,13 @@ int main(void)
     LOG_PRINTK("\n");
     LOG_INF("Initializing transport...\n");
 
-    // Start transport
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    LOG_INF("Initializing storage service...\n");
+    ret = storage_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize storage (err %d)", ret);
+    }
+#endif
     int transportErr;
     transportErr = transport_start();
     if (transportErr) {
