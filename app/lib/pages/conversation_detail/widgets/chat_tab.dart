@@ -28,6 +28,9 @@ class _ChatTabState extends State<ChatTab> {
   // Pull-up gesture tracking
   double _initialPanPosition = 0;
   bool _hasTriggeredHaptic = false;
+  double _pullUpProgress = 0.0; // 0.0 to 1.0 progress
+  bool _showPullUpIndicator = false;
+  DateTime? _gestureStartTime;
 
   @override
   void initState() {
@@ -135,6 +138,12 @@ class _ChatTabState extends State<ChatTab> {
   void _showClearChatDialog(ConversationDetailProvider provider) {
     if (!mounted) return;
 
+    // Hide pull-up indicator
+    setState(() {
+      _showPullUpIndicator = false;
+      _pullUpProgress = 0.0;
+    });
+
     HapticFeedback.lightImpact(); // Additional haptic for dialog appearance
 
     showDialog(
@@ -177,34 +186,90 @@ class _ChatTabState extends State<ChatTab> {
                 onPanStart: (details) {
                   _initialPanPosition = details.globalPosition.dy;
                   _hasTriggeredHaptic = false;
+                  _gestureStartTime = DateTime.now();
+                  setState(() {
+                    _pullUpProgress = 0.0;
+                    _showPullUpIndicator = _messages.isNotEmpty;
+                  });
                 },
                 onPanUpdate: (details) {
                   // Only respond to gesture if there are messages to clear
                   if (_messages.isEmpty) return;
 
-                  // Detect upward pull (negative delta)
-                  double deltaY = details.globalPosition.dy - _initialPanPosition;
+                  // Calculate upward pull distance (negative delta becomes positive progress)
+                  double deltaY = _initialPanPosition - details.globalPosition.dy;
+                  double progress = (deltaY / 120).clamp(0.0, 1.0); // 120px = 100% progress (more gradual)
 
-                  // If user pulls up more than 50 pixels and hasn't triggered haptic yet
-                  if (deltaY < -50 && !_hasTriggeredHaptic) {
+                  setState(() {
+                    _pullUpProgress = progress;
+                  });
+
+                  // Trigger haptic feedback at 40% progress (48px) - earlier trigger
+                  if (progress >= 0.4 && !_hasTriggeredHaptic) {
                     _hasTriggeredHaptic = true;
                     HapticFeedback.mediumImpact();
                   }
                 },
                 onPanEnd: (details) {
                   // Only allow clear if there are messages to clear
-                  if (_messages.isEmpty) return;
+                  if (_messages.isEmpty) {
+                    setState(() {
+                      _showPullUpIndicator = false;
+                      _pullUpProgress = 0.0;
+                    });
+                    return;
+                  }
 
-                  // If significant upward movement, show clear dialog
+                  // Check if should trigger clear dialog
                   double deltaY = details.velocity.pixelsPerSecond.dy;
                   double totalDelta = _initialPanPosition - details.globalPosition.dy;
 
-                  // Show clear dialog if upward velocity or significant pull
-                  if (deltaY < -500 || totalDelta > 80) {
+                  // Show clear dialog if upward velocity or significant pull (adjusted for 120px scale)
+                  if (deltaY < -400 || totalDelta > 100) {
                     _showClearChatDialog(provider);
+                  } else {
+                    // Ensure animation is visible for minimum time, even on quick swipes
+                    final gestureDuration = DateTime.now().difference(_gestureStartTime ?? DateTime.now());
+                    final minVisibleTime = const Duration(milliseconds: 300);
+
+                    if (gestureDuration < minVisibleTime) {
+                      // Wait until minimum time passes
+                      final remainingTime = minVisibleTime - gestureDuration;
+                      Future.delayed(remainingTime, () {
+                        if (mounted) {
+                          setState(() {
+                            _showPullUpIndicator = false;
+                            _pullUpProgress = 0.0;
+                          });
+                        }
+                      });
+                    } else {
+                      // Hide immediately
+                      setState(() {
+                        _showPullUpIndicator = false;
+                        _pullUpProgress = 0.0;
+                      });
+                    }
                   }
                 },
-                child: _buildMessagesArea(provider),
+                child: Stack(
+                  children: [
+                    _buildMessagesArea(provider),
+
+                    // Subtle background overlay during pull
+                    if (_showPullUpIndicator && _pullUpProgress > 0.1)
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: (_pullUpProgress * 0.1).clamp(0.0, 0.1), // Very subtle dark overlay
+                        child: Container(
+                          color: Colors.black,
+                        ),
+                      ),
+
+                    // Pull-up animation overlay
+                    if (_showPullUpIndicator) _buildPullUpIndicator(),
+                  ],
+                ),
               ),
             ),
 
@@ -490,6 +555,63 @@ class _ChatTabState extends State<ChatTab> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPullUpIndicator() {
+    return Positioned(
+      bottom: 100 + MediaQuery.of(context).padding.bottom, // Above input area
+      left: 0,
+      right: 0,
+      child: Center(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          opacity: _showPullUpIndicator
+              ? (_pullUpProgress * 0.6 + 0.4).clamp(0.0, 1.0) // Start at 40% opacity, grow to 100%
+              : 0.0,
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutBack,
+            scale: _showPullUpIndicator
+                ? 0.95 + (_pullUpProgress * 0.15) // Scale from 0.95 to 1.1 (very subtle)
+                : 0.8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    FontAwesomeIcons.trashCan,
+                    color: Colors.white,
+                    size: 16 + (_pullUpProgress * 2), // Grow from 16 to 18 (more subtle)
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _pullUpProgress >= 0.8 ? 'Release to clear chat' : 'Pull up to clear chat',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13 + (_pullUpProgress * 1), // Grow from 13 to 14 (more subtle)
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
