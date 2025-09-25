@@ -4,8 +4,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversation_chat.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/widgets/chat_input_area.dart';
 import 'package:omi/widgets/dialog.dart';
-// Note: Using simplified message widgets for conversation chat
 import 'package:provider/provider.dart';
 
 class ChatTab extends StatefulWidget {
@@ -19,7 +19,6 @@ class _ChatTabState extends State<ChatTab> {
   final TextEditingController _messageController = TextEditingController();
   final FocusNode _messageFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-  bool _showVoiceRecorder = false;
 
   List<ConversationChatMessage> _messages = [];
   bool _isLoading = true;
@@ -230,7 +229,7 @@ class _ChatTabState extends State<ChatTab> {
                   } else {
                     // Ensure animation is visible for minimum time, even on quick swipes
                     final gestureDuration = DateTime.now().difference(_gestureStartTime ?? DateTime.now());
-                    final minVisibleTime = const Duration(milliseconds: 300);
+                    const minVisibleTime = Duration(milliseconds: 300);
 
                     if (gestureDuration < minVisibleTime) {
                       // Wait until minimum time passes
@@ -273,8 +272,13 @@ class _ChatTabState extends State<ChatTab> {
               ),
             ),
 
-            // Input area at bottom
-            _buildInputArea(provider),
+            // Input area at bottom - reusing main chat structure
+            ConversationChatInputArea(
+              textController: _messageController,
+              textFieldFocusNode: _messageFocusNode,
+              isSending: _isSending,
+              onSendMessage: (text) => _sendMessage(provider, text),
+            ),
           ],
         );
       },
@@ -352,7 +356,7 @@ class _ChatTabState extends State<ChatTab> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Ask questions about this conversation\nand get context-aware answers',
+              'Ask questions about this conversation',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                     color: Colors.grey.shade400,
@@ -365,142 +369,59 @@ class _ChatTabState extends State<ChatTab> {
     );
   }
 
-  Widget _buildInputArea(ConversationDetailProvider provider) {
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1f1f25),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(22),
-          topRight: Radius.circular(22),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Chat input row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            child: Row(
-              children: [
-                // Voice recorder button
-                if (!_showVoiceRecorder)
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      setState(() {
-                        _showVoiceRecorder = true;
-                      });
-                    },
-                    child: Container(
-                      height: 44,
-                      width: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: const Icon(
-                        FontAwesomeIcons.microphone,
-                        color: Colors.white,
-                        size: 18,
-                      ),
+  Widget _buildPullUpIndicator() {
+    return Positioned(
+      bottom: 140 + MediaQuery.of(context).padding.bottom, // Above input area + navbar clearance
+      left: 0,
+      right: 0,
+      child: Center(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          opacity: _showPullUpIndicator
+              ? (_pullUpProgress * 0.6 + 0.4).clamp(0.0, 1.0) // Start at 40% opacity, grow to 100%
+              : 0.0,
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutBack,
+            scale: _showPullUpIndicator
+                ? 0.95 + (_pullUpProgress * 0.15) // Scale from 0.95 to 1.1 (very subtle)
+                : 0.8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    FontAwesomeIcons.trashCan,
+                    color: Colors.white,
+                    size: 16 + (_pullUpProgress * 2), // Grow from 16 to 18 (more subtle)
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _pullUpProgress >= 0.8 ? 'Release to clear chat' : 'Pull up to clear chat',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13 + (_pullUpProgress * 1), // Grow from 13 to 14 (more subtle)
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-
-                const SizedBox(width: 8),
-
-                // Text input
-                Expanded(
-                  child: _showVoiceRecorder
-                      ? Container(
-                          // TODO: Add VoiceRecorderWidget here
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'Voice recording...',
-                              style: TextStyle(color: Colors.white54),
-                            ),
-                          ),
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                          child: TextField(
-                            controller: _messageController,
-                            focusNode: _messageFocusNode,
-                            decoration: const InputDecoration(
-                              hintText: 'Ask about this conversation...',
-                              hintStyle: TextStyle(fontSize: 16.0, color: Colors.white54),
-                              focusedBorder: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              isDense: true,
-                            ),
-                            minLines: 1,
-                            maxLines: 5,
-                            keyboardType: TextInputType.multiline,
-                            textCapitalization: TextCapitalization.sentences,
-                            style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
-                            onSubmitted: (text) => _sendMessage(provider, text),
-                          ),
-                        ),
-                ),
-
-                const SizedBox(width: 8),
-
-                // Send button
-                if (!_showVoiceRecorder)
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _messageController,
-                    builder: (context, value, child) {
-                      final canSend = value.text.trim().isNotEmpty && !_isSending;
-
-                      return GestureDetector(
-                        onTap: canSend
-                            ? () {
-                                HapticFeedback.mediumImpact();
-                                _sendMessage(provider, _messageController.text);
-                              }
-                            : null,
-                        child: Container(
-                          height: 44,
-                          width: 44,
-                          decoration: BoxDecoration(
-                            color: canSend
-                                ? const Color(0xFF6C5CE7) // Purple accent color
-                                : Colors.grey[700],
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                          child: _isSending
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Icon(
-                                  FontAwesomeIcons.paperPlane,
-                                  color: canSend ? Colors.white : Colors.grey[500],
-                                  size: 16,
-                                ),
-                        ),
-                      );
-                    },
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
-
-          // Safe area padding
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
-        ],
+        ),
       ),
     );
   }
@@ -555,63 +476,6 @@ class _ChatTabState extends State<ChatTab> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPullUpIndicator() {
-    return Positioned(
-      bottom: 100 + MediaQuery.of(context).padding.bottom, // Above input area
-      left: 0,
-      right: 0,
-      child: Center(
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          opacity: _showPullUpIndicator
-              ? (_pullUpProgress * 0.6 + 0.4).clamp(0.0, 1.0) // Start at 40% opacity, grow to 100%
-              : 0.0,
-          child: AnimatedScale(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutBack,
-            scale: _showPullUpIndicator
-                ? 0.95 + (_pullUpProgress * 0.15) // Scale from 0.95 to 1.1 (very subtle)
-                : 0.8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    FontAwesomeIcons.trashCan,
-                    color: Colors.white,
-                    size: 16 + (_pullUpProgress * 2), // Grow from 16 to 18 (more subtle)
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _pullUpProgress >= 0.8 ? 'Release to clear chat' : 'Pull up to clear chat',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13 + (_pullUpProgress * 1), // Grow from 13 to 14 (more subtle)
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
