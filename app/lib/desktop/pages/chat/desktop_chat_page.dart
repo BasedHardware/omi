@@ -624,6 +624,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       itemCount: provider.messages.length,
       itemBuilder: (context, chatIndex) {
+        final appProvider = context.read<AppProvider>();
         final message = provider.messages[chatIndex];
         double topPadding = chatIndex == provider.messages.length - 1 ? 16 : 16;
         if (chatIndex != 0) message.askForNps = false;
@@ -685,7 +686,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     children: [
                       OmiAvatar(
                         size: 32,
-                        imageUrl: provider.messageSenderApp(message.appId)?.getImageUrl(),
+                        imageUrl:
+                            provider.messageSenderApp(message.appId, context.read<AppProvider>().apps)?.getImageUrl(),
                         fallback: Image.asset(Assets.images.herologo.path, height: 24, width: 24),
                       ),
                       const SizedBox(width: 12),
@@ -754,7 +756,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         messageText: message.text.decodeString,
         date: message.createdAt,
       );
-    } else if (provider.messages.length <= 1 && provider.messageSenderApp(message.appId)?.isNotPersona() == true) {
+    } else if (provider.messages.length <= 1 &&
+        provider.messageSenderApp(message.appId, context.read<AppProvider>().apps)?.isNotPersona() == true) {
       return InitialMessageWidget(
         showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
         messageText: message.text.decodeString,

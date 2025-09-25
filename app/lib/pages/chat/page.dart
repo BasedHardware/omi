@@ -186,6 +186,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                                   itemCount: provider.messages.length,
                                   itemBuilder: (context, chatIndex) {
+                                    final appProvider = context.read<AppProvider>();
                                     final message = provider.messages[chatIndex];
                                     double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
 
@@ -312,8 +313,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 message: message,
                                                 sendMessage: _sendMessageUtil,
                                                 displayOptions: provider.messages.length <= 1 &&
-                                                    provider.messageSenderApp(message.appId)?.isNotPersona() == true,
-                                                appSender: provider.messageSenderApp(message.appId),
+                                                    provider
+                                                            .messageSenderApp(message.appId, appProvider.apps)
+                                                            ?.isNotPersona() ==
+                                                        true,
+                                                appSender: provider.messageSenderApp(message.appId, appProvider.apps),
                                                 updateConversation: (ServerConversation conversation) {
                                                   context.read<ConversationProvider>().updateConversation(conversation);
                                                 },
