@@ -94,7 +94,10 @@ Future<bool> clearConversationChat(String conversationId) async {
     body: '',
   );
 
-  if (response == null) return false;
+  if (response == null) {
+    return false;
+  }
+
   return response.statusCode == 200;
 }
 

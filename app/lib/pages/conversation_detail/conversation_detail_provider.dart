@@ -32,6 +32,19 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   final scaffoldKey = GlobalKey<ScaffoldState>();
   List<App> get appsList => appProvider?.apps ?? [];
 
+  // Callback for clearing chat messages in UI
+  VoidCallback? _clearChatMessagesCallback;
+
+  void registerClearChatCallback(VoidCallback callback) {
+    _clearChatMessagesCallback = callback;
+  }
+
+  void clearChatMessages() {
+    if (_clearChatMessagesCallback != null) {
+      _clearChatMessagesCallback!();
+    }
+  }
+
   Structured get structured {
     return conversation.structured;
   }

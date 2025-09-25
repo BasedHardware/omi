@@ -127,8 +127,10 @@ class ConversationChatInputArea extends StatelessWidget {
             ),
           ),
 
-          // Safe area padding
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 64),
+          // Smart padding - moves up with keyboard but navbar stays fixed
+          SizedBox(
+            height: MediaQuery.of(context).padding.bottom + 64 + MediaQuery.of(context).viewInsets.bottom,
+          ),
         ],
       ),
     );

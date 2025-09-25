@@ -309,6 +309,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         child: Scaffold(
           key: scaffoldKey,
           extendBody: true,
+          resizeToAvoidBottomInset: selectedTab != ConversationTab.chat, // Don't resize on chat tab
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
             automaticallyImplyLeading: false,

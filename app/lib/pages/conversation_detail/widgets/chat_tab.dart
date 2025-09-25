@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversation_chat.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/chat_input_area.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class ChatTab extends StatefulWidget {
@@ -24,17 +22,14 @@ class _ChatTabState extends State<ChatTab> {
   bool _isLoading = true;
   bool _isSending = false;
 
-  // Pull-up gesture tracking
-  double _initialPanPosition = 0;
-  bool _hasTriggeredHaptic = false;
-  double _pullUpProgress = 0.0; // 0.0 to 1.0 progress
-  bool _showPullUpIndicator = false;
-  DateTime? _gestureStartTime;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Register clear messages callback with provider
+      final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+      provider.registerClearChatCallback(clearMessages);
+
       _loadMessages();
     });
   }
@@ -64,6 +59,15 @@ class _ChatTabState extends State<ChatTab> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  // Public method to clear messages (can be called from outside)
+  void clearMessages() {
+    if (mounted) {
+      setState(() {
+        _messages.clear();
+      });
     }
   }
 
@@ -134,145 +138,20 @@ class _ChatTabState extends State<ChatTab> {
     });
   }
 
-  void _showClearChatDialog(ConversationDetailProvider provider) {
-    if (!mounted) return;
-
-    // Hide pull-up indicator
-    setState(() {
-      _showPullUpIndicator = false;
-      _pullUpProgress = 0.0;
-    });
-
-    HapticFeedback.lightImpact(); // Additional haptic for dialog appearance
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return getDialog(
-          context,
-          () {
-            Navigator.of(context).pop(); // Cancel
-          },
-          () async {
-            Navigator.of(context).pop(); // Close dialog
-
-            // Clear chat with haptic feedback
-            HapticFeedback.mediumImpact();
-            final success = await clearConversationChat(provider.conversation.id);
-
-            if (success && mounted) {
-              setState(() {
-                _messages.clear();
-              });
-            }
-          },
-          "Clear Chat?",
-          "Are you sure you want to clear this conversation chat? This action cannot be undone.",
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         return Column(
           children: [
-            // Chat messages area with pull-up gesture
+            // Chat messages area
             Expanded(
               child: GestureDetector(
                 // Dismiss keyboard when tapping anywhere in messages area
                 onTap: () {
                   FocusScope.of(context).unfocus();
                 },
-                onPanStart: (details) {
-                  _initialPanPosition = details.globalPosition.dy;
-                  _hasTriggeredHaptic = false;
-                  _gestureStartTime = DateTime.now();
-                  setState(() {
-                    _pullUpProgress = 0.0;
-                    _showPullUpIndicator = _messages.isNotEmpty;
-                  });
-                },
-                onPanUpdate: (details) {
-                  // Only respond to gesture if there are messages to clear
-                  if (_messages.isEmpty) return;
-
-                  // Calculate upward pull distance (negative delta becomes positive progress)
-                  double deltaY = _initialPanPosition - details.globalPosition.dy;
-                  double progress = (deltaY / 120).clamp(0.0, 1.0); // 120px = 100% progress (more gradual)
-
-                  setState(() {
-                    _pullUpProgress = progress;
-                  });
-
-                  // Trigger haptic feedback at 40% progress (48px) - earlier trigger
-                  if (progress >= 0.4 && !_hasTriggeredHaptic) {
-                    _hasTriggeredHaptic = true;
-                    HapticFeedback.mediumImpact();
-                  }
-                },
-                onPanEnd: (details) {
-                  // Only allow clear if there are messages to clear
-                  if (_messages.isEmpty) {
-                    setState(() {
-                      _showPullUpIndicator = false;
-                      _pullUpProgress = 0.0;
-                    });
-                    return;
-                  }
-
-                  // Check if should trigger clear dialog
-                  double deltaY = details.velocity.pixelsPerSecond.dy;
-                  double totalDelta = _initialPanPosition - details.globalPosition.dy;
-
-                  // Show clear dialog if upward velocity or significant pull (adjusted for 120px scale)
-                  if (deltaY < -400 || totalDelta > 100) {
-                    _showClearChatDialog(provider);
-                  } else {
-                    // Ensure animation is visible for minimum time, even on quick swipes
-                    final gestureDuration = DateTime.now().difference(_gestureStartTime ?? DateTime.now());
-                    const minVisibleTime = Duration(milliseconds: 300);
-
-                    if (gestureDuration < minVisibleTime) {
-                      // Wait until minimum time passes
-                      final remainingTime = minVisibleTime - gestureDuration;
-                      Future.delayed(remainingTime, () {
-                        if (mounted) {
-                          setState(() {
-                            _showPullUpIndicator = false;
-                            _pullUpProgress = 0.0;
-                          });
-                        }
-                      });
-                    } else {
-                      // Hide immediately
-                      setState(() {
-                        _showPullUpIndicator = false;
-                        _pullUpProgress = 0.0;
-                      });
-                    }
-                  }
-                },
-                child: Stack(
-                  children: [
-                    _buildMessagesArea(provider),
-
-                    // Subtle background overlay during pull
-                    if (_showPullUpIndicator && _pullUpProgress > 0.1)
-                      AnimatedOpacity(
-                        duration: const Duration(milliseconds: 200),
-                        opacity: (_pullUpProgress * 0.1).clamp(0.0, 0.1), // Very subtle dark overlay
-                        child: Container(
-                          color: Colors.black,
-                        ),
-                      ),
-
-                    // Pull-up animation overlay
-                    if (_showPullUpIndicator) _buildPullUpIndicator(),
-                  ],
-                ),
+                child: _buildMessagesArea(provider),
               ),
             ),
 
@@ -291,8 +170,10 @@ class _ChatTabState extends State<ChatTab> {
 
   Widget _buildMessagesArea(ConversationDetailProvider provider) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white54),
+      return const SizedBox.expand(
+        child: Center(
+          child: CircularProgressIndicator(color: Colors.white54),
+        ),
       );
     }
 
@@ -332,98 +213,43 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                FontAwesomeIcons.solidComment,
-                color: Colors.white54,
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Start a conversation',
-              style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Ask questions about this conversation',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                    color: Colors.grey.shade400,
-                    height: 1.4,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPullUpIndicator() {
-    return Positioned(
-      bottom: 140 + MediaQuery.of(context).padding.bottom, // Above input area + navbar clearance
-      left: 0,
-      right: 0,
+    return SizedBox.expand(
       child: Center(
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          opacity: _showPullUpIndicator
-              ? (_pullUpProgress * 0.6 + 0.4).clamp(0.0, 1.0) // Start at 40% opacity, grow to 100%
-              : 0.0,
-          child: AnimatedScale(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutBack,
-            scale: _showPullUpIndicator
-                ? 0.95 + (_pullUpProgress * 0.15) // Scale from 0.95 to 1.1 (very subtle)
-                : 0.8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[900],
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  FontAwesomeIcons.solidComment,
+                  color: Colors.white54,
+                  size: 32,
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    FontAwesomeIcons.trashCan,
-                    color: Colors.white,
-                    size: 16 + (_pullUpProgress * 2), // Grow from 16 to 18 (more subtle)
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _pullUpProgress >= 0.8 ? 'Release to clear chat' : 'Pull up to clear chat',
-                    style: TextStyle(
+              const SizedBox(height: 16),
+              Text(
+                'Start a conversation',
+                style: Theme.of(context).textTheme.titleMedium!.copyWith(
                       color: Colors.white,
-                      fontSize: 13 + (_pullUpProgress * 1), // Grow from 13 to 14 (more subtle)
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                ],
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                'Ask questions about this conversation',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                      color: Colors.grey.shade400,
+                      height: 1.4,
+                    ),
+              ),
+            ],
           ),
         ),
       ),
