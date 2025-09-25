@@ -160,37 +160,6 @@ class _ChatTabState extends State<ChatTab> {
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
-        // Header
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 24, left: 8, right: 8, bottom: 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Chat about this conversation',
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 24),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () async {
-                    final success = await clearConversationChat(provider.conversation.id);
-                    if (success && mounted) {
-                      setState(() {
-                        _messages.clear();
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.delete_outline, color: Colors.white, size: 20),
-                ),
-              ],
-            ),
-          ),
-        ),
-
         // Chat messages
         SliverList(
           delegate: SliverChildBuilderDelegate(
