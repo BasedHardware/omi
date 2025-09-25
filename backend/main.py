@@ -8,6 +8,7 @@ from modal import Image, App, asgi_app, Secret
 from routers import (
     workflow,
     chat,
+    chat_convo,
     firmware,
     plugins,
     transcribe,
@@ -46,6 +47,7 @@ app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
+app.include_router(chat_convo.router)
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 # app.include_router(screenpipe.router)
