@@ -21,7 +21,6 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
-  AppProvider? appProvider;
   List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
 
@@ -38,10 +37,6 @@ class MessageProvider extends ChangeNotifier {
   List<MessageFile> uploadedFiles = [];
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
-
-  void updateAppProvider(AppProvider p) {
-    appProvider = p;
-  }
 
   void setNextMessageOriginIsVoice(bool isVoice) {
     _isNextMessageFromVoice = isVoice;
@@ -93,7 +88,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void captureImage() async {
+  void captureImage({String? appId}) async {
     if (PlatformService.isDesktop) {
       AppSnackbar.showSnackbarError('Camera capture is not available on this platform');
       return;
@@ -105,7 +100,7 @@ class MessageProvider extends ChangeNotifier {
         selectedFiles.add(File(res.path));
         selectedFileTypes.add('image');
         var index = selectedFiles.length - 1;
-        await uploadFiles([selectedFiles[index]], appProvider?.selectedChatAppId);
+        await uploadFiles([selectedFiles[index]], appId);
         notifyListeners();
       }
     } on PlatformException catch (e) {
@@ -119,7 +114,7 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
-  void selectImage() async {
+  void selectImage({String? appId}) async {
     if (selectedFiles.length >= 4) {
       AppSnackbar.showSnackbarError('You can only select up to 4 images');
       return;
@@ -175,7 +170,7 @@ class MessageProvider extends ChangeNotifier {
       if (files.isNotEmpty) {
         selectedFiles.addAll(files);
         selectedFileTypes.addAll(files.map((e) => 'image'));
-        await uploadFiles(files, appProvider?.selectedChatAppId);
+        await uploadFiles(files, appId);
       }
       notifyListeners();
     } on PlatformException catch (e) {
@@ -191,7 +186,7 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
-  void selectFile() async {
+  void selectFile({String? appId}) async {
     if (selectedFiles.length >= 4) {
       AppSnackbar.showSnackbarError('You can only select up to 4 files');
       return;
@@ -218,7 +213,7 @@ class MessageProvider extends ChangeNotifier {
         if (files.isNotEmpty) {
           selectedFiles.addAll(files);
           selectedFileTypes.addAll(files.map((e) => 'file'));
-          await uploadFiles(files, appProvider?.selectedChatAppId);
+          await uploadFiles(files, appId);
         }
         notifyListeners();
       }
@@ -267,12 +262,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future refreshMessages({bool dropdownSelected = false}) async {
+  Future refreshMessages({String? appId, bool dropdownSelected = false}) async {
     setLoadingMessages(true);
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
     }
-    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
+    messages = await getMessagesFromServer(appId: appId, dropdownSelected: dropdownSelected);
     if (messages.isEmpty) {
       messages = SharedPreferencesUtil().cachedMessages;
     } else {
@@ -291,14 +286,14 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
+  Future<List<ServerMessage>> getMessagesFromServer({String? appId, bool dropdownSelected = false}) async {
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
     }
     setLoadingMessages(true);
     var mes = await getMessagesServer(
-      appId: appProvider?.selectedChatAppId,
+      appId: appId,
       dropdownSelected: dropdownSelected,
     );
     if (!hasCachedMessages) {
@@ -317,19 +312,19 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future clearChat() async {
+  Future clearChat({String? appId}) async {
     setClearingChat(true);
-    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
+    var mes = await clearChatServer(appId: appId);
     messages = mes;
     setClearingChat(false);
     notifyListeners();
   }
 
-  void addMessageLocally(String messageText) {
+  void addMessageLocally(String messageText, {String? appId}) {
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
-    var appId = appProvider?.selectedChatAppId;
-    if (appId == 'no_selected') {
-      appId = null;
+    var localAppId = appId;
+    if (localAppId == 'no_selected') {
+      localAppId = null;
     }
     var message = ServerMessage(
       const Uuid().v4(),
@@ -337,7 +332,7 @@ class MessageProvider extends ChangeNotifier {
       messageText,
       MessageSender.human,
       MessageType.text,
-      appId,
+      localAppId,
       false,
       List.from(uploadedFiles),
       fileIds,
@@ -359,20 +354,19 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
-      {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
+      {App? app, Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
       codec?.getFrameSize() ?? 160,
     );
 
-    var currentAppId = appProvider?.selectedChatAppId;
+    var currentAppId = app?.id;
     if (currentAppId == 'no_selected') {
       currentAppId = null;
     }
     String chatTargetId = currentAppId ?? 'omi';
-    App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
-    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+    bool isPersonaChat = app != null ? !app.isNotPersona() : false;
 
     MixpanelManager().chatVoiceInputUsed(
       chatTargetId: chatTargetId,
@@ -433,16 +427,15 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(false);
   }
 
-  Future sendMessageStreamToServer(String text) async {
+  Future sendMessageStreamToServer(String text, {App? app}) async {
     setShowTypingIndicator(true);
-    var currentAppId = appProvider?.selectedChatAppId;
+    var currentAppId = app?.id;
     if (currentAppId == 'no_selected') {
       currentAppId = null;
     }
 
     String chatTargetId = currentAppId ?? 'omi';
-    App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
-    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+    bool isPersonaChat = app != null ? !app.isNotPersona() : false;
 
     MixpanelManager().chatMessageSent(
       message: text,
@@ -454,7 +447,7 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
-    var message = ServerMessage.empty(appId: currentAppId);
+    var message = ServerMessage.empty(appId: app?.id);
     messages.insert(0, message);
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
@@ -473,7 +466,7 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: app?.id, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);
@@ -524,7 +517,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  App? messageSenderApp(String? appId) {
-    return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
+  App? messageSenderApp(String? appId, List<App> apps) {
+    return apps.firstWhereOrNull((p) => p.id == appId);
   }
 }

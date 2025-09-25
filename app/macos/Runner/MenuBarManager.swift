@@ -6,9 +6,13 @@ class MenuBarManager: NSObject {
     // MARK: - Properties
     private var statusBarItem: NSStatusItem?
     private weak var mainWindow: NSWindow?
+    private var isFloatingChatButtonVisible: Bool = false
+    private var isFloatingChatWindowVisible: Bool = false
     
     // Callbacks for menu actions
     var onToggleWindow: (() -> Void)?
+    var onToggleFloatingChat: (() -> Void)?
+    var onOpenChatWindow: (() -> Void)?
     var onQuit: (() -> Void)?
     
     // MARK: - Initialization
@@ -52,6 +56,19 @@ class MenuBarManager: NSObject {
         
         menu.addItem(NSMenuItem.separator())
         
+        // Floating Chat Controls
+        let showHideFloatingChatItem = NSMenuItem(title: "Show/Hide Floating Chat ⌘\\", action: #selector(toggleFloatingChat), keyEquivalent: "\\")
+        showHideFloatingChatItem.target = self
+        showHideFloatingChatItem.tag = 200
+        menu.addItem(showHideFloatingChatItem)
+        
+        let openChatWindowItem = NSMenuItem(title: "Open Chat Window ⌘↩", action: #selector(openChatWindow), keyEquivalent: "")
+        openChatWindowItem.target = self
+        openChatWindowItem.tag = 201
+        menu.addItem(openChatWindowItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         // Status item
         let statusItem = NSMenuItem(title: "Status: Ready", action: nil, keyEquivalent: "")
         statusItem.tag = 100
@@ -70,6 +87,16 @@ class MenuBarManager: NSObject {
     }
     
     // MARK: - Public Methods
+    
+    func updateFloatingChatButtonVisibility(isVisible: Bool) {
+        isFloatingChatButtonVisible = isVisible
+        updateFloatingChatMenuItemState()
+    }
+    
+    func updateFloatingChatWindowVisibility(isVisible: Bool) {
+        isFloatingChatWindowVisible = isVisible
+        updateOpenChatWindowMenuItemState()
+    }
     
     func updateStatus(status: String, isActive: Bool = false) {
         guard let menu = statusBarItem?.menu,
@@ -106,6 +133,24 @@ class MenuBarManager: NSObject {
     
     // MARK: - Private Methods
     
+    private func updateFloatingChatMenuItemState() {
+        guard let menu = statusBarItem?.menu,
+              let menuItem = menu.item(withTag: 200) else {
+            print("WARNING: Cannot find floating chat menu item with tag 200")
+            return
+        }
+        menuItem.state = isFloatingChatButtonVisible ? .on : .off
+    }
+    
+    private func updateOpenChatWindowMenuItemState() {
+        guard let menu = statusBarItem?.menu,
+              let menuItem = menu.item(withTag: 201) else {
+            print("WARNING: Cannot find open chat window menu item with tag 201")
+            return
+        }
+        menuItem.isEnabled = !isFloatingChatWindowVisible
+    }
+    
     private func getWindowToggleTitle() -> String {
         guard let window = mainWindow else { return "Show Window" }
         return window.isVisible ? "Hide Window" : "Show Window"
@@ -128,6 +173,14 @@ class MenuBarManager: NSObject {
     @objc private func toggleWindowVisibility() {
         print("INFO: Menu bar toggle window action triggered")
         onToggleWindow?()
+    }
+
+    @objc private func toggleFloatingChat() {
+        onToggleFloatingChat?()
+    }
+
+    @objc private func openChatWindow() {
+        onOpenChatWindow?()
     }
     
     @objc private func quitApplication() {

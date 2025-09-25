@@ -9,6 +9,7 @@ import 'package:omi/pages/settings/delete_account.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
+import 'package:omi/pages/settings/widgets/floating_window_settings.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
@@ -341,6 +342,17 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                   routeToPage(context, const PaymentsPage());
                 },
               ),
+            ],
+          ),
+
+          const SizedBox(height: 32),
+
+          // Floating Window Section
+          OmiSection(
+            title: 'Floating Window',
+            icon: FontAwesomeIcons.windowMaximize,
+            children: const [
+              FloatingWindowSettings(),
             ],
           ),
 

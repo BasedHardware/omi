@@ -25,6 +25,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // Overlay channel
     private var overlayChannel: FlutterMethodChannel!
 
+    // Auto-start channel
+    private var autoStartChannel: FlutterMethodChannel!
+
+    // Floating Chat
+    private var floatingChatButton: FloatingChatButton?
+    private var floatingChatChannel: FlutterMethodChannel!
+
 
 
     override func awakeFromNib() {
@@ -35,6 +42,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         RegisterGeneratedPlugins(registry: flutterViewController)
 
+        // Configure the shared window manager
+        FloatingChatWindowManager.shared.configure(flutterEngine: flutterViewController.engine)
+
         screenCaptureChannel = FlutterMethodChannel(
             name: "screenCapturePlatform",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
@@ -42,6 +52,16 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Setup overlay channel
         overlayChannel = FlutterMethodChannel(
             name: "overlayPlatform",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        // Setup auto-start channel
+        autoStartChannel = FlutterMethodChannel(
+            name: "com.omi.macos/autostart",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        // Setup floating chat channel
+        floatingChatChannel = FlutterMethodChannel(
+            name: "com.omi/floating_chat",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
         // Set self as delegate to detect window events
@@ -72,6 +92,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.setupMenuBar()
         }
+
+        // Setup global shortcuts
+        GlobalShortcutManager.shared.registerShortcuts()
 
         // Setup audio manager with Flutter channel
         audioManager.setFlutterChannel(screenCaptureChannel)
@@ -128,6 +151,64 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 self.moveOverlay(x: x, y: y)
                 result(nil)
                 
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        autoStartChannel.setMethodCallHandler { (call, result) in
+            switch call.method {
+            case "isAutoStartEnabled":
+                result(LoginItemManager.shared.isEnabled)
+            case "setAutoStart":
+                if let args = call.arguments as? [String: Any],
+                   let isEnabled = args["isEnabled"] as? Bool {
+                    LoginItemManager.shared.isEnabled = isEnabled
+                    result(nil)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing 'isEnabled' argument", details: nil))
+                }
+            case "getStartupBehavior":
+                result(LoginItemManager.shared.startupBehavior.rawValue)
+            case "setStartupBehavior":
+                if let args = call.arguments as? [String: Any],
+                   let behaviorRawValue = args["behavior"] as? String,
+                   let behavior = StartupBehavior(rawValue: behaviorRawValue) {
+                    LoginItemManager.shared.startupBehavior = behavior
+                    result(nil)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid 'behavior' argument", details: nil))
+                }
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        floatingChatChannel.setMethodCallHandler { [weak self] (call, result) in
+            guard let self = self else { return }
+
+            switch call.method {
+            case "showChatWindow":
+                // TODO: Get window ID from call.arguments
+                FloatingChatWindowManager.shared.showWindow(id: "default")
+                result(nil)
+            case "hideChatWindow":
+                // TODO: Get window ID from call.arguments
+                FloatingChatWindowManager.shared.closeWindow(id: "default")
+                result(nil)
+            case "showButton":
+                self.showFloatingChatButton()
+                result(nil)
+            case "hideButton":
+                self.hideFloatingChatButton()
+                result(nil)
+            case "resetButtonPosition":
+                self.floatingChatButton?.resetPosition()
+                result(nil)
+            case "resetAllPositions":
+                self.floatingChatButton?.resetPosition()
+                FloatingChatWindowManager.shared.resetAllPositions()
+                result(nil)
             default:
                 result(FlutterMethodNotImplemented)
             }
@@ -260,6 +341,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Add screen sleep/wake observers
         setupScreenSleepWakeObservers()
 
+        // Add observers for global shortcuts
+        setupShortcutObservers()
+
         super.awakeFromNib()
     }
 
@@ -356,6 +440,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             self?.handleQuitApplication()
         }
         
+        menuBarManager?.onToggleFloatingChat = { [weak self] in
+            self?.handleToggleFloatingButtonShortcut()
+        }
+
+        menuBarManager?.onOpenChatWindow = {
+            // TODO: This should eventually support opening specific or new windows.
+            FloatingChatWindowManager.shared.showWindow(id: "default")
+        }
+        
         menuBarManager?.setupMenuBarItem()
     }
     
@@ -388,7 +481,40 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Cleanup menu bar
         menuBarManager?.cleanup()
         
+        // Unregister global shortcuts
+        GlobalShortcutManager.shared.unregisterShortcuts()
+        
         NSApp.terminate(nil)
+    }
+
+    // MARK: - Floating Chat Methods
+
+    func showFloatingChatButton() {
+        DispatchQueue.main.async {
+            if self.floatingChatButton == nil {
+                let buttonSize = NSSize(width: 150, height: 36)
+                self.floatingChatButton = FloatingChatButton(
+                    contentRect: NSRect(origin: .zero, size: buttonSize),
+                    styleMask: [.borderless],
+                    backing: .buffered,
+                    defer: false
+                )
+                self.floatingChatButton?.onClick = {
+                    FloatingChatWindowManager.shared.showWindow(id: "default")
+                }
+            }
+            self.floatingChatButton?.makeKeyAndOrderFront(nil)
+            self.menuBarManager?.updateFloatingChatButtonVisibility(isVisible: true)
+        }
+    }
+
+    func hideFloatingChatButton() {
+        DispatchQueue.main.async {
+            guard let button = self.floatingChatButton else { return }
+            self.floatingChatButton = nil
+            button.close()
+            self.menuBarManager?.updateFloatingChatButtonVisibility(isVisible: false)
+        }
     }
     
     // MARK: - Floating Overlay Methods
@@ -501,14 +627,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             // Clear the reference first to prevent recursive calls
             self.floatingOverlay = nil
             
-            // Safely close the overlay with error handling
-            do {
-                overlay.orderOut(nil)
-                overlay.close()
-                print("DEBUG: Floating overlay hidden successfully")
-            } catch {
-                print("DEBUG: Error closing overlay: \(error)")
-            }
+            // Safely close the overlay
+            overlay.orderOut(nil)
+            overlay.close()
+            print("DEBUG: Floating overlay hidden successfully")
             
             // Notify Flutter that overlay was hidden (with error handling)
             if let overlayChannel = self.overlayChannel {
@@ -692,6 +814,38 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Clean up observers
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         DistributedNotificationCenter.default().removeObserver(self)
-        print("DEBUG: 🧹 Screen sleep/wake observers removed")
+        NotificationCenter.default.removeObserver(self)
+        print("DEBUG: 🧹 Observers removed")
+    }
+}
+
+// MARK: - Global Shortcut Handlers
+extension MainFlutterWindow {
+    private func setupShortcutObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenChatShortcut),
+            name: GlobalShortcutManager.openChatNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleToggleFloatingButtonShortcut),
+            name: GlobalShortcutManager.toggleFloatingButtonNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleOpenChatShortcut() {
+        // TODO: This should eventually support opening specific or new windows.
+        FloatingChatWindowManager.shared.showWindow(id: "default")
+    }
+
+    @objc private func handleToggleFloatingButtonShortcut() {
+        if floatingChatButton?.isVisible ?? false {
+            hideFloatingChatButton()
+        } else {
+            showFloatingChatButton()
+        }
     }
 }
