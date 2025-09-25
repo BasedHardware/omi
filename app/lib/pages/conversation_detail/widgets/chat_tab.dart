@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversation_chat.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/widgets/dialog.dart';
 // Note: Using simplified message widgets for conversation chat
 import 'package:provider/provider.dart';
 
@@ -23,6 +24,10 @@ class _ChatTabState extends State<ChatTab> {
   List<ConversationChatMessage> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
+
+  // Pull-up gesture tracking
+  double _initialPanPosition = 0;
+  bool _hasTriggeredHaptic = false;
 
   @override
   void initState() {
@@ -127,15 +132,80 @@ class _ChatTabState extends State<ChatTab> {
     });
   }
 
+  void _showClearChatDialog(ConversationDetailProvider provider) {
+    if (!mounted) return;
+
+    HapticFeedback.lightImpact(); // Additional haptic for dialog appearance
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return getDialog(
+          context,
+          () {
+            Navigator.of(context).pop(); // Cancel
+          },
+          () async {
+            Navigator.of(context).pop(); // Close dialog
+
+            // Clear chat with haptic feedback
+            HapticFeedback.mediumImpact();
+            final success = await clearConversationChat(provider.conversation.id);
+
+            if (success && mounted) {
+              setState(() {
+                _messages.clear();
+              });
+            }
+          },
+          "Clear Chat?",
+          "Are you sure you want to clear this conversation chat? This action cannot be undone.",
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         return Column(
           children: [
-            // Chat messages area
+            // Chat messages area with pull-up gesture
             Expanded(
-              child: _buildMessagesArea(provider),
+              child: GestureDetector(
+                onPanStart: (details) {
+                  _initialPanPosition = details.globalPosition.dy;
+                  _hasTriggeredHaptic = false;
+                },
+                onPanUpdate: (details) {
+                  // Only respond to gesture if there are messages to clear
+                  if (_messages.isEmpty) return;
+
+                  // Detect upward pull (negative delta)
+                  double deltaY = details.globalPosition.dy - _initialPanPosition;
+
+                  // If user pulls up more than 50 pixels and hasn't triggered haptic yet
+                  if (deltaY < -50 && !_hasTriggeredHaptic) {
+                    _hasTriggeredHaptic = true;
+                    HapticFeedback.mediumImpact();
+                  }
+                },
+                onPanEnd: (details) {
+                  // Only allow clear if there are messages to clear
+                  if (_messages.isEmpty) return;
+
+                  // If significant upward movement, show clear dialog
+                  double deltaY = details.velocity.pixelsPerSecond.dy;
+                  double totalDelta = _initialPanPosition - details.globalPosition.dy;
+
+                  // Show clear dialog if upward velocity or significant pull
+                  if (deltaY < -500 || totalDelta > 80) {
+                    _showClearChatDialog(provider);
+                  }
+                },
+                child: _buildMessagesArea(provider),
+              ),
             ),
 
             // Input area at bottom
