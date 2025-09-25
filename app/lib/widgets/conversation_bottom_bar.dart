@@ -14,7 +14,7 @@ enum ConversationBottomBarMode {
   detail // For viewing completed conversations
 }
 
-enum ConversationTab { transcript, summary, actionItems }
+enum ConversationTab { transcript, summary, actionItems, chat }
 
 class ConversationBottomBar extends StatelessWidget {
   final ConversationBottomBarMode mode;
@@ -81,8 +81,9 @@ class ConversationBottomBar extends StatelessWidget {
                   _buildSummaryTab(context),
                   const SizedBox(width: 4),
                   _buildActionItemsTab(),
+                  const SizedBox(width: 4),
+                  _buildChatTab(),
                 ],
-              _ => [_buildSummaryTab(context)],
             },
           ],
         ),
@@ -189,6 +190,14 @@ class ConversationBottomBar extends StatelessWidget {
       icon: FontAwesomeIcons.listCheck,
       isSelected: selectedTab == ConversationTab.actionItems,
       onTap: () => onTabSelected(ConversationTab.actionItems),
+    );
+  }
+
+  Widget _buildChatTab() {
+    return TabButton(
+      icon: FontAwesomeIcons.solidComment,
+      isSelected: selectedTab == ConversationTab.chat,
+      onTap: () => onTabSelected(ConversationTab.chat),
     );
   }
 }

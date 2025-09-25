@@ -28,6 +28,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
+import 'widgets/chat_tab.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -128,7 +129,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller = TabController(length: 4, vsync: this, initialIndex: 1); // Start with summary tab
     _controller!.addListener(() {
       setState(() {
         switch (_controller!.index) {
@@ -140,6 +141,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             break;
           case 2:
             selectedTab = ConversationTab.actionItems;
+            break;
+          case 3:
+            selectedTab = ConversationTab.chat;
             break;
           default:
             debugPrint('Invalid tab index: ${_controller!.index}');
@@ -205,6 +209,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         return 'Conversation';
       case ConversationTab.actionItems:
         return 'Action Items';
+      case ConversationTab.chat:
+        return 'Chat';
     }
   }
 
@@ -612,6 +618,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 },
                               ),
                               ActionItemsTab(),
+                              ChatTab(),
                             ],
                           );
                         }),
@@ -646,6 +653,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             break;
                           case ConversationTab.actionItems:
                             index = 2;
+                            break;
+                          case ConversationTab.chat:
+                            index = 3;
                             break;
                         }
                         _controller!.animateTo(index);
