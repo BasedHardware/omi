@@ -584,14 +584,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 child: Column(
                   children: [
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Builder(builder: (context) {
-                          return TabBarView(
-                            controller: _controller,
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              TranscriptWidgets(
+                      child: Builder(builder: (context) {
+                        return TabBarView(
+                          controller: _controller,
+                          physics: const NeverScrollableScrollPhysics(),
+                          children: [
+                            // Other tabs with padding
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: TranscriptWidgets(
                                 searchQuery: _searchQuery,
                                 currentResultIndex: getCurrentResultIndexForHighlighting(),
                                 onTapWhenSearchEmpty: () {
@@ -604,7 +605,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   }
                                 },
                               ),
-                              SummaryTab(
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: SummaryTab(
                                 searchQuery: _searchQuery,
                                 currentResultIndex: getCurrentResultIndexForHighlighting(),
                                 onTapWhenSearchEmpty: () {
@@ -617,12 +621,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   }
                                 },
                               ),
-                              ActionItemsTab(),
-                              ChatTab(),
-                            ],
-                          );
-                        }),
-                      ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: ActionItemsTab(),
+                            ),
+                            // Chat tab with NO padding - 100% width
+                            ChatTab(),
+                          ],
+                        );
+                      }),
                     ),
                   ],
                 ),

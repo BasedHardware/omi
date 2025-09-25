@@ -18,9 +18,10 @@ class ConversationChatInputArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ONE CLEAN STATE - exactly like main chat
+    // ONE CLEAN STATE - 100% horizontal width
     return Container(
-      margin: const EdgeInsets.only(top: 10),
+      width: double.infinity, // Force 100% width
+      margin: const EdgeInsets.only(top: 10), // Keep small top margin for spacing
       decoration: const BoxDecoration(
         color: Color(0xFF1f1f25),
         borderRadius: BorderRadius.only(
@@ -31,14 +32,14 @@ class ConversationChatInputArea extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.only(left: 16, right: 16, top: 20, bottom: 20),
+            padding: const EdgeInsets.only(left: 8, right: 8, top: 20, bottom: 20), // Reduced horizontal padding
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 // Main input container - ALWAYS the same
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.only(left: 16, right: 8),
+                    padding: const EdgeInsets.only(left: 8, right: 4), // Reduced inner padding for more space
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -91,7 +92,7 @@ class ConversationChatInputArea extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(width: 8),
+                const SizedBox(width: 4), // Minimal gap to maximize space usage
 
                 // Send button - ALWAYS visible (static)
                 GestureDetector(
