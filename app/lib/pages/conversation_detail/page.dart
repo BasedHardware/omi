@@ -131,6 +131,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
     _controller = TabController(length: 4, vsync: this, initialIndex: 1); // Start with summary tab
     _controller!.addListener(() {
+      // Dismiss keyboard when switching tabs for clean UX
+      FocusScope.of(context).unfocus();
+
       setState(() {
         switch (_controller!.index) {
           case 0:

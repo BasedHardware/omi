@@ -182,6 +182,10 @@ class _ChatTabState extends State<ChatTab> {
             // Chat messages area with pull-up gesture
             Expanded(
               child: GestureDetector(
+                // Dismiss keyboard when tapping anywhere in messages area
+                onTap: () {
+                  FocusScope.of(context).unfocus();
+                },
                 onPanStart: (details) {
                   _initialPanPosition = details.globalPosition.dy;
                   _hasTriggeredHaptic = false;
