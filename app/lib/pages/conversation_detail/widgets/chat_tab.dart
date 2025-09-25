@@ -166,11 +166,14 @@ class _ChatTabState extends State<ChatTab> {
             padding: const EdgeInsets.only(top: 24, left: 8, right: 8, bottom: 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Chat about this conversation',
-                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                Expanded(
+                  child: Text(
+                    'Chat about this conversation',
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 24),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
                 IconButton(
                   onPressed: () async {
@@ -182,7 +185,7 @@ class _ChatTabState extends State<ChatTab> {
                     }
                   },
                   icon: const Icon(Icons.delete_outline, color: Colors.white, size: 20),
-                )
+                ),
               ],
             ),
           ),
@@ -194,7 +197,7 @@ class _ChatTabState extends State<ChatTab> {
             (context, index) {
               final message = _messages[index];
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                 child: message.isFromUser ? _buildUserMessage(message) : _buildAIMessage(message),
               );
             },
@@ -272,7 +275,7 @@ class _ChatTabState extends State<ChatTab> {
         children: [
           // Chat input row
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
             child: Row(
               children: [
                 // Voice recorder button
@@ -299,7 +302,7 @@ class _ChatTabState extends State<ChatTab> {
                     ),
                   ),
 
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
 
                 // Text input
                 Expanded(
@@ -331,7 +334,7 @@ class _ChatTabState extends State<ChatTab> {
                               hintStyle: TextStyle(fontSize: 16.0, color: Colors.white54),
                               focusedBorder: InputBorder.none,
                               enabledBorder: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               isDense: true,
                             ),
                             minLines: 1,
@@ -344,7 +347,7 @@ class _ChatTabState extends State<ChatTab> {
                         ),
                 ),
 
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
 
                 // Send button
                 if (!_showVoiceRecorder)
@@ -392,7 +395,7 @@ class _ChatTabState extends State<ChatTab> {
           ),
 
           // Safe area padding
-          SizedBox(height: MediaQuery.of(context).padding.bottom),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
       ),
     );
@@ -400,7 +403,7 @@ class _ChatTabState extends State<ChatTab> {
 
   Widget _buildUserMessage(ConversationChatMessage message) {
     return Padding(
-      padding: const EdgeInsets.only(left: 40),
+      padding: const EdgeInsets.only(left: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -427,7 +430,7 @@ class _ChatTabState extends State<ChatTab> {
 
   Widget _buildAIMessage(ConversationChatMessage message) {
     return Padding(
-      padding: const EdgeInsets.only(right: 40),
+      padding: const EdgeInsets.only(right: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
