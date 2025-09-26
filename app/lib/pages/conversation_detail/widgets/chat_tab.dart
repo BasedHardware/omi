@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversation_chat.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/chat_input_area.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
+
+// Import desktop voice recorder for desktop platforms
+import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart'
+    if (dart.library.html) 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 
 class ChatTab extends StatefulWidget {
   const ChatTab({super.key});
@@ -21,6 +27,7 @@ class _ChatTabState extends State<ChatTab> {
   List<ConversationChatMessage> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
+  bool _showVoiceRecorder = false;
 
   @override
   void initState() {
@@ -69,6 +76,34 @@ class _ChatTabState extends State<ChatTab> {
         _messages.clear();
       });
     }
+  }
+
+  // Voice recorder callbacks
+  void _onTranscriptReady(String transcript) {
+    if (mounted) {
+      setState(() {
+        _messageController.text = transcript;
+        _showVoiceRecorder = false;
+      });
+      // Focus text field after transcript is ready
+      _messageFocusNode.requestFocus();
+    }
+  }
+
+  void _onVoiceRecorderClose() {
+    if (mounted) {
+      setState(() {
+        _showVoiceRecorder = false;
+      });
+    }
+  }
+
+  void _startVoiceRecording() {
+    // Hide keyboard when voice recording starts
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _showVoiceRecorder = true;
+    });
   }
 
   void _sendMessage(ConversationDetailProvider provider, String text) async {
@@ -155,12 +190,29 @@ class _ChatTabState extends State<ChatTab> {
               ),
             ),
 
-            // Input area at bottom - reusing main chat structure
-            ConversationChatInputArea(
-              textController: _messageController,
-              textFieldFocusNode: _messageFocusNode,
-              isSending: _isSending,
-              onSendMessage: (text) => _sendMessage(provider, text),
+            // Input area at bottom with voice recorder overlay
+            Stack(
+              children: [
+                // Input area (always visible)
+                ConversationChatInputArea(
+                  textController: _messageController,
+                  textFieldFocusNode: _messageFocusNode,
+                  isSending: _isSending,
+                  onSendMessage: (text) => _sendMessage(provider, text),
+                  onVoicePressed: _startVoiceRecording,
+                  hideButtons: _showVoiceRecorder, // Hide buttons when voice recorder is showing
+                ),
+
+                // Voice recorder overlay (only when recording) - positioned exactly over the Row
+                if (_showVoiceRecorder)
+                  Positioned(
+                    top: 30, // Top padding (10 margin + 20 padding)
+                    left: 16, // Left padding (8 + 8)
+                    right: 16, // Right padding (8 + 8)
+                    height: 44, // Height of the buttons row
+                    child: _buildVoiceRecorderOverlay(),
+                  ),
+              ],
             ),
           ],
         );
@@ -209,6 +261,25 @@ class _ChatTabState extends State<ChatTab> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildVoiceRecorderOverlay() {
+    // Voice recorder overlay - positioned exactly over text field + buttons Row
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: PlatformService.isDesktop
+          ? DesktopVoiceRecorderWidget(
+              onTranscriptReady: _onTranscriptReady,
+              onClose: _onVoiceRecorderClose,
+            )
+          : VoiceRecorderWidget(
+              onTranscriptReady: _onTranscriptReady,
+              onClose: _onVoiceRecorderClose,
+            ),
     );
   }
 

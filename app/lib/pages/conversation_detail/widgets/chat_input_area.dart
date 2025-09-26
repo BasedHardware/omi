@@ -7,6 +7,8 @@ class ConversationChatInputArea extends StatelessWidget {
   final FocusNode textFieldFocusNode;
   final bool isSending;
   final Function(String) onSendMessage;
+  final VoidCallback? onVoicePressed;
+  final bool hideButtons;
 
   const ConversationChatInputArea({
     super.key,
@@ -14,6 +16,8 @@ class ConversationChatInputArea extends StatelessWidget {
     required this.textFieldFocusNode,
     required this.isSending,
     required this.onSendMessage,
+    this.onVoicePressed,
+    this.hideButtons = false,
   });
 
   @override
@@ -70,59 +74,64 @@ class ConversationChatInputArea extends StatelessWidget {
                           ),
                         ),
 
-                        // Microphone ALWAYS stays here (never disappears)
-                        GestureDetector(
-                          child: Container(
-                            height: 44,
-                            width: 44,
-                            alignment: Alignment.center,
-                            child: const Icon(
-                              FontAwesomeIcons.microphone,
-                              color: Colors.white,
-                              size: 20,
+                        // Microphone button - hidden when voice recorder is active
+                        if (!hideButtons)
+                          GestureDetector(
+                            child: Container(
+                              height: 44,
+                              width: 44,
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                FontAwesomeIcons.microphone,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
+                            onTap: () {
+                              FocusScope.of(context).unfocus();
+                              if (onVoicePressed != null) {
+                                onVoicePressed!();
+                              }
+                            },
                           ),
-                          onTap: () {
-                            FocusScope.of(context).unfocus();
-                            // TODO: Add voice recording
-                          },
-                        ),
                       ],
                     ),
                   ),
                 ),
 
-                const SizedBox(width: 4), // Minimal gap to maximize space usage
+                // Send button - hidden when voice recorder is active
+                if (!hideButtons) ...[
+                  const SizedBox(width: 4), // Minimal gap to maximize space usage
 
-                // Send button - ALWAYS visible (static)
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    String message = textController.text.trim();
-                    if (message.isEmpty) return;
-                    onSendMessage(message);
-                  },
-                  child: Container(
-                    height: 44,
-                    width: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      FontAwesomeIcons.arrowUp,
-                      color: isSending ? Colors.grey[400] : Colors.black,
-                      size: 20,
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      String message = textController.text.trim();
+                      if (message.isEmpty) return;
+                      onSendMessage(message);
+                    },
+                    child: Container(
+                      height: 44,
+                      width: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        FontAwesomeIcons.arrowUp,
+                        color: isSending ? Colors.grey[400] : Colors.black,
+                        size: 20,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
