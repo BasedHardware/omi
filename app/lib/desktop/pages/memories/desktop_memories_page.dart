@@ -281,31 +281,31 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                         ),
                       ),
 
-            // Panel overlay
-            ValueListenableBuilder<List<Memory>?>(
-              valueListenable: _reviewMemoriesNotifier,
-              builder: (context, reviewMemories, child) {
-                if (reviewMemories == null) return const SizedBox.shrink();
+                      // Panel overlay
+                      ValueListenableBuilder<List<Memory>?>(
+                        valueListenable: _reviewMemoriesNotifier,
+                        builder: (context, reviewMemories, child) {
+                          if (reviewMemories == null) return const SizedBox.shrink();
 
-                return Stack(
-                  children: [
-                    // Backdrop blur overlay
-                    Positioned.fill(
-                      child: GestureDetector(
-                        onTap: () {
-                          _reviewMemoriesNotifier.value = null;
-                        },
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                          return Stack(
+                            children: [
+                              // Backdrop blur overlay
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    _reviewMemoriesNotifier.value = null;
+                                  },
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
 
                               // Memory review panel
                               Positioned(
