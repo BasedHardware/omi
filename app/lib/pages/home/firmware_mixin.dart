@@ -265,8 +265,22 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         orElse: () => throw Exception('OTA control characteristic not found'),
       );
 
+      // Calculate dynamic chunk size based on MTU
+      // MTU includes 3 bytes for ATT header, so usable payload is MTU - 3
+      // We also leave some safety margin for BLE stack overhead
+      final currentMtu = deviceConnection.bleDevice.mtuNow;
+      final maxPayload = currentMtu - 3; // ATT header overhead
+      final safetyMargin = 20; // Additional safety margin for BLE stack
+      final calculatedChunkSize = maxPayload - safetyMargin;
+      
+      // Ensure chunk size is within reasonable bounds
+      // Minimum: 20 bytes (for very restrictive devices)
+      // Maximum: 500 bytes (ESP32 firmware BLE_CHUNK_SIZE limit)
+      final chunkSize = calculatedChunkSize.clamp(20, 500);
+      
+      debugPrint('MTU: $currentMtu, Calculated chunk size: $chunkSize bytes');
+      
       // send chunks of data to the device
-      const chunkSize = 480;
       int sentBytes = 0;
       int chunkIndex = 0;
       
