@@ -3,7 +3,7 @@ import FlutterMacOS
 
 @main
 class AppDelegate: FlutterAppDelegate {
-    var floatingChatButton: FloatingChatButton?
+    var floatingControlBar: FloatingControlBar?
 
     override func applicationDidFinishLaunching(_ aNotification: Notification) {
         super.applicationDidFinishLaunching(aNotification)
@@ -14,45 +14,34 @@ class AppDelegate: FlutterAppDelegate {
         if LoginItemManager.shared.isEnabled && LoginItemManager.shared.startupBehavior == .showFloatingButton {
             // Hide the main window. It's created by FlutterAppDelegate but we don't want to show it.
             mainWindow?.orderOut(nil)
-            showFloatingChatButton()
+            showFloatingControlBar()
         } else {
             // This is the default behavior for first launch or if the user prefers it.
             mainWindow?.makeKeyAndOrderFront(nil)
         }
     }
 
-    func showFloatingChatButton() {
-        if floatingChatButton == nil {
-            let buttonSize = NSSize(width: 150, height: 36)
-            floatingChatButton = FloatingChatButton(
+    func showFloatingControlBar() {
+        if floatingControlBar == nil {
+            let buttonSize = NSSize(width: 280, height: 40)
+            floatingControlBar = FloatingControlBar(
                 contentRect: NSRect(origin: .zero, size: buttonSize),
                 styleMask: [.borderless],
                 backing: .buffered,
                 defer: false
             )
-            floatingChatButton?.onClick = { [weak self] in
+            FloatingChatWindowManager.shared.floatingButton = floatingControlBar
+            floatingControlBar?.onAskAI = { [weak self] in
                 FloatingChatWindowManager.shared.showWindow(id: "default")
                 // The AppDelegate's button instance must be closed manually.
-                self?.floatingChatButton?.close()
-                self?.floatingChatButton = nil
+                self?.floatingControlBar?.close()
+                FloatingChatWindowManager.shared.floatingButton = nil
+                self?.floatingControlBar = nil
+            }
+            floatingControlBar?.onMove = {
+                FloatingChatWindowManager.shared.positionWindowFromButton()
             }
         }
-        floatingChatButton?.makeKeyAndOrderFront(nil)
-    }
-
-    override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            let mainWindow = NSApp.windows.first { $0 is MainFlutterWindow }
-            mainWindow?.makeKeyAndOrderFront(nil)
-        }
-        return true
-    }
-
-    override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return true
-    }
-  
-    override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-        return true
+        floatingControlBar?.makeKeyAndOrderFront(nil)
     }
 }

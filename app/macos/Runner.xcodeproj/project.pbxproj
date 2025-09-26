@@ -27,16 +27,24 @@
 		33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F22044A3C60003C045 /* Assets.xcassets */; };
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
-		33CC11142044BFA00003C045 /* FloatingRecordingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11152044BFA00003C045 /* FloatingRecordingOverlay.swift */; };
 		33CC11162044BFA00003C045 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11172044BFA00003C045 /* PermissionManager.swift */; };
 		33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11192044BFA00003C045 /* MenuBarManager.swift */; };
 		33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC111B2044BFA00003C045 /* AudioManager.swift */; };
 		6CEA62AC1B6F48029F663C75 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */; };
-		CFD3F5522E857FDC00CFA1AD /* FloatingChatButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5502E857FDC00CFA1AD /* FloatingChatButton.swift */; };
 		CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5512E857FDC00CFA1AD /* GlobalShortcutManager.swift */; };
 		CFD3F5552E8581D100CFA1AD /* FloatingChatWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5542E8581D100CFA1AD /* FloatingChatWindow.swift */; };
 		CFD3F5572E85860300CFA1AD /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5562E85860300CFA1AD /* LoginItemManager.swift */; };
 		CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */; };
+		CFD3F55D2E85A2E600CFA1AD /* FloatingChatMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F55C2E85A2E600CFA1AD /* FloatingChatMessagesView.swift */; };
+		CFD3F55E2E85A2E600CFA1AD /* FloatingChatInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F55A2E85A2E600CFA1AD /* FloatingChatInputView.swift */; };
+		CFD3F55F2E85A2E600CFA1AD /* FloatingChatMessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F55B2E85A2E600CFA1AD /* FloatingChatMessageBubble.swift */; };
+		CFD3F5612E86368F00CFA1AD /* FloatingControlBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */; };
+		CFD3F5632E868FD100CFA1AD /* ScreenCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */; };
+		CFD3F5692E8691C500CFA1AD /* AskAIInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5682E8691C500CFA1AD /* AskAIInputView.swift */; };
+		CFD3F56B2E8696CC00CFA1AD /* AIResponseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56A2E8696CC00CFA1AD /* AIResponseView.swift */; };
+		CFD3F56D2E8697A400CFA1AD /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */; };
+		CFD3F56F2E86CA4E00CFA1AD /* AIConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56E2E86CA4E00CFA1AD /* AIConversationView.swift */; };
+		CFD3F5712E86CCE700CFA1AD /* AIConversationWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5702E86CCE700CFA1AD /* AIConversationWindow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,7 +88,6 @@
 		33CC10F52044A3C60003C045 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		33CC10F72044A3C60003C045 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Runner/Info.plist; sourceTree = "<group>"; };
 		33CC11122044BFA00003C045 /* MainFlutterWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainFlutterWindow.swift; sourceTree = "<group>"; };
-		33CC11152044BFA00003C045 /* FloatingRecordingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingRecordingOverlay.swift; sourceTree = "<group>"; };
 		33CC11172044BFA00003C045 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		33CC11192044BFA00003C045 /* MenuBarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarManager.swift; sourceTree = "<group>"; };
 		33CC111B2044BFA00003C045 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
@@ -98,11 +105,20 @@
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		9E30D5C1306899D4214FF616 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
-		CFD3F5502E857FDC00CFA1AD /* FloatingChatButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatButton.swift; sourceTree = "<group>"; };
 		CFD3F5512E857FDC00CFA1AD /* GlobalShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutManager.swift; sourceTree = "<group>"; };
 		CFD3F5542E8581D100CFA1AD /* FloatingChatWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatWindow.swift; sourceTree = "<group>"; };
 		CFD3F5562E85860300CFA1AD /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
 		CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatWindowManager.swift; sourceTree = "<group>"; };
+		CFD3F55A2E85A2E600CFA1AD /* FloatingChatInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatInputView.swift; sourceTree = "<group>"; };
+		CFD3F55B2E85A2E600CFA1AD /* FloatingChatMessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatMessageBubble.swift; sourceTree = "<group>"; };
+		CFD3F55C2E85A2E600CFA1AD /* FloatingChatMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatMessagesView.swift; sourceTree = "<group>"; };
+		CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingControlBar.swift; sourceTree = "<group>"; };
+		CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureManager.swift; sourceTree = "<group>"; };
+		CFD3F5682E8691C500CFA1AD /* AskAIInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskAIInputView.swift; sourceTree = "<group>"; };
+		CFD3F56A2E8696CC00CFA1AD /* AIResponseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIResponseView.swift; sourceTree = "<group>"; };
+		CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
+		CFD3F56E2E86CA4E00CFA1AD /* AIConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConversationView.swift; sourceTree = "<group>"; };
+		CFD3F5702E86CCE700CFA1AD /* AIConversationWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConversationWindow.swift; sourceTree = "<group>"; };
 		ECA12410D4472837013672C6 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
 		F8DCBD7DD8AB67EE93F0458C /* Pods-Runner.profile-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-prod.xcconfig"; sourceTree = "<group>"; };
 		FBFF4BAE9914B1C75B63AB20 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
@@ -176,10 +192,19 @@
 		33FAB671232836740065AC1E /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				CFD3F5702E86CCE700CFA1AD /* AIConversationWindow.swift */,
+				CFD3F56E2E86CA4E00CFA1AD /* AIConversationView.swift */,
+				CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */,
+				CFD3F56A2E8696CC00CFA1AD /* AIResponseView.swift */,
+				CFD3F5682E8691C500CFA1AD /* AskAIInputView.swift */,
+				CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */,
+				CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */,
+				CFD3F55A2E85A2E600CFA1AD /* FloatingChatInputView.swift */,
+				CFD3F55B2E85A2E600CFA1AD /* FloatingChatMessageBubble.swift */,
+				CFD3F55C2E85A2E600CFA1AD /* FloatingChatMessagesView.swift */,
 				CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */,
 				CFD3F5562E85860300CFA1AD /* LoginItemManager.swift */,
 				CFD3F5542E8581D100CFA1AD /* FloatingChatWindow.swift */,
-				CFD3F5502E857FDC00CFA1AD /* FloatingChatButton.swift */,
 				CFD3F5512E857FDC00CFA1AD /* GlobalShortcutManager.swift */,
 				33AE6C012D885D8700901B39 /* RunnerProfile-prod.entitlements */,
 				33AE6C002D885D7E00901B39 /* RunnerRelease-prod.entitlements */,
@@ -190,7 +215,6 @@
 				332689E42D870FC600CB35A1 /* RunnerRelease.entitlements */,
 				33CC10F02044A3C60003C045 /* AppDelegate.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
-				33CC11152044BFA00003C045 /* FloatingRecordingOverlay.swift */,
 				33CC11172044BFA00003C045 /* PermissionManager.swift */,
 				33CC11192044BFA00003C045 /* MenuBarManager.swift */,
 				33CC111B2044BFA00003C045 /* AudioManager.swift */,
@@ -430,17 +454,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CFD3F56B2E8696CC00CFA1AD /* AIResponseView.swift in Sources */,
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */,
-				CFD3F5522E857FDC00CFA1AD /* FloatingChatButton.swift in Sources */,
 				CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */,
-				33CC11142044BFA00003C045 /* FloatingRecordingOverlay.swift in Sources */,
+				CFD3F55D2E85A2E600CFA1AD /* FloatingChatMessagesView.swift in Sources */,
+				CFD3F56D2E8697A400CFA1AD /* VisualEffectView.swift in Sources */,
+				CFD3F5712E86CCE700CFA1AD /* AIConversationWindow.swift in Sources */,
+				CFD3F55E2E85A2E600CFA1AD /* FloatingChatInputView.swift in Sources */,
+				CFD3F55F2E85A2E600CFA1AD /* FloatingChatMessageBubble.swift in Sources */,
 				33CC11162044BFA00003C045 /* PermissionManager.swift in Sources */,
+				CFD3F56F2E86CA4E00CFA1AD /* AIConversationView.swift in Sources */,
+				CFD3F5692E8691C500CFA1AD /* AskAIInputView.swift in Sources */,
 				CFD3F5552E8581D100CFA1AD /* FloatingChatWindow.swift in Sources */,
 				33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */,
 				CFD3F5572E85860300CFA1AD /* LoginItemManager.swift in Sources */,
 				33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
+				CFD3F5632E868FD100CFA1AD /* ScreenCaptureManager.swift in Sources */,
+				CFD3F5612E86368F00CFA1AD /* FloatingControlBar.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

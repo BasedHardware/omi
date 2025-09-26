@@ -7,7 +7,6 @@ class MenuBarManager: NSObject {
     private var statusBarItem: NSStatusItem?
     private weak var mainWindow: NSWindow?
     private var isFloatingChatButtonVisible: Bool = false
-    private var isFloatingChatWindowVisible: Bool = false
     
     // Callbacks for menu actions
     var onToggleWindow: (() -> Void)?
@@ -19,6 +18,12 @@ class MenuBarManager: NSObject {
     init(mainWindow: NSWindow) {
         self.mainWindow = mainWindow
         super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(updateChatWindowStatus),
+            name: FloatingChatWindowManager.windowCountChangedNotification,
+            object: nil
+        )
     }
     
     // MARK: - Setup
@@ -67,6 +72,11 @@ class MenuBarManager: NSObject {
         openChatWindowItem.tag = 201
         menu.addItem(openChatWindowItem)
         
+        let chatStatusItem = NSMenuItem(title: "No Chat Windows Open", action: nil, keyEquivalent: "")
+        chatStatusItem.tag = 202
+        chatStatusItem.isEnabled = false
+        menu.addItem(chatStatusItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         // Status item
@@ -91,11 +101,6 @@ class MenuBarManager: NSObject {
     func updateFloatingChatButtonVisibility(isVisible: Bool) {
         isFloatingChatButtonVisible = isVisible
         updateFloatingChatMenuItemState()
-    }
-    
-    func updateFloatingChatWindowVisibility(isVisible: Bool) {
-        isFloatingChatWindowVisible = isVisible
-        updateOpenChatWindowMenuItemState()
     }
     
     func updateStatus(status: String, isActive: Bool = false) {
@@ -125,6 +130,7 @@ class MenuBarManager: NSObject {
     }
     
     func cleanup() {
+        NotificationCenter.default.removeObserver(self)
         if let statusBarItem = statusBarItem {
             NSStatusBar.system.removeStatusItem(statusBarItem)
             self.statusBarItem = nil
@@ -142,13 +148,21 @@ class MenuBarManager: NSObject {
         menuItem.state = isFloatingChatButtonVisible ? .on : .off
     }
     
-    private func updateOpenChatWindowMenuItemState() {
+    @objc private func updateChatWindowStatus() {
+        let count = FloatingChatWindowManager.shared.windowCount
         guard let menu = statusBarItem?.menu,
-              let menuItem = menu.item(withTag: 201) else {
-            print("WARNING: Cannot find open chat window menu item with tag 201")
+              let menuItem = menu.item(withTag: 202) else {
+            print("WARNING: Cannot find chat status menu item with tag 202")
             return
         }
-        menuItem.isEnabled = !isFloatingChatWindowVisible
+        
+        if count == 0 {
+            menuItem.title = "No Chat Windows Open"
+        } else if count == 1 {
+            menuItem.title = "1 Chat Window Open"
+        } else {
+            menuItem.title = "\(count) Chat Windows Open"
+        }
     }
     
     private func getWindowToggleTitle() -> String {

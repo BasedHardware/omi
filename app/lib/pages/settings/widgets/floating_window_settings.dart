@@ -49,7 +49,6 @@ class FloatingWindowSettings extends StatelessWidget {
               const SizedBox(width: 16),
               ElevatedButton(
                 onPressed: () {
-                  FloatingChatService.resetAllPositions();
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: const Text('Window positions have been reset.'),

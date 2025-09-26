@@ -31,6 +31,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/floating_chat_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -197,11 +198,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
           ChangeNotifierProvider(create: (context) => MessageProvider()),
+          ChangeNotifierProvider(
+            create: (context) => FloatingChatProvider(context.read<MessageProvider>()),
+            lazy: false,
+          ),
           ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
               CaptureProvider>(
             create: (context) => CaptureProvider(),
             update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
                 (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
+            lazy: false,
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
