@@ -21,6 +21,64 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
+  static const _askAIChannel = MethodChannel('com.omi/ask_ai');
+
+  MessageProvider() {
+    _askAIChannel.setMethodCallHandler(_handleAskAIMethodCall);
+  }
+
+  Future<void> _handleAskAIMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'sendQuery':
+        final args = call.arguments as Map<dynamic, dynamic>;
+        final message = args['message'] as String;
+        final filePath = args['filePath'] as String?;
+
+        List<String>? fileIds;
+        if (filePath != null && filePath.isNotEmpty) {
+          final file = File(filePath);
+          final uploadedFilesResult = await uploadFiles([file], null, addToState: false);
+          if (uploadedFilesResult != null) {
+            fileIds = uploadedFilesResult.map((f) => f.id).toList();
+          } else {
+            _askAIChannel.invokeMethod('aiResponseChunk', {
+              'type': 'error',
+              'text': 'Failed to upload the attached file.',
+            });
+            return;
+          }
+        }
+
+        try {
+          await for (var chunk in sendMessageStreamServer(message, filesId: fileIds)) {
+            final chunkMap = {
+              'type': chunk.type.toString().split('.').last,
+              'text': chunk.text,
+              'messageId': chunk.messageId,
+            };
+            if (chunk.type == MessageChunkType.done && chunk.message != null) {
+              chunkMap['text'] = chunk.message!.text;
+            }
+            _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
+          }
+        } catch (e) {
+          final failedChunk = ServerMessageChunk.failedMessage();
+          final chunkMap = {
+            'type': failedChunk.type.toString().split('.').last,
+            'text': failedChunk.text,
+            'messageId': failedChunk.messageId,
+          };
+          _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
+        }
+        break;
+      default:
+        throw PlatformException(
+          code: 'Unimplemented',
+          details: 'Method ${call.method} not implemented.',
+        );
+    }
+  }
+
   List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
 
@@ -242,19 +300,25 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> uploadFiles(List<File> files, String? appId) async {
+  Future<List<MessageFile>?> uploadFiles(List<File> files, String? appId, {bool addToState = true}) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
       var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
-        uploadedFiles.addAll(res);
+        if (addToState) {
+          uploadedFiles.addAll(res);
+        }
       } else {
-        clearSelectedFiles();
+        if (addToState) {
+          clearSelectedFiles();
+        }
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
       }
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
       notifyListeners();
+      return res;
     }
+    return null;
   }
 
   void removeLocalMessage(String id) {
@@ -427,9 +491,12 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(false);
   }
 
-  Future sendMessageStreamToServer(String text, {App? app}) async {
-    setShowTypingIndicator(true);
-    var currentAppId = app?.id;
+  Future sendMessageStreamToServer(String text,
+      {App? app, String? appId, Function(ServerMessageChunk)? onChunk, List<String>? fileIds}) async {
+    if (onChunk == null) {
+      setShowTypingIndicator(true);
+    }
+    var currentAppId = app?.id ?? appId;
     if (currentAppId == 'no_selected') {
       currentAppId = null;
     }
@@ -447,12 +514,26 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
+    List<String> finalFileIds = fileIds ?? uploadedFiles.map((e) => e.id).toList();
+    if (fileIds == null) {
+      clearSelectedFiles();
+      clearUploadedFiles();
+    }
+
+    if (onChunk != null) {
+      try {
+        await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: finalFileIds)) {
+          onChunk(chunk);
+        }
+      } catch (e) {
+        onChunk(ServerMessageChunk.failedMessage());
+      }
+      return;
+    }
+
     var message = ServerMessage.empty(appId: app?.id);
     messages.insert(0, message);
     notifyListeners();
-    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
-    clearSelectedFiles();
-    clearUploadedFiles();
     String textBuffer = '';
     Timer? timer;
 
@@ -466,7 +547,7 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: app?.id, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: finalFileIds)) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);

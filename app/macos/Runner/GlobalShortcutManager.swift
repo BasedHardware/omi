@@ -4,16 +4,16 @@ import Carbon.HIToolbox.Events
 // Using Carbon APIs for robust global shortcut handling.
 class GlobalShortcutManager {
     
-    static let openChatNotification = Notification.Name("com.omi.openChat")
     static let toggleFloatingButtonNotification = Notification.Name("com.omi.toggleFloatingButton")
+    static let askAINotification = Notification.Name("com.omi.askAI")
     
     static let shared = GlobalShortcutManager()
     
     private var hotKeyRefs: [EventHotKeyRef?] = []
     
     private enum HotKeyID: UInt32 {
-        case openChat = 1
-        case openChatKeypad = 2
+        case askAI = 1
+        case askAIKeypad = 2
         case toggleButton = 3
     }
     
@@ -31,8 +31,8 @@ class GlobalShortcutManager {
         // Unregister any existing shortcuts before registering new ones.
         unregisterShortcuts()
         
-        registerHotKey(keyCode: kVK_Return, modifiers: cmdKey, id: .openChat)
-        registerHotKey(keyCode: kVK_ANSI_KeypadEnter, modifiers: cmdKey, id: .openChatKeypad)
+        registerHotKey(keyCode: kVK_Return, modifiers: cmdKey, id: .askAI) // CMD+Enter
+        registerHotKey(keyCode: kVK_ANSI_KeypadEnter, modifiers: cmdKey, id: .askAIKeypad) // CMD+Keypad Enter
         registerHotKey(keyCode: 42, modifiers: cmdKey, id: .toggleButton) // kVK_Backslash
     }
     
@@ -70,9 +70,9 @@ class GlobalShortcutManager {
         }
         
         switch id {
-        case .openChat, .openChatKeypad:
-            print("CMD+Enter shortcut detected. Opening chat interface...")
-            NotificationCenter.default.post(name: GlobalShortcutManager.openChatNotification, object: nil)
+        case .askAI, .askAIKeypad:
+            print("CMD+Enter shortcut detected. Triggering Ask AI...")
+            NotificationCenter.default.post(name: GlobalShortcutManager.askAINotification, object: nil)
         case .toggleButton:
             print("CMD+\\ shortcut detected. Toggling floating button...")
             NotificationCenter.default.post(name: GlobalShortcutManager.toggleFloatingButtonNotification, object: nil)
