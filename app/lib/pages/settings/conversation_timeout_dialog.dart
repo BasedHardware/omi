@@ -7,13 +7,13 @@ class ConversationTimeoutDialog {
     final currentDuration = SharedPreferencesUtil().conversationSilenceDuration;
     int selectedDuration = currentDuration;
 
-    // Timeout options: 2 mins, 5 mins, 10 mins, 30 mins, never
+    // Timeout options: 2 mins, 5 mins, 10 mins, 30 mins, 4 hours
     final timeoutOptions = [
       {'label': '2 minutes', 'value': 120, 'description': 'End conversation after 2 minutes of silence'},
       {'label': '5 minutes', 'value': 300, 'description': 'End conversation after 5 minutes of silence'},
       {'label': '10 minutes', 'value': 600, 'description': 'End conversation after 10 minutes of silence'},
       {'label': '30 minutes', 'value': 1800, 'description': 'End conversation after 30 minutes of silence'},
-      {'label': 'Never', 'value': -1, 'description': 'Conversations will only end manually'},
+      {'label': '4 hours', 'value': -1, 'description': 'End conversation after 4 hours of silence'},
     ];
 
     await showDialog(
