@@ -43,6 +43,12 @@ extern uint32_t write_to_tx_queue_count;
 extern struct bt_gatt_service storage_service;
 extern uint32_t file_num_array[2];
 extern bool storage_is_on;
+
+#ifndef CONFIG_BOARD_OMI_DK2
+extern bool cv1_storage_active;
+extern struct bt_conn *cv1_current_connection;
+extern void cv1_read_file_data_in_pusher(void);
+#endif
 #endif
 
 extern bool is_connected;
@@ -50,6 +56,7 @@ extern bool is_connected;
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
+static atomic_t audio_notifications_enabled = ATOMIC_INIT(0);
 //
 // Internal
 //
@@ -201,8 +208,10 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
 {
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for notifications");
+        atomic_set(&audio_notifications_enabled, 1);
     } else if (value == 0) {
         LOG_INF("Client unsubscribed from notifications");
+        atomic_set(&audio_notifications_enabled, 0);
     } else {
         LOG_INF("Invalid CCC value: %u", value);
     }
@@ -586,8 +595,8 @@ static bool read_from_tx_queue()
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 4096);
-static struct k_thread pusher_thread;
+K_THREAD_STACK_DEFINE(pusher_stack, 8192);
+struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 
 // Define buffer sizes based on configuration and potential MTU
@@ -652,11 +661,18 @@ static bool push_to_gatt(struct bt_conn *conn)
     return true;
 }
 
-#define OPUS_PREFIX_LENGTH 1
+#define OPUS_PREFIX_LENGTH 4
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
+
+static void write_opus_prefix(uint8_t *dest, uint32_t size) {
+    dest[0] = size & 0xFF;
+    dest[1] = (size >> 8) & 0xFF;
+    dest[2] = (size >> 16) & 0xFF;
+    dest[3] = (size >> 24) & 0xFF;
+}
 // bool write_to_storage(void)
 // {
 //     if (!read_from_tx_queue())
@@ -680,11 +696,12 @@ static uint16_t buffer_offset = 0;
 
 //     return true;
 // }
-// for improving ble bandwidth
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
+
+#ifndef CONFIG_BOARD_OMI_DK2
 bool write_to_storage(void)
-{ // max possible packing
+{
     if (!read_from_tx_queue()) {
         return false;
     }
@@ -692,33 +709,66 @@ bool write_to_storage(void)
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
 
-    // buffer_offset = buffer_offset+amount_to_fill;
     // check if adding the new packet will cause a overflow
-    if (buffer_offset + packet_size > MAX_WRITE_SIZE - 1) {
+    if (buffer_offset + packet_size > MAX_WRITE_SIZE - OPUS_PREFIX_LENGTH) {
 
-        storage_temp_data[buffer_offset] = tx_buffer_size;
+        write_opus_prefix(storage_temp_data + buffer_offset, tx_buffer_size);
         uint8_t *write_ptr = storage_temp_data;
         write_to_file(write_ptr, MAX_WRITE_SIZE);
 
         buffer_offset = packet_size;
-        storage_temp_data[0] = tx_buffer_size;
-        memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
+        write_opus_prefix(storage_temp_data, tx_buffer_size);
+        memcpy(storage_temp_data + OPUS_PREFIX_LENGTH, buffer, tx_buffer_size);
 
-    } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - 1) {
-        // exact frame needed
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
+    } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - OPUS_PREFIX_LENGTH) {
+        write_opus_prefix(storage_temp_data + buffer_offset, tx_buffer_size);
+        memcpy(storage_temp_data + buffer_offset + OPUS_PREFIX_LENGTH, buffer, tx_buffer_size);
         buffer_offset = 0;
         uint8_t *write_ptr = (uint8_t *) storage_temp_data;
         write_to_file(write_ptr, MAX_WRITE_SIZE);
     } else {
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
+        write_opus_prefix(storage_temp_data + buffer_offset, tx_buffer_size);
+        memcpy(storage_temp_data + buffer_offset + OPUS_PREFIX_LENGTH, buffer, tx_buffer_size);
         buffer_offset = buffer_offset + packet_size;
     }
 
     return true;
 }
+#else
+bool write_to_storage(void)
+{
+    if (!read_from_tx_queue()) {
+        return false;
+    }
+
+    uint8_t *buffer = tx_buffer + 2;
+    uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
+
+    if (buffer_offset + packet_size > MAX_WRITE_SIZE - OPUS_PREFIX_LENGTH) {
+
+        write_opus_prefix(storage_temp_data + buffer_offset, tx_buffer_size);
+        uint8_t *write_ptr = storage_temp_data;
+        write_to_file(write_ptr, MAX_WRITE_SIZE);
+
+        buffer_offset = packet_size;
+        write_opus_prefix(storage_temp_data, tx_buffer_size);
+        memcpy(storage_temp_data + OPUS_PREFIX_LENGTH, buffer, tx_buffer_size);
+
+    } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - OPUS_PREFIX_LENGTH) {
+        write_opus_prefix(storage_temp_data + buffer_offset, tx_buffer_size);
+        memcpy(storage_temp_data + buffer_offset + OPUS_PREFIX_LENGTH, buffer, tx_buffer_size);
+        buffer_offset = 0;
+        uint8_t *write_ptr = (uint8_t *) storage_temp_data;
+        write_to_file(write_ptr, MAX_WRITE_SIZE);
+    } else {
+        write_opus_prefix(storage_temp_data + buffer_offset, tx_buffer_size);
+        memcpy(storage_temp_data + buffer_offset + OPUS_PREFIX_LENGTH, buffer, tx_buffer_size);
+        buffer_offset = buffer_offset + packet_size;
+    }
+
+    return true;
+}
+#endif
 #endif
 
 static bool use_storage = true;
@@ -739,6 +789,7 @@ void test_pusher(void)
     uint32_t runs_count = 0;
     while (1) {
         k_sleep(K_MSEC(1));
+        runs_count++;
         struct bt_conn *conn = current_connection;
         if (conn) {
             conn = bt_conn_ref(conn);
@@ -749,19 +800,18 @@ void test_pusher(void)
         } else if (!conn) {
             valid = false;
         } else if (runs_count % 100 == 0) {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
         }
         if (valid) {
             // Expected 100 packages per seconds
             bool sent = push_to_gatt(conn);
             if (!sent) {
-                // k_sleep(K_MSEC(50));
+                // Could add delay here if needed
             }
         }
         if (conn) {
             bt_conn_unref(conn);
         }
-        runs_count++;
         k_yield();
     }
 }
@@ -825,16 +875,25 @@ void pusher(void)
             }
         }
 #endif
-        if (valid) {
-            bool sent = push_to_gatt(conn);
-            if (!sent) {
-                // k_sleep(K_MSEC(50));
-            }
+    if (valid) {
+        bool sent = push_to_gatt(conn);
+        if (!sent) {
+            // Could add delay here if needed
         }
+    }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+#ifndef CONFIG_BOARD_OMI_DK2
+        if (conn && cv1_storage_active && cv1_current_connection) {
+            cv1_read_file_data_in_pusher();
+        }
+#endif
+#endif
         if (conn) {
             bt_conn_unref(conn);
         }
 
+        k_sleep(K_MSEC(1));
         k_yield();
     }
 }
@@ -955,7 +1014,9 @@ int transport_start()
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
+    #ifdef CONFIG_BOARD_OMI_DK2
     bt_gatt_service_register(&storage_service);
+    #endif
 #endif
 
     // Start advertising
@@ -992,7 +1053,7 @@ int transport_start()
     struct k_thread *thread = k_thread_create(&pusher_thread,
                                               pusher_stack,
                                               K_THREAD_STACK_SIZEOF(pusher_stack),
-                                              (k_thread_entry_t) test_pusher,
+                                              (k_thread_entry_t) pusher,
                                               NULL,
                                               NULL,
                                               NULL,
@@ -1016,6 +1077,11 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
+    // Connected but not yet subscribed -> drop (prevents pre-CCCD burst).
+    if (current_connection != NULL && !atomic_get(&audio_notifications_enabled)) {
+        return -1;
+    }
+
     if (!write_to_tx_queue(buffer, size)) {
         return -1;
     }
