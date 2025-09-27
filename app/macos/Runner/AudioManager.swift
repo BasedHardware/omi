@@ -890,6 +890,130 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         deviceListChangedListener = nil
     }
     
+    // MARK: - Audio Device Management
+    
+    func getAvailableAudioDevices() -> [[String: String]] {
+        var devices: [[String: String]] = []
+        let deviceIDs = getAudioDeviceIDs()
+        
+        for deviceID in deviceIDs {
+            // Check if device has input streams
+            if hasInputStreams(deviceID: deviceID) {
+                if let deviceName = getDeviceName(for: deviceID) {
+                    if !isAggregateOrVirtualDevice(deviceName: deviceName, deviceID: deviceID) {
+                        let friendlyName = getFriendlyDeviceName(deviceName)
+                        devices.append([
+                            "id": String(deviceID),
+                            "name": friendlyName
+                        ])
+                    }
+                }
+            }
+        }
+        
+        return devices
+    }
+    
+    private func isAggregateOrVirtualDevice(deviceName: String, deviceID: AudioDeviceID) -> Bool {
+        // Filter out aggregate devices
+        if deviceName.contains("CADefaultDeviceAggregate") ||
+           deviceName.contains("Aggregate Device") ||
+           deviceName.contains("Multi-Output Device") {
+            return true
+        }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var transportType: UInt32 = 0
+        var propertySize = UInt32(MemoryLayout<UInt32>.size)
+        
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &propertySize,
+            &transportType
+        )
+        
+        if status == noErr {
+            return transportType == kAudioDeviceTransportTypeVirtual ||
+                   transportType == kAudioDeviceTransportTypeAggregate
+        }
+        
+        return false
+    }
+    
+    private func getFriendlyDeviceName(_ deviceName: String) -> String {
+        if deviceName.contains("MacBook") && deviceName.contains("Microphone") {
+            return "MacBook Microphone"
+        } else if deviceName.contains("AirPods") {
+            return deviceName
+        } else if deviceName.contains("USB") {
+            return deviceName.replacingOccurrences(of: "USB ", with: "")
+        } else if deviceName.contains("Built-in") {
+            return "Built-in Microphone"
+        }
+        
+        return deviceName
+    }
+    
+    private func hasInputStreams(deviceID: AudioDeviceID) -> Bool {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var propertySize: UInt32 = 0
+        let status = AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nil, &propertySize)
+        
+        return status == noErr && propertySize > 0
+    }
+    
+    func selectAudioDevice(deviceID: String) -> Bool {
+        guard let deviceIDInt = AudioDeviceID(deviceID) else {
+            print("ERROR: Invalid device ID: \(deviceID)")
+            return false
+        }
+        
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var deviceIDToSet = deviceIDInt
+        let propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        
+        let status = AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            propertySize,
+            &deviceIDToSet
+        )
+        
+        if status == noErr {
+            print("DEBUG: Successfully set default input device to ID: \(deviceID)")
+            
+            self.currentInputDeviceID = deviceIDInt
+            if let deviceName = getDeviceName(for: deviceIDInt) {
+                self.currentInputDeviceName = deviceName
+                print("DEBUG: New input device name: \(deviceName)")
+            }
+            
+            return true
+        } else {
+            print("ERROR: Failed to set default input device: \(status)")
+            return false
+        }
+    }
 }
 
 // MARK: - Audio Manager Errors
