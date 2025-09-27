@@ -196,13 +196,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProvider(create: (context) => PeopleProvider()),
           ChangeNotifierProvider(create: (context) => UsageProvider()),
-          ChangeNotifierProvider(create: (context) => MessageProvider()),
+          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
+            create: (context) => MessageProvider(),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                (previous?..updateAppProvider(value)) ?? MessageProvider(),
+          ),
           ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
               CaptureProvider>(
             create: (context) => CaptureProvider(),
             update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
                 (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
-            lazy: false,
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
