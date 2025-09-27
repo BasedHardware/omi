@@ -37,10 +37,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   bool _isHovered = false;
   List<Map<String, String>> _availableAudioDevices = [];
   String? _selectedDeviceId;
-  // Add this GlobalKey to your state class
-final GlobalKey _micKey = GlobalKey();
-// Add this OverlayEntry to your state class
-OverlayEntry? _audioDeviceOverlayEntry;
+  final GlobalKey _micKey = GlobalKey();
+  OverlayEntry? _audioDeviceOverlayEntry;
 
 
   Future<void> _toggleRecording(BuildContext context, CaptureProvider provider) async {
@@ -968,6 +966,15 @@ Future<void> _selectAudioDevice(Map<String, String> device) async {
 
   SharedPreferences prefs = await SharedPreferences.getInstance();
   await prefs.setString('selected_audio_device_id', device['id'] ?? '');
+  
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Audio input set to ${device['name']}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 }
 
 Widget _buildFloatingAudioDeviceDropdown() {
@@ -996,7 +1003,15 @@ Widget _buildFloatingAudioDeviceDropdown() {
             Divider(height: 1, color: Colors.white.withOpacity(0.1)),
             const SizedBox(height: 4),
             if (_availableAudioDevices.isNotEmpty)
-              ..._availableAudioDevices.map(_buildFloatingAudioDeviceItem),
+              ..._availableAudioDevices.map(_buildFloatingAudioDeviceItem)
+            else
+              const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                      child: Text('Loading devices...',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: ResponsiveHelper.textSecondary)))),
             const SizedBox(height: 4),
           ],
         ),
