@@ -128,7 +128,7 @@ class ConversationTimeoutDialog {
                     // Show confirmation
                     String message;
                     if (selectedDuration == -1) {
-                      message = 'Conversations will now only end manually';
+                      message = 'Conversations will now end after 4 hours of silence';
                     } else {
                       final minutes = selectedDuration ~/ 60;
                       message = 'Conversations will now end after $minutes minute${minutes == 1 ? '' : 's'} of silence';
