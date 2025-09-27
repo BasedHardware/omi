@@ -99,19 +99,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             guard let self = self else { return }
 
             switch call.method {
-            case "showButton":
-                self.showFloatingControlBar()
-                result(nil)
-            case "hideButton":
-                self.hideFloatingControlBar()
-                result(nil)
-            case "resetButtonPosition":
-                self.floatingControlBar?.resetPosition()
-                result(nil)
-            case "resetAllPositions":
-                self.floatingControlBar?.resetPosition()
-                FloatingChatWindowManager.shared.resetAllPositions()
-                result(nil)
             case "updateRecordingState":
                 if let args = call.arguments as? [String: Any],
                    let isRecording = args["isRecording"] as? Bool,
