@@ -38,9 +38,24 @@ To select the appropriate overlay file select the configuration in the nRF Conne
 
 To enable USB serial debugging:
 
-1. Uncomment the debug lines in `main.c`.
-2. Use the nRF Terminal in VS Code to view debug output.
-3. Full live-code debugging is also supported using the nRF Connect extension however this requires a J-Link debugger device and additional setup.
+### DevKit2
+
+1. Clone this repository and edit `firmware/devkit/prj_xiao_ble_sense_devkitv2-adafruit.conf`.
+2. Ensure the following settings are enabled (set to `y` and not commented out):
+   - `CONFIG_CONSOLE=y`
+   - `CONFIG_PRINTK=y`
+   - `CONFIG_LOG=y`
+   - `CONFIG_LOG_PRINTK=y`
+   - `CONFIG_UART_CONSOLE=y`
+3. Offline storage is currently experimental and must be disabled for logging. Ensure the following setting is disabled (set to `n` and not commented out):
+   - `CONFIG_OMI_ENABLE_OFFLINE_STORAGE=n`
+4. **NOTE:** Logging may be enabled with offline storage with the following settings. **These settings may affect the performance of data transfer via BLE or when writing to the SD card**:
+   - `CONFIG_LOG_PROCESS_THREAD_PRIORITY=5`
+   - `CONFIG_LOG_PROCESS_THREAD_CUSTOM_PRIORITY=y`
+5. Build and flash the debugging firmware according to the instructions in the [official documentation](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
+6. Use the nRF Serial Terminal in VS Code to view debug output.
+
+Full live-code debugging is also supported using the nRF Connect extension; however, this requires a J-Link debugger device and additional setup.
 
 ## Key Components
 
