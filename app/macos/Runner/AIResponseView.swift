@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import MarkdownUI
 
 // MARK: - SwiftUI Views from FloatingControlBar
 
@@ -151,7 +152,7 @@ struct AIResponseView: View {
                 Spacer()
             } else {
                 ScrollView {
-                    Text(responseText)
+                    Markdown(responseText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

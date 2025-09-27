@@ -40,6 +40,7 @@
 		CFD3F56D2E8697A400CFA1AD /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */; };
 		CFD3F56F2E86CA4E00CFA1AD /* AIConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56E2E86CA4E00CFA1AD /* AIConversationView.swift */; };
 		CFD3F5712E86CCE700CFA1AD /* AIConversationWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5702E86CCE700CFA1AD /* AIConversationWindow.swift */; };
+		CFD3F5742E87FAFF00CFA1AD /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = CFD3F5732E87FAFF00CFA1AD /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -120,6 +121,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6CEA62AC1B6F48029F663C75 /* Pods_Runner.framework in Frameworks */,
+				CFD3F5742E87FAFF00CFA1AD /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1317,6 +1319,14 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CFD3F5732E87FAFF00CFA1AD /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CFD3F5722E87C59500CFA1AD /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 33CC10E52044A3C60003C045 /* Project object */;
 }
