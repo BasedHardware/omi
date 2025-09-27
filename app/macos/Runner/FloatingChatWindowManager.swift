@@ -23,13 +23,6 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
         self.askAIChannel = askAIChannel
     }
     
-    func resetAllPositions() {
-        // Only reset AI conversation window position since that's all we have now
-        DispatchQueue.main.async {
-            // AI conversation window doesn't need position reset as it's positioned relative to floating button
-        }
-    }
-
     // MARK: - Ask AI Window Management
 
     func floatingButtonDidMove() {
@@ -139,7 +132,16 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
     }
 
     func removeScreenshotFromAIConversation() {
-        showAIConversationWindow(screenshotURL: nil)
+        DispatchQueue.main.async {
+            self.currentScreenshotURL = nil
+            
+            // Update the existing window's view instead of recreating it
+            if let window = self.aiConversationWindow, window.isVisible {
+                let conversationView = AIConversationView(manager: self, screenshotURL: nil)
+                let hostingController = NSHostingController(rootView: conversationView)
+                window.contentViewController = hostingController
+            }
+        }
     }
 
     func clearAndHideAIConversationWindow() {
