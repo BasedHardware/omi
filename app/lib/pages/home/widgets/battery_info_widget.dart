@@ -21,6 +21,10 @@ class BatteryInfoWidget extends StatelessWidget {
       return Assets.images.omiDevkitWithoutRope.path;
     }
 
+    if (deviceName != null && deviceName.contains('Apple Watch')) {
+      return Assets.images.appleWatch.path;
+    }
+
     return Assets.images.omiWithoutRope.path;
   }
 

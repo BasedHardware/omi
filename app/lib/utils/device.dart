@@ -50,9 +50,15 @@ class DeviceUtils {
     if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
       return Assets.images.omiGlass.path;
     }
+
     if (deviceModel.contains('Omi DevKit') || deviceModel.contains('Friend')) {
       return Assets.images.omiDevkitWithoutRope.path;
     }
+
+    if (deviceModel.contains('Apple Watch')) {
+      return Assets.images.appleWatch.path;
+    }
+
     return Assets.images.omiWithoutRope.path;
   }
 }

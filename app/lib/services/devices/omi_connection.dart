@@ -15,6 +15,8 @@ import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:version/version.dart';
 
+import 'communication/device_communicator.dart';
+
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
   BluetoothService? _omiService;

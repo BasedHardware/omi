@@ -1,10 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
 
 enum ImageOrientation {
   orientation0, // 0 degrees
@@ -160,6 +162,7 @@ enum DeviceType {
   omi,
   openglass,
   frame,
+  appleWatch,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -169,6 +172,8 @@ class BtDevice {
   String id;
   DeviceType type;
   int rssi;
+  // Protocol-agnostic discovery locator for post-discovery connection
+  final DeviceLocator? locator;
   String? _modelNumber;
   String? _firmwareRevision;
   String? _hardwareRevision;
@@ -179,6 +184,7 @@ class BtDevice {
       required this.id,
       required this.type,
       required this.rssi,
+      this.locator,
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
@@ -195,6 +201,7 @@ class BtDevice {
         id = '',
         type = DeviceType.omi,
         rssi = 0,
+        locator = null,
         _modelNumber = '',
         _firmwareRevision = '',
         _hardwareRevision = '',
@@ -216,6 +223,9 @@ class BtDevice {
 
   static shortId(String id) {
     try {
+      if (id == 'apple-watch') {
+        return 'watchOS';
+      }
       return id.replaceAll(':', '').split('-').last.substring(0, 6);
     } catch (e) {
       return id.length > 6 ? id.substring(0, 6) : id;
@@ -227,6 +237,7 @@ class BtDevice {
       String? id,
       DeviceType? type,
       int? rssi,
+      DeviceLocator? locator,
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
@@ -236,6 +247,7 @@ class BtDevice {
       id: id ?? this.id,
       type: type ?? this.type,
       rssi: rssi ?? this.rssi,
+      locator: locator ?? this.locator,
       modelNumber: modelNumber ?? _modelNumber,
       firmwareRevision: firmwareRevision ?? _firmwareRevision,
       hardwareRevision: hardwareRevision ?? _hardwareRevision,
@@ -275,6 +287,8 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.frame) {
       return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
+    } else if (type == DeviceType.appleWatch) {
+      return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
@@ -348,6 +362,27 @@ class BtDevice {
     );
   }
 
+  Future _getDeviceInfoFromAppleWatch(AppleWatchDeviceConnection conn) async {
+    try {
+      final deviceInfo = await conn.getWatchInfo();
+      return copyWith(
+        modelNumber: deviceInfo['model'] ?? 'Apple Watch',
+        firmwareRevision: deviceInfo['systemVersion'] ?? 'Unknown',
+        hardwareRevision: deviceInfo['localizedModel'] ?? 'Unknown',
+        manufacturerName: 'Apple',
+        type: DeviceType.appleWatch,
+      );
+    } catch (e) {
+      return copyWith(
+        modelNumber: 'Apple Watch',
+        firmwareRevision: 'Unknown',
+        hardwareRevision: 'Unknown',
+        manufacturerName: 'Apple',
+        type: DeviceType.appleWatch,
+      );
+    }
+  }
+
   // from BluetoothDevice
   Future fromBluetoothDevice(BluetoothDevice device) async {
     var rssi = await device.readRssi();
@@ -377,6 +412,7 @@ class BtDevice {
       id: result.device.remoteId.str,
       type: deviceType ?? DeviceType.omi,
       rssi: result.rssi,
+      locator: DeviceLocator.bluetooth(deviceId: result.device.remoteId.str),
     );
   }
 
