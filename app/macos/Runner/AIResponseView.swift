@@ -35,12 +35,9 @@ private struct SpinnerView: View {
     var body: some View {
         Image("app_launcher_icon")
             .resizable()
-            .frame(width: 24, height: 24)
-            .colorInvert() // Invert the white icon to black for visibility on white background
+            .colorInvert()
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
             .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isSpinning)
-            .scaleEffect(0.9) // Slightly smaller for better visual balance
-            .opacity(0.9) // Slightly transparent to indicate loading state
             .onAppear {
                 withAnimation {
                     isSpinning = true
@@ -78,9 +75,19 @@ struct AIResponseView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Text("AI response")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
+                if isLoading {
+                    SpinnerView()
+                        .frame(width: 16, height: 16)
+                        .background(Color.white)
+                        .clipShape(Circle())
+                    Text("thinking")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                } else {
+                    Text("AI response")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                }
                 Spacer()
             }
 
@@ -139,11 +146,6 @@ struct AIResponseView: View {
             if isLoading {
                 Spacer()
                 HStack {
-                    Spacer()
-                    SpinnerView()
-                        .frame(width: 32, height: 32)
-                        .background(Color.white)
-                        .clipShape(Circle())
                     Spacer()
                 }
                 Spacer()

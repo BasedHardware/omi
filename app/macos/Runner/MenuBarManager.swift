@@ -3,27 +3,28 @@ import Cocoa
 // MARK: - Menu Bar Manager
 class MenuBarManager: NSObject {
     
+    // MARK: - Notification Names
+    static let toggleWindowNotification = Notification.Name("com.omi.menubar.toggleWindow")
+    static let toggleFloatingChatNotification = Notification.Name("com.omi.menubar.toggleFloatingChat")
+    static let openChatWindowNotification = Notification.Name("com.omi.menubar.openChatWindow")
+    static let quitApplicationNotification = Notification.Name("com.omi.menubar.quitApplication")
+    
+    // MARK: - Singleton
+    static let shared = MenuBarManager()
+    
     // MARK: - Properties
     private var statusBarItem: NSStatusItem?
     private weak var mainWindow: NSWindow?
     private var isFloatingChatButtonVisible: Bool = false
     
-    // Callbacks for menu actions
-    var onToggleWindow: (() -> Void)?
-    var onToggleFloatingChat: (() -> Void)?
-    var onOpenChatWindow: (() -> Void)?
-    var onQuit: (() -> Void)?
-    
     // MARK: - Initialization
-    init(mainWindow: NSWindow) {
-        self.mainWindow = mainWindow
+    private override init() {
         super.init()
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(updateChatWindowStatus),
-            name: FloatingChatWindowManager.windowCountChangedNotification,
-            object: nil
-        )
+    }
+    
+    // MARK: - Configuration
+    func configure(mainWindow: NSWindow) {
+        self.mainWindow = mainWindow
     }
     
     // MARK: - Setup
@@ -54,28 +55,33 @@ class MenuBarManager: NSObject {
         // Create menu
         let menu = NSMenu()
         
-        // Show/Hide Window item
-        let showHideItem = NSMenuItem(title: getWindowToggleTitle(), action: #selector(toggleWindowVisibility), keyEquivalent: "")
-        showHideItem.target = self
-        menu.addItem(showHideItem)
+        // Open Omi Window item
+        let openOmiItem = NSMenuItem(title: "Open Omi", action: #selector(openOmiWindow), keyEquivalent: "m")
+        openOmiItem.target = self
+        openOmiItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(openOmiItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        // Floating Chat Controls
-        let showHideFloatingChatItem = NSMenuItem(title: "Show/Hide Floating Chat ⌘\\", action: #selector(toggleFloatingChat), keyEquivalent: "\\")
-        showHideFloatingChatItem.target = self
-        showHideFloatingChatItem.tag = 200
-        menu.addItem(showHideFloatingChatItem)
+        // Control Bar Toggle
+        let toggleControlBarItem = NSMenuItem(title: "Toggle Control Bar", action: #selector(toggleFloatingChat), keyEquivalent: "\\")
+        toggleControlBarItem.target = self
+        toggleControlBarItem.keyEquivalentModifierMask = [.command]
+        toggleControlBarItem.tag = 200
+        menu.addItem(toggleControlBarItem)
         
-        let openChatWindowItem = NSMenuItem(title: "Open Chat Window ⌘↩", action: #selector(openChatWindow), keyEquivalent: "")
+        // Chat Window
+        let openChatWindowItem = NSMenuItem(title: "Ask AI", action: #selector(openChatWindow), keyEquivalent: "\r")
         openChatWindowItem.target = self
+        openChatWindowItem.keyEquivalentModifierMask = [.command]
         openChatWindowItem.tag = 201
         menu.addItem(openChatWindowItem)
         
-        let chatStatusItem = NSMenuItem(title: "No Chat Windows Open", action: nil, keyEquivalent: "")
-        chatStatusItem.tag = 202
-        chatStatusItem.isEnabled = false
-        menu.addItem(chatStatusItem)
+        menu.addItem(NSMenuItem.separator())
+        
+        let aboutItem = NSMenuItem(title: "About Omi", action: #selector(openOmiWebsite), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -89,6 +95,7 @@ class MenuBarManager: NSObject {
         // Quit item
         let quitItem = NSMenuItem(title: "Quit Omi", action: #selector(quitApplication), keyEquivalent: "q")
         quitItem.target = self
+        quitItem.keyEquivalentModifierMask = [.command]
         menu.addItem(quitItem)
         
         statusBarItem.menu = menu
@@ -102,6 +109,7 @@ class MenuBarManager: NSObject {
         isFloatingChatButtonVisible = isVisible
         updateFloatingChatMenuItemState()
     }
+    
     
     func updateStatus(status: String, isActive: Bool = false) {
         guard let menu = statusBarItem?.menu,
@@ -125,9 +133,6 @@ class MenuBarManager: NSObject {
         }
     }
     
-    func updateWindowToggleTitle() {
-        updateMenuItemTitle(itemIndex: 0, to: getWindowToggleTitle())
-    }
     
     func cleanup() {
         NotificationCenter.default.removeObserver(self)
@@ -142,33 +147,14 @@ class MenuBarManager: NSObject {
     private func updateFloatingChatMenuItemState() {
         guard let menu = statusBarItem?.menu,
               let menuItem = menu.item(withTag: 200) else {
-            print("WARNING: Cannot find floating chat menu item with tag 200")
+            print("WARNING: Cannot find control bar menu item with tag 200")
             return
         }
         menuItem.state = isFloatingChatButtonVisible ? .on : .off
+        menuItem.title = isFloatingChatButtonVisible ? "Hide Control Bar" : "Show Control Bar"
     }
     
-    @objc private func updateChatWindowStatus() {
-        let count = FloatingChatWindowManager.shared.windowCount
-        guard let menu = statusBarItem?.menu,
-              let menuItem = menu.item(withTag: 202) else {
-            print("WARNING: Cannot find chat status menu item with tag 202")
-            return
-        }
-        
-        if count == 0 {
-            menuItem.title = "No Chat Windows Open"
-        } else if count == 1 {
-            menuItem.title = "1 Chat Window Open"
-        } else {
-            menuItem.title = "\(count) Chat Windows Open"
-        }
-    }
     
-    private func getWindowToggleTitle() -> String {
-        guard let window = mainWindow else { return "Show Window" }
-        return window.isVisible ? "Hide Window" : "Show Window"
-    }
     
     private func updateMenuItemTitle(itemIndex: Int, to newTitle: String) {
         guard let menu = statusBarItem?.menu,
@@ -184,21 +170,28 @@ class MenuBarManager: NSObject {
     
     // MARK: - Menu Actions
     
-    @objc private func toggleWindowVisibility() {
-        print("INFO: Menu bar toggle window action triggered")
-        onToggleWindow?()
+    @objc private func openOmiWindow() {
+        print("INFO: Menu bar open Omi window action triggered")
+        NotificationCenter.default.post(name: MenuBarManager.toggleWindowNotification, object: nil)
     }
 
     @objc private func toggleFloatingChat() {
-        onToggleFloatingChat?()
+        NotificationCenter.default.post(name: MenuBarManager.toggleFloatingChatNotification, object: nil)
     }
 
     @objc private func openChatWindow() {
-        onOpenChatWindow?()
+        NotificationCenter.default.post(name: MenuBarManager.openChatWindowNotification, object: nil)
+    }
+    
+    @objc private func openOmiWebsite() {
+        print("INFO: Menu bar about action triggered - opening omi.me")
+        if let url = URL(string: "https://omi.me") {
+            NSWorkspace.shared.open(url)
+        }
     }
     
     @objc private func quitApplication() {
         print("INFO: Menu bar quit action triggered")
-        onQuit?()
+        NotificationCenter.default.post(name: MenuBarManager.quitApplicationNotification, object: nil)
     }
 } 

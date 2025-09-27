@@ -2,8 +2,8 @@ import Cocoa
 import FlutterMacOS
 import SwiftUI
 
-/// Manages the lifecycle of multiple floating chat windows.
-class FloatingChatWindowManager: NSObject, NSWindowDelegate, ObservableObject {
+/// Manages the AI conversation window functionality.
+class FloatingChatWindowManager: NSObject, ObservableObject {
     @Published var aiResponseText: String = ""
     @Published var isAIResponseLoading: Bool = true
     @Published var askAIInputText: String = ""
@@ -11,226 +11,61 @@ class FloatingChatWindowManager: NSObject, NSWindowDelegate, ObservableObject {
     @Published var aiConversationWindowWidth: CGFloat = 500
 
     static let shared = FloatingChatWindowManager()
-    static let windowCountChangedNotification = Notification.Name("FloatingChatWindowCountChanged")
 
-    private var chatWindows: [String: FloatingChatWindow] = [:]
     private var aiConversationWindow: AIConversationWindow?
     private var currentScreenshotURL: URL?
-    private var channel: FlutterMethodChannel?
     private var askAIChannel: FlutterMethodChannel?
     var floatingButton: FloatingControlBar?
-    private var isProgrammaticallyMoving: Bool = false
-
-    var windowCount: Int {
-        return chatWindows.count
-    }
 
     private override init() {}
 
     func configure(flutterEngine: FlutterEngine, askAIChannel: FlutterMethodChannel) {
-        let messenger = flutterEngine.binaryMessenger
-        channel = FlutterMethodChannel(name: "com.omi/floating_chat", binaryMessenger: messenger)
         self.askAIChannel = askAIChannel
-    }
-
-    private func invokeMethodWithRetry(method: String, arguments: Any?, maxAttempts: Int = 3, delay: TimeInterval = 0.2) {
-        var attempts = 0
-        
-        func attempt() {
-            channel?.invokeMethod(method, arguments: arguments) { result in
-                if let error = result as? FlutterError {
-                    attempts += 1
-                    if attempts < maxAttempts {
-                        print("ERROR: Failed to invoke '\(method)' (attempt \(attempts)/\(maxAttempts)): \(error.message ?? "No message"). Retrying...")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + delay * Double(attempts)) {
-                            attempt()
-                        }
-                    } else {
-                        print("ERROR: Max retries reached for '\(method)'. Giving up. Error: \(error.message ?? "No message")")
-                    }
-                }
-                // Success, do nothing.
-            }
-        }
-        
-        attempt()
-    }
-
-    func requestHistoryForWindow(id: String) {
-        invokeMethodWithRetry(method: "requestHistory", arguments: ["conversationId": id])
-    }
-
-    func sendMessageToFlutter(id: String, message: [String: Any]) {
-        invokeMethodWithRetry(method: "userMessage", arguments: message)
-    }
-
-    func handleAIResponse(arguments: Any?) {
-        guard let args = arguments as? [String: Any],
-              let id = args["conversationId"] as? String,
-              let messageId = args["messageId"] as? String,
-              let text = args["text"] as? String,
-              let isFinal = args["isFinal"] as? Bool else {
-            print("ERROR: Invalid AI response arguments")
-            return
-        }
-
-        DispatchQueue.main.async {
-            if let window = self.chatWindows[id] {
-                window.updateAIResponse(messageId: messageId, message: text, isFinal: isFinal)
-            }
-        }
-    }
-
-    func handleChatHistory(arguments: Any?) {
-        guard let args = arguments as? [String: Any],
-              let id = args["conversationId"] as? String,
-              let history = args["history"] as? [[String: Any]] else {
-            print("ERROR: Invalid chat history arguments")
-            return
-        }
-
-        DispatchQueue.main.async {
-            if let window = self.chatWindows[id] {
-                window.displayHistory(messages: history)
-            }
-        }
-    }
-
-    /// Creates and shows a new chat window or brings an existing one to the front.
-    func showWindow(id: String) {
-        DispatchQueue.main.async {
-            if let window = self.chatWindows[id] {
-                window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-                if id == "default", let button = self.floatingButton {
-                    self.positionWindow(for: button, and: window)
-                }
-                return
-            }
-
-            let window = FloatingChatWindow(id: id)
-            
-            window.delegate = self
-
-            self.chatWindows[id] = window
-            
-            if id == "default", let button = self.floatingButton {
-                self.positionWindow(for: button, and: window)
-            }
-
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            NotificationCenter.default.post(name: FloatingChatWindowManager.windowCountChangedNotification, object: nil)
-        }
-    }
-
-    /// Hides a chat window.
-    func hideWindow(id: String) {
-        DispatchQueue.main.async {
-            if let window = self.chatWindows[id] {
-                window.orderOut(nil)
-            }
-        }
     }
     
     func resetAllPositions() {
+        // Only reset AI conversation window position since that's all we have now
         DispatchQueue.main.async {
-            for (_, window) in self.chatWindows {
-                window.resetPosition()
-            }
+            // AI conversation window doesn't need position reset as it's positioned relative to floating button
         }
-    }
-    
-    // MARK: - NSWindowDelegate
-    
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? FloatingChatWindow else { return }
-        
-        // Find the ID for this window and remove it from our tracking dictionary.
-        if let (id, _) = chatWindows.first(where: { $0.value == window }) {
-            chatWindows.removeValue(forKey: id)
-            print("DEBUG: Closed and removed chat window with id \(id)")
-            NotificationCenter.default.post(name: FloatingChatWindowManager.windowCountChangedNotification, object: nil)
-        }
-    }
-
-    func windowDidMove(_ notification: Notification) {
-        guard !isProgrammaticallyMoving, let window = notification.object as? FloatingChatWindow else { return }
-        positionButton(for: window)
-    }
-    
-    func windowDidResize(_ notification: Notification) {
-        guard let window = notification.object as? FloatingChatWindow else { return }
-        positionButton(for: window)
-    }
-    
-    private func positionButton(for window: FloatingChatWindow) {
-        guard window.windowId == "default", let button = floatingButton, button.isVisible, !isProgrammaticallyMoving else {
-            return
-        }
-        
-        isProgrammaticallyMoving = true
-        
-        let windowFrame = window.frame
-        let buttonFrame = button.frame
-        
-        let newX = windowFrame.origin.x + (windowFrame.width - buttonFrame.width) / 2
-        let newY = windowFrame.origin.y + windowFrame.height
-        
-        button.setFrameOrigin(NSPoint(x: newX, y: newY))
-        
-        isProgrammaticallyMoving = false
-    }
-    
-    func positionWindowFromButton() {
-        guard let button = floatingButton, let window = chatWindows["default"], window.isVisible, !isProgrammaticallyMoving else {
-            return
-        }
-        
-        isProgrammaticallyMoving = true
-        
-        let buttonFrame = button.frame
-        let windowFrame = window.frame
-        
-        let newX = buttonFrame.origin.x - (windowFrame.width - buttonFrame.width) / 2
-        let newY = buttonFrame.origin.y - windowFrame.height
-        
-        window.setFrameOrigin(NSPoint(x: newX, y: newY))
-        
-        isProgrammaticallyMoving = false
-    }
-    
-    private func positionWindow(for button: FloatingControlBar, and window: FloatingChatWindow) {
-        isProgrammaticallyMoving = true
-        
-        let buttonFrame = button.frame
-        let windowFrame = window.frame
-        
-        let newX = buttonFrame.origin.x - (windowFrame.width - buttonFrame.width) / 2
-        let newY = buttonFrame.origin.y - windowFrame.height
-        
-        window.setFrameOrigin(NSPoint(x: newX, y: newY))
-        
-        isProgrammaticallyMoving = false
     }
 
     // MARK: - Ask AI Window Management
 
     func floatingButtonDidMove() {
-        positionWindowFromButton()
         positionAIConversationWindow()
     }
 
-    private func positionAIConversationWindow() {
-        guard let button = floatingButton, let window = aiConversationWindow, window.isVisible else { return }
+    func positionAIConversationWindow() {
+        guard let window = aiConversationWindow, window.isVisible else { return }
 
-        let buttonFrame = button.frame
-        let spacing: CGFloat = 8
+        if let button = floatingButton {
+            // Synchronize width first
+            let buttonWidth = button.frame.width
+            if abs(window.frame.width - buttonWidth) > 1.0 { // Only resize if significantly different
+                aiConversationWindowWidth = buttonWidth
+                let currentHeight = window.frame.height
+                window.setContentSize(NSSize(width: buttonWidth, height: currentHeight))
+            }
+            
+            // Position relative to floating control bar
+            let buttonFrame = button.frame
+            let spacing: CGFloat = 8
 
-        let windowFrame = window.frame
-        let newX = buttonFrame.origin.x
-        let newY = buttonFrame.origin.y - windowFrame.height - spacing
-        window.setFrameOrigin(NSPoint(x: newX, y: newY))
+            let windowFrame = window.frame
+            let newX = buttonFrame.origin.x
+            let newY = buttonFrame.origin.y - windowFrame.height - spacing
+            window.setFrameOrigin(NSPoint(x: newX, y: newY))
+        } else {
+            // If no floating control bar, center the window on screen
+            if let screen = NSScreen.main {
+                let screenFrame = screen.visibleFrame
+                let windowFrame = window.frame
+                let newX = screenFrame.origin.x + (screenFrame.width - windowFrame.width) / 2
+                let newY = screenFrame.origin.y + (screenFrame.height - windowFrame.height) / 2
+                window.setFrameOrigin(NSPoint(x: newX, y: newY))
+            }
+        }
     }
 
     func toggleAIConversationWindow(screenshotURL: URL?) {
@@ -247,12 +82,11 @@ class FloatingChatWindowManager: NSObject, NSWindowDelegate, ObservableObject {
             self.isAIResponseLoading = true
             self.aiResponseText = ""
             
-            if let buttonWidth = self.floatingButton?.frame.width {
-                self.aiConversationWindowWidth = buttonWidth
-            }
-
+            // Create window if it doesn't exist
             if self.aiConversationWindow == nil {
-                let windowRect = NSRect(x: 0, y: 0, width: self.aiConversationWindowWidth, height: 300) // dummy rect
+                // Use current width or default
+                let initialWidth = self.floatingButton?.frame.width ?? self.aiConversationWindowWidth
+                let windowRect = NSRect(x: 0, y: 0, width: initialWidth, height: 300)
                 self.aiConversationWindow = AIConversationWindow(contentRect: windowRect, backing: .buffered, defer: false)
             }
             
@@ -261,15 +95,16 @@ class FloatingChatWindowManager: NSObject, NSWindowDelegate, ObservableObject {
             let hostingController = NSHostingController(rootView: conversationView)
             self.aiConversationWindow?.contentViewController = hostingController
 
-            // Resize window to fit content before positioning
+            // Resize window to fit content
             if let contentView = self.aiConversationWindow?.contentView {
                 let newSize = contentView.intrinsicContentSize
-                self.aiConversationWindow?.setContentSize(NSSize(width: self.aiConversationWindowWidth, height: newSize.height))
+                let currentWidth = self.floatingButton?.frame.width ?? self.aiConversationWindowWidth
+                self.aiConversationWindow?.setContentSize(NSSize(width: currentWidth, height: newSize.height))
             }
             
-            self.positionAIConversationWindow()
-            
+            // Position and show the window (this will handle width sync)
             self.aiConversationWindow?.makeKeyAndOrderFront(nil)
+            self.positionAIConversationWindow()
             NSApp.activate(ignoringOtherApps: true)
         }
     }
@@ -290,9 +125,13 @@ class FloatingChatWindowManager: NSObject, NSWindowDelegate, ObservableObject {
         // Switch to response view
         isShowingAIResponse = true
         
-        // Resize window to fit response view
+        // Resize window to fit response view and maintain alignment
         DispatchQueue.main.async {
             if let window = self.aiConversationWindow {
+                // Synchronize width with floating control bar if available
+                if let buttonWidth = self.floatingButton?.frame.width {
+                    self.aiConversationWindowWidth = buttonWidth
+                }
                 window.setContentSize(NSSize(width: self.aiConversationWindowWidth, height: 300)) // AIResponseView size
                 self.positionAIConversationWindow()
             }
