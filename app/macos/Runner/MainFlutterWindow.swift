@@ -19,12 +19,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // Menu bar manager
     private var menuBarManager: MenuBarManager?
 
-    // Auto-start channel
-    private var autoStartChannel: FlutterMethodChannel!
-
-    // Floating Chat
+    // Floating control bar
     private var floatingControlBar: FloatingControlBar?
-    private var floatingChatChannel: FlutterMethodChannel!
     private var floatingControlBarChannel: FlutterMethodChannel!
     private var askAIChannel: FlutterMethodChannel!
 
@@ -40,16 +36,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         screenCaptureChannel = FlutterMethodChannel(
             name: "screenCapturePlatform",
-            binaryMessenger: flutterViewController.engine.binaryMessenger)
-
-        // Setup auto-start channel
-        autoStartChannel = FlutterMethodChannel(
-            name: "com.omi.macos/autostart",
-            binaryMessenger: flutterViewController.engine.binaryMessenger)
-
-        // Setup floating chat channel
-        floatingChatChannel = FlutterMethodChannel(
-            name: "com.omi/floating_chat",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
         // Setup floating control bar channel
@@ -108,63 +94,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         // Setup audio manager with Flutter channel
         audioManager.setFlutterChannel(screenCaptureChannel)
-
-        autoStartChannel.setMethodCallHandler { (call, result) in
-            switch call.method {
-            case "isAutoStartEnabled":
-                result(LoginItemManager.shared.isEnabled)
-            case "setAutoStart":
-                if let args = call.arguments as? [String: Any],
-                   let isEnabled = args["isEnabled"] as? Bool {
-                    LoginItemManager.shared.isEnabled = isEnabled
-                    result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing 'isEnabled' argument", details: nil))
-                }
-            case "getStartupBehavior":
-                result(LoginItemManager.shared.startupBehavior.rawValue)
-            case "setStartupBehavior":
-                if let args = call.arguments as? [String: Any],
-                   let behaviorRawValue = args["behavior"] as? String,
-                   let behavior = StartupBehavior(rawValue: behaviorRawValue) {
-                    LoginItemManager.shared.startupBehavior = behavior
-                    result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid 'behavior' argument", details: nil))
-                }
-            default:
-                result(FlutterMethodNotImplemented)
-            }
-        }
-
-        floatingChatChannel.setMethodCallHandler { (call, result) in
-            switch call.method {
-            case "showChatWindow":
-                if let args = call.arguments as? [String: Any],
-                   let id = args["id"] as? String {
-                    FloatingChatWindowManager.shared.showWindow(id: id)
-                    result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing 'id' argument", details: nil))
-                }
-            case "hideChatWindow":
-                if let args = call.arguments as? [String: Any],
-                   let id = args["id"] as? String {
-                    FloatingChatWindowManager.shared.hideWindow(id: id)
-                    result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing 'id' argument", details: nil))
-                }
-            case "aiResponse":
-                FloatingChatWindowManager.shared.handleAIResponse(arguments: call.arguments)
-                result(nil)
-            case "chatHistory":
-                FloatingChatWindowManager.shared.handleChatHistory(arguments: call.arguments)
-                result(nil)
-            default:
-                result(FlutterMethodNotImplemented)
-            }
-        }
 
         floatingControlBarChannel.setMethodCallHandler { [weak self] (call, result) in
             guard let self = self else { return }
@@ -417,45 +346,51 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // MARK: - Menu Bar Setup
     
     private func setupMenuBar() {
-        menuBarManager = MenuBarManager(mainWindow: self)
-        
-        // Setup callbacks
-        menuBarManager?.onToggleWindow = { [weak self] in
-            self?.handleWindowToggle()
-        }
-        
-        menuBarManager?.onQuit = { [weak self] in
-            self?.handleQuitApplication()
-        }
-        
-        menuBarManager?.onToggleFloatingChat = { [weak self] in
-            self?.handleToggleFloatingButtonShortcut()
-        }
-
-        menuBarManager?.onOpenChatWindow = {
-            // TODO: This should eventually support opening specific or new windows.
-            FloatingChatWindowManager.shared.showWindow(id: "default")
-        }
-        
+        menuBarManager = MenuBarManager.shared
+        menuBarManager?.configure(mainWindow: self)
         menuBarManager?.setupMenuBarItem()
+        
+        // Setup notification observers for menu actions
+        setupMenuBarObservers()
     }
     
-    private func handleWindowToggle() {
+    private func setupMenuBarObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarToggleWindow),
+            name: MenuBarManager.toggleWindowNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarQuitApplication),
+            name: MenuBarManager.quitApplicationNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarToggleFloatingChat),
+            name: MenuBarManager.toggleFloatingChatNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarOpenChatWindow),
+            name: MenuBarManager.openChatWindowNotification,
+            object: nil
+        )
+    }
+    
+    private func handleOpenWindow() {
         DispatchQueue.main.async {
-            if self.isVisible {
-                // Mark Flutter engine as inactive before hiding window
-                self.audioManager.setFlutterEngineActive(false)
-                self.orderOut(nil)
-                print("INFO: Window hidden")
-            } else {
-                self.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-                // Mark Flutter engine as active after showing window
-                self.audioManager.setFlutterEngineActive(true)
-                print("INFO: Window shown")
-            }
-            // Update menu title after window state change
-            self.menuBarManager?.updateWindowToggleTitle()
+            self.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            // Mark Flutter engine as active after showing window
+            self.audioManager.setFlutterEngineActive(true)
+            print("INFO: Window opened and brought to front")
         }
     }
     
@@ -495,12 +430,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     self?.handlePlayPauseWithRetry()
                 }
                 self.floatingControlBar?.onMove = {
-                    // Call both positioning methods when the control bar moves
+                    // Position AI conversation window when the control bar moves
                     FloatingChatWindowManager.shared.floatingButtonDidMove()
-                    FloatingChatWindowManager.shared.positionWindowFromButton()
                 }
                 self.floatingControlBar?.onResize = { newWidth in
                     FloatingChatWindowManager.shared.aiConversationWindowWidth = newWidth
+                    // Reposition AI conversation window if it's visible
+                    FloatingChatWindowManager.shared.positionAIConversationWindow()
                 }
                 self.floatingControlBar?.onHide = { [weak self] in
                     self?.menuBarManager?.updateFloatingChatButtonVisibility(isVisible: false)
@@ -508,6 +444,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             }
             self.floatingControlBar?.makeKeyAndOrderFront(nil)
             self.menuBarManager?.updateFloatingChatButtonVisibility(isVisible: true)
+            
+            // If AI conversation window was created before floating control bar, position it now
+            FloatingChatWindowManager.shared.positionAIConversationWindow()
         }
     }
 
@@ -604,6 +543,27 @@ extension MainFlutterWindow {
             name: GlobalShortcutManager.askAINotification,
             object: nil
         )
+    }
+    
+    // MARK: - Menu Bar Action Handlers
+    
+    @objc private func handleMenuBarToggleWindow() {
+        handleOpenWindow()
+    }
+    
+    @objc private func handleMenuBarQuitApplication() {
+        handleQuitApplication()
+    }
+    
+    @objc private func handleMenuBarToggleFloatingChat() {
+        handleToggleFloatingButtonShortcut()
+    }
+    
+    @objc private func handleMenuBarOpenChatWindow() {
+        Task {
+            let screenshotURL = await ScreenCaptureManager.captureScreen()
+            FloatingChatWindowManager.shared.toggleAIConversationWindow(screenshotURL: screenshotURL)
+        }
     }
 
     private func handlePlayPauseWithRetry() {

@@ -9,7 +9,6 @@ import 'package:omi/pages/settings/delete_account.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
-import 'package:omi/pages/settings/widgets/floating_window_settings.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
@@ -347,17 +346,6 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
 
           const SizedBox(height: 32),
 
-          // Floating Window Section
-          OmiSection(
-            title: 'Floating Window',
-            icon: FontAwesomeIcons.windowMaximize,
-            children: const [
-              FloatingWindowSettings(),
-            ],
-          ),
-
-          const SizedBox(height: 32),
-
           // Preferences Section
           OmiSection(
             title: 'Preferences',
@@ -435,7 +423,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                   color: ResponsiveHelper.infoColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
+                child: const Icon(
                   FontAwesomeIcons.chartLine,
                   size: 18,
                   color: ResponsiveHelper.infoColor,
