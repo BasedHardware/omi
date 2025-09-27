@@ -45,8 +45,8 @@ class CaptureProvider extends ChangeNotifier
   DateTime? _keepAliveLastExecutedAt;
 
   // Method channel for system audio permissions
-  static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
-  static const MethodChannel _floatingControlBarChannel = MethodChannel('com.omi/floating_control_bar');
+  static late MethodChannel _screenCaptureChannel;
+  static late MethodChannel _controlBarChannel;
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -87,24 +87,20 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
-    debugPrint("init capture provider");
 
-    // Add app lifecycle listener to detect sleep/wake cycles
     if (PlatformService.isDesktop) {
+      _screenCaptureChannel = const MethodChannel('screenCapturePlatform');
+      _controlBarChannel = const MethodChannel('com.omi/floating_control_bar');
+
       _initializeAppLifecycleListener();
-      // Delay the method channel setup to ensure Flutter engine is ready
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _setupMethodChannelHandler();
+        _controlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
       });
     }
   }
 
-  void _setupMethodChannelHandler() {
-    _floatingControlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
-  }
-
   void _initializeAppLifecycleListener() {
-    // Add this instance as a lifecycle observer
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -796,6 +792,8 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _handleFloatingControlBarMethodCall(MethodCall call) async {
+    if (!PlatformService.isDesktop) return;
+
     switch (call.method) {
       case 'togglePauseResume':
         if (isPaused) {
@@ -1156,7 +1154,7 @@ class CaptureProvider extends ChangeNotifier
       'isInitialising': recordingState == RecordingState.initialising,
     };
 
-    _floatingControlBarChannel.invokeMethod('updateRecordingState', stateData);
+    _controlBarChannel.invokeMethod('updateRecordingState', stateData);
   }
 
   void _startRecordingTimer() {

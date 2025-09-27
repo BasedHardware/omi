@@ -85,13 +85,6 @@ class MenuBarManager: NSObject {
         
         menu.addItem(NSMenuItem.separator())
         
-        // Status item
-        let statusItem = NSMenuItem(title: "Status: Ready", action: nil, keyEquivalent: "")
-        statusItem.tag = 100
-        menu.addItem(statusItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        
         // Quit item
         let quitItem = NSMenuItem(title: "Quit Omi", action: #selector(quitApplication), keyEquivalent: "q")
         quitItem.target = self
@@ -111,27 +104,6 @@ class MenuBarManager: NSObject {
     }
     
     
-    func updateStatus(status: String, isActive: Bool = false) {
-        guard let menu = statusBarItem?.menu,
-              let statusItem = menu.item(withTag: 100) else { return }
-        
-        statusItem.title = "Status: \(status)"
-        
-        // Update icon based on state
-        if let button = statusBarItem?.button {
-            if let customIcon = NSImage(named: "app_launcher_icon") {
-                customIcon.isTemplate = true
-                customIcon.size = NSSize(width: 18, height: 18)
-                // You could modify the icon appearance based on isActive state if needed
-                // For now, we'll keep the same icon but could add visual indicators
-                button.image = customIcon
-            } else {
-                // Fallback to system icons with state
-                let iconName = isActive ? "mic.circle.fill" : "mic.circle"
-                button.image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Omi")
-            }
-        }
-    }
     
     
     func cleanup() {
