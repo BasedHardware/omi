@@ -102,6 +102,7 @@ dist/
 *.swp
 *.tmp
 hs_err_pid*
+Package.resolved
 
 # Servers
 src/recordings

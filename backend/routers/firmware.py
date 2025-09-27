@@ -53,7 +53,7 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
 
     # Make GitHub API request if not cached
     async with httpx.AsyncClient() as client:
-        url = "https://api.github.com/repos/BasedHardware/omi/releases?per_page=100"
+        url = "https://api.github.com/repos/kanishkatn/omi/releases?per_page=100"
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -66,6 +66,7 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
         releases = response.json()
         # Cache successful response for 30 minutes
         set_generic_cache(cache_key, releases, ttl=1800)
+        print(releases)
         return releases
 
 
@@ -121,6 +122,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     elif device == DeviceModel.OMI_CV1:
         release_prefix = "Omi_CV1"
 
+    print("release_prefix: ", release_prefix)
     candidate_releases = []
     for release in releases:
         if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
@@ -154,6 +156,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         if meets_minimum_requirement:
             candidate_releases.append(release)
 
+    print("candidate_releases: ", candidate_releases)
     if not candidate_releases:
         raise HTTPException(status_code=404, detail="No suitable firmware update found for your device version.")
 
