@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field, ValidationError
 import database.users as users_db
 from database.redis_db import add_filter_category_item
 from models.app import App
-from models.chat import Message, MessageSender
+from langchain_core.messages import AnyMessage
+from models.chat import Message, MessageSender, Any
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -919,3 +920,39 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
         '    ', ''
     ).strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+
+
+# **************************************************
+# ** FINAL ANSWER (MCP tools + Existing Pipeline) **
+# **************************************************
+
+
+def final_answer_prompt(question: str, answer: str, tool_messages: List[AnyMessage]) -> str:
+
+    prompt = f"""
+    You are responsible for generating the final answer to the user's original question {question} by combining the results from the MCP tools and the existing pipeline.
+
+    The MCP tools have been used to answer the user's question and the results are in the tool_messages (this is optional only if the MCP tools returned any results).
+    The existing pipeline has been used to answer the user's question and the results are in the messages (this will always exist and be available).
+
+    Here are results from both the MCP tools and the existing pipeline:
+    ```
+    {tool_messages}
+    ```
+    ```
+    {answer}
+    ```
+    You must combine the results from the MCP tools (if any results exist) and the existing pipeline to generate the final answer (this would always exist).
+
+    """
+    return prompt
+
+
+def final_answer(question: str, answer: str, tool_messages: List[AnyMessage]) -> str:
+    prompt = final_answer_prompt(question, answer, tool_messages)
+    return llm_medium.invoke(prompt).content
+
+
+def final_answer_stream(question: str, answer: str, tool_messages: List[AnyMessage], callbacks=[]) -> str:
+    prompt = final_answer_prompt(question, answer, tool_messages)
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
