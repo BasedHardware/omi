@@ -973,10 +973,13 @@ Future<void> _selectAudioDevice(Map<String, String> device) async {
 Widget _buildFloatingAudioDeviceDropdown() {
   return Material(
       elevation: 8,
+      borderRadius: BorderRadius.circular(12),
       color: const Color(0xFF2C2C2E),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 280, minWidth: 220),
         decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -990,6 +993,7 @@ Widget _buildFloatingAudioDeviceDropdown() {
                       color: Colors.white70,
                       fontWeight: FontWeight.w600)),
             ),
+            Divider(height: 1, color: Colors.white.withOpacity(0.1)),
             const SizedBox(height: 4),
             if (_availableAudioDevices.isNotEmpty)
               ..._availableAudioDevices.map(_buildFloatingAudioDeviceItem),
@@ -1042,7 +1046,8 @@ Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
                   device['name'] ?? 'Unknown Device',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.white,
+                    color: isSelected ? Colors.white : Colors.white70,
+                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
