@@ -423,7 +423,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                   color: ResponsiveHelper.infoColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
+                child: const Icon(
                   FontAwesomeIcons.chartLine,
                   size: 18,
                   color: ResponsiveHelper.infoColor,

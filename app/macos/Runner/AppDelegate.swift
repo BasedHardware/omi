@@ -3,11 +3,11 @@ import FlutterMacOS
 
 @main
 class AppDelegate: FlutterAppDelegate {
-  override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    return true
-  }
-  
-  override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-    return true
-  }
+    override func applicationDidFinishLaunching(_ aNotification: Notification) {
+        super.applicationDidFinishLaunching(aNotification)
+        
+        // Show the main window by default
+        let mainWindow = NSApp.windows.first { $0 is MainFlutterWindow }
+        mainWindow?.makeKeyAndOrderFront(nil)
+    }
 }
