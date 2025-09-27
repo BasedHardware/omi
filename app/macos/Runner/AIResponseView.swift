@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MarkdownUI
+import Cocoa
 
 // MARK: - SwiftUI Views from FloatingControlBar
 
@@ -90,16 +91,44 @@ struct AIResponseView: View {
                         .foregroundColor(.white.opacity(0.8))
                 }
                 Spacer()
+                if !isLoading {
+                    Button(action: {
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        pasteboard.setString(responseText, forType: .string)
+                    }) {
+                        Image(systemName: "square.on.square")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                Button(action: { onClose?() }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .regular))
+                        .foregroundColor(.secondary)
+                        .frame(width: 16, height: 16)
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
+                        )
+                }
+                .buttonStyle(PlainButtonStyle())
             }
 
             // User question bar
             HStack(spacing: 8) {
                 if let url = screenshotURL, let nsImage = NSImage(contentsOf: url) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 24, height: 24)
-                        .cornerRadius(4)
+                    Button(action: {
+                        NSWorkspace.shared.open(url)
+                    }) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 24, height: 24)
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 } else {
                     // As per the screenshot, but this is a placeholder.
                     // A better icon could be used if available in assets.
@@ -113,28 +142,6 @@ struct AIResponseView: View {
                     .foregroundColor(.white)
                 
                 Spacer()
-                
-                Button(action: {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(responseText, forType: .string)
-                }) {
-                    Image(systemName: "doc.on.doc")
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Button(action: { onClose?() }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .regular))
-                        .foregroundColor(.secondary)
-                        .frame(width: 16, height: 16)
-                        .overlay(
-                            Circle()
-                                .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
-                        )
-                }
-                .buttonStyle(PlainButtonStyle())
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)

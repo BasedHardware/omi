@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Cocoa
 
 // MARK: - SwiftUI Views from FloatingControlBar
 
@@ -68,11 +69,16 @@ struct AskAIInputView: View {
         HStack(spacing: 12) {
             if let url = screenshotURL, let nsImage = NSImage(contentsOf: url) {
                 ZStack(alignment: .topTrailing) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 40, height: 40)
-                        .cornerRadius(8)
+                    Button(action: {
+                        NSWorkspace.shared.open(url)
+                    }) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 40, height: 40)
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(PlainButtonStyle())
 
                     Button(action: {
                         onRemoveScreenshot?()
