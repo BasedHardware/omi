@@ -13,6 +13,8 @@ import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 
+import 'communication/device_communicator.dart';
+
 class DeviceConnectionFactory {
   static DeviceConnection? create(
     BtDevice device,

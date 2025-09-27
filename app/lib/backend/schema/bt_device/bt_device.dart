@@ -6,6 +6,7 @@ import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
 
 enum ImageOrientation {
   orientation0, // 0 degrees
@@ -171,6 +172,8 @@ class BtDevice {
   String id;
   DeviceType type;
   int rssi;
+  // Protocol-agnostic discovery locator for post-discovery connection
+  final DeviceLocator? locator;
   String? _modelNumber;
   String? _firmwareRevision;
   String? _hardwareRevision;
@@ -181,6 +184,7 @@ class BtDevice {
       required this.id,
       required this.type,
       required this.rssi,
+      this.locator,
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
@@ -197,6 +201,7 @@ class BtDevice {
         id = '',
         type = DeviceType.omi,
         rssi = 0,
+        locator = null,
         _modelNumber = '',
         _firmwareRevision = '',
         _hardwareRevision = '',
@@ -232,6 +237,7 @@ class BtDevice {
       String? id,
       DeviceType? type,
       int? rssi,
+      DeviceLocator? locator,
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
@@ -241,6 +247,7 @@ class BtDevice {
       id: id ?? this.id,
       type: type ?? this.type,
       rssi: rssi ?? this.rssi,
+      locator: locator ?? this.locator,
       modelNumber: modelNumber ?? _modelNumber,
       firmwareRevision: firmwareRevision ?? _firmwareRevision,
       hardwareRevision: hardwareRevision ?? _hardwareRevision,
@@ -405,6 +412,7 @@ class BtDevice {
       id: result.device.remoteId.str,
       type: deviceType ?? DeviceType.omi,
       rssi: result.rssi,
+      locator: DeviceLocator.bluetooth(deviceId: result.device.remoteId.str),
     );
   }
 

@@ -7,10 +7,13 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/errors.dart';
-import 'package:omi/services/devices/models.dart';
-import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/gen/flutter_communicator.g.dart';
+import 'package:omi/services/devices/discovery/device_discoverer.dart';
+import 'package:omi/services/devices/discovery/bluetooth_discoverer.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
+import 'package:omi/services/devices/communication/device_communicator.dart';
+import 'package:omi/services/devices/communication/communicator_factory.dart';
 
 abstract class IDeviceService {
   void start();
@@ -32,10 +35,10 @@ enum DeviceServiceStatus {
   stop,
 }
 
-enum DeviceConnectionState {
-  connected,
-  disconnected,
-}
+// enum DeviceConnectionState {
+//   connected,
+//   disconnected,
+// }
 
 class OmiFeatures {
   static const int speaker = 1 << 0;
@@ -57,11 +60,17 @@ abstract class IDeviceServiceSubsciption {
 class DeviceService implements IDeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
-  List<ScanResult> _bleDevices = [];
+
+  // New: discoverers (start with Bluetooth only to keep behavior)
+  final List<DeviceDiscoverer> _discoverers = [
+    BluetoothDeviceDiscoverer(),
+    AppleWatchDiscoverer(),
+  ];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
   DeviceConnection? _connection;
+  final Map<String, DeviceCommunicator> _communicators = {};
 
   List<BtDevice> get devices => _devices;
 
@@ -80,51 +89,36 @@ class DeviceService implements IDeviceService {
       return;
     }
 
-    if (!(await BluetoothAdapter.isSupported)) {
-      logCommonErrorMessage("Bluetooth is not supported");
-      return;
-    }
-
-    if (BluetoothAdapter.isScanningNow) {
-      debugPrint("Device service is scanning...");
-      return;
-    }
-
-    // Listen to scan results, always re-emits previous results
-    var discoverSubscription = BluetoothAdapter.scanResults.listen(
-      (results) async {
-        await _onBleDiscovered(results, desirableDeviceId);
-      },
-      onError: (e) {
-        debugPrint('bleFindDevices error: $e');
-      },
-    );
-    BluetoothAdapter.cancelWhenScanComplete(discoverSubscription);
-
-    // Only look for devices that implement Omi or Frame main service
     _status = DeviceServiceStatus.scanning;
-    await BluetoothAdapter.adapterState.where((val) => val == BluetoothAdapterStateHelper.on).first;
-    await BluetoothAdapter.startScan(
-      timeout: Duration(seconds: timeout),
-      withServices: [BluetoothAdapter.createGuid(omiServiceUuid), BluetoothAdapter.createGuid(frameServiceUuid)],
-    );
-    _status = DeviceServiceStatus.ready;
-  }
 
-  Future<void> _onBleDiscovered(List<dynamic> results, String? desirableDeviceId) async {
-    _bleDevices = results.cast<ScanResult>().where((r) => r.device.platformName.isNotEmpty).toList();
-    _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
-    _devices = _bleDevices.map<BtDevice>((e) => BtDevice.fromScanResult(e)).toList();
+    try {
+      final discoveredDevices = <BtDevice>[];
 
-    // Also discover Apple Watch
-    await _discoverAppleWatch();
-    onDevices(devices);
+      // Sequential to preserve timing/ordering; can parallelize later
+      for (final d in _discoverers.where((d) => d.isSupported)) {
+        try {
+          final result = await d.discover(timeout: timeout);
+          discoveredDevices.addAll(result.devices);
 
-    // Check desirable device
-    if (desirableDeviceId != null && desirableDeviceId.isNotEmpty) {
-      await ensureConnection(desirableDeviceId, force: true);
+          // We no longer keep BLE ScanResult around in the service
+        } catch (e, st) {
+          debugPrint('Discovery failed for ${d.name}: $e');
+          debugPrint('$st');
+        }
+      }
+
+      _devices = discoveredDevices;
+      onDevices(devices);
+
+      if (desirableDeviceId != null && desirableDeviceId.isNotEmpty) {
+        await ensureConnection(desirableDeviceId, force: true);
+      }
+    } finally {
+      _status = DeviceServiceStatus.ready;
     }
   }
+
+  // Legacy helper is no longer used after introducing discoverers.
 
   Future<void> _connectToDevice(String id) async {
     // Drop exist connection first
@@ -133,56 +127,44 @@ class DeviceService implements IDeviceService {
     }
     _connection = null;
 
-    // Handle Apple Watch logical device separately
-    if (id == 'apple-watch') {
-      await _connectToAppleWatch();
-      return;
-    }
-
-    var bleDevice = _bleDevices.firstWhereOrNull((f) => f.device.remoteId.str == id);
     var device = _devices.firstWhereOrNull((f) => f.id == id);
-    if (bleDevice == null || device == null) {
-      debugPrint("bleDevice or device is null");
+    if (device == null) {
+      debugPrint("device is null");
       return;
     }
 
-    // Check exist ble device connection, force disconnect
-    if (bleDevice.device.isConnected) {
-      await bleDevice.device.disconnect();
+    // Create communicator for this device
+    final communicator = CommunicatorFactory.create(device);
+    if (communicator == null) {
+      debugPrint("Failed to create communicator for device: ${device.id}");
+      return;
     }
 
-    // Then create new connection
-    _connection = DeviceConnectionFactory.create(device, bleDevice.device);
-    await _connection?.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
-    return;
-  }
+    // Store communicator for later use
+    _communicators[device.id] = communicator;
 
-  Future<void> _discoverAppleWatch() async {
-    try {
-      final host = WatchRecorderHostAPI();
-      final supported = await host.isWatchSessionSupported();
-      final paired = await host.isWatchPaired();
-      final reachable = await host.isWatchReachable();
-
-      if (supported && paired) {
-        final appleWatch = BtDevice(
-          name: 'Apple Watch',
-          id: 'apple-watch',
-          type: DeviceType.appleWatch,
-          rssi: reachable ? 0 : -100,
-        );
-        _devices.removeWhere((d) => d.type == DeviceType.appleWatch);
-        _devices.add(appleWatch);
-        onDevices(_devices);
-      } else {
-        // Remove Apple Watch if not supported/paired
-        _devices.removeWhere((d) => d.type == DeviceType.appleWatch);
-        onDevices(_devices);
+    // For now, still use the existing DeviceConnectionFactory for compatibility
+    // TODO: Refactor DeviceConnection to use communicators directly
+    if (device.locator?.kind == TransportKind.bluetooth) {
+      final targetId = device.locator!.bluetoothId;
+      if (targetId == null) {
+        debugPrint("Bluetooth locator missing deviceId for ${device.id}");
+        return;
       }
-    } catch (e) {
-      debugPrint('Apple Watch discover error: $e');
+      final bleDevice = BluetoothDevice.fromId(targetId);
+
+      if (bleDevice.isConnected) {
+        await bleDevice.disconnect();
+      }
+
+      _connection = DeviceConnectionFactory.create(device, bleDevice);
+      await _connection?.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
+    } else if (device.locator?.kind == TransportKind.watchConnectivity) {
+      await _connectToAppleWatch();
     }
   }
+
+  // Legacy discover method removed (now handled by AppleWatchDiscoverer)
 
   Future<void> _connectToAppleWatch() async {
     // Build a pseudo BLE device wrapper for factory (not used by AW connection)
@@ -191,9 +173,8 @@ class DeviceService implements IDeviceService {
       return;
     }
 
-    // Create a dummy BluetoothDevice to satisfy factory signature
-    // We reuse the first BLE device or create a fake handle; AppleWatchDeviceConnection doesn't use it
-    final fakeBle = _bleDevices.isNotEmpty ? _bleDevices.first.device : await _createFakeBleDevice();
+    // Create a dummy BluetoothDevice to satisfy the existing factory signature.
+    final fakeBle = await _createFakeBleDevice();
 
     // Drop any existing connection
     if (_connection?.status == DeviceConnectionState.connected) {
@@ -244,12 +225,19 @@ class DeviceService implements IDeviceService {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
-    if (BluetoothAdapter.isScanningNow) {
-      BluetoothAdapter.stopScan();
+    // Stop all discoverers to prevent resource leaks and battery drain
+    for (final discoverer in _discoverers) {
+      discoverer.stop();
     }
+
+    // Clean up all communicators
+    for (final communicator in _communicators.values) {
+      communicator.dispose();
+    }
+    _communicators.clear();
+
     _subscriptions.clear();
     _devices.clear();
-    _bleDevices.clear();
   }
 
   void onStatusChanged(DeviceServiceStatus status) {

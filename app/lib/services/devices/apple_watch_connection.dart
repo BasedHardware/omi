@@ -10,6 +10,8 @@ import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:omi/services/bridges/apple_watch_bridge.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'communication/device_communicator.dart';
+
 /// Note: Apple Watch connectivity is not BLE; this class provides no-op/default
 /// implementations for BLE-specific operations so it can be wired into the
 /// app's existing device management pipeline. Platform-specific watch
