@@ -1,5 +1,4 @@
 import Cocoa
-import FlutterMacOS
 import SwiftUI
 
 // MARK: - SwiftUI Views
@@ -155,7 +154,7 @@ private struct FloatingControlBarView: View {
         return (state.isRecording && !state.isPaused) ? "pause.fill" : "play.fill"
     }
 
-    private var content: some View {
+    var body: some View {
         HStack(spacing: 12) {
             // Recording status
             HStack(spacing: 8) {
@@ -222,24 +221,15 @@ private struct FloatingControlBarView: View {
 
             CommandButton(title: "Show/Hide", keys: ["⌘", "\\"], action: onHide)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(width: 400, height: 64)
         .modifier(MainBackgroundStyle(cornerRadius: 20))
         .overlay(
             RoundedRectangle(cornerRadius: 20)
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
         )
     }
-
-    var body: some View {
-         if #available(macOS 26.0, *) {
-             GlassEffectContainer {
-                 content
-             }
-         } else {
-             content
-         }
-     }
 }
 
 // MARK: - AppKit Integration
@@ -276,7 +266,7 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
 
         self.isOpaque = false
         self.backgroundColor = .clear
-        self.hasShadow = false
+        self.hasShadow = true
         self.level = .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = true

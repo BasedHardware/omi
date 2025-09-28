@@ -72,6 +72,7 @@ struct AIResponseView: View {
     var screenshotURL: URL?
     var width: CGFloat
     var onClose: (() -> Void)?
+    @State private var isCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -83,11 +84,11 @@ struct AIResponseView: View {
                         .background(Color.white)
                         .clipShape(Circle())
                     Text("thinking")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 14, weight: .regular))
                         .foregroundColor(.white.opacity(0.8))
                 } else {
                     Text("AI response")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 14, weight: .regular))
                         .foregroundColor(.white.opacity(0.8))
                 }
                 Spacer()
@@ -96,9 +97,25 @@ struct AIResponseView: View {
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
                         pasteboard.setString(responseText, forType: .string)
+                        withAnimation {
+                            isCopied = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                isCopied = false
+                            }
+                        }
                     }) {
-                        Image(systemName: "square.on.square")
-                            .foregroundColor(.secondary)
+                        if isCopied {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark")
+                                Text("Copied")
+                            }
+                            .foregroundColor(.green)
+                        } else {
+                            Image(systemName: "square.on.square")
+                                .foregroundColor(.secondary)
+                        }
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
@@ -171,11 +188,5 @@ struct AIResponseView: View {
             RoundedRectangle(cornerRadius: 20)
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
         )
-    }
-}
-
-struct AIResponseView_Previews: PreviewProvider {
-    static var previews: some View {
-        AIResponseView(isLoading: .constant(false), responseText: .constant("This is a sample AI response to show how the text will be displayed."), userInput: "What are the differences between EBITDA and net income?", screenshotURL: nil, width: 500, onClose: {})
     }
 }

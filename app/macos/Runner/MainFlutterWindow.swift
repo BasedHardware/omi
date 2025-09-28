@@ -399,13 +399,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     func showFloatingControlBar() {
         DispatchQueue.main.async {
             if self.floatingControlBar == nil {
-                let buttonSize = NSSize(width: 280, height: 40)
-                self.floatingControlBar = FloatingControlBar(
-                    contentRect: NSRect(origin: .zero, size: buttonSize),
-                    styleMask: [.borderless],
-                    backing: .buffered,
-                    defer: false
-                )
+                self.floatingControlBar = FloatingControlBar()
                 FloatingChatWindowManager.shared.floatingButton = self.floatingControlBar
                 self.floatingControlBar?.onAskAI = {
                     Task {
@@ -417,12 +411,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     self?.handlePlayPauseWithRetry()
                 }
                 self.floatingControlBar?.onMove = {
-                    // Position AI conversation window when the control bar moves
                     FloatingChatWindowManager.shared.floatingButtonDidMove()
                 }
                 self.floatingControlBar?.onResize = { newWidth in
                     FloatingChatWindowManager.shared.aiConversationWindowWidth = newWidth
-                    // Reposition AI conversation window if it's visible
                     FloatingChatWindowManager.shared.positionAIConversationWindow()
                 }
                 self.floatingControlBar?.onHide = { [weak self] in

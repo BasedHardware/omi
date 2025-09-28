@@ -122,17 +122,11 @@ struct AskAIInputView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(width: width)
+        .frame(width: width, height: 64)
         .modifier(MainBackgroundStyle(cornerRadius: 20))
         .overlay(
             RoundedRectangle(cornerRadius: 20)
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
         )
-    }
-}
-
-struct AskAIInputView_Previews: PreviewProvider {
-    static var previews: some View {
-        AskAIInputView(userInput: .constant(""), screenshotURL: nil, width: 500)
     }
 }
