@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/env/env.dart';
@@ -181,15 +182,42 @@ class AuthService {
 
       debugPrint('Authorization URL: $authUrl');
 
-      final result = await FlutterWebAuth2.authenticate(
-        url: authUrl,
-        callbackUrlScheme: 'omi',
-        options: const FlutterWebAuth2Options(
-          intentFlags: ephemeralIntentFlags,
-        ),
+      final launched = await launchUrl(
+        Uri.parse(authUrl),
+        mode: LaunchMode.externalApplication,
       );
 
-      debugPrint('Authentication result: $result');
+      if (!launched) {
+        throw Exception('Failed to launch authentication URL');
+      }
+
+      // Listen for the callback URL using app_links
+      final appLinks = AppLinks();
+      late StreamSubscription linkSubscription;
+      final completer = Completer<String>();
+
+      linkSubscription = appLinks.uriLinkStream.listen(
+        (Uri uri) {
+          debugPrint('Received callback URI: $uri');
+          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+            linkSubscription.cancel();
+            completer.complete(uri.toString());
+          }
+        },
+        onError: (error) {
+          debugPrint('App link error: $error');
+          linkSubscription.cancel();
+          completer.completeError(error);
+        },
+      );
+
+      final result = await completer.future.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () {
+          linkSubscription.cancel();
+          throw Exception('Authentication timeout');
+        },
+      );
 
       final uri = Uri.parse(result);
       final code = uri.queryParameters['code'];
@@ -436,15 +464,42 @@ class AuthService {
 
       debugPrint('Authorization URL: $authUrl');
 
-      final result = await FlutterWebAuth2.authenticate(
-        url: authUrl,
-        callbackUrlScheme: 'omi',
-        options: const FlutterWebAuth2Options(
-          intentFlags: ephemeralIntentFlags,
-        ),
+      final launched = await launchUrl(
+        Uri.parse(authUrl),
+        mode: LaunchMode.externalApplication,
       );
 
-      debugPrint('Authentication result: $result');
+      if (!launched) {
+        throw Exception('Failed to launch authentication URL');
+      }
+
+      // Listen for the callback URL using app_links
+      final appLinks = AppLinks();
+      late StreamSubscription linkSubscription;
+      final completer = Completer<String>();
+
+      linkSubscription = appLinks.uriLinkStream.listen(
+        (Uri uri) {
+          debugPrint('Received callback URI: $uri');
+          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+            linkSubscription.cancel();
+            completer.complete(uri.toString());
+          }
+        },
+        onError: (error) {
+          debugPrint('App link error: $error');
+          linkSubscription.cancel();
+          completer.completeError(error);
+        },
+      );
+
+      final result = await completer.future.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () {
+          linkSubscription.cancel();
+          throw Exception('Authentication timeout');
+        },
+      );
 
       final uri = Uri.parse(result);
       final code = uri.queryParameters['code'];
@@ -515,7 +570,6 @@ class AuthService {
   Future<UserCredential?> _handleExistingCredential(FirebaseAuthException e) async {
     // Get existing user credentials
     final existingCred = e.credential;
-    final oldUserId = FirebaseAuth.instance.currentUser?.uid;
 
     // Sign out current anonymous user
     await FirebaseAuth.instance.signOut();
