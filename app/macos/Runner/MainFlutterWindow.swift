@@ -2,6 +2,7 @@ import Cocoa
 import FlutterMacOS
 import ScreenCaptureKit
 import AVFoundation
+import ServiceManagement
 import CoreBluetooth
 import CoreLocation
 import UserNotifications
@@ -23,7 +24,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     private var floatingControlBar: FloatingControlBar?
     private var floatingControlBarChannel: FlutterMethodChannel!
     private var askAIChannel: FlutterMethodChannel!
-
 
 
     override func awakeFromNib() {
@@ -59,7 +59,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 result(FlutterMethodNotImplemented)
             }
         }
-
+        
         // Set self as delegate to detect window events
         self.delegate = self
 

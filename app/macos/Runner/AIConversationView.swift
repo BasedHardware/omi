@@ -2,7 +2,6 @@ import SwiftUI
 
 struct AIConversationView: View {
     @ObservedObject var manager: FloatingChatWindowManager
-    var screenshotURL: URL?
 
     var body: some View {
         Group {
@@ -11,7 +10,7 @@ struct AIConversationView: View {
                     isLoading: $manager.isAIResponseLoading,
                     responseText: $manager.aiResponseText,
                     userInput: manager.askAIInputText,
-                    screenshotURL: screenshotURL,
+                    screenshotURL: manager.currentScreenshotURL,
                     width: manager.aiConversationWindowWidth,
                     onClose: {
                         manager.clearAndHideAIConversationWindow()
@@ -24,7 +23,7 @@ struct AIConversationView: View {
                         get: { manager.askAIInputText },
                         set: { manager.askAIInputText = $0 }
                     ),
-                    screenshotURL: screenshotURL,
+                    screenshotURL: manager.currentScreenshotURL,
                     width: manager.aiConversationWindowWidth,
                     onSend: { message, url in
                         manager.sendAIQuery(message: message, url: url)

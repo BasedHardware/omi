@@ -6,8 +6,12 @@ class AppDelegate: FlutterAppDelegate {
     override func applicationDidFinishLaunching(_ aNotification: Notification) {
         super.applicationDidFinishLaunching(aNotification)
         
-        // Show the main window by default
-        let mainWindow = NSApp.windows.first { $0 is MainFlutterWindow }
-        mainWindow?.makeKeyAndOrderFront(nil)
+        // Delay to check if app was launched hidden (e.g., as a login item)
+        DispatchQueue.main.async {
+            if !NSApp.isHidden {
+                let mainWindow = NSApp.windows.first { $0 is MainFlutterWindow }
+                mainWindow?.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 }

@@ -9,11 +9,11 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
     @Published var askAIInputText: String = ""
     @Published var isShowingAIResponse: Bool = false
     @Published var aiConversationWindowWidth: CGFloat = 400
+    @Published var currentScreenshotURL: URL?
 
     static let shared = FloatingChatWindowManager()
 
     private var aiConversationWindow: AIConversationWindow?
-    private var currentScreenshotURL: URL?
     private var askAIChannel: FlutterMethodChannel?
     var floatingButton: FloatingControlBar?
 
@@ -117,7 +117,7 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
             }
             
             // Update view
-            let conversationView = AIConversationView(manager: self, screenshotURL: self.currentScreenshotURL)
+            let conversationView = AIConversationView(manager: self)
             let hostingController = NSHostingController(rootView: conversationView)
             self.aiConversationWindow?.contentViewController = hostingController
 
@@ -167,13 +167,6 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
     func removeScreenshotFromAIConversation() {
         DispatchQueue.main.async {
             self.currentScreenshotURL = nil
-            
-            // Update the existing window's view instead of recreating it
-            if let window = self.aiConversationWindow, window.isVisible {
-                let conversationView = AIConversationView(manager: self, screenshotURL: nil)
-                let hostingController = NSHostingController(rootView: conversationView)
-                window.contentViewController = hostingController
-            }
         }
     }
 

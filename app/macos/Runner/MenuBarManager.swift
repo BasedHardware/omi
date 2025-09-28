@@ -1,4 +1,5 @@
 import Cocoa
+import ServiceManagement
 
 // MARK: - Menu Bar Manager
 class MenuBarManager: NSObject {
@@ -79,6 +80,14 @@ class MenuBarManager: NSObject {
         
         menu.addItem(NSMenuItem.separator())
         
+        // Launch at Login item
+        if #available(macOS 13.0, *) {
+            let launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+            launchAtLoginItem.target = self
+            updateLaunchAtLoginState(for: launchAtLoginItem)
+            menu.addItem(launchAtLoginItem)
+        }
+        
         let aboutItem = NSMenuItem(title: "About Omi", action: #selector(openOmiWebsite), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
@@ -141,6 +150,32 @@ class MenuBarManager: NSObject {
     }
     
     // MARK: - Menu Actions
+    
+    @available(macOS 13.0, *)
+    private func updateLaunchAtLoginState(for item: NSMenuItem) {
+        item.state = SMAppService.mainApp.status == SMAppService.Status.enabled ? .on : .off
+    }
+    
+    @available(macOS 13.0, *)
+    private func performToggleLaunchAtLogin(for item: NSMenuItem) {
+        do {
+            if SMAppService.mainApp.status == SMAppService.Status.enabled {
+                try SMAppService.mainApp.unregister()
+                item.state = .off
+            } else {
+                try SMAppService.mainApp.register()
+                item.state = .on
+            }
+        } catch {
+            print("ERROR: Failed to update Launch at Login status: \(error.localizedDescription)")
+        }
+    }
+    
+    @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
+        if #available(macOS 13.0, *) {
+            performToggleLaunchAtLogin(for: sender)
+        }
+    }
     
     @objc private func openOmiWindow() {
         print("INFO: Menu bar open Omi window action triggered")
