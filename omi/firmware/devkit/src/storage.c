@@ -46,11 +46,18 @@ static struct bt_uuid_128 storage_write_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295781, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
 static struct bt_uuid_128 storage_read_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295782, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
+static struct bt_uuid_128 storage_chunk_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295783, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
 static ssize_t storage_read_characteristic(struct bt_conn *conn,
                                            const struct bt_gatt_attr *attr,
                                            void *buf,
                                            uint16_t len,
                                            uint16_t offset);
+static ssize_t storage_chunk_characteristic(struct bt_conn *conn,
+                                            const struct bt_gatt_attr *attr,
+                                            void *buf,
+                                            uint16_t len,
+                                            uint16_t offset);
 
 K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
@@ -75,6 +82,12 @@ static struct bt_gatt_attr storage_service_attr[] = {
                            NULL,
                            NULL),
     BT_GATT_CCC(storage_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&storage_chunk_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           storage_chunk_characteristic,
+                           NULL,
+                           NULL),
 
 };
 
@@ -93,6 +106,18 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
     } else {
         LOG_ERR("Invalid CCC value: %u", value);
     }
+}
+
+static ssize_t storage_chunk_characteristic(struct bt_conn *conn,
+                                            const struct bt_gatt_attr *attr,
+                                            void *buf,
+                                            uint16_t len,
+                                            uint16_t offset)
+{
+    uint32_t counters[2] = {0};
+    get_chunk_counter_snapshot(&counters[0], &counters[1]);
+
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, counters, sizeof(counters));
 }
 
 static ssize_t storage_read_characteristic(struct bt_conn *conn,

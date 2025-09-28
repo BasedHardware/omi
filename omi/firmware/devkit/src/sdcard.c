@@ -609,6 +609,22 @@ char* generate_chunk_audio_filename(void)
     return filename;
 }
 
+void get_chunk_counter_snapshot(uint32_t *start_counter, uint32_t *current_counter)
+{
+    if (start_counter == NULL || current_counter == NULL) {
+        return;
+    }
+
+    if (!chunking_enabled) {
+        *start_counter = 0;
+        *current_counter = 0;
+        return;
+    }
+
+    *start_counter = chunk_start_counter;
+    *current_counter = chunk_current_counter;
+}
+
 int initialize_chunk_file(void)
 {
     // Safety check - ensure chunking is enabled and SD is properly initialized
@@ -652,6 +668,19 @@ int initialize_chunk_file(void)
         LOG_INF("H - Debug: NEW AUDIO CHUNK CREATED: %s", current_chunk_filename);
         LOG_INF("H - Debug: File path: %s", write_buffer);
         LOG_INF("H - Debug: Chunk will rotate in %d cycles (%d seconds)", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
+        // H - Debug TEMP debugs
+        printf("H - Debug: NEW AUDIO CHUNK CREATED: %s\n", current_chunk_filename);
+        printf("H - Debug: File path: %s\n", write_buffer);
+        printf("H - Debug: Chunk will rotate in %d cycles (%d seconds)\n", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
+        printf("H - Debug: Chunk start counter: %d\n", chunk_start_counter);
+        printf("H - Debug: Chunk current counter: %d\n", chunk_current_counter);
+        printf("H - Debug: Chunk active: %d\n", chunk_active);
+        printf("H - Debug: Chunk duration cycles: %d\n", CHUNK_DURATION_CYCLES);
+        printf("H - Debug: Chunk duration seconds: %d\n", CHUNK_DURATION_CYCLES / 2);
+        printf("H - Debug: Chunking enabled: %d\n", chunking_enabled);
+        printf("H - Debug: SD enabled: %d\n", sd_enabled);
+        printf("H - Debug: System boot complete: %d\n", system_boot_complete);
+        // END TEMP debugs
     } else {
         LOG_ERR("Failed to create chunk file: %d", ret);
         // Reset chunk state on failure

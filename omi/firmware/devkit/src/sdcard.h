@@ -194,4 +194,15 @@ int save_chunk_counters(uint32_t start_counter, uint32_t current_counter);
  */
 int get_chunk_counters(uint32_t *start_counter, uint32_t *current_counter);
 
+/**
+ * @brief Get the in-memory snapshot of chunk counters
+ *
+ * Reads the current values tracked by the chunking system without touching
+ * persistent storage. Returns zeros when chunking is disabled.
+ *
+ * @param start_counter Pointer to receive the start counter value
+ * @param current_counter Pointer to receive the current counter value
+ */
+void get_chunk_counter_snapshot(uint32_t *start_counter, uint32_t *current_counter);
+
 #endif
