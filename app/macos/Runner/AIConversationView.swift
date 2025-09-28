@@ -16,7 +16,6 @@ struct AIConversationView: View {
                         manager.clearAndHideAIConversationWindow()
                     }
                 )
-                .transition(.opacity.animation(.easeInOut(duration: 0.2)))
             } else {
                 AskAIInputView(
                     userInput: Binding(
@@ -38,6 +37,5 @@ struct AIConversationView: View {
                 .transition(.opacity.animation(.easeInOut(duration: 0.2)))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: manager.isShowingAIResponse)
     }
 }
