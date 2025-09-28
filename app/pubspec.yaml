@@ -45,7 +45,6 @@ dependencies:
   firebase_crashlytics: 4.3.2
 
   # Auth
-  flutter_web_auth_2: 5.0.0-alpha.3
   google_sign_in: 6.2.2
   sign_in_with_apple: ^6.1.1
 
