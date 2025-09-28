@@ -72,6 +72,7 @@ struct AIResponseView: View {
     var screenshotURL: URL?
     var width: CGFloat
     var onClose: (() -> Void)?
+    var onAskFollowUp: (() -> Void)?
     @State private var isCopied = false
 
     var body: some View {
@@ -93,6 +94,17 @@ struct AIResponseView: View {
                 }
                 Spacer()
                 if !isLoading {
+                    Button(action: { onAskFollowUp?() }) {
+                        Text("Ask follow up")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
                     Button(action: {
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
@@ -179,6 +191,7 @@ struct AIResponseView: View {
                     Markdown(responseText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
             }
         }
         .padding()

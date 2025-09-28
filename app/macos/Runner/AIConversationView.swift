@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AIConversationView: View {
     @ObservedObject var manager: FloatingChatWindowManager
+    @State private var displayedQuery: String = ""
 
     var body: some View {
         Group {
@@ -9,11 +10,18 @@ struct AIConversationView: View {
                 AIResponseView(
                     isLoading: $manager.isAIResponseLoading,
                     responseText: $manager.aiResponseText,
-                    userInput: manager.askAIInputText,
+                    userInput: displayedQuery,
                     screenshotURL: manager.currentScreenshotURL,
                     width: manager.aiConversationWindowWidth,
                     onClose: {
                         manager.clearAndHideAIConversationWindow()
+                    },
+                    onAskFollowUp: {
+                        manager.isShowingAIResponse = false
+                        manager.aiResponseText = ""
+                        manager.askAIInputText = ""
+                        manager.isAIResponseLoading = false
+                        manager.removeScreenshotFromAIConversation()
                     }
                 )
             } else {
@@ -25,6 +33,10 @@ struct AIConversationView: View {
                     screenshotURL: manager.currentScreenshotURL,
                     width: manager.aiConversationWindowWidth,
                     onSend: { message, url in
+                        displayedQuery = message
+                        manager.isShowingAIResponse = true
+                        manager.isAIResponseLoading = true
+                        manager.aiResponseText = ""
                         manager.sendAIQuery(message: message, url: url)
                     },
                     onCancel: {
