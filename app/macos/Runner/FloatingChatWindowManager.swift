@@ -8,7 +8,7 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
     @Published var isAIResponseLoading: Bool = true
     @Published var askAIInputText: String = ""
     @Published var isShowingAIResponse: Bool = false
-    @Published var aiConversationWindowWidth: CGFloat = 500
+    @Published var aiConversationWindowWidth: CGFloat = 400
 
     static let shared = FloatingChatWindowManager()
 
@@ -48,7 +48,12 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
             let windowFrame = window.frame
             let newX = buttonFrame.origin.x
             let newY = buttonFrame.origin.y - windowFrame.height - spacing
-            window.setFrameOrigin(NSPoint(x: newX, y: newY))
+            
+            // Add check to prevent feedback loop
+            let newOrigin = NSPoint(x: newX, y: newY)
+            if abs(windowFrame.origin.x - newOrigin.x) > 0.1 || abs(windowFrame.origin.y - newOrigin.y) > 0.1 {
+                window.setFrameOrigin(newOrigin)
+            }
         } else {
             // If no floating control bar, center the window on screen
             if let screen = NSScreen.main {
@@ -58,6 +63,26 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
                 let newY = screenFrame.origin.y + (screenFrame.height - windowFrame.height) / 2
                 window.setFrameOrigin(NSPoint(x: newX, y: newY))
             }
+        }
+    }
+
+    @objc private func aiConversationWindowDidMove(_ notification: Notification) {
+        guard let window = notification.object as? AIConversationWindow,
+              window == self.aiConversationWindow,
+              let floatingButton = self.floatingButton else {
+            return
+        }
+        
+        // Position floating button relative to this window
+        let windowFrame = window.frame
+        let spacing: CGFloat = 8
+        let newX = windowFrame.origin.x
+        let newY = windowFrame.origin.y + windowFrame.height + spacing
+        
+        // Add check to prevent feedback loop
+        let newOrigin = NSPoint(x: newX, y: newY)
+        if abs(floatingButton.frame.origin.x - newOrigin.x) > 0.1 || abs(floatingButton.frame.origin.y - newOrigin.y) > 0.1 {
+            floatingButton.setFrameOrigin(newOrigin)
         }
     }
 
@@ -81,6 +106,14 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
                 let initialWidth = self.floatingButton?.frame.width ?? self.aiConversationWindowWidth
                 let windowRect = NSRect(x: 0, y: 0, width: initialWidth, height: 300)
                 self.aiConversationWindow = AIConversationWindow(contentRect: windowRect, backing: .buffered, defer: false)
+                
+                // Observe window move events to sync floating button
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(self.aiConversationWindowDidMove),
+                    name: NSWindow.didMoveNotification,
+                    object: self.aiConversationWindow
+                )
             }
             
             // Update view

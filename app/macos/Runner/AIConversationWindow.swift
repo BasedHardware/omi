@@ -15,7 +15,7 @@ class AIConversationWindow: NSWindow {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.level = .floating
-        self.isMovableByWindowBackground = false
+        self.isMovableByWindowBackground = true
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     }
     
