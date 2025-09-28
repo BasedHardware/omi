@@ -28,16 +28,16 @@ private struct KeyView: View {
     var body: some View {
         let keyContent = Text(key)
             .font(.system(size: 12, weight: .regular))
-            .foregroundColor(.white)
+            .foregroundColor(.primary)
             .padding(.horizontal, 6)
             .frame(height: 24)
             .frame(minWidth: 24)
 
         keyContent
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
-        )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 0.5)
+            )
     }
 }
 
@@ -66,7 +66,7 @@ private struct CommandButton: View {
             HStack(spacing: 4) {
                 Text(title)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
 
                 ForEach(keys, id: \.self) { key in
                     KeyView(key: key)
@@ -90,16 +90,16 @@ private struct CommandButton: View {
 /// A spinning loading indicator.
 private struct SpinnerView: View {
     @State private var isSpinning = false
-    
+
     var body: some View {
         Image("app_launcher_icon")
             .resizable()
             .frame(width: 24, height: 24)
-            .colorInvert() // Invert the white icon to black for visibility on white background
+            .foregroundColor(.black)
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
             .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isSpinning)
-            .scaleEffect(0.9) // Slightly smaller for better visual balance
-            .opacity(0.9) // Slightly transparent to indicate loading state
+            .scaleEffect(0.9)  // Slightly smaller for better visual balance
+            .opacity(0.9)  // Slightly transparent to indicate loading state
             .onAppear {
                 withAnimation {
                     isSpinning = true
@@ -120,7 +120,7 @@ private struct Separator: View {
 /// A view modifier for the main background of the control bar.
 private struct MainBackgroundStyle: ViewModifier {
     let cornerRadius: CGFloat
-    
+
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
             content.glassEffect(in: RoundedRectangle(cornerRadius: cornerRadius))
@@ -133,7 +133,6 @@ private struct MainBackgroundStyle: ViewModifier {
         }
     }
 }
-
 
 /// The main SwiftUI view for the floating control bar.
 private struct FloatingControlBarView: View {
@@ -204,11 +203,13 @@ private struct FloatingControlBarView: View {
                 if state.isRecording {
                     Text(formattedDuration)
                         .font(.system(size: 14, weight: .regular).monospacedDigit())
-                        .foregroundColor(.white.opacity(0.8))
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.8).combined(with: .opacity),
-                            removal: .scale(scale: 0.8).combined(with: .opacity)
-                        ))
+                        .foregroundColor(.primary)
+                        .transition(
+                            .asymmetric(
+                                insertion: .scale(scale: 0.8).combined(with: .opacity),
+                                removal: .scale(scale: 0.8).combined(with: .opacity)
+                            )
+                        )
                         .animation(.easeInOut(duration: 0.3), value: state.duration)
                 }
             }
@@ -223,12 +224,8 @@ private struct FloatingControlBarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(width: 400, height: 64)
+        .frame(width: 400, height: 56)
         .modifier(MainBackgroundStyle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-        )
     }
 }
 
@@ -258,15 +255,15 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
 
     override init(
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
-        backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool
+        backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
         super.init(
-            contentRect: contentRect, styleMask: [.borderless], backing: backingStoreType,
+            contentRect: contentRect, styleMask: [.borderless, .utilityWindow], backing: backingStoreType,
             defer: flag)
 
         self.isOpaque = false
         self.backgroundColor = .clear
-        self.hasShadow = true
+        self.hasShadow = false
         self.level = .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = true
@@ -281,6 +278,16 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
         } else {
             self.center()
         }
+    }
+
+    // Allow the window to become the key window to receive keyboard events.
+    override var canBecomeKey: Bool {
+        return true
+    }
+
+    // Allow the window to become the main window.
+    override var canBecomeMain: Bool {
+        return true
     }
 
     private func setupViews() {
@@ -301,7 +308,9 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
     }
 
     // --- Public Methods for State Update ---
-    public func updateRecordingState(isRecording: Bool, isPaused: Bool, duration: Int, isInitialising: Bool) {
+    public func updateRecordingState(
+        isRecording: Bool, isPaused: Bool, duration: Int, isInitialising: Bool
+    ) {
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.35)) {
                 self.state.isRecording = isRecording
@@ -309,7 +318,7 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
                 self.state.duration = duration
                 self.state.isInitialising = isInitialising
             }
-            
+
             // Auto-resize window after animation
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 if let hostingView = self.hostingView {
@@ -329,9 +338,5 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
         UserDefaults.standard.set(
             NSStringFromPoint(self.frame.origin), forKey: FloatingControlBar.positionKey)
         onMove?()
-    }
-
-    func windowDidResize(_ notification: Notification) {
-        onResize?(frame.width)
     }
 }

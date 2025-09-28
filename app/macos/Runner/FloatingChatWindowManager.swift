@@ -105,7 +105,7 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
                 // Use current width or default
                 let initialWidth = self.floatingButton?.frame.width ?? self.aiConversationWindowWidth
                 let windowRect = NSRect(x: 0, y: 0, width: initialWidth, height: 300)
-                self.aiConversationWindow = AIConversationWindow(contentRect: windowRect, backing: .buffered, defer: false)
+                self.aiConversationWindow = AIConversationWindow(contentRect: windowRect, defer: false)
                 
                 // Observe window move events to sync floating button
                 NotificationCenter.default.addObserver(

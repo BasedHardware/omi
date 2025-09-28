@@ -5,8 +5,8 @@
 //  Created by Omi on 2025-09-26.
 //
 
-import SwiftUI
 import Cocoa
+import SwiftUI
 
 // MARK: - SwiftUI Views from FloatingControlBar
 
@@ -32,7 +32,7 @@ private struct ControlBarVisualEffectView: NSViewRepresentable {
 /// A view modifier for the main background of the control bar.
 private struct MainBackgroundStyle: ViewModifier {
     let cornerRadius: CGFloat
-    
+
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
             content.glassEffect(in: RoundedRectangle(cornerRadius: cornerRadius))
@@ -49,14 +49,19 @@ private struct MainBackgroundStyle: ViewModifier {
 struct AskAIInputView: View {
     @Binding var userInput: String
     @State private var localInput: String = ""
+    @FocusState private var isInputFocused: Bool
     let screenshotURL: URL?
-    
+
     var onSend: ((String, URL?) -> Void)?
     var onCancel: (() -> Void)?
     var onRemoveScreenshot: (() -> Void)?
     var width: CGFloat
 
-    init(userInput: Binding<String>, screenshotURL: URL?, width: CGFloat, onSend: ((String, URL?) -> Void)? = nil, onCancel: (() -> Void)? = nil, onRemoveScreenshot: (() -> Void)? = nil) {
+    init(
+        userInput: Binding<String>, screenshotURL: URL?, width: CGFloat,
+        onSend: ((String, URL?) -> Void)? = nil, onCancel: (() -> Void)? = nil,
+        onRemoveScreenshot: (() -> Void)? = nil
+    ) {
         self._userInput = userInput
         self.screenshotURL = screenshotURL
         self.width = width
@@ -103,13 +108,15 @@ struct AskAIInputView: View {
                 .frame(height: 40)
                 .padding(.horizontal, 12)
                 .cornerRadius(20)
+                .focused($isInputFocused)
                 .onChange(of: localInput) { newValue in
                     userInput = newValue
                 }
                 .onAppear {
                     localInput = userInput
+                    isInputFocused = true
                 }
-            
+
             Button(action: {
                 onSend?(localInput, screenshotURL)
             }) {
@@ -122,11 +129,7 @@ struct AskAIInputView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(width: width, height: 64)
+        .frame(width: width, height: 56)
         .modifier(MainBackgroundStyle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-        )
     }
 }
