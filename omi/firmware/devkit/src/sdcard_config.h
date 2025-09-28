@@ -23,8 +23,8 @@
 
 // Chunking configuration
 #define CHUNK_DURATION_CYCLES  600  // 5 minutes = 600 cycles of 500ms each
-#define CHUNK_FILENAME_MAX_LENGTH 64
-#define CHUNK_FILENAME_FORMAT "audio/chunk_%02d%02d%02d_%05d.b"
+#define CHUNK_FILENAME_MAX_LENGTH 48
+#define CHUNK_FILENAME_FORMAT "audio/chunk_%05d.bin"
 
 // File system configuration
 #define MAX_PATH_LENGTH 32

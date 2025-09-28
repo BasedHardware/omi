@@ -1,6 +1,7 @@
 #include "sdcard.h"
 
 #include <ff.h>
+#include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/fs/fs.h>
@@ -50,8 +51,9 @@ bool chunking_enabled = false;
 #endif
 static atomic_t chunk_cycle_counter = ATOMIC_INIT(0);  // Thread-safe counter for 500ms cycles
 
-// Persistent chunk counter for unique filenames across reboots
-static uint32_t chunk_counter = 0;
+// Persistent chunk counters for unique filenames across reboots
+static uint32_t chunk_start_counter = 0;
+static uint32_t chunk_current_counter = 0;
 
 static atomic_t should_rotate_flag = ATOMIC_INIT(0);  // Thread-safe flag (0=false, 1=true)
 
@@ -116,13 +118,14 @@ int mount_sd_card(void)
         LOG_INF("Using chunking system");
         file_count = 1;  // Set to 1 for compatibility
         
-        // Load the persistent chunk counter
-        int ret = get_chunk_counter(&chunk_counter);
+        // Load the persistent chunk counters
+        int ret = get_chunk_counters(&chunk_start_counter, &chunk_current_counter);
         if (ret < 0) {
-            LOG_ERR("Failed to load chunk counter: %d", ret);
-            chunk_counter = 0; // Use default value on error
+            LOG_ERR("Failed to load chunk counters: %d", ret);
+            chunk_start_counter = 0;
+            chunk_current_counter = 0;
         }
-        LOG_INF("Loaded chunk counter: %d", chunk_counter);
+        LOG_INF("Loaded chunk counters: start=%d current=%d", chunk_start_counter, chunk_current_counter);
     } else {
         // ======================================================================
         // LEGACY AUDIO FILE SYSTEM 
@@ -484,13 +487,17 @@ bool is_sd_on()
     return sd_enabled;
 }
 
-int save_chunk_counter(uint32_t counter)
+int save_chunk_counters(uint32_t start_counter, uint32_t current_counter)
 {
-    uint8_t buf[4] = {
-        counter & 0xFF,
-        (counter >> 8) & 0xFF,
-        (counter >> 16) & 0xFF, 
-        (counter >> 24) & 0xFF 
+    uint8_t buf[8] = {
+        start_counter & 0xFF,
+        (start_counter >> 8) & 0xFF,
+        (start_counter >> 16) & 0xFF,
+        (start_counter >> 24) & 0xFF,
+        current_counter & 0xFF,
+        (current_counter >> 8) & 0xFF,
+        (current_counter >> 16) & 0xFF,
+        (current_counter >> 24) & 0xFF,
     };
 
     struct fs_file_t write_file;
@@ -501,24 +508,40 @@ int save_chunk_counter(uint32_t counter)
         LOG_ERR("error opening chunk counter file %d", res);
         return res;
     }
-    res = fs_write(&write_file, &buf, 4);
+    res = fs_seek(&write_file, 0, FS_SEEK_SET);
+    if (res < 0) {
+        LOG_ERR("error seeking chunk counter file %d", res);
+        fs_close(&write_file);
+        return res;
+    }
+    res = fs_write(&write_file, buf, sizeof(buf));
     if (res < 0)
     {
         LOG_ERR("error writing chunk counter file %d", res);
         fs_close(&write_file);
         return res;
     }
+    if (res != sizeof(buf)) {
+        LOG_ERR("partial write to chunk counter file: %d", res);
+        fs_close(&write_file);
+        return -EIO;
+    }
+    res = fs_truncate(&write_file, sizeof(buf));
+    if (res < 0) {
+        LOG_WRN("failed to truncate chunk counter file: %d", res);
+        // continue; data already written, truncate failure likely harmless
+    }
     fs_close(&write_file);
     return 0;
 }
 
-int get_chunk_counter(uint32_t *counter)
+int get_chunk_counters(uint32_t *start_counter, uint32_t *current_counter)
 {
-    if (counter == NULL) {
+    if (start_counter == NULL || current_counter == NULL) {
         return -EINVAL;
     }
     
-    uint8_t buf[4];
+    uint8_t buf[8];
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
     int rc = fs_open(&read_file, SDCARD_CHUNK_COUNTER_FILE, FS_O_READ);
@@ -526,11 +549,12 @@ int get_chunk_counter(uint32_t *counter)
     {
         // File doesn't exist, start with counter 0
         LOG_INF("chunk counter file doesn't exist, starting with 0");
-        *counter = 0;
+        *start_counter = 0;
+        *current_counter = 0;
         return 0;
     }
     
-    rc = fs_read(&read_file, &buf, 4);
+    rc = fs_read(&read_file, buf, sizeof(buf));
     fs_close(&read_file);
     
     if (rc < 0)
@@ -539,34 +563,31 @@ int get_chunk_counter(uint32_t *counter)
         return rc; // Return the actual error code
     }
     
-    if (rc != 4) {
-        LOG_ERR("incomplete read of chunk counter, got %d bytes", rc);
+    if (rc != sizeof(buf)) {
+        LOG_ERR("incomplete read of chunk counters, got %d bytes", rc);
         return -EIO;
     }
     
     uint32_t *counter_ptr = (uint32_t*)buf;
-    *counter = counter_ptr[0];
-    LOG_INF("loaded chunk counter: %d", *counter);
+    *start_counter = counter_ptr[0];
+    *current_counter = counter_ptr[1];
+    if (*current_counter < *start_counter) {
+        LOG_WRN("Chunk counters corrupted (current < start), resetting to start value");
+        *current_counter = *start_counter;
+    }
+    LOG_INF("loaded chunk counters: start=%d current=%d", *start_counter, *current_counter);
     return 0;
 }
 
-char* generate_timestamp_audio_filename(void)
+char* generate_chunk_audio_filename(void)
 {
     // Increment and save the chunk counter for unique filenames across reboots
-    chunk_counter++;
-    int ret = save_chunk_counter(chunk_counter);
+    chunk_current_counter++;
+    int ret = save_chunk_counters(chunk_start_counter, chunk_current_counter);
     if (ret < 0) {
         LOG_ERR("Failed to save chunk counter: %d", ret);
         // Continue anyway - we can still generate filename with current counter
     }
-    
-    int64_t current_time = k_uptime_get();
-    
-    // Simple timestamp based on uptime (in seconds since boot)
-    uint32_t uptime_seconds = current_time / 1000;
-    uint32_t hours = (uptime_seconds / 3600) % 24;
-    uint32_t minutes = (uptime_seconds / 60) % 60;
-    uint32_t seconds = uptime_seconds % 60;
     
     char *filename = k_malloc(CHUNK_FILENAME_MAX_LENGTH);
     if (filename == NULL) {
@@ -574,11 +595,11 @@ char* generate_timestamp_audio_filename(void)
         return NULL;
     }
     
-    // Format: audio/chunk_HHMMSS_NNNNN.bin (with unique counter after timestamp)
-    int len = snprintf(filename, CHUNK_FILENAME_MAX_LENGTH, CHUNK_FILENAME_FORMAT, 
-                      (int)hours, (int)minutes, (int)seconds, (int)chunk_counter);
+    // Format: audio/chunk_NNNNN.bin
+    int len = snprintf(filename, CHUNK_FILENAME_MAX_LENGTH, CHUNK_FILENAME_FORMAT,
+                      (int)chunk_current_counter);
     
-    if (len >= 40 || len < 0) {
+    if (len >= CHUNK_FILENAME_MAX_LENGTH || len < 0) {
         LOG_ERR("Filename too long or formatting error");
         k_free(filename);
         return NULL;
@@ -601,7 +622,7 @@ int initialize_chunk_file(void)
         return SDCARD_ERR_SD_NOT_ENABLED;
     }
     
-    char *filename = generate_timestamp_audio_filename();
+    char *filename = generate_chunk_audio_filename();
     if (filename == NULL) {
         LOG_ERR("Failed to generate chunk filename - out of memory");
         return SDCARD_ERR_FILENAME_GENERATION;
@@ -628,9 +649,9 @@ int initialize_chunk_file(void)
         atomic_set(&chunk_cycle_counter, 0);     // Thread-safe: Reset cycle counter for new chunk
         chunk_active = true;
         atomic_set(&should_rotate_flag, 0);      // Thread-safe: Reset rotation flag for new chunk
-        LOG_INF("NEW AUDIO CHUNK CREATED: %s", current_chunk_filename);
-        LOG_INF("File path: %s", write_buffer);
-        LOG_INF("Chunk will rotate in %d cycles (%d seconds)", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
+        LOG_INF("H - Debug: NEW AUDIO CHUNK CREATED: %s", current_chunk_filename);
+        LOG_INF("H - Debug: File path: %s", write_buffer);
+        LOG_INF("H - Debug: Chunk will rotate in %d cycles (%d seconds)", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
     } else {
         LOG_ERR("Failed to create chunk file: %d", ret);
         // Reset chunk state on failure
@@ -682,6 +703,16 @@ int start_new_chunk(void)
         LOG_INF("FINALIZING CHUNK: %s", current_chunk_filename);
         LOG_INF("Duration: %d cycles (%d seconds)", cycles, cycles / 2);
         // Current chunk is automatically finalized when we stop writing to it
+    } else {
+        // New chunk session starting; initialize start counter only if not already set
+        if (chunk_start_counter == 0 && chunk_current_counter == 0) {
+            chunk_start_counter = 1;
+            int ret = save_chunk_counters(chunk_start_counter, chunk_current_counter);
+            if (ret < 0) {
+                LOG_ERR("Failed to initialize chunk counters for new session: %d", ret);
+                return ret;
+            }
+        }
     }
     
     return initialize_chunk_file();

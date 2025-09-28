@@ -118,19 +118,19 @@ extern bool chunk_active;
 extern bool chunking_enabled;
 
 /**
- * @brief Generate a unique audio file name
+ * @brief Generate a sequential audio file name
  *
- * Creates a file name with persistent counter and timestamp for chunked recording
- * Format: audio/chunk_NNNNN_HHMMSS.bin (where NNNNN is persistent counter)
+ * Creates a file name with persistent counter for chunked recording
+ * Format: audio/chunk_NNNNN.bin (where NNNNN is the persistent counter)
  * 
  * @return dynamically allocated string with file path, must be freed with k_free()
  */
-char* generate_timestamp_audio_filename(void);
+char* generate_chunk_audio_filename(void);
 
 /**
  * @brief Initialize a new chunk file for recording
  *
- * Creates a new audio file with chunk_HHMMSS.bin naming for 5-minute chunks
+ * Creates a new audio file with sequential chunk naming for 5-minute chunks
  * 
  * @return 0 if successful, negative errno code if error
  */
@@ -177,7 +177,7 @@ void set_system_boot_complete(void);
  * @param counter The counter value to save
  * @return 0 if successful, negative errno code if error
  */
-int save_chunk_counter(uint32_t counter);
+int save_chunk_counters(uint32_t start_counter, uint32_t current_counter);
 
 /**
  * @brief Load chunk counter from persistent storage
@@ -192,6 +192,6 @@ int save_chunk_counter(uint32_t counter);
  * @param counter Pointer to store the counter value
  * @return 0 if successful, negative errno code if error
  */
-int get_chunk_counter(uint32_t *counter);
+int get_chunk_counters(uint32_t *start_counter, uint32_t *current_counter);
 
 #endif
