@@ -132,8 +132,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-
-
   @override
   void subscribe(IDeviceServiceSubsciption subscription, Object context) {
     _subscriptions.remove(context.hashCode);
@@ -165,7 +163,6 @@ class DeviceService implements IDeviceService {
     for (final discoverer in _discoverers) {
       discoverer.stop();
     }
-
 
     _subscriptions.clear();
     _devices.clear();

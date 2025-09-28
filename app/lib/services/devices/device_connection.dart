@@ -18,11 +18,11 @@ import 'package:omi/services/devices/discovery/device_locator.dart';
 class DeviceConnectionFactory {
   static DeviceConnection? create(BtDevice device) {
     DeviceTransport transport;
-    
+
     // Create transport based on device locator
     final locator = device.locator;
     if (locator == null) return null;
-    
+
     switch (locator.kind) {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
@@ -30,11 +30,11 @@ class DeviceConnectionFactory {
         final bleDevice = BluetoothDevice.fromId(deviceId);
         transport = BleTransport(bleDevice);
         break;
-        
+
       case TransportKind.watchConnectivity:
         transport = WatchTransport();
         break;
-        
+
       default:
         return null;
     }
@@ -109,7 +109,7 @@ abstract class DeviceConnection {
   }
 
   Future<void> connect({
-   void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
+    void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
   }) async {
     if (_connectionState == DeviceConnectionState.connected) {
       throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
@@ -121,7 +121,7 @@ abstract class DeviceConnection {
     try {
       // Use transport to connect
       await transport.connect();
-      
+
       // Check connection
       await ping();
 
@@ -138,7 +138,7 @@ abstract class DeviceConnection {
       _connectionStateChangedCallback!(device.id, _connectionState);
       _connectionStateChangedCallback = null;
     }
-    
+
     await transport.disconnect();
     await _transportStateSubscription?.cancel();
     _transportStateSubscription = null;
@@ -268,7 +268,8 @@ abstract class DeviceConnection {
 
   Future<bool> performPlayToSpeakerHaptic(int mode) async {
     try {
-      await transport.writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [mode & 0xFF]);
+      await transport
+          .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [mode & 0xFF]);
       return true;
     } catch (e) {
       debugPrint('Failed to play haptic: $e');
@@ -298,11 +299,8 @@ abstract class DeviceConnection {
         (offset >> 8) & 0xFF,
         offset & 0xFF,
       ];
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid,
+          [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
       return true;
     } catch (e) {
       debugPrint('Failed to write to storage: $e');

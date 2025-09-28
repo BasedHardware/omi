@@ -23,14 +23,12 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     super.transport,
   );
 
-
-
   @override
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
   }) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
-    
+
     // Check for any recording that should be restarted
     await checkAndStartRecordingOnRelaunch();
   }
@@ -142,7 +140,6 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     }
   }
 
-
   Future<Map<String, String>> getDeviceInfo() async {
     if (transport is WatchTransport) {
       final watchTransport = transport as WatchTransport;
@@ -156,7 +153,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     void Function(int p1)? onBatteryLevelChange,
   }) async {
     final stream = transport.getCharacteristicStream(watchBatteryServiceUuid, watchBatteryLevelCharacteristicUuid);
-    
+
     final subscription = stream.listen((batteryData) {
       if (batteryData.isNotEmpty) {
         final batteryLevel = batteryData[0];
@@ -172,7 +169,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     required void Function(List<int> p1) onAudioBytesReceived,
   }) async {
     final stream = transport.getCharacteristicStream(watchAudioServiceUuid, watchAudioDataCharacteristicUuid);
-    
+
     final subscription = stream.listen((bytes) {
       onAudioBytesReceived(bytes);
     });

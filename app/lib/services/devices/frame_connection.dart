@@ -8,7 +8,6 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 
-
 const String _photoHeader =
     "/9j/4AAQSkZJRgABAgAAZABkAAD/2wBDACAWGBwYFCAcGhwkIiAmMFA0MCwsMGJGSjpQdGZ6eHJmcG6AkLicgIiuim5woNqirr7EztDOfJri8uDI8LjKzsb/2wBDASIkJDAqMF40NF7GhHCExsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsb/wAARCAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwA=";
 
@@ -96,7 +95,7 @@ class FrameDeviceConnection extends DeviceConnection {
       {required void Function(List<int>) onAudioBytesReceived}) async {
     try {
       final stream = transport.getCharacteristicStream('frame-audio-service', 'frame-audio-characteristic');
-      
+
       debugPrint('Subscribed to audioBytes stream from Frame Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onAudioBytesReceived(value);
@@ -116,7 +115,7 @@ class FrameDeviceConnection extends DeviceConnection {
       {void Function(int)? onBatteryLevelChange}) async {
     try {
       final stream = transport.getCharacteristicStream('frame-battery-service', 'frame-battery-characteristic');
-      
+
       final subscription = stream.listen((value) {
         if (value.isNotEmpty && onBatteryLevelChange != null) {
           final currentLevel = value[0];
@@ -167,7 +166,7 @@ class FrameDeviceConnection extends DeviceConnection {
       {required void Function(OrientedImage orientedImage) onImageReceived}) async {
     try {
       final stream = transport.getCharacteristicStream('frame-image-service', 'frame-image-characteristic');
-      
+
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) {
           final header = base64.decode(_photoHeader);
@@ -236,11 +235,12 @@ class FrameDeviceConnection extends DeviceConnection {
   /// Get device information from Frame device
   Future<Map<String, String>> getDeviceInfo() async {
     Map<String, String> deviceInfo = {};
-    
+
     try {
       // Read firmware version from Frame
       try {
-        final firmwareValue = await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
+        final firmwareValue =
+            await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
         if (firmwareValue.isNotEmpty) {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }
@@ -257,7 +257,6 @@ class FrameDeviceConnection extends DeviceConnection {
       } catch (e) {
         debugPrint('FrameDeviceConnection: Error reading battery level: $e');
       }
-
     } catch (e) {
       debugPrint('FrameDeviceConnection: Error getting device info: $e');
     }

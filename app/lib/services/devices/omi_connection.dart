@@ -25,8 +25,6 @@ class OmiDeviceConnection extends DeviceConnection {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
   }
 
-
-
   @override
   Future<int> performRetrieveBatteryLevel() async {
     try {
@@ -45,7 +43,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }) async {
     try {
       final stream = transport.getCharacteristicStream(batteryServiceUuid, batteryLevelCharacteristicUuid);
-      
+
       final subscription = stream.listen((value) {
         if (value.isNotEmpty && onBatteryLevelChange != null) {
           debugPrint('Battery level changed: ${value[0]}');
@@ -77,7 +75,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }) async {
     try {
       final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
-      
+
       debugPrint('Subscribed to button stream from Omi Device');
       final subscription = stream.listen((value) {
         debugPrint("new button value $value");
@@ -97,7 +95,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }) async {
     try {
       final stream = transport.getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid);
-      
+
       debugPrint('Subscribed to audioBytes stream from Omi Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onAudioBytesReceived(value);
@@ -114,7 +112,7 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<BleAudioCodec> performGetAudioCodec() async {
     try {
       final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
-      
+
       var codecId = 1;
       if (codecValue.isNotEmpty) {
         codecId = codecValue[0];
@@ -152,8 +150,9 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetStorageList() async {
     debugPrint('perform storage list called');
     try {
-      final storageValue = await transport.readCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid);
-      
+      final storageValue =
+          await transport.readCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid);
+
       List<int> storageLengths = [];
       if (storageValue.isNotEmpty) {
         int totalEntries = (storageValue.length / 4).toInt();
@@ -183,8 +182,9 @@ class OmiDeviceConnection extends DeviceConnection {
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid);
-      
+      final stream =
+          transport.getCharacteristicStream(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid);
+
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onStorageBytesReceived(value);
       });
@@ -204,7 +204,8 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<bool> performPlayToSpeakerHaptic(int level) async {
     try {
       debugPrint('About to play to speaker haptic');
-      await transport.writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [level & 0xFF]);
+      await transport
+          .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [level & 0xFF]);
       return true;
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error playing haptic: $e');
@@ -219,7 +220,7 @@ class OmiDeviceConnection extends DeviceConnection {
       debugPrint('about to send $numFile');
       debugPrint('about to send $command');
       debugPrint('about to send offset$offset');
-      
+
       var offsetBytes = [
         (offset >> 24) & 0xFF,
         (offset >> 16) & 0xFF,
@@ -227,11 +228,8 @@ class OmiDeviceConnection extends DeviceConnection {
         offset & 0xFF,
       ];
 
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid, 
-        storageDataStreamCharacteristicUuid,
-        [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid,
+          [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
       return true;
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error writing to storage: $e');
@@ -288,7 +286,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }) async {
     try {
       final stream = transport.getCharacteristicStream(omiServiceUuid, imageDataStreamCharacteristicUuid);
-      
+
       debugPrint('Subscribed to imageBytes stream from Omi Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onImageBytesReceived(value);
@@ -428,7 +426,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }) async {
     try {
       final stream = transport.getCharacteristicStream(accelDataStreamServiceUuid, accelDataStreamCharacteristicUuid);
-      
+
       final subscription = stream.listen((value) {
         if (value.length > 4) {
           //for some reason, the very first reading is four bytes
@@ -491,7 +489,8 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<void> performSetLedDimRatio(int ratio) async {
     try {
-      await transport.writeCharacteristic(settingsServiceUuid, settingsDimRatioCharacteristicUuid, [ratio.clamp(0, 100)]);
+      await transport
+          .writeCharacteristic(settingsServiceUuid, settingsDimRatioCharacteristicUuid, [ratio.clamp(0, 100)]);
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error setting LED dim ratio: $e');
     }
@@ -528,11 +527,12 @@ class OmiDeviceConnection extends DeviceConnection {
   /// Get device information from Omi device
   Future<Map<String, String>> getDeviceInfo() async {
     Map<String, String> deviceInfo = {};
-    
+
     try {
       // Read model number
       try {
-        final modelValue = await transport.readCharacteristic(deviceInformationServiceUuid, modelNumberCharacteristicUuid);
+        final modelValue =
+            await transport.readCharacteristic(deviceInformationServiceUuid, modelNumberCharacteristicUuid);
         if (modelValue.isNotEmpty) {
           deviceInfo['modelNumber'] = String.fromCharCodes(modelValue);
         }
@@ -542,7 +542,8 @@ class OmiDeviceConnection extends DeviceConnection {
 
       // Read firmware revision
       try {
-        final firmwareValue = await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
+        final firmwareValue =
+            await transport.readCharacteristic(deviceInformationServiceUuid, firmwareRevisionCharacteristicUuid);
         if (firmwareValue.isNotEmpty) {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }
@@ -552,7 +553,8 @@ class OmiDeviceConnection extends DeviceConnection {
 
       // Read hardware revision
       try {
-        final hardwareValue = await transport.readCharacteristic(deviceInformationServiceUuid, hardwareRevisionCharacteristicUuid);
+        final hardwareValue =
+            await transport.readCharacteristic(deviceInformationServiceUuid, hardwareRevisionCharacteristicUuid);
         if (hardwareValue.isNotEmpty) {
           deviceInfo['hardwareRevision'] = String.fromCharCodes(hardwareValue);
         }
@@ -562,7 +564,8 @@ class OmiDeviceConnection extends DeviceConnection {
 
       // Read manufacturer name
       try {
-        final manufacturerValue = await transport.readCharacteristic(deviceInformationServiceUuid, manufacturerNameCharacteristicUuid);
+        final manufacturerValue =
+            await transport.readCharacteristic(deviceInformationServiceUuid, manufacturerNameCharacteristicUuid);
         if (manufacturerValue.isNotEmpty) {
           deviceInfo['manufacturerName'] = String.fromCharCodes(manufacturerValue);
         }
@@ -577,7 +580,6 @@ class OmiDeviceConnection extends DeviceConnection {
       } catch (e) {
         deviceInfo['hasImageStream'] = 'false';
       }
-
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error getting device info: $e');
     }

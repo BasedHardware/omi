@@ -301,16 +301,16 @@ class BtDevice {
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
     var t = DeviceType.omi;
-    
+
     try {
       if (conn is OmiDeviceConnection) {
         final deviceInfo = await conn.getDeviceInfo();
-        
+
         modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
         firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
         hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
         manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
-        
+
         // Check if device has image streaming capability (OpenGlass detection)
         if (type == DeviceType.openglass) {
           t = DeviceType.openglass;
@@ -338,19 +338,18 @@ class BtDevice {
     var firmwareRevision = 'Unknown';
     var hardwareRevision = 'Brilliant Labs Frame';
     var manufacturerName = 'Brilliant Labs';
-    
+
     try {
       final deviceInfo = await conn.getDeviceInfo();
-      
+
       modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
       firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
       hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
       manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
-      
     } catch (e) {
       Logger.error('Error getting Frame device info: $e');
     }
-    
+
     return copyWith(
       modelNumber: modelNumber,
       firmwareRevision: firmwareRevision,
@@ -365,19 +364,18 @@ class BtDevice {
     var firmwareRevision = 'Unknown';
     var hardwareRevision = 'Unknown';
     var manufacturerName = 'Apple';
-    
+
     try {
       final deviceInfo = await conn.getDeviceInfo();
-      
+
       modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
       firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
       hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
       manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
-      
     } catch (e) {
       Logger.error('Error getting Apple Watch device info: $e');
     }
-    
+
     return copyWith(
       modelNumber: modelNumber,
       firmwareRevision: firmwareRevision,
