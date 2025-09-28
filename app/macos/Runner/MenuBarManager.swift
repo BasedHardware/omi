@@ -16,7 +16,7 @@ class MenuBarManager: NSObject {
     // MARK: - Properties
     private var statusBarItem: NSStatusItem?
     private weak var mainWindow: NSWindow?
-    private var isFloatingChatButtonVisible: Bool = false
+    private var isVisibleObservation: NSKeyValueObservation?
     
     // MARK: - Initialization
     private override init() {
@@ -107,13 +107,13 @@ class MenuBarManager: NSObject {
     
     // MARK: - Public Methods
     
-    func updateFloatingChatButtonVisibility(isVisible: Bool) {
-        isFloatingChatButtonVisible = isVisible
-        updateFloatingChatMenuItemState()
+    func observeFloatingControlBar(_ controlBar: FloatingControlBar) {
+        isVisibleObservation = controlBar.observe(\.isVisible, options: [.initial, .new]) { [weak self] _, change in
+            DispatchQueue.main.async {
+                self?.updateFloatingChatMenuItemState(isVisible: change.newValue ?? false)
+            }
+        }
     }
-    
-    
-    
     
     func cleanup() {
         NotificationCenter.default.removeObserver(self)
@@ -125,14 +125,14 @@ class MenuBarManager: NSObject {
     
     // MARK: - Private Methods
     
-    private func updateFloatingChatMenuItemState() {
+    private func updateFloatingChatMenuItemState(isVisible: Bool) {
         guard let menu = statusBarItem?.menu,
               let menuItem = menu.item(withTag: 200) else {
             print("WARNING: Cannot find control bar menu item with tag 200")
             return
         }
-        menuItem.state = isFloatingChatButtonVisible ? .on : .off
-        menuItem.title = isFloatingChatButtonVisible ? "Hide Control Bar" : "Show Control Bar"
+        menuItem.state = isVisible ? .on : .off
+        menuItem.title = isVisible ? "Hide Control Bar" : "Show Control Bar"
     }
     
     
