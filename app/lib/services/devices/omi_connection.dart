@@ -141,7 +141,6 @@ class OmiDeviceConnection extends DeviceConnection {
       debugPrint('storage list called');
       return await performGetStorageList();
     }
-    // _showDeviceDisconnectedNotification();
     debugPrint('storage list error');
     return Future.value(<int>[]);
   }
@@ -236,7 +235,6 @@ class OmiDeviceConnection extends DeviceConnection {
       return false;
     }
   }
-  // Future<List<int>> performGetStorageList();
 
   @override
   Future performCameraStartPhotoController() async {

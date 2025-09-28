@@ -2,6 +2,7 @@ import Cocoa
 import FlutterMacOS
 import ScreenCaptureKit
 import AVFoundation
+import ServiceManagement
 import CoreBluetooth
 import CoreLocation
 import UserNotifications
@@ -16,15 +17,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // Permission manager
     private let permissionManager = PermissionManager.shared
 
-    // Floating overlay window
-    private var floatingOverlay: FloatingRecordingOverlay?
-
     // Menu bar manager
     private var menuBarManager: MenuBarManager?
 
-    // Overlay channel
-    private var overlayChannel: FlutterMethodChannel!
-
+    // Floating control bar
+    private var floatingControlBar: FloatingControlBar?
+    private var floatingControlBarChannel: FlutterMethodChannel!
+    private var askAIChannel: FlutterMethodChannel!
 
 
     override func awakeFromNib() {
@@ -39,11 +38,28 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             name: "screenCapturePlatform",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
-        // Setup overlay channel
-        overlayChannel = FlutterMethodChannel(
-            name: "overlayPlatform",
+        // Setup floating control bar channel
+        floatingControlBarChannel = FlutterMethodChannel(
+            name: "com.omi/floating_control_bar",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
+        askAIChannel = FlutterMethodChannel(
+            name: "com.omi/ask_ai",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+        
+        // Configure the shared window manager
+        FloatingChatWindowManager.shared.configure(flutterEngine: flutterViewController.engine, askAIChannel: askAIChannel)
+        
+        askAIChannel.setMethodCallHandler { (call, result) in
+            switch call.method {
+            case "aiResponseChunk":
+                FloatingChatWindowManager.shared.handleAIResponseChunk(arguments: call.arguments)
+                result(nil)
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+        
         // Set self as delegate to detect window events
         self.delegate = self
 
@@ -73,61 +89,30 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             self.setupMenuBar()
         }
 
+        // Setup global shortcuts
+        GlobalShortcutManager.shared.registerShortcuts()
+
         // Setup audio manager with Flutter channel
         audioManager.setFlutterChannel(screenCaptureChannel)
 
-        // Setup overlay channel handlers
-        overlayChannel.setMethodCallHandler { [weak self] (call, result) in
+        floatingControlBarChannel.setMethodCallHandler { [weak self] (call, result) in
             guard let self = self else { return }
-            
+
             switch call.method {
-            case "showOverlay":
-                self.showOverlay()
-                result(nil)
-                
-            case "hideOverlay":
-                self.hideOverlay()
-                result(nil)
-                
-            case "updateOverlayState":
-                guard let args = call.arguments as? [String: Any],
-                      let isRecording = args["isRecording"] as? Bool,
-                      let isPaused = args["isPaused"] as? Bool else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing required parameters", details: nil))
-                    return
+            case "updateRecordingState":
+                if let args = call.arguments as? [String: Any],
+                   let isRecording = args["isRecording"] as? Bool,
+                   let isPaused = args["isPaused"] as? Bool,
+                   let duration = args["duration"] as? Int,
+                   let isInitialising = args["isInitialising"] as? Bool {
+                    self.floatingControlBar?.updateRecordingState(
+                        isRecording: isRecording, 
+                        isPaused: isPaused, 
+                        duration: duration,
+                        isInitialising: isInitialising
+                    )
                 }
-                self.updateOverlayState(isRecording: isRecording, isPaused: isPaused)
                 result(nil)
-                
-            case "updateOverlayTranscript":
-                guard let args = call.arguments as? [String: Any],
-                      let transcript = args["transcript"] as? String,
-                      let segmentCount = args["segmentCount"] as? Int else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing required parameters", details: nil))
-                    return
-                }
-                self.updateOverlayTranscript(transcript: transcript, segmentCount: segmentCount)
-                result(nil)
-                
-            case "updateOverlayStatus":
-                guard let args = call.arguments as? [String: Any],
-                      let status = args["status"] as? String else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing status parameter", details: nil))
-                    return
-                }
-                self.updateOverlayStatus(status: status)
-                result(nil)
-                
-            case "moveOverlay":
-                guard let args = call.arguments as? [String: Any],
-                      let x = args["x"] as? Double,
-                      let y = args["y"] as? Double else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing position parameters", details: nil))
-                    return
-                }
-                self.moveOverlay(x: x, y: y)
-                result(nil)
-                
             default:
                 result(FlutterMethodNotImplemented)
             }
@@ -260,6 +245,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Add screen sleep/wake observers
         setupScreenSleepWakeObservers()
 
+        // Add observers for global shortcuts
+        setupShortcutObservers()
+
         super.awakeFromNib()
     }
 
@@ -345,36 +333,51 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // MARK: - Menu Bar Setup
     
     private func setupMenuBar() {
-        menuBarManager = MenuBarManager(mainWindow: self)
-        
-        // Setup callbacks
-        menuBarManager?.onToggleWindow = { [weak self] in
-            self?.handleWindowToggle()
-        }
-        
-        menuBarManager?.onQuit = { [weak self] in
-            self?.handleQuitApplication()
-        }
-        
+        menuBarManager = MenuBarManager.shared
+        menuBarManager?.configure(mainWindow: self)
         menuBarManager?.setupMenuBarItem()
+        
+        // Setup notification observers for menu actions
+        setupMenuBarObservers()
     }
     
-    private func handleWindowToggle() {
+    private func setupMenuBarObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarToggleWindow),
+            name: MenuBarManager.toggleWindowNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarQuitApplication),
+            name: MenuBarManager.quitApplicationNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarToggleFloatingChat),
+            name: MenuBarManager.toggleFloatingChatNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarOpenChatWindow),
+            name: MenuBarManager.openChatWindowNotification,
+            object: nil
+        )
+    }
+    
+    private func handleOpenWindow() {
         DispatchQueue.main.async {
-            if self.isVisible {
-                // Mark Flutter engine as inactive before hiding window
-                self.audioManager.setFlutterEngineActive(false)
-                self.orderOut(nil)
-                print("INFO: Window hidden")
-            } else {
-                self.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-                // Mark Flutter engine as active after showing window
-                self.audioManager.setFlutterEngineActive(true)
-                print("INFO: Window shown")
-            }
-            // Update menu title after window state change
-            self.menuBarManager?.updateWindowToggleTitle()
+            self.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            // Mark Flutter engine as active after showing window
+            self.audioManager.setFlutterEngineActive(true)
+            print("INFO: Window opened and brought to front")
         }
     }
     
@@ -382,218 +385,52 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Cleanup: stop audio engine and streams
         audioManager.stopCapture()
         
-        // Hide overlay
-        hideOverlay()
-        
         // Cleanup menu bar
         menuBarManager?.cleanup()
         
+        // Unregister global shortcuts
+        GlobalShortcutManager.shared.unregisterShortcuts()
+        
         NSApp.terminate(nil)
     }
-    
-    // MARK: - Floating Overlay Methods
-    
-    private func showOverlay() {
+
+    // MARK: - Floating Chat Methods
+
+    func showFloatingControlBar() {
         DispatchQueue.main.async {
-            print("DEBUG: showOverlay called")
-            
-            if self.floatingOverlay != nil {
-                print("DEBUG: Overlay already exists, updating instead of creating new one")
-                self.floatingOverlay?.makeKeyAndOrderFront(nil)
-                return
-            }
-            
-            print("DEBUG: Creating new overlay window")
-            
-            // Position overlay in top-right corner of main screen
-            guard let screen = NSScreen.main else { 
-                print("ERROR: Could not get main screen for overlay positioning")
-                return 
-            }
-            
-            let screenFrame = screen.visibleFrame
-            let overlayFrame = NSRect(
-                x: screenFrame.maxX - 240, // 220 width + 20 margin
-                y: screenFrame.maxY - 72,  // 52 height + 20 margin
-                width: 220,
-                height: 52
-            )
-            
-            print("DEBUG: Overlay frame: \(overlayFrame)")
-                
-            self.floatingOverlay = FloatingRecordingOverlay(
-                contentRect: overlayFrame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
-            )
-            
-            // Configure overlay window properties for stability
-            self.floatingOverlay?.isReleasedWhenClosed = false
-            self.floatingOverlay?.hidesOnDeactivate = false
-            
-            print("DEBUG: Overlay window created successfully")
-            
-            // Setup callbacks
-            self.floatingOverlay?.onPlayPause = { [weak self] in
-                guard let self = self, let overlayChannel = self.overlayChannel else {
-                    print("WARNING: Overlay channel not available for onPlayPause")
-                    return
-                }
-                print("DEBUG: Overlay play/pause callback triggered")
-                overlayChannel.invokeMethod("onPlayPause", arguments: nil)
-            }
-            
-            self.floatingOverlay?.onStop = { [weak self] in
-                guard let self = self, let overlayChannel = self.overlayChannel else {
-                    print("WARNING: Overlay channel not available for onStop")
-                    return
-                }
-                print("DEBUG: Overlay stop callback triggered")
-                overlayChannel.invokeMethod("onStop", arguments: nil)
-            }
-            
-            self.floatingOverlay?.onExpand = { [weak self] in
-                guard let self = self else {
-                    print("WARNING: MainFlutterWindow reference lost in onExpand")
-                    return
-                }
-                print("DEBUG: Overlay expand callback triggered - restoring main window")
-                
-                // Prevent delegate callbacks during restoration to avoid conflicts
-                self.delegate = nil
-                
-                // Hide the overlay first to prevent visual conflicts
-                self.hideOverlay()
-                
-                // Restore the main window after hiding overlay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.restoreMainWindow()
-                    
-                    // Re-enable delegate after restoration is complete
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        self.delegate = self
-                    }
-                    
-                    // Notify Flutter after restoration is complete
-                    if let overlayChannel = self.overlayChannel {
-                        overlayChannel.invokeMethod("onExpand", arguments: nil)
+            if self.floatingControlBar == nil {
+                self.floatingControlBar = FloatingControlBar()
+                FloatingChatWindowManager.shared.floatingButton = self.floatingControlBar
+                self.menuBarManager?.observeFloatingControlBar(self.floatingControlBar!)
+                self.floatingControlBar?.onAskAI = {
+                    Task {
+                        let screenshotURL = await ScreenCaptureManager.captureScreen()
+                        FloatingChatWindowManager.shared.toggleAIConversationWindow(screenshotURL: screenshotURL)
                     }
                 }
-            }
-            
-            self.floatingOverlay?.makeKeyAndOrderFront(nil)
-            
-            print("DEBUG: Floating overlay shown successfully")
-        }
-    }
-    
-    private func hideOverlay() {
-        // Ensure we're on the main thread and prevent concurrent access
-        DispatchQueue.main.async {
-            guard let overlay = self.floatingOverlay else {
-                print("DEBUG: No overlay to hide")
-                return
-            }
-            
-            print("DEBUG: Hiding floating overlay...")
-            
-            // Clear the reference first to prevent recursive calls
-            self.floatingOverlay = nil
-            
-            // Safely close the overlay with error handling
-            do {
-                overlay.orderOut(nil)
-                overlay.close()
-                print("DEBUG: Floating overlay hidden successfully")
-            } catch {
-                print("DEBUG: Error closing overlay: \(error)")
-            }
-            
-            // Notify Flutter that overlay was hidden (with error handling)
-            if let overlayChannel = self.overlayChannel {
-                overlayChannel.invokeMethod("onOverlayHidden", arguments: nil)
-            }
-        }
-    }
-    
-    private func updateOverlayState(isRecording: Bool, isPaused: Bool) {
-        DispatchQueue.main.async {
-            self.floatingOverlay?.updateRecordingState(isRecording: isRecording, isPaused: isPaused)
-            
-            // Update menu bar status
-            if isRecording {
-                self.menuBarManager?.updateStatus(status: "Recording", isActive: true)
-            } else if isPaused {
-                self.menuBarManager?.updateStatus(status: "Paused", isActive: false)
-            } else {
-                self.menuBarManager?.updateStatus(status: "Ready", isActive: false)
-            }
-        }
-    }
-    
-    private func updateOverlayTranscript(transcript: String, segmentCount: Int) {
-        DispatchQueue.main.async {
-            self.floatingOverlay?.updateTranscript(transcript, segmentCount: segmentCount)
-            
-            // Update menu bar status with segment count if recording
-            if segmentCount > 0 {
-                self.menuBarManager?.updateStatus(status: "Recording (\(segmentCount) segments)", isActive: true)
-            }
-        }
-    }
-    
-    private func updateOverlayStatus(status: String) {
-        DispatchQueue.main.async {
-            self.floatingOverlay?.updateStatusText(status)
-        }
-    }
-    
-    private func moveOverlay(x: Double, y: Double) {
-        DispatchQueue.main.async {
-            let newOrigin = NSPoint(x: x, y: y)
-            self.floatingOverlay?.setFrameOrigin(newOrigin)
-        }
-    }
-    
-    private func restoreMainWindow() {
-        print("DEBUG: Attempting to restore main window from MainFlutterWindow...")
-        
-        // Ensure we're on the main thread for all window operations
-        DispatchQueue.main.async {
-            // Check if window is valid before operating on it
-            guard self.isVisible || self.isMiniaturized else {
-                print("DEBUG: Window is not in a valid state for restoration")
-                NSApp.activate(ignoringOtherApps: true)
-                return
-            }
-            
-            // If this window is minimized, deminiaturize it first
-            if self.isMiniaturized {
-                print("DEBUG: Window is minimized, deminiaturizing...")
-                self.deminiaturize(nil)
-                
-                // Wait a brief moment for deminiaturization to complete
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.completeWindowRestoration()
+                self.floatingControlBar?.onPlayPause = { [weak self] in
+                    self?.handlePlayPauseWithRetry()
                 }
-            } else {
-                self.completeWindowRestoration()
+                self.floatingControlBar?.onMove = {
+                    FloatingChatWindowManager.shared.floatingButtonDidMove()
+                }
+                self.floatingControlBar?.onResize = { newWidth in
+                    FloatingChatWindowManager.shared.aiConversationWindowWidth = newWidth
+                    FloatingChatWindowManager.shared.positionAIConversationWindow()
+                }
+                self.floatingControlBar?.onHide = { }
             }
+            self.floatingControlBar?.makeKeyAndOrderFront(nil)
+            
+            // If AI conversation window was created before floating control bar, position it now
+            FloatingChatWindowManager.shared.positionAIConversationWindow()
         }
     }
-    
-    private func completeWindowRestoration() {
-        print("DEBUG: Completing window restoration...")
-        
-        // Make this window visible and bring to front
-        self.makeKeyAndOrderFront(nil)
-        self.orderFrontRegardless()
-        
-        // Activate the app
-        NSApp.activate(ignoringOtherApps: true)
-        
-        print("DEBUG: Successfully restored main window")
+
+    func hideFloatingControlBar() {
+        DispatchQueue.main.async {
+            self.floatingControlBar?.orderOut(nil)
+        }
     }
     
     // MARK: - NSWindowDelegate Methods
@@ -608,16 +445,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         
         // Ensure Flutter engine is marked as active when window becomes main
         audioManager.setFlutterEngineActive(true)
-        
-        // Only hide overlay if it exists and is visible
-        guard let overlay = floatingOverlay, overlay.isVisible else {
-            return
-        }
-        
-        print("DEBUG: Main Flutter window became active, hiding overlay")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.hideOverlay()
-        }
     }
     
     func windowDidBecomeKey(_ notification: Notification) {
@@ -630,16 +457,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         
         // Ensure Flutter engine is marked as active when window becomes key
         audioManager.setFlutterEngineActive(true)
-        
-        // Only hide overlay if it exists and is visible
-        guard let overlay = floatingOverlay, overlay.isVisible else {
-            return
-        }
-        
-        print("DEBUG: Main Flutter window became key, hiding overlay")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.hideOverlay()
-        }
     }
     
     func windowDidDeminiaturize(_ notification: Notification) {
@@ -652,16 +469,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         
         // Ensure Flutter engine is marked as active when window is deminiaturized
         audioManager.setFlutterEngineActive(true)
-        
-        // Only hide overlay if it exists and is visible
-        guard let overlay = floatingOverlay, overlay.isVisible else {
-            return
-        }
-        
-        print("DEBUG: Main Flutter window deminiaturized, hiding overlay")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.hideOverlay()
-        }
     }
     
     func windowDidMiniaturize(_ notification: Notification) {
@@ -692,6 +499,82 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Clean up observers
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         DistributedNotificationCenter.default().removeObserver(self)
-        print("DEBUG: 🧹 Screen sleep/wake observers removed")
+        NotificationCenter.default.removeObserver(self)
+        print("DEBUG: 🧹 Observers removed")
+    }
+}
+
+// MARK: - Global Shortcut Handlers
+extension MainFlutterWindow {
+    private func setupShortcutObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleToggleFloatingButtonShortcut),
+            name: GlobalShortcutManager.toggleFloatingButtonNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAskAIShortcut),
+            name: GlobalShortcutManager.askAINotification,
+            object: nil
+        )
+    }
+    
+    // MARK: - Menu Bar Action Handlers
+    
+    @objc private func handleMenuBarToggleWindow() {
+        handleOpenWindow()
+    }
+    
+    @objc private func handleMenuBarQuitApplication() {
+        handleQuitApplication()
+    }
+    
+    @objc private func handleMenuBarToggleFloatingChat() {
+        handleToggleFloatingButtonShortcut()
+    }
+    
+    @objc private func handleMenuBarOpenChatWindow() {
+        Task {
+            let screenshotURL = await ScreenCaptureManager.captureScreen()
+            FloatingChatWindowManager.shared.toggleAIConversationWindow(screenshotURL: screenshotURL)
+        }
+    }
+
+    private func handlePlayPauseWithRetry() {
+        var attempts = 0
+        let maxAttempts = 3
+        
+        func attemptInvoke() {
+            attempts += 1
+            
+            floatingControlBarChannel.invokeMethod("togglePauseResume", arguments: nil) { result in
+                if let error = result as? FlutterError {
+                    if attempts < maxAttempts {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            attemptInvoke()
+                        }
+                    }
+                }
+            }
+        }
+        
+        attemptInvoke()
+    }
+
+    @objc private func handleToggleFloatingButtonShortcut() {
+        if floatingControlBar?.isVisible ?? false {
+            hideFloatingControlBar()
+        } else {
+            showFloatingControlBar()
+        }
+    }
+
+    @objc private func handleAskAIShortcut() {
+        Task {
+            let screenshotURL = await ScreenCaptureManager.captureScreen()
+            FloatingChatWindowManager.shared.toggleAIConversationWindow(screenshotURL: screenshotURL)
+        }
     }
 }

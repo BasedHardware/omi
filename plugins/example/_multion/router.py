@@ -11,7 +11,7 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_groq import ChatGroq
 
 import db
-from models import Memory, EndpointResponse
+from models import Conversation, EndpointResponse
 
 load_dotenv()
 
@@ -147,12 +147,12 @@ async def check_setup_completion(uid: str = Query(...)):
 
 
 @router.post("/multion", response_model=EndpointResponse, tags=['multion'])
-async def multion_endpoint(memory: Memory, uid: str = Query(...)):
+async def multion_endpoint(conversation: Conversation, uid: str = Query(...)):
     user_id = db.get_multion_user_id(uid)
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
 
-    books = retrieve_books_to_buy(memory.get_transcript())
+    books = retrieve_books_to_buy(conversation.get_transcript())
     if not books:
         return EndpointResponse(message='No books were suggested or mentioned.')
 

@@ -22,31 +22,9 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 - `boards/`: Custom board definitions and configurations
 - `scripts/`: Build and utility scripts
 
-## Building the Firmware
-
-There are two ways to build the firmware:
-
-### Option 1: Using nRF Connect for VS Code
+## Building and flashing the Firmware
 
 Follow the instructions in our [official documentation](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
-
-### Option 2: Using Docker
-
-This is the easiest method and works across all platforms:
-
-```bash
-./scripts/build-docker.sh
-```
-
-For detailed instructions, see [docker-build.md](./scripts/docker-build.md).
-
-
-## Flashing the Firmware
-
-Follow the instructions at https://docs.omi.me/doc/get_started/Flash_device
-
-For Docker builds, the output files will be in `build/docker_build/`.
-For nRF Connect builds, locate the `zephyr.uf2` file in your build output directory.
 
 ## Device-Specific Builds
 
