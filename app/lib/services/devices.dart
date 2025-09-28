@@ -87,17 +87,24 @@ class DeviceService implements IDeviceService {
     try {
       final discoveredDevices = <BtDevice>[];
 
-      // Sequential to preserve timing/ordering; can parallelize later
-      for (final d in _discoverers.where((d) => d.isSupported)) {
+      final supportedDiscoverers = _discoverers.where((d) => d.isSupported).toList();
+      final discoveryFutures = supportedDiscoverers.map((d) async {
         try {
           final result = await d.discover(timeout: timeout);
-          discoveredDevices.addAll(result.devices);
-
-          // We no longer keep BLE ScanResult around in the service
+          return result.devices;
         } catch (e, st) {
           debugPrint('Discovery failed for ${d.name}: $e');
           debugPrint('$st');
+          return <BtDevice>[];
         }
+      });
+
+      // Wait for all discoveries to complete
+      final results = await Future.wait(discoveryFutures);
+
+      // Combine all discovered devices
+      for (final devices in results) {
+        discoveredDevices.addAll(devices);
       }
 
       _devices = discoveredDevices;
