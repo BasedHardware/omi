@@ -4,6 +4,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
+import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
@@ -300,46 +301,27 @@ class BtDevice {
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
     var t = DeviceType.omi;
+    
     try {
-      var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
-      if (deviceInformationService != null) {
-        var modelNumberCharacteristic = conn.getCharacteristic(deviceInformationService, modelNumberCharacteristicUuid);
-        if (modelNumberCharacteristic != null) {
-          modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
-        }
-
-        var firmwareRevisionCharacteristic =
-            conn.getCharacteristic(deviceInformationService, firmwareRevisionCharacteristicUuid);
-        if (firmwareRevisionCharacteristic != null) {
-          firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
-        }
-
-        var hardwareRevisionCharacteristic =
-            conn.getCharacteristic(deviceInformationService, hardwareRevisionCharacteristicUuid);
-        if (hardwareRevisionCharacteristic != null) {
-          hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
-        }
-
-        var manufacturerNameCharacteristic =
-            conn.getCharacteristic(deviceInformationService, manufacturerNameCharacteristicUuid);
-        if (manufacturerNameCharacteristic != null) {
-          manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
-        }
-      }
-
-      if (type == DeviceType.openglass) {
-        t = DeviceType.openglass;
-      } else {
-        final omiService = await conn.getService(omiServiceUuid);
-        if (omiService != null) {
-          var imageCaptureControlCharacteristic = conn.getCharacteristic(omiService, imageDataStreamCharacteristicUuid);
-          if (imageCaptureControlCharacteristic != null) {
-            t = DeviceType.openglass;
-          }
+      if (conn is OmiDeviceConnection) {
+        final deviceInfo = await conn.getDeviceInfo();
+        
+        modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+        firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+        hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+        manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+        
+        // Check if device has image streaming capability (OpenGlass detection)
+        if (type == DeviceType.openglass) {
+          t = DeviceType.openglass;
+        } else if (deviceInfo['hasImageStream'] == 'true') {
+          t = DeviceType.openglass;
         }
       }
     } on PlatformException catch (e) {
       Logger.error('Device Disconnected while getting device info: $e');
+    } catch (e) {
+      Logger.error('Error getting Omi device info: $e');
     }
 
     return copyWith(
@@ -352,35 +334,57 @@ class BtDevice {
   }
 
   Future _getDeviceInfoFromFrame(FrameDeviceConnection conn) async {
-    await conn.init();
+    var modelNumber = 'Frame';
+    var firmwareRevision = 'Unknown';
+    var hardwareRevision = 'Brilliant Labs Frame';
+    var manufacturerName = 'Brilliant Labs';
+    
+    try {
+      final deviceInfo = await conn.getDeviceInfo();
+      
+      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+      
+    } catch (e) {
+      Logger.error('Error getting Frame device info: $e');
+    }
+    
     return copyWith(
-      modelNumber: conn.modelNumber,
-      firmwareRevision: conn.firmwareRevision,
-      hardwareRevision: conn.hardwareRevision,
-      manufacturerName: conn.manufacturerName,
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
       type: DeviceType.frame,
     );
   }
 
   Future _getDeviceInfoFromAppleWatch(AppleWatchDeviceConnection conn) async {
+    var modelNumber = 'Apple Watch';
+    var firmwareRevision = 'Unknown';
+    var hardwareRevision = 'Unknown';
+    var manufacturerName = 'Apple';
+    
     try {
-      final deviceInfo = await conn.getWatchInfo();
-      return copyWith(
-        modelNumber: deviceInfo['model'] ?? 'Apple Watch',
-        firmwareRevision: deviceInfo['systemVersion'] ?? 'Unknown',
-        hardwareRevision: deviceInfo['localizedModel'] ?? 'Unknown',
-        manufacturerName: 'Apple',
-        type: DeviceType.appleWatch,
-      );
+      final deviceInfo = await conn.getDeviceInfo();
+      
+      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+      
     } catch (e) {
-      return copyWith(
-        modelNumber: 'Apple Watch',
-        firmwareRevision: 'Unknown',
-        hardwareRevision: 'Unknown',
-        manufacturerName: 'Apple',
-        type: DeviceType.appleWatch,
-      );
+      Logger.error('Error getting Apple Watch device info: $e');
     }
+    
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.appleWatch,
+    );
   }
 
   // from BluetoothDevice
