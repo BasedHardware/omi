@@ -401,6 +401,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             if self.floatingControlBar == nil {
                 self.floatingControlBar = FloatingControlBar()
                 FloatingChatWindowManager.shared.floatingButton = self.floatingControlBar
+                self.menuBarManager?.observeFloatingControlBar(self.floatingControlBar!)
                 self.floatingControlBar?.onAskAI = {
                     Task {
                         let screenshotURL = await ScreenCaptureManager.captureScreen()
@@ -417,12 +418,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     FloatingChatWindowManager.shared.aiConversationWindowWidth = newWidth
                     FloatingChatWindowManager.shared.positionAIConversationWindow()
                 }
-                self.floatingControlBar?.onHide = { [weak self] in
-                    self?.menuBarManager?.updateFloatingChatButtonVisibility(isVisible: false)
-                }
+                self.floatingControlBar?.onHide = { }
             }
             self.floatingControlBar?.makeKeyAndOrderFront(nil)
-            self.menuBarManager?.updateFloatingChatButtonVisibility(isVisible: true)
             
             // If AI conversation window was created before floating control bar, position it now
             FloatingChatWindowManager.shared.positionAIConversationWindow()
@@ -432,7 +430,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     func hideFloatingControlBar() {
         DispatchQueue.main.async {
             self.floatingControlBar?.orderOut(nil)
-            self.menuBarManager?.updateFloatingChatButtonVisibility(isVisible: false)
         }
     }
     
