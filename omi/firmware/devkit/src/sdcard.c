@@ -583,6 +583,9 @@ char* generate_chunk_audio_filename(void)
 {
     // Increment and save the chunk counter for unique filenames across reboots
     chunk_current_counter++;
+    if (chunk_start_counter == 0 || chunk_start_counter > chunk_current_counter) {
+        chunk_start_counter = chunk_current_counter;
+    }
     int ret = save_chunk_counters(chunk_start_counter, chunk_current_counter);
     if (ret < 0) {
         LOG_ERR("Failed to save chunk counter: %d", ret);
@@ -743,8 +746,126 @@ int start_new_chunk(void)
             }
         }
     }
-    
+
     return initialize_chunk_file();
+}
+
+static int chunk_id_to_path(uint32_t chunk_id, char *out_path, size_t path_len)
+{
+    if (chunk_id == 0 || out_path == NULL) {
+        return -EINVAL;
+    }
+
+    int len = snprintf(out_path,
+                       path_len,
+                       "%s" CHUNK_FILENAME_FORMAT,
+                       SDCARD_MOUNT_POINT,
+                       (int)chunk_id);
+
+    printf("[sdcard] chunk_id_to_path: %s\n", out_path);
+    printf("[sdcard] chunk_id: %d\n", chunk_id);
+    printf("[sdcard] path_len: %d\n", path_len);
+    printf("[sdcard] len: %d\n", len);
+    if (len < 0 || (size_t)len >= path_len) {
+        return -ENAMETOOLONG;
+    }
+    return 0;
+}
+
+int stream_chunk_file(uint32_t chunk_id, uint32_t *out_size)
+{
+    if (!chunking_enabled) {
+        return SDCARD_ERR_CHUNKING_DISABLED;
+    }
+
+    int ret = chunk_id_to_path(chunk_id, read_buffer, sizeof(read_buffer));
+    if (ret) {
+        printf("[sdcard] chunk_id_to_path failed for %u: %d\n", chunk_id, ret);
+        return ret;
+    }
+
+    printf("[sdcard] chunk_id_to_path succeeded for %u: %s\n", chunk_id, read_buffer);
+    struct fs_dirent entry;
+    ret = fs_stat(read_buffer, &entry);
+    if (ret) {
+        LOG_ERR("chunk %u not found", chunk_id);  
+        printf("[sdcard] chunk %u not found\n", chunk_id);
+        return -ENOENT;
+    }
+
+    if (out_size != NULL) {
+        *out_size = (uint32_t)entry.size;
+        printf("[sdcard] chunk %u size: %u\n", chunk_id, *out_size);
+    }
+
+    return 0;
+}
+
+int delete_chunk_file(uint32_t chunk_id)
+{
+    if (!chunking_enabled) {
+        return SDCARD_ERR_CHUNKING_DISABLED;
+    }
+
+    char path[MAX_PATH_LENGTH];
+    int ret = chunk_id_to_path(chunk_id, path, sizeof(path));
+    if (ret) {
+        return ret;
+    }
+
+    ret = fs_unlink(path);
+    if (ret) {
+        if (ret == -EIO) {
+            printf("[sdcard] fs_unlink returned -EIO for %s, treating as success\n", path);
+        } else {
+            LOG_ERR("Failed to delete chunk %u: %d", chunk_id, ret);
+            return ret;
+        }
+    }
+
+    if (chunk_id == chunk_start_counter) {
+        uint32_t start = chunk_start_counter + 1;
+        uint32_t current = chunk_current_counter;
+        char path_check[MAX_PATH_LENGTH];
+        struct fs_dirent entry;
+        bool found = false;
+
+        for (uint32_t id = start; id <= current; ++id) {
+            if (chunk_id_to_path(id, path_check, sizeof(path_check)) == 0 && fs_stat(path_check, &entry) == 0) {
+                chunk_start_counter = id;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            chunk_start_counter = chunk_current_counter = 0;
+        }
+    } else if (chunk_id == chunk_current_counter) {
+        char path_check[MAX_PATH_LENGTH];
+        struct fs_dirent entry;
+        bool found = false;
+
+        for (uint32_t id = chunk_current_counter - 1; id >= chunk_start_counter && id > 0; --id) {
+            if (chunk_id_to_path(id, path_check, sizeof(path_check)) == 0 && fs_stat(path_check, &entry) == 0) {
+                chunk_current_counter = id;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            chunk_start_counter = chunk_current_counter = 0;
+        }
+    }
+
+    ret = save_chunk_counters(chunk_start_counter, chunk_current_counter);
+    if (ret < 0) {
+        LOG_ERR("Failed to persist chunk counters after delete: %d", ret);
+        return ret;
+    }
+
+    return 0;
 }
 
 void set_system_boot_complete(void)

@@ -205,4 +205,7 @@ int get_chunk_counters(uint32_t *start_counter, uint32_t *current_counter);
  */
 void get_chunk_counter_snapshot(uint32_t *start_counter, uint32_t *current_counter);
 
+int stream_chunk_file(uint32_t chunk_id, uint32_t *out_size);
+int delete_chunk_file(uint32_t chunk_id);
+
 #endif
