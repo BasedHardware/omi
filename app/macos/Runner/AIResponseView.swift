@@ -5,9 +5,9 @@
 //  Created by Omi on 2025-09-26.
 //
 
-import SwiftUI
-import MarkdownUI
 import Cocoa
+import MarkdownUI
+import SwiftUI
 
 // MARK: - SwiftUI Views from FloatingControlBar
 
@@ -33,7 +33,7 @@ private struct ControlBarVisualEffectView: NSViewRepresentable {
 /// A spinning loading indicator.
 private struct SpinnerView: View {
     @State private var isSpinning = false
-    
+
     var body: some View {
         Image("app_launcher_icon")
             .resizable()
@@ -51,7 +51,7 @@ private struct SpinnerView: View {
 /// A view modifier for the main background of the control bar.
 private struct MainBackgroundStyle: ViewModifier {
     let cornerRadius: CGFloat
-    
+
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
             content.glassEffect(in: RoundedRectangle(cornerRadius: cornerRadius))
@@ -119,7 +119,7 @@ struct AIResponseView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
-                
+
                 Button(action: { onClose?() }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .regular))
@@ -152,12 +152,12 @@ struct AIResponseView: View {
                     Image(systemName: "questionmark.circle.fill")
                         .foregroundColor(.red)
                 }
-                
+
                 Text(userInput)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundColor(.white)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -184,9 +184,5 @@ struct AIResponseView: View {
         .padding()
         .frame(width: width, height: 300)
         .modifier(MainBackgroundStyle(cornerRadius: 20))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-        )
     }
 }
