@@ -159,7 +159,6 @@ flutter:
   config:
     enable-swift-package-manager: false
   assets:
-    - assets/images/blob.png
     - assets/images/stars.png
     - assets/images/herologo.png
     - assets/fonts/

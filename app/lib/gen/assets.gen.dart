@@ -109,8 +109,8 @@ class $AssetsImagesGen {
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
 
-  /// File path: assets/images/blob.png
-  AssetGenImage get blob => const AssetGenImage('assets/images/blob.png');
+  /// File path: assets/images/blob.webp
+  AssetGenImage get blob => const AssetGenImage('assets/images/blob.webp');
 
   /// File path: assets/images/calendar_logo.png
   AssetGenImage get calendarLogo =>
@@ -214,13 +214,13 @@ class $AssetsImagesGen {
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
 
-  /// File path: assets/images/omi-without-rope-turned-off.png
+  /// File path: assets/images/omi-without-rope-turned-off.webp
   AssetGenImage get omiWithoutRopeTurnedOff =>
-      const AssetGenImage('assets/images/omi-without-rope-turned-off.png');
+      const AssetGenImage('assets/images/omi-without-rope-turned-off.webp');
 
-  /// File path: assets/images/omi-without-rope.png
+  /// File path: assets/images/omi-without-rope.webp
   AssetGenImage get omiWithoutRope =>
-      const AssetGenImage('assets/images/omi-without-rope.png');
+      const AssetGenImage('assets/images/omi-without-rope.webp');
 
   /// File path: assets/images/onboarding-bg-1.jpg
   AssetGenImage get onboardingBg1 =>
