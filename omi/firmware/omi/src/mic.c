@@ -6,6 +6,7 @@
 
 #include "lib/dk2/mic.h"
 
+#include <nrfx_pdm.h>
 #include <zephyr/audio/dmic.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -15,6 +16,7 @@ LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
 #define MAX_SAMPLE_RATE 16000
 #define SAMPLE_BIT_WIDTH 16
 #define BYTES_PER_SAMPLE sizeof(int16_t)
+#define CHANNELS 2
 
 /* Milliseconds to wait for a block to be read. */
 #define READ_TIMEOUT 1000
@@ -35,11 +37,70 @@ static const struct device *dmic_dev;
 static volatile mix_handler callback_func = NULL;
 static volatile bool mic_running = false;
 
+static inline void
+deinterleave_stereo(const int16_t *restrict interleaved, size_t frames, int16_t *restrict left, int16_t *restrict right)
+{
+    /* interleaved: L0, R0, L1, R1, ... */
+    for (size_t i = 0, j = 0; i < frames; ++i, j += 2) {
+        left[i] = interleaved[j + 0];
+        right[i] = interleaved[j + 1];
+    }
+}
+
+static inline void
+mixdown_to_mono(const int16_t *restrict left, const int16_t *restrict right, size_t frames, int16_t *restrict mono_out)
+{
+    /* simple 0.5*(L+R) with saturation */
+    for (size_t i = 0; i < frames; ++i) {
+        int32_t s = (int32_t) left[i] + (int32_t) right[i];
+        s >>= 1; /* divide by 2 to avoid clipping */
+        if (s > 32767)
+            s = 32767;
+        if (s < -32768)
+            s = -32768;
+        mono_out[i] = (int16_t) s;
+    }
+}
+
 static void process_audio_buffer(void *buffer, uint32_t size)
 {
-    if (callback_func) {
-        callback_func((int16_t *) buffer);
+    /* size is total interleaved stereo size: frames * 2ch * 2bytes */
+    __ASSERT_NO_MSG((size % (BYTES_PER_SAMPLE * CHANNELS)) == 0);
+    size_t frames = size / (BYTES_PER_SAMPLE * CHANNELS);
+    int16_t *inter = (int16_t *) buffer;
+
+    /* Allocate contiguous L and R */
+    int16_t *left = k_malloc(frames * BYTES_PER_SAMPLE);
+    int16_t *right = k_malloc(frames * BYTES_PER_SAMPLE);
+
+    if (!left || !right) {
+        LOG_ERR("Out of memory for deinterleave (frames=%zu)", frames);
+        if (left)
+            k_free(left);
+        if (right)
+            k_free(right);
+        /* Still free original slab block */
+        k_mem_slab_free(&mem_slab, buffer);
+        return;
     }
+
+    deinterleave_stereo(inter, frames, left, right);
+
+    /* Mix to mono and call mono callback */
+    int16_t *mono = k_malloc(frames * BYTES_PER_SAMPLE);
+    if (!mono) {
+        LOG_ERR("Out of memory for mono mix (frames=%zu)", frames);
+    } else {
+        mixdown_to_mono(left, right, frames, mono);
+        if (callback_func) {
+            callback_func((int16_t *) mono);
+        }
+        k_free(mono);
+    }
+
+    /* Clean up */
+    k_free(left);
+    k_free(right);
     k_mem_slab_free(&mem_slab, buffer);
 }
 
@@ -89,32 +150,28 @@ int mic_start()
     struct pcm_stream_cfg stream = {
         .pcm_width = SAMPLE_BIT_WIDTH,
         .mem_slab = &mem_slab,
+        .pcm_rate = MAX_SAMPLE_RATE,
+        .block_size = BLOCK_SIZE(MAX_SAMPLE_RATE, CHANNELS),
     };
 
     struct dmic_cfg cfg = {
         .io =
             {
-                /* These fields can be used to limit the PDM clock
-                 * configurations that the driver is allowed to use
-                 * to those supported by the microphone.
-                 */
-                .min_pdm_clk_freq = 1000000,
+                .min_pdm_clk_freq = 512000,
                 .max_pdm_clk_freq = 3500000,
-                .min_pdm_clk_dc = 40,
-                .max_pdm_clk_dc = 60,
+                .min_pdm_clk_dc = 48,
+                .max_pdm_clk_dc = 52,
             },
         .streams = &stream,
         .channel =
             {
                 .req_num_streams = 1,
+                .req_num_chan = CHANNELS,
+                .req_chan_map_lo =
+                    dmic_build_channel_map(0, 0, PDM_CHAN_LEFT) | dmic_build_channel_map(1, 0, PDM_CHAN_RIGHT),
             },
-    };
 
-    /* Configure for mono audio */
-    cfg.channel.req_num_chan = 1;
-    cfg.channel.req_chan_map_lo = dmic_build_channel_map(0, 0, PDM_CHAN_LEFT);
-    cfg.streams[0].pcm_rate = MAX_SAMPLE_RATE;
-    cfg.streams[0].block_size = BLOCK_SIZE(cfg.streams[0].pcm_rate, cfg.channel.req_num_chan);
+    };
 
     LOG_INF("PCM output rate: %u, channels: %u", cfg.streams[0].pcm_rate, cfg.channel.req_num_chan);
 
@@ -123,6 +180,13 @@ int mic_start()
         LOG_ERR("Failed to configure the driver: %d", ret);
         return ret;
     }
+
+    // Mic gain 0x40, range [0x00, 0x50], default: 0x28
+#ifdef NRF_PDM0_S
+    nrf_pdm_gain_set(NRF_PDM0_S, 0x40, 0x40);
+#else
+    nrf_pdm_gain_set(NRF_PDM0_NS, 0x40, 0x40);
+#endif
 
     ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
     if (ret < 0) {
