@@ -148,8 +148,6 @@ PODS:
   - flutter_sound_core (9.28.0)
   - flutter_timezone (0.0.1):
     - Flutter
-  - flutter_web_auth_2 (5.0.0-alpha.2):
-    - Flutter
   - frame_sdk (0.0.2):
     - Flutter
   - geolocator_apple (1.2.0):
@@ -291,7 +289,6 @@ DEPENDENCIES:
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - flutter_sound (from `.symlinks/plugins/flutter_sound/ios`)
   - flutter_timezone (from `.symlinks/plugins/flutter_timezone/ios`)
-  - flutter_web_auth_2 (from `.symlinks/plugins/flutter_web_auth_2/ios`)
   - frame_sdk (from `.symlinks/plugins/frame_sdk/ios`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
@@ -393,8 +390,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_sound/ios"
   flutter_timezone:
     :path: ".symlinks/plugins/flutter_timezone/ios"
-  flutter_web_auth_2:
-    :path: ".symlinks/plugins/flutter_web_auth_2/ios"
   frame_sdk:
     :path: ".symlinks/plugins/frame_sdk/ios"
   geolocator_apple:
@@ -478,7 +473,6 @@ SPEC CHECKSUMS:
   flutter_sound: b9236a5875299aaa4cef1690afd2f01d52a3f890
   flutter_sound_core: 427465f72d07ab8c3edbe8ffdde709ddacd3763c
   flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
-  flutter_web_auth_2: c35a99b4799ad94b0dc140880f406cf59a4af866
   frame_sdk: 4d4df786d828557bf57e05f6f1856613896cc9db
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
   google_sign_in_ios: 39f46834c156be9a4dfef914258e0145b7117725
