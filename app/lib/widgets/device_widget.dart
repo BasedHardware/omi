@@ -120,6 +120,10 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
       return Assets.images.omiDevkitWithoutRope.path;
     }
 
+    if (widget.deviceName != null && widget.deviceName!.contains('Apple Watch')) {
+      return Assets.images.appleWatch.path;
+    }
+
     // Default to omi device image, fallback to hero logo only if no device name
     if (widget.deviceName != null && widget.deviceName!.isNotEmpty) {
       return Assets.images.omiWithoutRope.path;

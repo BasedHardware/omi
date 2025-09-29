@@ -1,34 +1,58 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/frame_connection.dart';
+import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
+import 'package:omi/services/devices/transports/ble_transport.dart';
+import 'package:omi/services/devices/transports/watch_transport.dart';
+import 'package:omi/services/devices/transports/frame_transport.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
 
 class DeviceConnectionFactory {
-  static DeviceConnection? create(
-    BtDevice device,
-    BluetoothDevice bleDevice,
-  ) {
-    if (device.type == null) {
-      return null;
-    }
-    switch (device.type!) {
-      case DeviceType.omi:
-        return OmiDeviceConnection(device, bleDevice);
-      case DeviceType.openglass:
-        return OmiDeviceConnection(device, bleDevice);
-      case DeviceType.frame:
-        return FrameDeviceConnection(device, bleDevice);
+  static DeviceConnection? create(BtDevice device) {
+    DeviceTransport transport;
+
+    // Create transport based on device locator
+    final locator = device.locator;
+    if (locator == null) return null;
+
+    switch (locator.kind) {
+      case TransportKind.bluetooth:
+        final deviceId = locator.bluetoothId;
+        if (deviceId == null) return null;
+        final bleDevice = BluetoothDevice.fromId(deviceId);
+        transport = BleTransport(bleDevice);
+        break;
+
+      case TransportKind.watchConnectivity:
+        transport = WatchTransport();
+        break;
+
       default:
         return null;
+    }
+
+    // Create device connection with transport
+    switch (device.type) {
+      case DeviceType.omi:
+      case DeviceType.openglass:
+        return OmiDeviceConnection(device, transport);
+      case DeviceType.frame:
+        if (locator.kind == TransportKind.bluetooth) {
+          final deviceId = locator.bluetoothId;
+          if (deviceId == null) return null;
+          transport = FrameTransport(deviceId);
+        }
+        return FrameDeviceConnection(device, transport);
+      case DeviceType.appleWatch:
+        return AppleWatchDeviceConnection(device, transport);
     }
   }
 }
@@ -40,77 +64,71 @@ class DeviceConnectionException implements Exception {
 
 abstract class DeviceConnection {
   BtDevice device;
-  BluetoothDevice bleDevice;
+  DeviceTransport transport;
   DateTime? _pongAt;
   int? _features;
 
   DeviceConnectionState _connectionState = DeviceConnectionState.disconnected;
 
-  List<BluetoothService> _services = [];
-
   DeviceConnectionState get status => _connectionState;
 
   DeviceConnectionState get connectionState => _connectionState;
+
+  @protected
+  set connectionState(DeviceConnectionState state) => _connectionState = state;
 
   Function(String deviceId, DeviceConnectionState state)? _connectionStateChangedCallback;
 
   DateTime? get pongAt => _pongAt;
 
-  late StreamSubscription<BluetoothConnectionState> _connectionStateSubscription;
+  StreamSubscription<DeviceTransportState>? _transportStateSubscription;
 
   DeviceConnection(
     this.device,
-    this.bleDevice,
-  );
+    this.transport,
+  ) {
+    // Listen to transport state changes
+    _transportStateSubscription = transport.connectionStateStream.listen((transportState) {
+      final deviceState = _mapTransportStateToDeviceState(transportState);
+      if (_connectionState != deviceState) {
+        _connectionState = deviceState;
+        _connectionStateChangedCallback?.call(device.id, _connectionState);
+      }
+    });
+  }
+
+  DeviceConnectionState _mapTransportStateToDeviceState(DeviceTransportState transportState) {
+    switch (transportState) {
+      case DeviceTransportState.connected:
+        return DeviceConnectionState.connected;
+      case DeviceTransportState.disconnected:
+      case DeviceTransportState.connecting:
+      case DeviceTransportState.disconnecting:
+        return DeviceConnectionState.disconnected;
+    }
+  }
 
   Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
+    void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
   }) async {
     if (_connectionState == DeviceConnectionState.connected) {
       throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
     }
 
-    // Connect
+    // Set callback for connection state changes
     _connectionStateChangedCallback = onConnectionStateChanged;
-    _connectionStateSubscription = bleDevice.connectionState.listen((BluetoothConnectionState state) async {
-      _onBleConnectionStateChanged(state);
-    });
 
     try {
-      await BluetoothAdapter.adapterState.where((val) => val == BluetoothAdapterStateHelper.on).first;
-      await bleDevice.connect();
-      await bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
-    } on FlutterBluePlusException catch (e) {
-      throw DeviceConnectionException("FlutterBluePlusException: ${e.toString()}");
-    }
+      // Use transport to connect
+      await transport.connect();
 
-    // Mtu
-    if (Platform.isAndroid && bleDevice.mtuNow < 512) {
-      await bleDevice.requestMtu(512); // This might fix the code 133 error
-    }
+      // Check connection
+      await ping();
 
-    // Check connection
-    await ping();
-
-    // Discover services
-    _services = await bleDevice.discoverServices();
-
-    // Update device info
-    device = await device.getDeviceInfo(this);
-  }
-
-  void _onBleConnectionStateChanged(BluetoothConnectionState state) async {
-    if (state == BluetoothConnectionState.disconnected && _connectionState == DeviceConnectionState.connected) {
-      _connectionState = DeviceConnectionState.disconnected;
-      await disconnect();
-      return;
-    }
-
-    if (state == BluetoothConnectionState.connected && _connectionState == DeviceConnectionState.disconnected) {
-      _connectionState = DeviceConnectionState.connected;
-      if (_connectionStateChangedCallback != null) {
-        _connectionStateChangedCallback!(device.id, _connectionState);
-      }
+      // Update device info
+      device = await device.getDeviceInfo(this);
+    } catch (e) {
+      throw DeviceConnectionException("Transport connection failed: ${e.toString()}");
     }
   }
 
@@ -120,40 +138,32 @@ abstract class DeviceConnection {
       _connectionStateChangedCallback!(device.id, _connectionState);
       _connectionStateChangedCallback = null;
     }
-    await bleDevice.disconnect();
-    _connectionStateSubscription.cancel();
-    _services.clear();
+
+    await transport.disconnect();
+    await _transportStateSubscription?.cancel();
+    _transportStateSubscription = null;
   }
 
   Future<bool> ping() async {
     try {
-      int rssi = await bleDevice.readRssi(timeout: 10);
-      device.rssi = rssi;
-      _pongAt = DateTime.now();
-      return true;
+      final result = await transport.ping();
+      if (result) {
+        _pongAt = DateTime.now();
+      }
+      return result;
     } catch (e) {
-      debugPrint('Error reading RSSI: $e');
+      debugPrint('Transport ping failed: $e');
+      return false;
     }
-
-    return false;
   }
 
   void read() {}
 
   void write() {}
 
-  Future<BluetoothService?> getService(String uuid) async {
-    return _services.firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == uuid);
+  Future<bool> isConnected() async {
+    return await transport.isConnected();
   }
-
-  BluetoothCharacteristic? getCharacteristic(BluetoothService service, String uuid) {
-    return service.characteristics.firstWhereOrNull(
-      (characteristic) => characteristic.uuid.str128.toLowerCase() == uuid.toLowerCase(),
-    );
-  }
-
-  // Mimic @app/lib/utils/device_base.dart
-  Future<bool> isConnected();
 
   Future<int> retrieveBatteryLevel() async {
     if (await isConnected()) {
@@ -177,7 +187,14 @@ abstract class DeviceConnection {
 
   Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
     void Function(int)? onBatteryLevelChange,
-  });
+  }) async {
+    final stream = transport.getCharacteristicStream(batteryServiceUuid, batteryLevelCharacteristicUuid);
+    return stream.listen((value) {
+      if (value.isNotEmpty && onBatteryLevelChange != null) {
+        onBatteryLevelChange(value[0]);
+      }
+    });
+  }
 
   Future<StreamSubscription?> getBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
@@ -211,11 +228,17 @@ abstract class DeviceConnection {
 
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
-  });
+  }) async {
+    final stream = transport.getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid);
+    return stream.listen(onAudioBytesReceived);
+  }
 
   Future<StreamSubscription?> performGetBleButtonListener({
     required void Function(List<int>) onButtonReceived,
-  });
+  }) async {
+    final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
+    return stream.listen(onButtonReceived);
+  }
 
   Future<BleAudioCodec> getAudioCodec() async {
     if (await isConnected()) {
@@ -225,9 +248,34 @@ abstract class DeviceConnection {
     return BleAudioCodec.pcm8;
   }
 
-  Future<BleAudioCodec> performGetAudioCodec();
+  Future<BleAudioCodec> performGetAudioCodec() async {
+    final data = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
+    if (data.isNotEmpty) {
+      final codecId = data[0];
+      switch (codecId) {
+        case 1:
+          return BleAudioCodec.pcm8;
+        case 20:
+          return BleAudioCodec.opus;
+        case 21:
+          return BleAudioCodec.opusFS320;
+        default:
+          return BleAudioCodec.pcm8;
+      }
+    }
+    return BleAudioCodec.pcm8;
+  }
 
-  Future<bool> performPlayToSpeakerHaptic(int mode);
+  Future<bool> performPlayToSpeakerHaptic(int mode) async {
+    try {
+      await transport
+          .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [mode & 0xFF]);
+      return true;
+    } catch (e) {
+      debugPrint('Failed to play haptic: $e');
+      return false;
+    }
+  }
 
   // storage here
 
@@ -239,9 +287,26 @@ abstract class DeviceConnection {
     return Future.value(<int>[]);
   }
 
-  Future<List<int>> performGetStorageList();
+  Future<List<int>> performGetStorageList() async {
+    return await transport.readCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid);
+  }
 
-  Future<bool> performWriteToStorage(int numFile, int command, int offset);
+  Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
+    try {
+      final offsetBytes = [
+        (offset >> 24) & 0xFF,
+        (offset >> 16) & 0xFF,
+        (offset >> 8) & 0xFF,
+        offset & 0xFF,
+      ];
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid,
+          [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
+      return true;
+    } catch (e) {
+      debugPrint('Failed to write to storage: $e');
+      return false;
+    }
+  }
 
   Future<bool> writeToStorage(int numFile, int command, int offset) async {
     if (await isConnected()) {
