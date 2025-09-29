@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/ui/organisms/desktop/action_item_desktop.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
@@ -36,6 +38,14 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
   String? _errorMessage;
   bool _hasNetworkError = false;
+  bool _isReloading = false;
+  late FocusNode _focusNode;
+
+  void _requestFocusIfPossible() {
+    if (mounted && _focusNode.canRequestFocus) {
+      _focusNode.requestFocus();
+    }
+  }
 
   @override
   void dispose() {
@@ -44,6 +54,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -51,6 +62,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _focusNode = FocusNode();
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -92,7 +104,17 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
       _fadeController.forward();
       _slideController.forward();
+
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _requestFocusIfPossible();
+      });
     }).withPostFrameCallback();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
   }
 
   void _onScroll() {
@@ -107,58 +129,109 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<ActionItemsProvider>(
-      builder: (context, provider, _) {
-        // Get incomplete and complete items
-        final incompleteItems = provider.incompleteItems;
-        final completedItems = provider.completedItems;
-        final allItems = provider.actionItems;
+    return VisibilityDetector(
+        key: const Key('desktop-actions-page'),
+        onVisibilityChanged: (visibilityInfo) {
+          if (visibilityInfo.visibleFraction > 0.1) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
+          }
+        },
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+          },
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            child: GestureDetector(
+              onTap: () {
+                if (!_focusNode.hasFocus) {
+                  _focusNode.requestFocus();
+                }
+              },
+              child: Consumer<ActionItemsProvider>(
+                builder: (context, provider, _) {
+                  // Get incomplete and complete items
+                  final incompleteItems = provider.incompleteItems;
+                  final completedItems = provider.completedItems;
+                  final allItems = provider.actionItems;
 
-        return Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                ResponsiveHelper.backgroundPrimary,
-                ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              children: [
-                _buildAnimatedBackground(),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.02),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
+                  return Stack(
                     children: [
-                      _buildHeader(incompleteItems),
-                      Expanded(
-                        child: _animationsInitialized
-                            ? FadeTransition(
-                                opacity: _fadeAnimation,
-                                child: SlideTransition(
-                                  position: _slideAnimation,
-                                  child: _buildActionsContent(provider, allItems, incompleteItems, completedItems),
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              ResponsiveHelper.backgroundPrimary,
+                              ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Stack(
+                            children: [
+                              _buildAnimatedBackground(),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.02),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
-                              )
-                            : _buildActionsContent(provider, allItems, incompleteItems, completedItems),
+                                child: Column(
+                                  children: [
+                                    _buildHeader(incompleteItems),
+                                    Expanded(
+                                      child: _animationsInitialized
+                                          ? FadeTransition(
+                                              opacity: _fadeAnimation,
+                                              child: SlideTransition(
+                                                position: _slideAnimation,
+                                                child: _buildActionsContent(
+                                                    provider, allItems, incompleteItems, completedItems),
+                                              ),
+                                            )
+                                          : _buildActionsContent(provider, allItems, incompleteItems, completedItems),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
+
+                      if (_isReloading)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Loading action items...',
+                                  style: ResponsiveHelper(context).bodyLarge.copyWith(
+                                        color: ResponsiveHelper.textPrimary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
-                  ),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
-        );
-      },
-    );
+        ));
   }
 
   Widget _buildAnimatedBackground() {
@@ -266,6 +339,32 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       _errorMessage = null;
     });
     provider.fetchActionItems(showShimmer: true);
+  }
+
+  Future<void> _handleReload() async {
+    if (_isReloading) return;
+
+    setState(() {
+      _isReloading = true;
+    });
+
+    // Scroll to top
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    await provider.forceRefreshActionItems();
+
+    if (mounted) {
+      setState(() {
+        _isReloading = false;
+      });
+    }
   }
 
   Widget _buildActionsContent(
