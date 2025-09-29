@@ -3,6 +3,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -35,7 +41,10 @@ class MemoryItem extends StatelessWidget {
       },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingL),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppStyles.spacingL,
+          vertical: AppStyles.spacingL,
+        ),
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
           borderRadius: BorderRadius.circular(16),
@@ -53,7 +62,8 @@ class MemoryItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Stack(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         memory.content.decodeString,
@@ -65,7 +75,16 @@ class MemoryItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
-                _buildVisibilityButton(context),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (memory.conversationId != null) ...[
+                      _buildConversationLinkButton(context),
+                      const SizedBox(width: AppStyles.spacingS),
+                    ],
+                    _buildVisibilityButton(context),
+                  ],
+                ),
               ],
             ),
             if (memory.isLocked)
@@ -76,14 +95,19 @@ class MemoryItem extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () {
                         MixpanelManager().paywallOpened('Action Item');
-                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                        routeToPage(
+                          context,
+                          const UsagePage(showUpgradeDialog: true),
+                        );
                         return;
                       },
                       child: Container(
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.01),
-                          borderRadius: const BorderRadius.all(Radius.circular(8)),
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(8),
+                          ),
                         ),
                         child: const Text(
                           'Upgrade to unlimited',
@@ -136,6 +160,85 @@ class MemoryItem extends StatelessWidget {
         child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
       child: memoryWidget,
+    );
+  }
+
+  Widget _buildConversationLinkButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _navigateToConversation(context),
+      child: Container(
+        height: 36,
+        width: 36,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
+        ),
+        child: const Icon(
+          Icons.chat_bubble_outline,
+          size: 16,
+          color: Colors.white70,
+        ),
+      ),
+    );
+  }
+
+  DateTime _getConversationDate(DateTime createdAt) {
+    return DateTime(createdAt.year, createdAt.month, createdAt.day);
+  }
+
+  void _ensureConversationInGroup(
+    ConversationProvider conversationProvider,
+    dynamic conversation,
+  ) {
+    final date = _getConversationDate(conversation.createdAt);
+    conversationProvider.groupedConversations.putIfAbsent(date, () => []);
+
+    final conversations = conversationProvider.groupedConversations[date]!;
+    if (!conversations.any((c) => c.id == conversation.id)) {
+      conversations.insert(0, conversation);
+    }
+  }
+
+  Future<void> _navigateToConversation(BuildContext context) async {
+    if (memory.conversationId == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final conversation = await getConversationById(memory.conversationId!);
+
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+
+    if (conversation != null) {
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
+
+      _ensureConversationInGroup(conversationProvider, conversation);
+
+      final conversationDate = _getConversationDate(conversation.createdAt);
+      detailProvider.conversationIdx = 0;
+      detailProvider.selectedDate = conversationDate;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ConversationDetailPage(conversation: conversation),
+        ),
+      );
+    } else {
+      _showConversationNotFoundError(context);
+    }
+  }
+
+  void _showConversationNotFoundError(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Conversation not found or has been deleted'),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 
@@ -228,22 +331,14 @@ class MemoryItem extends StatelessWidget {
                   ),
                   Text(
                     description,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              const Icon(
-                Icons.check,
-                size: 18,
-                color: Colors.white,
-              ),
+            if (isSelected) const Icon(Icons.check, size: 18, color: Colors.white),
           ],
         ),
       ),

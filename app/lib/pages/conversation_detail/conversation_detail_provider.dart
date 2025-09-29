@@ -352,4 +352,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       (app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled,
     );
   }
+
+  @override
+  void dispose() {
+    _ratingTimer?.cancel();
+    super.dispose();
+  }
 }
