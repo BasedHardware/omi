@@ -12,6 +12,8 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 class AppProvider extends BaseProvider {
   List<App> apps = [];
   List<App> popularApps = [];
+  // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
+  List<Map<String, dynamic>> groupedApps = [];
 
   bool filterChat = true;
   bool filterMemories = true;
@@ -269,9 +271,16 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch fresh data from server
-      final freshApps = await retrieveApps();
-      apps = freshApps;
+      // Fetch fresh grouped data from server (first page per category)
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: false);
+      groupedApps = groups;
+      // Flatten for search/filter views
+      final List<App> flat = [];
+      for (final g in groups) {
+        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
+        flat.addAll(data);
+      }
+      apps = flat;
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
@@ -412,8 +421,14 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       debugPrint('Refreshing apps after installation/change...');
-      final freshApps = await retrieveApps();
-      apps = freshApps;
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: false);
+      groupedApps = groups;
+      final List<App> flat = [];
+      for (final g in groups) {
+        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
+        flat.addAll(data);
+      }
+      apps = flat;
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Refresh popular apps too

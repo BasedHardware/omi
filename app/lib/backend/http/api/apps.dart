@@ -9,23 +9,28 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart';
 
-Future<List<App>> retrieveApps() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps',
+/// v2: Fetch paginated, server-grouped apps (first page per category)
+Future<List<App>> retrieveApps({int offset = 0, int limit = 20, bool includeReviews = false}) async {
+  final url = '${Env.apiBaseUrl}v2/apps?offset=$offset&limit=$limit&include_reviews=$includeReviews';
+  final response = await makeApiCall(
+    url: url,
     headers: {},
     body: '',
     method: 'GET',
   );
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
-      log('apps: ${response.body}');
-      var apps = App.fromJsonList(jsonDecode(response.body));
-      apps = apps.where((p) => !p.deleted).toList();
-      SharedPreferencesUtil().appsList = apps;
-      return apps;
+      final data = jsonDecode(response.body);
+      final groups = (data['groups'] as List?) ?? [];
+      final List<App> apps = [];
+      for (final g in groups) {
+        final items = (g['data'] as List?) ?? [];
+        apps.addAll(App.fromJsonList(items));
+      }
+      final filtered = apps.where((p) => !p.deleted).toList();
+      SharedPreferencesUtil().appsList = filtered;
+      return filtered;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -33,6 +38,70 @@ Future<List<App>> retrieveApps() async {
     }
   }
   return SharedPreferencesUtil().appsList;
+}
+
+/// v2: Fetch paginated, server-grouped apps and keep grouping structure
+Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
+  int offset = 0,
+  int limit = 20,
+  bool includeReviews = false,
+}) async {
+  final url = '${Env.apiBaseUrl}v2/apps?offset=$offset&limit=$limit&include_reviews=$includeReviews';
+  final response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final groups = (data['groups'] as List?) ?? [];
+    final List<Map<String, dynamic>> parsed = [];
+    for (final g in groups) {
+      final category = g['category'] as Map<String, dynamic>?;
+      final pagination = g['pagination'] as Map<String, dynamic>? ?? {};
+      final items = (g['data'] as List?) ?? [];
+      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
+      parsed.add({'category': category, 'data': apps, 'pagination': pagination});
+    }
+    return parsed;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return [];
+  }
+}
+
+/// v2: Fetch a single category page
+Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? category})> retrieveAppsByCategory({
+  required String category,
+  int offset = 0,
+  int limit = 20,
+  bool includeReviews = false,
+}) async {
+  final url = '${Env.apiBaseUrl}v2/apps?category=$category&offset=$offset&limit=$limit&include_reviews=$includeReviews';
+  final response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+      return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (data['data'] as List?) ?? [];
+    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
+    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
+    final cat = (data['category'] as Map<String, dynamic>?);
+    return (apps: apps, pagination: pagination, category: cat);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
+  }
 }
 
 Future<List<App>> retrievePopularApps() async {

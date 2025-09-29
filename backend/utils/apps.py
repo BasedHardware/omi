@@ -758,3 +758,125 @@ def is_user_app_enabled(uid: str, app_id: str) -> bool:
     """Check if a specific app is enabled for the user based on Redis cache."""
     user_enabled_apps = set(get_enabled_apps(uid))
     return app_id in user_enabled_apps
+
+
+# ********************************
+# ********* v2 APPS UTILS ********
+# ********************************
+
+
+def normalize_app_numeric_fields(app_dict: dict) -> dict:
+    """Ensure numeric fields that clients expect as float are emitted as float."""
+
+    def _to_float(value):
+        try:
+            return float(value) if value is not None else None
+        except (ValueError, TypeError):
+            return value
+
+    # Normalize fields that should be floats
+    for field in ['rating_avg', 'money_made', 'price']:
+        if field in app_dict and app_dict[field] is not None:
+            app_dict[field] = _to_float(app_dict[field])
+
+    return app_dict
+
+
+def filter_apps_by_category(apps: List[App], category: str) -> List[App]:
+    """Filter apps by category, handling special 'popular' category."""
+    if category == 'popular':
+        return [app for app in apps if getattr(app, 'is_popular', False)]
+    else:
+        return [app for app in apps if (app.category or 'other') == category]
+
+
+def sort_apps_by_installs(apps: List[App]) -> List[App]:
+    """Sort apps by install count in descending order."""
+    return sorted(apps, key=lambda a: a.installs, reverse=True)
+
+
+def paginate_apps(apps: List[App], offset: int, limit: int) -> List[App]:
+    """Apply pagination to apps list."""
+    return apps[offset : offset + limit]
+
+
+def build_pagination_metadata(total: int, offset: int, limit: int, category: str = None) -> dict:
+    """Build pagination metadata for API response."""
+    has_next = (offset + limit) < total
+    has_previous = offset > 0
+
+    metadata = {
+        'total': total,
+        'count': min(limit, total - offset),
+        'offset': offset,
+        'limit': limit,
+        'hasNext': has_next,
+        'hasPrevious': has_previous,
+    }
+
+    # Add navigation links if category is specified
+    if category:
+        base_url = f"/v2/apps?category={category}"
+        metadata['links'] = {
+            'next': f"{base_url}&offset={offset + limit}&limit={limit}" if has_next else None,
+            'previous': f"{base_url}&offset={max(offset - limit, 0)}&limit={limit}" if has_previous else None,
+        }
+
+    return metadata
+
+
+def group_apps_by_category(apps: List[App], categories: List[dict]) -> Dict[str, List[App]]:
+    """Group apps by category, including special 'popular' category."""
+    grouped = defaultdict(list)
+
+    # Add popular group first if there are popular apps
+    popular_apps = [app for app in apps if getattr(app, 'is_popular', False)]
+    if popular_apps:
+        grouped['popular'] = sort_apps_by_installs(popular_apps)
+
+    # Group remaining apps by their actual category
+    for app in apps:
+        category_id = app.category or 'other'
+        grouped[category_id].append(app)
+
+    # Sort each category by installs
+    for category_id in grouped:
+        if category_id != 'popular':  # Popular already sorted above
+            grouped[category_id] = sort_apps_by_installs(grouped[category_id])
+
+    return grouped
+
+
+def build_category_groups_response(
+    grouped_apps: Dict[str, List[App]], categories: List[dict], offset: int, limit: int
+) -> List[dict]:
+    """Build the groups response for v2/apps endpoint."""
+    id_to_title = {c['id']: c['title'] for c in categories}
+
+    # Maintain category order
+    ordered_keys = [c['id'] for c in categories]
+    for key in grouped_apps.keys():
+        if key not in ordered_keys:
+            ordered_keys.append(key)
+
+    groups = []
+    for category_id in ordered_keys:
+        apps = grouped_apps.get(category_id, [])
+        if not apps:
+            continue
+
+        total = len(apps)
+        page = paginate_apps(apps, offset, limit)
+
+        groups.append(
+            {
+                'category': {
+                    'id': category_id,
+                    'title': id_to_title.get(category_id, category_id.title().replace('-', ' ')),
+                },
+                'data': [normalize_app_numeric_fields(app.model_dump()) for app in page],
+                'pagination': build_pagination_metadata(total, offset, limit, category_id),
+            }
+        )
+
+    return groups

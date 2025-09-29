@@ -90,6 +90,96 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
     return get_available_apps(uid, include_reviews=include_reviews)
 
 
+# ******************************************************
+# ********************* v2 CATALOG *********************
+# ******************************************************
+
+
+def _get_v2_categories():
+    # Keep in sync with /v1/app-categories
+    return [
+        {'title': 'Popular', 'id': 'popular'},
+        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
+        {'title': 'Personality Emulation', 'id': 'personality-emulation'},
+        {'title': 'Health and Wellness', 'id': 'health-and-wellness'},
+        {'title': 'Education and Learning', 'id': 'education-and-learning'},
+        {'title': 'Communication Improvement', 'id': 'communication-improvement'},
+        {'title': 'Emotional and Mental Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity and Organization', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment and Fun', 'id': 'entertainment-and-fun'},
+        {'title': 'Financial', 'id': 'financial'},
+        {'title': 'Travel and Exploration', 'id': 'travel-and-exploration'},
+        {'title': 'Safety and Security', 'id': 'safety-and-security'},
+        {'title': 'Shopping and Commerce', 'id': 'shopping-and-commerce'},
+        {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
+        {'title': 'News and Information', 'id': 'news-and-information'},
+        {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
+        {'title': 'Other', 'id': 'other'},
+    ]
+
+
+@router.get('/v2/apps', tags=['v2'])
+def get_apps_v2(
+    category: str | None = Query(default=None, description='Filter by category id'),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=50),
+    include_reviews: bool = Query(default=False),
+):
+    """Public omi apps, paginated. If category is provided, returns a flat
+    list for that category. If not, returns groups by category (each limited).
+
+    Notes:
+    - Uses approved public apps only (no private/tester apps).
+    - Groups include pagination hints so the client can fetch more via category filter.
+    """
+    from utils.apps import (
+        filter_apps_by_category,
+        sort_apps_by_installs,
+        paginate_apps,
+        build_pagination_metadata,
+        group_apps_by_category,
+        build_category_groups_response,
+        normalize_app_numeric_fields,
+    )
+
+    categories = _get_v2_categories()
+
+    # Fetch and filter approved public apps
+    apps = get_approved_available_apps(include_reviews=include_reviews)
+    approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
+
+    # Category-specific response
+    if category:
+        filtered_apps = filter_apps_by_category(approved_apps, category)
+        sorted_apps = sort_apps_by_installs(filtered_apps)
+        page = paginate_apps(sorted_apps, offset, limit)
+
+        return {
+            'data': [normalize_app_numeric_fields(app.model_dump()) for app in page],
+            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, category),
+            'category': {
+                'id': category,
+                'title': next(
+                    (c['title'] for c in categories if c['id'] == category), category.title().replace('-', ' ')
+                ),
+            },
+        }
+
+    # Grouped response
+    grouped_apps = group_apps_by_category(approved_apps, categories)
+    groups = build_category_groups_response(grouped_apps, categories, offset, limit)
+
+    return {
+        'groups': groups,
+        'meta': {
+            'categories': categories,
+            'groupCount': len(groups),
+            'limit': limit,
+            'offset': offset,
+        },
+    }
+
+
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
 def get_approved_apps(include_reviews: bool = False):
     return get_approved_available_apps(include_reviews=include_reviews)
