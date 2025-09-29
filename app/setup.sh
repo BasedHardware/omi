@@ -18,6 +18,11 @@
 # - JDK (v21)
 # - Gradle (v8.10)
 # - NDK (28.2.13676358)
+#
+# For MacOS Developers:
+# - Xcode (v26.0)
+# - CocoaPods (v1.16.2)
+#
 # Usages: 
 # - $bash setup.sh ios
 # - $bash setup.sh android
@@ -44,7 +49,7 @@ echo "- Gradle (v8.10)"
 echo "- NDK (28.2.13676358)"
 echo ""
 echo "For macOS Developers:"
-echo "- Xcode (v16.4)"
+echo "- Xcode (v26.0)"
 echo "- CocoaPods (v1.16.2)"
 echo ""
 echo "Usages:"
