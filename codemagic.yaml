@@ -9,6 +9,7 @@ workflows:
       ios_signing:
         provisioning_profiles:
           - codemagic_v4
+          - codemagic_watchos_v4
         certificates:
           - codemagic_v4
       groups:
@@ -364,6 +365,7 @@ workflows:
       ios_signing:
         provisioning_profiles:
           - codemagic_v4
+          - codemagic_watchos_v4
         certificates:
           - codemagic_v4
       groups:
