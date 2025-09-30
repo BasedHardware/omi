@@ -40,6 +40,27 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   final GlobalKey _micKey = GlobalKey();
   OverlayEntry? _audioDeviceOverlayEntry;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedDeviceId();
+  }
+
+  Future<void> _loadSavedDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedDeviceId = prefs.getString('selected_audio_device_id');
+    if (savedDeviceId == null || savedDeviceId.isEmpty) return;
+
+    _setSelectedDeviceId(savedDeviceId);
+  }
+
+  void _setSelectedDeviceId(String deviceId) {
+    if (mounted) {
+      setState(() {
+        _selectedDeviceId = deviceId;
+      });
+    }
+  }
 
   Future<void> _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
@@ -944,18 +965,40 @@ void _removeAudioDeviceOverlay() {
 }
 
 OverlayEntry _createAudioDeviceOverlayEntry() {
-  final renderBox = _micKey.currentContext!.findRenderObject() as RenderBox;
+  final renderBox = _micKey.currentContext?.findRenderObject() as RenderBox?;
+  if (renderBox == null) {
+    return OverlayEntry(builder: (context) => const SizedBox.shrink());
+  }
+  
   final size = renderBox.size;
   final offset = renderBox.localToGlobal(Offset.zero);
 
   return OverlayEntry(
-    builder: (context) => Positioned(
-      top: offset.dy + size.height + 5,
-      left: offset.dx - 100 + (size.width / 2),
-      child: _buildFloatingAudioDeviceDropdown(),
+    builder: (context) => GestureDetector(
+      onTap: _removeAudioDeviceOverlay,
+      behavior: HitTestBehavior.translucent,
+      child: Stack(
+        children: [
+          _overlayBackground(),
+          Positioned(
+            top: offset.dy + size.height + 5,
+            left: offset.dx - 100 + (size.width / 2),
+            child: _overlayDropdown(),
+          ),
+        ],
+      ),
     ),
   );
 }
+
+Widget _overlayBackground() => Positioned.fill(
+  child: Container(color: Colors.transparent),
+);
+
+Widget _overlayDropdown() => GestureDetector(
+  onTap: () {},
+  child: _buildFloatingAudioDeviceDropdown(),
+);
 
 Future<void> _selectAudioDevice(Map<String, String> device) async {
   setState(() {
@@ -1089,6 +1132,15 @@ Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
     );
   }
 
+  String? _validateSelectedDevice(List<Map<String, String>> devices, String? currentId) {
+    if (currentId == null || currentId.isEmpty) {
+      return _findCurrentDeviceId(devices);
+    }
+
+    final exists = devices.any((d) => d['id'] == currentId);
+    return exists ? currentId : _findCurrentDeviceId(devices);
+  }
+
   Future<void> _loadAvailableAudioDevices() async {
     final result = await const MethodChannel('screenCapturePlatform')
         .invokeMethod('getAvailableAudioDevices');
@@ -1101,7 +1153,7 @@ Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
       
       setState(() {
         _availableAudioDevices = devices;
-        _selectedDeviceId ??= _findCurrentDeviceId(devices);
+        _selectedDeviceId = _validateSelectedDevice(devices, _selectedDeviceId);
       });
     }
   }
