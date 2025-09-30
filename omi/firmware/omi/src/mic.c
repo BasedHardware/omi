@@ -11,6 +11,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "lib/dk2/settings.h"
+
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_SAMPLE_RATE 16000
@@ -181,12 +183,9 @@ int mic_start()
         return ret;
     }
 
-    // Mic gain 0x40, range [0x00, 0x50], default: 0x28
-#ifdef NRF_PDM0_S
-    nrf_pdm_gain_set(NRF_PDM0_S, 0x40, 0x40);
-#else
-    nrf_pdm_gain_set(NRF_PDM0_NS, 0x40, 0x40);
-#endif
+    // Apply saved mic gain setting
+    uint8_t saved_gain = app_settings_get_mic_gain();
+    mic_set_gain(saved_gain);
 
     ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
     if (ret < 0) {
@@ -235,4 +234,45 @@ void mic_on()
 
         LOG_INF("Microphone restarted");
     }
+}
+
+void mic_set_gain(uint8_t gain_level)
+{
+    // Map gain level (0-8) to hardware values
+    // Level 0: 0x00 = mute
+    // Level 1: 0x14 = -20dB
+    // Level 2: 0x1E = -10dB
+    // Level 3: 0x28 = +0dB
+    // Level 4: 0x2E = +6dB
+    // Level 5: 0x32 = +10dB
+    // Level 6: 0x3C = +20dB (default)
+    // Level 7: 0x46 = +30dB
+    // Level 8: 0x50 = +40dB (max)
+
+    static const uint8_t gain_map[9] = {
+        0x00, // Level 0: mute
+        0x14, // Level 1: -20dB
+        0x1E, // Level 2: -10dB
+        0x28, // Level 3: +0dB
+        0x2E, // Level 4: +6dB
+        0x32, // Level 5: +10dB
+        0x3C, // Level 6: +20dB
+        0x46, // Level 7: +30dB
+        0x50  // Level 8: +40dB
+    };
+
+    // Clamp to valid level range
+    if (gain_level > 8) {
+        gain_level = 8;
+    }
+
+    uint8_t hw_gain = gain_map[gain_level];
+
+    LOG_INF("Setting mic gain to level %u (0x%02x)", gain_level, hw_gain);
+
+#ifdef NRF_PDM0_S
+    nrf_pdm_gain_set(NRF_PDM0_S, hw_gain, hw_gain);
+#else
+    nrf_pdm_gain_set(NRF_PDM0_NS, hw_gain, hw_gain);
+#endif
 }

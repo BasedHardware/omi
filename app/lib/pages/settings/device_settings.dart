@@ -2,19 +2,18 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/backend/schema/bt_device/omi_features.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
 class DeviceSettings extends StatefulWidget {
@@ -28,7 +27,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _dimRatio = 100.0;
   bool _isDimRatioLoaded = false;
   bool? _hasDimmingFeature;
+
+  double _micGain = 5.0;
+  bool _isMicGainLoaded = false;
+  bool? _hasMicGainFeature;
+
   Timer? _debounce;
+  Timer? _micGainDebounce;
 
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
@@ -51,6 +56,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _micGainDebounce?.cancel();
     super.dispose();
   }
 
@@ -61,29 +67,48 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       if (connection != null) {
         var features = await connection.getFeatures();
         final hasDimming = (features & OmiFeatures.ledDimming) != 0;
+        final hasMicGain = (features & OmiFeatures.micGain) != 0;
 
         if (!mounted) return;
         setState(() {
           _hasDimmingFeature = hasDimming;
+          _hasMicGainFeature = hasMicGain;
         });
 
         if (!hasDimming) {
           setState(() {
             _isDimRatioLoaded = true;
           });
-          return;
+        } else {
+          var ratio = await connection.getLedDimRatio();
+          if (ratio != null && mounted) {
+            setState(() {
+              _dimRatio = ratio.toDouble();
+              _isDimRatioLoaded = true;
+            });
+          } else if (mounted) {
+            setState(() {
+              _isDimRatioLoaded = true; // Loaded, but no value, use default
+            });
+          }
         }
 
-        var ratio = await connection.getLedDimRatio();
-        if (ratio != null && mounted) {
+        if (!hasMicGain) {
           setState(() {
-            _dimRatio = ratio.toDouble();
-            _isDimRatioLoaded = true;
+            _isMicGainLoaded = true;
           });
-        } else if (mounted) {
-          setState(() {
-            _isDimRatioLoaded = true; // Loaded, but no value, use default
-          });
+        } else {
+          var gain = await connection.getMicGain();
+          if (gain != null && mounted) {
+            setState(() {
+              _micGain = gain.toDouble();
+              _isMicGainLoaded = true;
+            });
+          } else if (mounted) {
+            setState(() {
+              _isMicGainLoaded = true; // Loaded, but no value, use default
+            });
+          }
         }
       }
     }
@@ -94,6 +119,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (deviceProvider.pairedDevice != null) {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
       await connection?.setLedDimRatio(value.toInt());
+    }
+  }
+
+  void _updateMicGain(double value) async {
+    final deviceProvider = context.read<DeviceProvider>();
+    if (deviceProvider.pairedDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+      await connection?.setMicGain(value.toInt());
     }
   }
 
@@ -165,6 +198,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       ),
                     ),
                     _buildDimmingControl(),
+                    _buildMicGainControl(),
                   ],
                 ),
               GestureDetector(
@@ -263,6 +297,262 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           _debounce?.cancel();
           _updateDimRatio(value);
         },
+      ),
+    );
+  }
+
+  Widget _buildMicGainControl() {
+    if (!_isMicGainLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_hasMicGainFeature == false) {
+      return const ListTile(
+        title: Text('Mic Gain'),
+        subtitle: Text('This feature is not available on your device.'),
+      );
+    }
+
+    // Map gain level to label and description
+    String getGainLabel(int level) {
+      const labels = [
+        'Mute', // Level 0
+        '-20dB', // Level 1
+        '-10dB', // Level 2
+        '+0dB', // Level 3
+        '+6dB', // Level 4
+        '+10dB', // Level 5
+        '+20dB', // Level 6 (default)
+        '+30dB', // Level 7
+        '+40dB', // Level 8
+      ];
+      return level >= 0 && level < labels.length ? labels[level] : '';
+    }
+
+    String getGainDescription(int level) {
+      const descriptions = [
+        'Microphone is muted', // Level 0
+        'Very quiet - for loud environments', // Level 1
+        'Quiet - for moderate noise', // Level 2
+        'Neutral - balanced recording', // Level 3
+        'Slightly boosted - normal use', // Level 4
+        'Boosted - for quiet environments', // Level 5
+        'High - for distant or soft voices', // Level 6 (default)
+        'Very high - for very quiet sources', // Level 7
+        'Maximum - use with caution', // Level 8
+      ];
+      return level >= 0 && level < descriptions.length ? descriptions[level] : '';
+    }
+
+    final currentLevel = _micGain.round();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade800, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Mic Gain',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      currentLevel == 0 ? Icons.mic_off : Icons.mic,
+                      size: 16,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      getGainLabel(currentLevel),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade300,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Current level description
+          Text(
+            getGainDescription(currentLevel),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade400,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Slider with level markers
+          Stack(
+            children: [
+              // Level markers
+              Positioned.fill(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: List.generate(9, (index) {
+                    final isActive = index == currentLevel;
+                    return Container(
+                      width: 2,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isActive ? Colors.white : Colors.grey.shade700,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              // Slider
+              SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: Colors.white,
+                  inactiveTrackColor: Colors.grey.shade800,
+                  thumbColor: Colors.white,
+                  overlayColor: Colors.white.withOpacity(0.1),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 10,
+                    elevation: 2,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+                  trackHeight: 4,
+                ),
+                child: Slider(
+                  value: _micGain,
+                  min: 0,
+                  max: 8,
+                  divisions: 8,
+                  onChanged: (double value) {
+                    if (!(_micGainDebounce?.isActive ?? false)) {
+                      _micGainDebounce = Timer(const Duration(milliseconds: 300), () {
+                        _updateMicGain(value);
+                      });
+                    }
+                    setState(() {
+                      _micGain = value;
+                    });
+                  },
+                  onChangeEnd: (double value) {
+                    _micGainDebounce?.cancel();
+                    _updateMicGain(value);
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          // Level labels
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Mute',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+                Text(
+                  '+6dB',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+                Text(
+                  'Max',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Quick presets
+          Row(
+            children: [
+              Expanded(
+                child: _buildPresetButton('Quiet', 2, currentLevel, () {
+                  setState(() => _micGain = 2.0);
+                  _updateMicGain(2.0);
+                }),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPresetButton('Normal', 4, currentLevel, () {
+                  setState(() => _micGain = 4.0);
+                  _updateMicGain(4.0);
+                }),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPresetButton('High', 6, currentLevel, () {
+                  setState(() => _micGain = 6.0);
+                  _updateMicGain(6.0);
+                }),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPresetButton(String label, int level, int currentLevel, VoidCallback onTap) {
+    final isSelected = level == currentLevel;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.white.withOpacity(0.8) : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: isSelected ? Colors.white : Colors.grey.shade400,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

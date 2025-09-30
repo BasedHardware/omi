@@ -27,4 +27,19 @@ int app_settings_save_dim_ratio(uint8_t new_ratio);
  */
 uint8_t app_settings_get_dim_ratio(void);
 
+/**
+ * @brief Save the microphone gain setting.
+ *
+ * @param new_gain The new gain level (0-8).
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_save_mic_gain(uint8_t new_gain);
+
+/**
+ * @brief Get the current microphone gain.
+ *
+ * @return The current gain level (0-8).
+ */
+uint8_t app_settings_get_mic_gain(void);
+
 #endif // SETTINGS_H

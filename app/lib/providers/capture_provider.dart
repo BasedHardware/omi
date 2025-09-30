@@ -9,6 +9,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/bt_device/omi_features.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/message_event.dart';
