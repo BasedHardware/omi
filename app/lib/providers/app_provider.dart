@@ -88,14 +88,6 @@ class AppProvider extends BaseProvider {
       filters.addAll({filterGroup: filter});
     }
 
-    if (filterGroup == 'Category' ||
-        filterGroup == 'Rating' ||
-        filterGroup == 'Capabilities' ||
-        filterGroup == 'Apps') {
-      performServerSearch();
-    } else {
-      filterApps();
-    }
     notifyListeners();
   }
 
@@ -110,7 +102,6 @@ class AppProvider extends BaseProvider {
       filters.addAll({'Category': category});
     }
 
-    performServerSearch();
     notifyListeners();
   }
 
@@ -125,7 +116,6 @@ class AppProvider extends BaseProvider {
       filters.addAll({'Capabilities': capability});
     }
 
-    performServerSearch();
     notifyListeners();
   }
 
@@ -143,23 +133,13 @@ class AppProvider extends BaseProvider {
 
   void clearFilters() {
     filters.clear();
-
-    if (isSearchActive() || searchResults.isNotEmpty) {
-      performServerSearch();
-    } else {
-      filterApps();
-    }
+    filterApps();
     notifyListeners();
   }
 
   void removeFilter(String filterGroup) {
     filters.remove(filterGroup);
-
-    if (isSearchActive() || searchResults.isNotEmpty) {
-      performServerSearch();
-    } else {
-      filterApps();
-    }
+    filterApps();
     notifyListeners();
   }
 
@@ -181,8 +161,7 @@ class AppProvider extends BaseProvider {
       notifyListeners();
       return;
     }
-
-    await performServerSearch();
+    notifyListeners();
   }
 
   bool _hasServerSideFilters() {
@@ -249,6 +228,15 @@ class AppProvider extends BaseProvider {
       filterApps();
     } finally {
       isSearching = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> applyFilters() async {
+    if (isSearchActive() || _hasServerSideFilters()) {
+      await performServerSearch();
+    } else {
+      filterApps();
       notifyListeners();
     }
   }
