@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
+import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -324,6 +325,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   //     setState(() => provider.loadingImportMemories = false);
                   //   },
                   // ),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade500),
+                  const SizedBox(height: 16),
+                  const DeveloperApiKeysSection(),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 16),
