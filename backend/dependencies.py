@@ -3,6 +3,7 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
+import database.dev_api_key as dev_api_key_db
 
 bearer_scheme = HTTPBearer()
 
@@ -33,6 +34,20 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
 
     token = api_key.replace("Bearer ", "")
     user_id = mcp_api_key_db.get_user_id_by_api_key(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return user_id
+
+
+async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> str:
+    if not api_key or not api_key.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
+        )
+
+    token = api_key.replace("Bearer ", "")
+    user_id = dev_api_key_db.get_user_id_by_api_key(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return user_id
