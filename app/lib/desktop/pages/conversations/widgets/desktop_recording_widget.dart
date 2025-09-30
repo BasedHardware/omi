@@ -967,13 +967,28 @@ Future<void> _selectAudioDevice(Map<String, String> device) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   await prefs.setString('selected_audio_device_id', device['id'] ?? '');
   
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Audio input set to ${device['name']}'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  try {
+    final result = await const MethodChannel('screenCapturePlatform')
+        .invokeMethod('selectAudioDevice', {'deviceId': device['id']});
+    
+    if (mounted && result == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Audio input set to ${device['name']}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error switching audio device: $e'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 

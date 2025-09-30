@@ -257,15 +257,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 result(devices)
                 
             case "selectAudioDevice":
-                guard let args = call.arguments as? [String: Any],
-                      let deviceId = args["deviceId"] as? String else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", 
-                                      message: "Missing deviceId parameter", 
-                                      details: nil))
-                    return
+                if let args = call.arguments as? [String: Any],
+                   let deviceId = args["deviceId"] as? String {
+                    let success = self.audioManager.selectAudioDevice(deviceID: deviceId)
+                    result(success)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Device ID is required", details: nil))
                 }
-                let success = self.audioManager.selectAudioDevice(deviceID: deviceId)
-                result(success)
                 
             default:
                 result(FlutterMethodNotImplemented)
