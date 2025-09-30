@@ -10,40 +10,9 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-/// v2: Fetch paginated, server-grouped apps (first page per category)
-Future<List<App>> retrieveApps({int offset = 0, int limit = 20, bool includeReviews = false}) async {
-  final url = '${Env.apiBaseUrl}v2/apps?offset=$offset&limit=$limit&include_reviews=$includeReviews';
-  final response = await makeApiCall(
-    url: url,
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
-    try {
-      final data = jsonDecode(response.body);
-      final groups = (data['groups'] as List?) ?? [];
-      final List<App> apps = [];
-      for (final g in groups) {
-        final items = (g['data'] as List?) ?? [];
-        apps.addAll(App.fromJsonList(items));
-      }
-      final filtered = apps.where((p) => !p.deleted).toList();
-      SharedPreferencesUtil().appsList = filtered;
-      return filtered;
-    } catch (e, stackTrace) {
-      debugPrint(e.toString());
-      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-      return SharedPreferencesUtil().appsList;
-    }
-  }
-  return SharedPreferencesUtil().appsList;
-}
-
-/// v2: Fetch paginated, server-grouped apps and keep grouping structure
 Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   int offset = 0,
-  int limit = 20,
+  int limit = 10,
   bool includeReviews = false,
 }) async {
   final url = '${Env.apiBaseUrl}v2/apps?offset=$offset&limit=$limit&include_reviews=$includeReviews';
@@ -73,7 +42,6 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   }
 }
 
-/// v2: Fetch a single category page
 Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? category})> retrieveAppsByCategory({
   required String category,
   int offset = 0,
@@ -101,6 +69,62 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     debugPrint(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
+  }
+}
+
+Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? filters})> retrieveAppsSearch({
+  String? query,
+  String? category,
+  double? minRating,
+  String? capability,
+  String? sort,
+  bool? myApps,
+  bool? installedApps,
+  int offset = 0,
+  int limit = 50,
+}) async {
+  // Build URL with query parameters
+  final params = <String>[];
+  if (query != null && query.isNotEmpty) params.add('q=${Uri.encodeComponent(query)}');
+  if (category != null && category.isNotEmpty) params.add('category=${Uri.encodeComponent(category)}');
+  if (minRating != null) params.add('rating=$minRating');
+  if (capability != null && capability.isNotEmpty) params.add('capability=${Uri.encodeComponent(capability)}');
+  if (sort != null && sort.isNotEmpty) params.add('sort=${Uri.encodeComponent(sort)}');
+  if (myApps != null) params.add('my_apps=$myApps');
+  if (installedApps != null) params.add('installed_apps=$installedApps');
+  params.add('offset=$offset');
+  params.add('limit=$limit');
+
+  final url = '${Env.apiBaseUrl}v2/apps/search?${params.join('&')}';
+  final response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+
+  try {
+    if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+      return (
+        apps: <App>[],
+        pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit},
+        filters: null,
+      );
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (data['data'] as List?) ?? [];
+    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
+    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
+    final filters = (data['filters'] as Map<String, dynamic>?);
+    return (apps: apps, pagination: pagination, filters: filters);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (
+      apps: <App>[],
+      pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit},
+      filters: null,
+    );
   }
 }
 
