@@ -873,7 +873,7 @@ def build_category_groups_response(
                     'id': category_id,
                     'title': id_to_title.get(category_id, category_id.title().replace('-', ' ')),
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump()) for app in page],
+                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
                 'pagination': build_pagination_metadata(total, offset, limit, category_id),
             }
         )

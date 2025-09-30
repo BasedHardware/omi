@@ -33,6 +33,8 @@ from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import (
     delete_generic_cache,
+    get_generic_cache,
+    set_generic_cache,
     get_specific_user_review,
     increase_app_installs_count,
     decrease_app_installs_count,
@@ -138,6 +140,15 @@ def get_apps_v2(
 
     categories = _get_categories()
 
+    if category:
+        cache_key = f"apps:category:{category}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+    else:
+        cache_key = f"apps:groups:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+
+    cached = get_generic_cache(cache_key)
+    if cached:
+        return cached
+
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
     approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
@@ -148,8 +159,8 @@ def get_apps_v2(
         sorted_apps = sort_apps_by_installs(filtered_apps)
         page = paginate_apps(sorted_apps, offset, limit)
 
-        return {
-            'data': [normalize_app_numeric_fields(app.model_dump()) for app in page],
+        res = {
+            'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
             'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, category),
             'category': {
                 'id': category,
@@ -158,12 +169,14 @@ def get_apps_v2(
                 ),
             },
         }
+        set_generic_cache(cache_key, res, ttl=60 * 10)
+        return res
 
     # Grouped response
     grouped_apps = group_apps_by_category(approved_apps, categories)
     groups = build_category_groups_response(grouped_apps, categories, offset, limit)
 
-    return {
+    res = {
         'groups': groups,
         'meta': {
             'categories': categories,
@@ -172,6 +185,8 @@ def get_apps_v2(
             'offset': offset,
         },
     }
+    set_generic_cache(cache_key, res, ttl=60 * 10)
+    return res
 
 
 @router.get('/v2/apps/search', tags=['v2'])

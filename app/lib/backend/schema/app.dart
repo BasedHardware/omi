@@ -23,18 +23,10 @@ class AppReview {
   });
 
   factory AppReview.fromJson(Map<String, dynamic> json) {
-    double _toDouble(dynamic v) {
-      if (v == null) return 0.0;
-      if (v is double) return v;
-      if (v is int) return v.toDouble();
-      if (v is num) return v.toDouble();
-      return double.tryParse(v.toString()) ?? 0.0;
-    }
-
     return AppReview(
       uid: json['uid'],
       ratedAt: DateTime.parse(json['rated_at']).toLocal(),
-      score: _toDouble(json['score']),
+      score: json['score'],
       review: json['review'],
       username: json['user_name'] ?? '',
       response: json['response'] ?? '',
@@ -311,14 +303,6 @@ class App {
   }
 
   factory App.fromJson(Map<String, dynamic> json) {
-    double? _toDoubleOrNull(dynamic v) {
-      if (v == null) return null;
-      if (v is double) return v;
-      if (v is int) return v.toDouble();
-      if (v is num) return v.toDouble();
-      return double.tryParse(v.toString());
-    }
-
     return App(
       category: json['category'] ?? 'other',
       approved: json['approved'] ?? true,
@@ -336,7 +320,7 @@ class App {
           json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
       reviews: AppReview.fromJsonList(json['reviews'] ?? []),
       userReview: json['user_review'] != null ? AppReview.fromJson(json['user_review']) : null,
-      ratingAvg: _toDoubleOrNull(json['rating_avg']),
+      ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
       deleted: json['deleted'] ?? false,
@@ -347,10 +331,10 @@ class App {
           ? ProactiveNotification.fromJson(json['proactive_notification'])
           : null,
       usageCount: json['usage_count'] ?? 0,
-      moneyMade: _toDoubleOrNull(json['money_made']) ?? 0.0,
+      moneyMade: json['money_made'] ?? 0.0,
       isPaid: json['is_paid'] ?? false,
       paymentPlan: json['payment_plan'],
-      price: _toDoubleOrNull(json['price']) ?? 0.0,
+      price: json['price'] ?? 0.0,
       isUserPaid: json['is_user_paid'] ?? false,
       paymentLink: json['payment_link'],
       thumbnailIds: (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
