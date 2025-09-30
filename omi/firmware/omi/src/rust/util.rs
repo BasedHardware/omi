@@ -34,7 +34,10 @@ struct LogBuffer {
 
 impl LogBuffer {
     fn new() -> Self {
-        Self { buf: [0; 160], len: 0 }
+        Self {
+            buf: [0; 160],
+            len: 0,
+        }
     }
 
     fn as_c_str(&mut self) -> *const c_char {

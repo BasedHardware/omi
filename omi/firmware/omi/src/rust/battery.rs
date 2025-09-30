@@ -1,8 +1,8 @@
 use core::ffi::c_void;
 
-use spin::Mutex;
 use crate::hal::{self, AdcDevice, BatteryHardware, Error as HalError};
 use crate::util;
+use spin::Mutex;
 
 const ADC_TOTAL_SAMPLES: usize = 50;
 const HISTORY_SIZE: usize = 5;
@@ -31,18 +31,54 @@ struct BatteryState {
 }
 
 const BATTERY_STATES: [BatteryState; 12] = [
-    BatteryState { millivolts: 4200, percentage: 100 },
-    BatteryState { millivolts: 4160, percentage: 99 },
-    BatteryState { millivolts: 4090, percentage: 91 },
-    BatteryState { millivolts: 4030, percentage: 78 },
-    BatteryState { millivolts: 3890, percentage: 63 },
-    BatteryState { millivolts: 3830, percentage: 53 },
-    BatteryState { millivolts: 3680, percentage: 36 },
-    BatteryState { millivolts: 3660, percentage: 35 },
-    BatteryState { millivolts: 3480, percentage: 14 },
-    BatteryState { millivolts: 3420, percentage: 11 },
-    BatteryState { millivolts: 3400, percentage: 1 },
-    BatteryState { millivolts: 0, percentage: 0 },
+    BatteryState {
+        millivolts: 4200,
+        percentage: 100,
+    },
+    BatteryState {
+        millivolts: 4160,
+        percentage: 99,
+    },
+    BatteryState {
+        millivolts: 4090,
+        percentage: 91,
+    },
+    BatteryState {
+        millivolts: 4030,
+        percentage: 78,
+    },
+    BatteryState {
+        millivolts: 3890,
+        percentage: 63,
+    },
+    BatteryState {
+        millivolts: 3830,
+        percentage: 53,
+    },
+    BatteryState {
+        millivolts: 3680,
+        percentage: 36,
+    },
+    BatteryState {
+        millivolts: 3660,
+        percentage: 35,
+    },
+    BatteryState {
+        millivolts: 3480,
+        percentage: 14,
+    },
+    BatteryState {
+        millivolts: 3420,
+        percentage: 11,
+    },
+    BatteryState {
+        millivolts: 3400,
+        percentage: 1,
+    },
+    BatteryState {
+        millivolts: 0,
+        percentage: 0,
+    },
 ];
 
 extern "C" {
@@ -202,7 +238,8 @@ pub extern "C" fn battery_get_percentage(out: *mut u8, battery_millivolt: u16) -
                 let voltage_range = (upper.millivolts - lower.millivolts) as u32;
                 let percentage_range = (upper.percentage - lower.percentage) as u32;
                 let voltage_diff = (upper.millivolts - battery_millivolt) as u32;
-                value = upper.percentage - ((voltage_diff * percentage_range) / voltage_range) as u8;
+                value =
+                    upper.percentage - ((voltage_diff * percentage_range) / voltage_range) as u8;
                 break;
             }
         }

@@ -1,5 +1,5 @@
 use core::ffi::{c_char, c_void, CStr};
-use core::ptr;
+use core::ptr::{self, NonNull};
 
 use crate::ffi;
 
@@ -46,28 +46,31 @@ impl From<i32> for Error {
 
 #[derive(Clone, Copy)]
 pub struct GpioPin {
-    raw: *const c_void,
+    raw: NonNull<c_void>,
 }
 
 impl GpioPin {
     pub fn new(raw: *const c_void) -> Result<Self> {
-        if raw.is_null() {
-            Err(Error::NullPointer)
-        } else {
-            Ok(Self { raw })
-        }
+        NonNull::new(raw as *mut c_void)
+            .map(|raw| Self { raw })
+            .ok_or(Error::NullPointer)
     }
 
     pub fn raw(&self) -> *const c_void {
-        self.raw
+        self.raw.as_ptr()
     }
 
     pub fn is_ready(&self) -> bool {
-        unsafe { ffi::omi_gpio_is_ready(self.raw) }
+        unsafe { ffi::omi_gpio_is_ready(self.raw.as_ptr() as *const c_void) }
     }
 
     pub fn configure_output(&self) -> Result<()> {
-        let err = unsafe { ffi::omi_gpio_configure(self.raw, ffi::omi_gpio_flag_output()) };
+        let err = unsafe {
+            ffi::omi_gpio_configure(
+                self.raw.as_ptr() as *const c_void,
+                ffi::omi_gpio_flag_output(),
+            )
+        };
         if err < 0 {
             Err(Error::from(err))
         } else {
@@ -76,7 +79,12 @@ impl GpioPin {
     }
 
     pub fn configure_input(&self) -> Result<()> {
-        let err = unsafe { ffi::omi_gpio_configure(self.raw, ffi::omi_gpio_flag_input()) };
+        let err = unsafe {
+            ffi::omi_gpio_configure(
+                self.raw.as_ptr() as *const c_void,
+                ffi::omi_gpio_flag_input(),
+            )
+        };
         if err < 0 {
             Err(Error::from(err))
         } else {
@@ -85,7 +93,7 @@ impl GpioPin {
     }
 
     pub fn set(&self, value: bool) -> Result<()> {
-        let err = unsafe { ffi::omi_gpio_set(self.raw, value as i32) };
+        let err = unsafe { ffi::omi_gpio_set(self.raw.as_ptr() as *const c_void, value as i32) };
         if err < 0 {
             Err(Error::from(err))
         } else {
@@ -185,34 +193,86 @@ pub fn led_start() -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+struct DeviceHandle(NonNull<c_void>);
+
+impl DeviceHandle {
+    fn new(raw: *const c_void) -> Result<Self> {
+        NonNull::new(raw as *mut c_void)
+            .map(DeviceHandle)
+            .ok_or(Error::NullPointer)
+    }
+
+    fn as_ptr(&self) -> *const c_void {
+        self.0.as_ptr()
+    }
+
+    fn is_ready(&self) -> bool {
+        unsafe { ffi::omi_device_is_ready(self.as_ptr()) }
+    }
+
+    fn pm_action(&self, action: i32) -> i32 {
+        unsafe { ffi::omi_pm_device_action(self.as_ptr(), action) }
+    }
+
+    fn name(&self) -> Option<&'static str> {
+        let ptr = unsafe { ffi::omi_device_name(self.as_ptr()) };
+        NonNull::new(ptr as *mut c_char)
+            .and_then(|nn| unsafe { CStr::from_ptr(nn.as_ptr()) }.to_str().ok())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MountHandle(NonNull<c_void>);
+
+impl MountHandle {
+    fn new(raw: *mut c_void) -> Result<Self> {
+        NonNull::new(raw).map(MountHandle).ok_or(Error::NullPointer)
+    }
+
+    fn as_ptr(&self) -> *mut c_void {
+        self.0.as_ptr()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct CStrHandle(NonNull<c_char>);
+
+impl CStrHandle {
+    fn new(raw: *const c_char) -> Result<Self> {
+        NonNull::new(raw as *mut c_char)
+            .map(CStrHandle)
+            .ok_or(Error::NullPointer)
+    }
+
+    fn as_ptr(&self) -> *const c_char {
+        self.0.as_ptr()
+    }
+
+    fn as_c_str(&self) -> &'static CStr {
+        unsafe { CStr::from_ptr(self.as_ptr()) }
+    }
+
+    fn to_str(&self) -> Option<&'static str> {
+        self.as_c_str().to_str().ok()
+    }
+}
+
 pub struct SdCard {
-    device: *const c_void,
+    device: DeviceHandle,
     enable_pin: GpioPin,
-    mount: *mut c_void,
-    drive: *const c_char,
-    mount_point: *const c_char,
+    mount: MountHandle,
+    drive: CStrHandle,
+    mount_point: CStrHandle,
 }
 
 impl SdCard {
     pub fn new() -> Result<Self> {
-        let device = unsafe { ffi::omi_sd_device() };
-        if device.is_null() {
-            return Err(Error::NullPointer);
-        }
-
+        let device = DeviceHandle::new(unsafe { ffi::omi_sd_device() })?;
         let enable_pin = GpioPin::new(unsafe { ffi::omi_sd_enable_pin() })?;
-        let mount = unsafe { ffi::omi_sd_mount_struct() };
-        if mount.is_null() {
-            return Err(Error::NullPointer);
-        }
-        let drive = unsafe { ffi::omi_sd_drive_name() };
-        if drive.is_null() {
-            return Err(Error::NullPointer);
-        }
-        let mount_point = unsafe { ffi::omi_sd_mount_point() };
-        if mount_point.is_null() {
-            return Err(Error::NullPointer);
-        }
+        let mount = MountHandle::new(unsafe { ffi::omi_sd_mount_struct() })?;
+        let drive = CStrHandle::new(unsafe { ffi::omi_sd_drive_name() })?;
+        let mount_point = CStrHandle::new(unsafe { ffi::omi_sd_mount_point() })?;
 
         Ok(Self {
             device,
@@ -224,26 +284,21 @@ impl SdCard {
     }
 
     pub fn device_name(&self) -> Option<&'static str> {
-        let ptr = unsafe { ffi::omi_device_name(self.device) };
-        if ptr.is_null() {
-            None
-        } else {
-            unsafe { CStr::from_ptr(ptr) }.to_str().ok()
-        }
+        self.device.name()
     }
 
     pub fn drive_name(&self) -> &'static str {
-        unsafe { CStr::from_ptr(self.drive) }.to_str().unwrap_or("SDMMC")
+        self.drive.to_str().unwrap_or("SDMMC")
     }
 
     pub fn mount_point(&self) -> &'static str {
-        unsafe { CStr::from_ptr(self.mount_point) }.to_str().unwrap_or("/ext")
+        self.mount_point.to_str().unwrap_or("/ext")
     }
 
     pub fn power_on(&self) -> Result<()> {
         self.enable_pin.configure_output()?;
         self.enable_pin.set(true)?;
-        let ret = unsafe { ffi::omi_pm_device_action(self.device, ffi::PM_DEVICE_ACTION_RESUME) };
+        let ret = self.device.pm_action(ffi::PM_DEVICE_ACTION_RESUME);
         if ret < 0 && ret != EALREADY {
             Err(Error::from(ret))
         } else {
@@ -252,7 +307,7 @@ impl SdCard {
     }
 
     pub fn power_off(&self) -> Result<()> {
-        let ret = unsafe { ffi::omi_pm_device_action(self.device, ffi::PM_DEVICE_ACTION_SUSPEND) };
+        let ret = self.device.pm_action(ffi::PM_DEVICE_ACTION_SUSPEND);
         if ret < 0 && ret != EALREADY {
             return Err(Error::from(ret));
         }
@@ -261,7 +316,7 @@ impl SdCard {
     }
 
     pub fn disk_ioctl_raw(&self, cmd: u8, buffer: *mut c_void) -> Result<()> {
-        let ret = unsafe { ffi::omi_disk_access_ioctl(self.drive, cmd, buffer) };
+        let ret = unsafe { ffi::omi_disk_access_ioctl(self.drive.as_ptr(), cmd, buffer) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -293,7 +348,7 @@ impl SdCard {
     }
 
     pub fn mount(&self) -> Result<()> {
-        let ret = unsafe { ffi::omi_fs_mount(self.mount) };
+        let ret = unsafe { ffi::omi_fs_mount(self.mount.as_ptr()) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -302,7 +357,7 @@ impl SdCard {
     }
 
     pub fn unmount(&self) -> Result<()> {
-        let ret = unsafe { ffi::omi_fs_unmount(self.mount) };
+        let ret = unsafe { ffi::omi_fs_unmount(self.mount.as_ptr()) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -311,7 +366,14 @@ impl SdCard {
     }
 
     pub fn format_ext2(&self) -> Result<()> {
-        let ret = unsafe { ffi::omi_fs_mkfs(ffi::FS_EXT2, self.mount as usize, ptr::null_mut(), 0) };
+        let ret = unsafe {
+            ffi::omi_fs_mkfs(
+                ffi::FS_EXT2,
+                self.mount.as_ptr() as usize,
+                ptr::null_mut(),
+                0,
+            )
+        };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -321,21 +383,18 @@ impl SdCard {
 }
 
 pub struct DelayableWork {
-    raw: *mut c_void,
+    raw: NonNull<c_void>,
 }
 
 impl DelayableWork {
     pub fn new(callback: ffi::omi_work_callback_t, user_data: *mut c_void) -> Result<Self> {
-        let raw = unsafe { ffi::omi_delayable_work_create(callback, user_data) };
-        if raw.is_null() {
-            Err(Error::NullPointer)
-        } else {
-            Ok(Self { raw })
-        }
+        NonNull::new(unsafe { ffi::omi_delayable_work_create(callback, user_data) })
+            .map(|raw| Self { raw })
+            .ok_or(Error::NullPointer)
     }
 
     pub fn cancel(&self) -> Result<()> {
-        let ret = unsafe { ffi::omi_delayable_work_cancel(self.raw) };
+        let ret = unsafe { ffi::omi_delayable_work_cancel(self.raw.as_ptr()) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -344,7 +403,7 @@ impl DelayableWork {
     }
 
     pub fn schedule(&self, delay_ms: u32) -> Result<()> {
-        let ret = unsafe { ffi::omi_delayable_work_schedule(self.raw, delay_ms) };
+        let ret = unsafe { ffi::omi_delayable_work_schedule(self.raw.as_ptr(), delay_ms) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -353,13 +412,13 @@ impl DelayableWork {
     }
 
     pub fn raw(&self) -> *mut c_void {
-        self.raw
+        self.raw.as_ptr()
     }
 }
 
 impl Drop for DelayableWork {
     fn drop(&mut self) {
-        unsafe { ffi::omi_delayable_work_destroy(self.raw) }
+        unsafe { ffi::omi_delayable_work_destroy(self.raw.as_ptr()) }
     }
 }
 
@@ -400,7 +459,8 @@ impl BatteryHardware {
     }
 
     pub fn read_samples(&self, buffer: &mut [i16], extra: u32) -> Result<()> {
-        let ret = unsafe { ffi::omi_battery_perform_read(buffer.as_mut_ptr(), buffer.len(), extra) };
+        let ret =
+            unsafe { ffi::omi_battery_perform_read(buffer.as_mut_ptr(), buffer.len(), extra) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -421,7 +481,11 @@ impl BatteryHardware {
         }
     }
 
-    pub fn set_charging_handler(&self, cb: ffi::omi_gpio_edge_cb_t, user_data: *mut c_void) -> Result<()> {
+    pub fn set_charging_handler(
+        &self,
+        cb: ffi::omi_gpio_edge_cb_t,
+        user_data: *mut c_void,
+    ) -> Result<()> {
         let ret = unsafe { ffi::omi_battery_set_chg_handler(cb, user_data) };
         if ret < 0 {
             Err(Error::from(ret))
@@ -459,19 +523,16 @@ impl BatteryHardware {
 }
 
 pub struct Dmic {
-    raw: *const c_void,
+    device: DeviceHandle,
 }
 
 impl Dmic {
     pub fn new() -> Result<Self> {
-        let raw = unsafe { ffi::omi_device_get(ffi::OMI_DEVICE_DMIC0) };
-        if raw.is_null() {
-            Err(Error::NullPointer)
-        } else if !unsafe { ffi::omi_device_is_ready(raw) } {
-            Err(Error::DeviceNotReady)
-        } else {
-            Ok(Self { raw })
+        let device = DeviceHandle::new(unsafe { ffi::omi_device_get(ffi::OMI_DEVICE_DMIC0) })?;
+        if !device.is_ready() {
+            return Err(Error::DeviceNotReady);
         }
+        Ok(Self { device })
     }
 
     pub fn configure(&self, sample_rate: u32, channels: u8) -> Result<()> {
@@ -484,7 +545,7 @@ impl Dmic {
     }
 
     pub fn trigger(&self, trigger: i32) -> Result<()> {
-        let ret = unsafe { ffi::omi_dmic_trigger(self.raw, trigger) };
+        let ret = unsafe { ffi::omi_dmic_trigger(self.device.as_ptr(), trigger) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -493,7 +554,7 @@ impl Dmic {
     }
 
     pub fn read(&self, buffer: &mut *mut c_void, size: &mut u32, timeout_ms: i32) -> Result<()> {
-        let ret = unsafe { ffi::omi_dmic_read(self.raw, 0, buffer, size, timeout_ms) };
+        let ret = unsafe { ffi::omi_dmic_read(self.device.as_ptr(), 0, buffer, size, timeout_ms) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -503,22 +564,19 @@ impl Dmic {
 }
 
 pub struct MemSlab {
-    raw: *mut c_void,
+    raw: NonNull<c_void>,
 }
 
 impl MemSlab {
     pub fn global() -> Result<Self> {
-        let raw = unsafe { ffi::omi_mic_mem_slab() };
-        if raw.is_null() {
-            Err(Error::NullPointer)
-        } else {
-            Ok(Self { raw })
-        }
+        NonNull::new(unsafe { ffi::omi_mic_mem_slab() })
+            .map(|raw| Self { raw })
+            .ok_or(Error::NullPointer)
     }
 
     pub fn alloc(&self, timeout_ms: u32) -> Result<*mut c_void> {
         let mut block: *mut c_void = ptr::null_mut();
-        let ret = unsafe { ffi::omi_mem_slab_alloc(self.raw, &mut block, timeout_ms) };
+        let ret = unsafe { ffi::omi_mem_slab_alloc(self.raw.as_ptr(), &mut block, timeout_ms) };
         if ret < 0 {
             Err(Error::from(ret))
         } else if block.is_null() {
@@ -529,7 +587,7 @@ impl MemSlab {
     }
 
     pub fn free(&self, block: *mut c_void) -> Result<()> {
-        let ret = unsafe { ffi::omi_mem_slab_free(self.raw, block) };
+        let ret = unsafe { ffi::omi_mem_slab_free(self.raw.as_ptr(), block) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -539,7 +597,7 @@ impl MemSlab {
 }
 
 pub struct ThreadHandle {
-    raw: *mut c_void,
+    raw: NonNull<c_void>,
 }
 
 impl ThreadHandle {
@@ -547,20 +605,25 @@ impl ThreadHandle {
         entry: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
         priority: i32,
     ) -> Result<Self> {
-        let raw = unsafe { ffi::omi_thread_create(entry, ptr::null_mut(), ptr::null_mut(), ptr::null_mut(), priority) };
-        if raw.is_null() {
-            Err(Error::NullPointer)
-        } else {
-            Ok(Self { raw })
-        }
+        NonNull::new(unsafe {
+            ffi::omi_thread_create(
+                entry,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                priority,
+            )
+        })
+        .map(|raw| Self { raw })
+        .ok_or(Error::NullPointer)
     }
 
     pub fn start(&self) {
-        unsafe { ffi::omi_thread_start(self.raw) };
+        unsafe { ffi::omi_thread_start(self.raw.as_ptr()) };
     }
 
     pub fn abort(&self) {
-        unsafe { ffi::omi_thread_abort(self.raw) };
+        unsafe { ffi::omi_thread_abort(self.raw.as_ptr()) };
     }
 }
 
@@ -610,7 +673,9 @@ impl Settings {
     }
 
     pub fn save_one(&self, name: &CStr, value: &[u8]) -> Result<()> {
-        let ret = unsafe { ffi::omi_settings_save_one(name.as_ptr(), value.as_ptr() as *const c_void, value.len()) };
+        let ret = unsafe {
+            ffi::omi_settings_save_one(name.as_ptr(), value.as_ptr() as *const c_void, value.len())
+        };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -624,7 +689,8 @@ impl Settings {
         set_cb: ffi::omi_settings_set_cb,
         user_data: *mut c_void,
     ) -> Result<()> {
-        let ret = unsafe { ffi::omi_settings_register_handler(subtree.as_ptr(), set_cb, user_data) };
+        let ret =
+            unsafe { ffi::omi_settings_register_handler(subtree.as_ptr(), set_cb, user_data) };
         if ret < 0 {
             Err(Error::from(ret))
         } else {
@@ -647,25 +713,21 @@ pub fn register_haptic_service(cb: ffi::omi_haptic_write_cb_t) -> Result<()> {
 }
 
 pub struct SpiFlash {
-    dev: *const c_void,
+    device: DeviceHandle,
 }
 
 impl SpiFlash {
     pub fn new() -> Result<Self> {
-        let dev = unsafe { ffi::omi_device_get(ffi::OMI_DEVICE_SPI_FLASH) };
-        if dev.is_null() {
-            Err(Error::NullPointer)
-        } else {
-            Ok(Self { dev })
-        }
+        let device = DeviceHandle::new(unsafe { ffi::omi_device_get(ffi::OMI_DEVICE_SPI_FLASH) })?;
+        Ok(Self { device })
     }
 
     pub fn is_ready(&self) -> bool {
-        unsafe { ffi::omi_device_is_ready(self.dev) }
+        self.device.is_ready()
     }
 
     pub fn suspend(&self) -> Result<()> {
-        let ret = unsafe { ffi::omi_pm_device_action(self.dev, ffi::PM_DEVICE_ACTION_SUSPEND) };
+        let ret = self.device.pm_action(ffi::PM_DEVICE_ACTION_SUSPEND);
         if ret < 0 && ret != EALREADY {
             Err(Error::from(ret))
         } else {
@@ -675,33 +737,31 @@ impl SpiFlash {
 }
 
 pub struct AdcDevice {
-    raw: *const c_void,
+    device: DeviceHandle,
 }
 
 impl AdcDevice {
     pub fn new() -> Result<Self> {
-        let raw = unsafe { ffi::omi_device_get(ffi::OMI_DEVICE_ADC) };
-        if raw.is_null() {
-            Err(Error::NullPointer)
-        } else {
-            Ok(Self { raw })
-        }
+        let device = DeviceHandle::new(unsafe { ffi::omi_device_get(ffi::OMI_DEVICE_ADC) })?;
+        Ok(Self { device })
     }
 
-    pub fn raw(&self) -> *const c_void {
-        self.raw
+    pub fn as_ptr(&self) -> *const c_void {
+        self.device.as_ptr()
     }
 
     pub fn is_ready(&self) -> bool {
-        unsafe { ffi::omi_device_is_ready(self.raw) }
+        self.device.is_ready()
     }
 
     pub fn ref_internal_mv(&self) -> u16 {
-        unsafe { ffi::omi_adc_ref_internal_mv(self.raw) }
+        unsafe { ffi::omi_adc_ref_internal_mv(self.device.as_ptr()) }
     }
 
     pub fn raw_to_millivolts(&self, gain: i32, resolution: u8, value: &mut i32) -> Result<()> {
-        let ret = unsafe { ffi::omi_adc_raw_to_millivolts(self.ref_internal_mv(), gain as _, resolution, value) };
+        let ret = unsafe {
+            ffi::omi_adc_raw_to_millivolts(self.ref_internal_mv(), gain as _, resolution, value)
+        };
         if ret < 0 {
             Err(Error::from(ret))
         } else {

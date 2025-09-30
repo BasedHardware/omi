@@ -100,26 +100,9 @@ fn boot_led_sequence() {
 
 fn set_led_state() {
     unsafe {
-        if is_charging {
-            set_led_green(true);
-        } else {
-            set_led_green(false);
-        }
-
-        if is_off {
-            set_led_red(false);
-            set_led_blue(false);
-            return;
-        }
-
-        if is_connected {
-            set_led_blue(true);
-            set_led_red(false);
-            return;
-        }
-
-        set_led_red(true);
-        set_led_blue(false);
+        set_led_green(is_charging);
+        set_led_red(!(is_off || is_connected));
+        set_led_blue(is_connected);
     }
 }
 

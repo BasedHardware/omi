@@ -32,13 +32,19 @@ pub extern "C" fn flash_off() -> i32 {
                     util::log_info("SPI Flash device already suspended\n");
                     0
                 } else {
-                    util::log_error_fmt(format_args!("Failed to suspend SPI Flash device ({:?})\n", err));
+                    util::log_error_fmt(format_args!(
+                        "Failed to suspend SPI Flash device ({:?})\n",
+                        err
+                    ));
                     err.as_errno()
                 }
             }
         },
         Err(err) => {
-            util::log_error_fmt(format_args!("SPI Flash device handle is null ({:?})\n", err));
+            util::log_error_fmt(format_args!(
+                "SPI Flash device handle is null ({:?})\n",
+                err
+            ));
             err.as_errno()
         }
     }

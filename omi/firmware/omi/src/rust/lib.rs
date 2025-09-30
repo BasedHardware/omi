@@ -1,19 +1,19 @@
 #![no_std]
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 
+pub mod app_main;
+pub mod battery;
 pub mod ble;
 pub mod ffi;
+pub mod hal;
+pub mod haptic;
 pub mod led;
+pub mod macros;
+pub mod mic;
+pub mod sd_card;
 pub mod settings;
 pub mod spi_flash;
 pub mod util;
-pub mod battery;
-pub mod mic;
-pub mod macros;
-pub mod haptic;
-pub mod sd_card;
-pub mod app_main;
-pub mod hal;
 
 use core::panic::PanicInfo;
 

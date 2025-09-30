@@ -28,7 +28,12 @@ pub mod omi_macro_support {
         F: Fn() -> Fut,
         Fut: Future,
     {
-        pub fn new(name: &'static str, stack_bytes: usize, priority: u8, future_factory: F) -> Self {
+        pub fn new(
+            name: &'static str,
+            stack_bytes: usize,
+            priority: u8,
+            future_factory: F,
+        ) -> Self {
             Self {
                 name,
                 stack_bytes,
@@ -190,11 +195,7 @@ pub mod omi_macro_support {
         };
     }
 
-    impl_kconfig_fromstr!(
-        u8, u16, u32, u64, usize,
-        i8, i16, i32, i64, isize,
-        f32, f64
-    );
+    impl_kconfig_fromstr!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize, f32, f64);
 
     impl KconfigValue for &'static str {
         fn parse(symbol: &'static str, raw: Option<&'static str>, default: Option<Self>) -> Self {
@@ -208,7 +209,11 @@ pub mod omi_macro_support {
     }
 
     /// Runtime parser used by `omi_config!` so the macro can stay tiny.
-    pub fn kconfig_value<T>(symbol: &'static str, raw: Option<&'static str>, default: Option<T>) -> T
+    pub fn kconfig_value<T>(
+        symbol: &'static str,
+        raw: Option<&'static str>,
+        default: Option<T>,
+    ) -> T
     where
         T: KconfigValue,
     {
@@ -680,7 +685,9 @@ mod tests {
         assert_eq!(audio_char.name, "audio_data");
         assert_eq!(audio_char.uuid, "814b9b7c-25fd-4acd-8604-d28877beee6e");
 
-        assert!(demo_audio::SPEC.find_characteristic("codec_format").is_some());
+        assert!(demo_audio::SPEC
+            .find_characteristic("codec_format")
+            .is_some());
 
         let mut registry = FakeRegistry;
         demo_audio::register(&mut registry);
@@ -730,7 +737,8 @@ mod tests {
             } else {
                 Err("overflow")
             }
-        } catch -1
+        },
+        catch - 1
     );
 
     #[test]

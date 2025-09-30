@@ -46,7 +46,8 @@ fn ensure_work_locked(slot: &mut Option<DelayableWork>) -> Result<(), i32> {
         util::log_info("Haptic turned off by work handler\n");
     }
 
-    let work = DelayableWork::new(Some(off_trampoline), ptr::null_mut()).map_err(|err| err.as_errno())?;
+    let work =
+        DelayableWork::new(Some(off_trampoline), ptr::null_mut()).map_err(|err| err.as_errno())?;
     *slot = Some(work);
     Ok(())
 }
@@ -167,7 +168,10 @@ pub extern "C" fn register_haptic_service() {
     log_service_metadata();
 
     if let Err(err) = hal::register_haptic_service(Some(haptic_ble_callback)) {
-        util::log_error_fmt(format_args!("Failed to register Haptic GATT service ({:?})\n", err));
+        util::log_error_fmt(format_args!(
+            "Failed to register Haptic GATT service ({:?})\n",
+            err
+        ));
     } else {
         SERVICE_REGISTERED.store(true, Ordering::Relaxed);
         util::log_info("Haptic GATT service registered\n");

@@ -1,7 +1,9 @@
 use core::ffi::c_char;
 
+use crate::macros::omi_macro_support::{
+    BleAccess, BleCharacteristicSpec, BleServiceSpec, CodecSpec,
+};
 use crate::omi_ble_service;
-use crate::macros::omi_macro_support::{BleAccess, BleCharacteristicSpec, BleServiceSpec, CodecSpec};
 
 omi_ble_service!(
     name: audio_service,
@@ -122,10 +124,10 @@ omi_ble_service!(
 pub use accel_service::Characteristic as AccelCharacteristic;
 pub use audio_service::Characteristic as AudioCharacteristic;
 pub use button_service::Characteristic as ButtonCharacteristic;
+pub use features_service::Characteristic as FeaturesCharacteristic;
 pub use haptic_service::Characteristic as HapticCharacteristic;
 pub use settings_service::Characteristic as SettingsCharacteristic;
 pub use storage_service::Characteristic as StorageCharacteristic;
-pub use features_service::Characteristic as FeaturesCharacteristic;
 
 pub const AUDIO_SERVICE: &BleServiceSpec = &audio_service::SPEC;
 pub const SETTINGS_SERVICE: &BleServiceSpec = &settings_service::SPEC;

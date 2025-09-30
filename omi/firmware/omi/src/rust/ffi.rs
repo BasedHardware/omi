@@ -34,7 +34,8 @@ pub const FS_EXT2: c_int = 3;
 pub type omi_gpio_edge_cb_t = Option<unsafe extern "C" fn(*mut c_void)>;
 pub type omi_haptic_write_cb_t = Option<unsafe extern "C" fn(u8)>;
 
-pub type settings_read_cb = unsafe extern "C" fn(cb_arg: *mut c_void, data: *mut c_void, len: usize) -> c_int;
+pub type settings_read_cb =
+    unsafe extern "C" fn(cb_arg: *mut c_void, data: *mut c_void, len: usize) -> c_int;
 pub type omi_settings_set_cb = unsafe extern "C" fn(
     name: *const c_char,
     len: usize,
@@ -93,7 +94,10 @@ extern "C" {
     ) -> c_int;
 
     // Delayable work helpers
-    pub fn omi_delayable_work_create(cb: omi_work_callback_t, user_data: *mut c_void) -> *mut c_void;
+    pub fn omi_delayable_work_create(
+        cb: omi_work_callback_t,
+        user_data: *mut c_void,
+    ) -> *mut c_void;
     pub fn omi_delayable_work_destroy(wrapper: *mut c_void);
     pub fn omi_delayable_work_set_user_data(wrapper: *mut c_void, user_data: *mut c_void);
     pub fn omi_delayable_work_schedule(wrapper: *mut c_void, delay_ms: u32) -> c_int;
@@ -130,7 +134,11 @@ extern "C" {
     pub fn omi_settings_subsys_init() -> c_int;
     pub fn omi_settings_load() -> c_int;
     pub fn omi_settings_save_one(name: *const c_char, value: *const c_void, len: usize) -> c_int;
-    pub fn omi_settings_name_steq(name: *const c_char, key: *const c_char, next: *mut *const c_char) -> bool;
+    pub fn omi_settings_name_steq(
+        name: *const c_char,
+        key: *const c_char,
+        next: *mut *const c_char,
+    ) -> bool;
     pub fn omi_settings_register_handler(
         subtree: *const c_char,
         set_cb: omi_settings_set_cb,
@@ -144,7 +152,11 @@ extern "C" {
     pub fn omi_battery_prepare_measurement_pin() -> c_int;
     pub fn omi_battery_restore_measurement_pin() -> c_int;
     pub fn omi_battery_channel_setup() -> c_int;
-    pub fn omi_battery_perform_read(buffer: *mut i16, sample_count: usize, extra_samplings: u32) -> c_int;
+    pub fn omi_battery_perform_read(
+        buffer: *mut i16,
+        sample_count: usize,
+        extra_samplings: u32,
+    ) -> c_int;
     pub fn omi_battery_configure_pins() -> c_int;
     pub fn omi_battery_set_chg_handler(cb: omi_gpio_edge_cb_t, user_data: *mut c_void) -> c_int;
     pub fn omi_battery_enable_chg_interrupt() -> c_int;

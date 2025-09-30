@@ -48,7 +48,9 @@ fn ensure_handler_registered() -> i32 {
             0
         }
         Err(code) => {
-            util::log_error_fmt(format_args!("Failed to register settings handler ({code})\n"));
+            util::log_error_fmt(format_args!(
+                "Failed to register settings handler ({code})\n"
+            ));
             code
         }
     }
@@ -89,7 +91,10 @@ unsafe extern "C" fn settings_set_cb(
 #[no_mangle]
 pub extern "C" fn app_settings_init() -> i32 {
     if let Err(err) = settings().init() {
-        util::log_error_fmt(format_args!("Failed to initialize settings subsystem ({:?})\n", err));
+        util::log_error_fmt(format_args!(
+            "Failed to initialize settings subsystem ({:?})\n",
+            err
+        ));
         return err.as_errno();
     }
 

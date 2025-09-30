@@ -19,7 +19,8 @@ fn get_dmic() -> Result<Dmic, i32> {
 }
 
 fn spawn_thread() -> Result<(), i32> {
-    let handle = ThreadHandle::create(mic_thread, MIC_THREAD_PRIORITY).map_err(|err| err.as_errno())?;
+    let handle =
+        ThreadHandle::create(mic_thread, MIC_THREAD_PRIORITY).map_err(|err| err.as_errno())?;
     handle.start();
     *THREAD_HANDLE.lock() = Some(handle);
     Ok(())
