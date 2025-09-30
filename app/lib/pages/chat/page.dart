@@ -44,7 +44,7 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => ChatPageState();
 }
 
-class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
+class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
@@ -58,6 +58,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   late List<App> apps;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _appButtonKey = GlobalKey();
 
   @override
   bool get wantKeepAlive => true;
@@ -801,41 +802,161 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
+  void _showAppsMenu(BuildContext ctx, AppProvider provider) {
+    final renderBox = _appButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final overlay = Overlay.of(ctx, rootOverlay: true);
+
+    final buttonOffset = renderBox.localToGlobal(Offset.zero);
+    final buttonSize = renderBox.size;
+    final screenSize = MediaQuery.of(ctx).size;
+
+    const double menuWidth = 260;
+    const double maxMenuHeight = 250;
+
+    double desiredTop = buttonOffset.dy + buttonSize.height + 8;
+    if ((desiredTop + maxMenuHeight) > screenSize.height) {
+      desiredTop = buttonOffset.dy - maxMenuHeight - 8;
+      if (desiredTop < 0) desiredTop = 8;
+    }
+
+    late OverlayEntry entry;
+
+    final controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    final curved = CurvedAnimation(parent: controller, curve: Curves.easeOut);
+
+    entry = OverlayEntry(
+      builder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  controller.reverse().then((_) => entry.remove());
+                },
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+            Positioned(
+              left: buttonOffset.dx + (buttonSize.width - menuWidth) / 2,
+              top: desiredTop,
+              child: AnimatedBuilder(
+                animation: curved,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: curved.value,
+                    alignment: Alignment.topCenter,
+                    child: Opacity(
+                      opacity: curved.value,
+                      child: child,
+                    ),
+                  );
+                },
+                child: Material(
+                  color: Colors.grey[900],
+                  borderRadius: BorderRadius.circular(12),
+                  elevation: 8,
+                  child: SizedBox(
+                    width: menuWidth,
+                    height: maxMenuHeight,
+                    child: PullDownMenu(
+                      items: [
+                        PullDownMenuItem(
+                          title: 'Clear Chat',
+                          iconWidget: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                          onTap: () {
+                            controller.reverse().then((_) {
+                              entry.remove();
+                              _handleAppSelection('clear_chat', provider);
+                            });
+                          },
+                        ),
+                        PullDownMenuItem(
+                          title: 'Enable Apps',
+                          iconWidget: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 16),
+                          onTap: () {
+                            controller.reverse().then((_) {
+                              entry.remove();
+                              _handleAppSelection('enable', provider);
+                            });
+                          },
+                        ),
+                        PullDownMenuItem(
+                          title: 'Omi',
+                          iconWidget: _getOmiAvatar(),
+                          onTap: () {
+                            controller.reverse().then((_) {
+                              entry.remove();
+                              _handleAppSelection('no_selected', provider);
+                            });
+                          },
+                          subtitle: provider.apps.firstWhereOrNull((a) => a.id == provider.selectedChatAppId) == null
+                              ? 'Selected'
+                              : null,
+                        ),
+                        ...provider.apps.where((app) => app.worksWithChat() && app.enabled).map(
+                              (app) => PullDownMenuItem(
+                                title: app.getName(),
+                                iconWidget: _getAppAvatar(app),
+                                onTap: () {
+                                  controller.reverse().then((_) {
+                                    entry.remove();
+                                    _handleAppSelection(app.id, provider);
+                                  });
+                                },
+                                subtitle: provider.selectedChatAppId == app.id ? 'Selected' : null,
+                              ),
+                            )
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    overlay.insert(entry);
+    controller.forward();
+  }
+
   Widget _buildAppSelection(BuildContext context, AppProvider provider) {
     var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
 
-    return PullDownButton(
-      itemBuilder: (context) => _getAppsDropdownItems(context, provider),
-      position: PullDownMenuPosition.automatic,
-      buttonBuilder: (context, showMenu) => GestureDetector(
-        onTap: () {
-          HapticFeedback.mediumImpact();
-          showMenu();
-        },
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
-            const SizedBox(width: 8),
-            Container(
-              constraints: const BoxConstraints(
-                maxWidth: 100,
-              ),
-              child: Text(
-                selectedApp != null ? selectedApp.getName() : "Omi",
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                overflow: TextOverflow.fade,
-              ),
+    return GestureDetector(
+      key: _appButtonKey,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        _showAppsMenu(context, provider);
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
+          const SizedBox(width: 8),
+          Container(
+            constraints: const BoxConstraints(maxWidth: 100),
+            child: Text(
+              selectedApp != null ? selectedApp.getName() : "Omi",
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              overflow: TextOverflow.fade,
             ),
-            const SizedBox(width: 8),
-            const SizedBox(
-              width: 16,
-              child: Icon(Icons.keyboard_arrow_down, color: Colors.white60, size: 16),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          const SizedBox(
+            width: 16,
+            child: Icon(Icons.keyboard_arrow_down, color: Colors.white60, size: 16),
+          ),
+        ],
       ),
     );
   }
@@ -890,36 +1011,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         ],
       ),
     );
-  }
-
-  List<PullDownMenuEntry> _getAppsDropdownItems(BuildContext context, AppProvider provider) {
-    var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
-    return [
-      PullDownMenuItem(
-        title: 'Clear Chat',
-        iconWidget: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
-        onTap: () => _handleAppSelection('clear_chat', provider),
-      ),
-      PullDownMenuItem(
-        title: 'Enable Apps',
-        iconWidget: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 16),
-        onTap: () => _handleAppSelection('enable', provider),
-      ),
-      PullDownMenuItem(
-        title: 'Omi',
-        iconWidget: _getOmiAvatar(),
-        onTap: () => _handleAppSelection('no_selected', provider),
-        subtitle: selectedApp == null ? 'Selected' : null,
-      ),
-      ...provider.apps.where((app) => app.worksWithChat() && app.enabled).map((app) {
-        return PullDownMenuItem(
-          title: app.getName(),
-          iconWidget: _getAppAvatar(app),
-          onTap: () => _handleAppSelection(app.id, provider),
-          subtitle: selectedApp?.id == app.id ? 'Selected' : null,
-        );
-      }),
-    ];
   }
 
   void _showIOSStyleActionSheet(BuildContext context) {
