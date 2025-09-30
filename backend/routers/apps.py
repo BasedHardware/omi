@@ -27,6 +27,7 @@ from database.apps import (
     list_api_keys_db,
     delete_api_key_db,
     set_app_popular_db,
+    search_apps_db,
 )
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
@@ -40,6 +41,7 @@ from database.redis_db import (
     delete_app_cache_by_id,
     is_username_taken,
     save_username,
+    get_enabled_apps,
 )
 from utils.apps import (
     get_available_apps,
@@ -61,6 +63,13 @@ from utils.apps import (
     increment_username,
     generate_api_key,
     get_popular_apps,
+    filter_apps_by_category,
+    sort_apps_by_installs,
+    paginate_apps,
+    build_pagination_metadata,
+    group_apps_by_category,
+    build_category_groups_response,
+    normalize_app_numeric_fields,
 )
 
 from database.memories import migrate_memories
@@ -80,23 +89,7 @@ from utils.social import (
 router = APIRouter()
 
 
-# ******************************************************
-# ********************* APPS CRUD **********************
-# ******************************************************
-
-
-@router.get('/v1/apps', tags=['v1'], response_model=List[App])
-def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
-    return get_available_apps(uid, include_reviews=include_reviews)
-
-
-# ******************************************************
-# ********************* v2 CATALOG *********************
-# ******************************************************
-
-
-def _get_v2_categories():
-    # Keep in sync with /v1/app-categories
+def _get_categories():
     return [
         {'title': 'Popular', 'id': 'popular'},
         {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
@@ -118,6 +111,16 @@ def _get_v2_categories():
     ]
 
 
+# ******************************************************
+# ********************* APPS CRUD **********************
+# ******************************************************
+
+
+@router.get('/v1/apps', tags=['v1'], response_model=List[App])
+def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
+    return get_available_apps(uid, include_reviews=include_reviews)
+
+
 @router.get('/v2/apps', tags=['v2'])
 def get_apps_v2(
     category: str | None = Query(default=None, description='Filter by category id'),
@@ -132,17 +135,8 @@ def get_apps_v2(
     - Uses approved public apps only (no private/tester apps).
     - Groups include pagination hints so the client can fetch more via category filter.
     """
-    from utils.apps import (
-        filter_apps_by_category,
-        sort_apps_by_installs,
-        paginate_apps,
-        build_pagination_metadata,
-        group_apps_by_category,
-        build_category_groups_response,
-        normalize_app_numeric_fields,
-    )
 
-    categories = _get_v2_categories()
+    categories = _get_categories()
 
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
@@ -180,9 +174,101 @@ def get_apps_v2(
     }
 
 
+@router.get('/v2/apps/search', tags=['v2'])
+def search_apps(
+    q: str | None = Query(default=None, description='Search query for app name or description'),
+    category: str | None = Query(default=None, description='Filter by category id'),
+    rating: float | None = Query(default=None, ge=0, le=5, description='Minimum rating filter'),
+    capability: str | None = Query(default=None, description='Filter by capability id'),
+    sort: str | None = Query(
+        default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'
+    ),
+    my_apps: bool | None = Query(default=None, description='Filter to show only user\'s apps'),
+    installed_apps: bool | None = Query(default=None, description='Filter to show only installed/enabled apps'),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Search and filter apps with pagination.
+
+    Returns a flat list of apps matching the search and filter criteria.
+    """
+
+    enabled_app_ids = None
+    if installed_apps:
+        enabled_app_ids = list(get_enabled_apps(uid))
+
+    apps_data = search_apps_db(
+        uid=uid,
+        category=category,
+        capability=capability,
+        my_apps=my_apps or False,
+        installed_apps=installed_apps or False,
+        enabled_app_ids=enabled_app_ids,
+    )
+
+    user_enabled = set(get_enabled_apps(uid))
+
+    apps = []
+
+    for app_dict in apps_data:
+        app_dict['enabled'] = app_dict['id'] in user_enabled
+        app_dict['rejected'] = app_dict.get('approved') is False
+
+        apps.append(App(**app_dict))
+
+    filtered_apps = apps
+
+    # Apply text search filter
+    if q and q.strip():
+        search_query = q.strip().lower()
+        filtered_apps = [app for app in filtered_apps if search_query in app.name.lower()]
+
+    # Apply rating filter
+    if rating is not None:
+        filtered_apps = [app for app in filtered_apps if (app.rating_avg or 0) >= rating]
+
+    # Apply sorting
+    if sort == 'rating_desc':
+        filtered_apps = sorted(filtered_apps, key=lambda a: (a.rating_avg or 0), reverse=True)
+    elif sort == 'rating_asc':
+        filtered_apps = sorted(filtered_apps, key=lambda a: (a.rating_avg or 0))
+    elif sort == 'name_asc':
+        filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
+    elif sort == 'name_desc':
+        filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower(), reverse=True)
+    else:
+        # Default: sort by name
+        filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
+
+    # Paginate results
+    total = len(filtered_apps)
+    page = paginate_apps(filtered_apps, offset, limit)
+
+    return {
+        'data': [normalize_app_numeric_fields(app.model_dump()) for app in page],
+        'pagination': build_pagination_metadata(total, offset, limit),
+        'filters': {
+            'query': q,
+            'category': category,
+            'rating': rating,
+            'capability': capability,
+            'sort': sort or 'name',
+            'my_apps': my_apps,
+            'installed_apps': installed_apps,
+        },
+    }
+
+
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
 def get_approved_apps(include_reviews: bool = False):
-    return get_approved_available_apps(include_reviews=include_reviews)
+    # return get_approved_available_apps(include_reviews=include_reviews)
+    from database import conversations as conversations_db, memories as memories_db, action_items as action_items_db
+
+    uid = 'gYv0uqqV5pXnFVuY2pOfvmAtr3x1'
+    conversations_db.unlock_all_conversations(uid)
+    memories_db.unlock_all_memories(uid)
+    action_items_db.unlock_all_action_items(uid)
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[App])

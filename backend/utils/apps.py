@@ -841,7 +841,7 @@ def group_apps_by_category(apps: List[App], categories: List[dict]) -> Dict[str,
 
     # Sort each category by installs
     for category_id in grouped:
-        if category_id != 'popular':  # Popular already sorted above
+        if category_id != 'popular':
             grouped[category_id] = sort_apps_by_installs(grouped[category_id])
 
     return grouped
@@ -853,7 +853,6 @@ def build_category_groups_response(
     """Build the groups response for v2/apps endpoint."""
     id_to_title = {c['id']: c['title'] for c in categories}
 
-    # Maintain category order
     ordered_keys = [c['id'] for c in categories]
     for key in grouped_apps.keys():
         if key not in ordered_keys:
