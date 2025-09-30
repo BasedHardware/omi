@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversation_chat.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/chat_input_area.dart';
@@ -28,6 +32,12 @@ class _ChatTabState extends State<ChatTab> {
   bool _isLoading = true;
   bool _isSending = false;
   bool _showVoiceRecorder = false;
+  bool _showTypingIndicator = false;
+
+  // For streaming messages
+  ConversationChatMessage? _streamingMessage;
+  String _streamingTextBuffer = '';
+  Timer? _streamingTimer;
 
   @override
   void initState() {
@@ -46,6 +56,7 @@ class _ChatTabState extends State<ChatTab> {
     _messageController.dispose();
     _messageFocusNode.dispose();
     _scrollController.dispose();
+    _streamingTimer?.cancel();
     super.dispose();
   }
 
@@ -130,13 +141,64 @@ class _ChatTabState extends State<ChatTab> {
     _messageFocusNode.unfocus();
     _scrollToBottom();
 
+    // Create an empty AI message for streaming
+    final streamingMessage = ConversationChatMessage(
+      id: 'streaming_${DateTime.now().millisecondsSinceEpoch}',
+      text: '',
+      createdAt: DateTime.now(),
+      sender: 'ai',
+      conversationId: provider.conversation.id,
+    );
+
+    setState(() {
+      _streamingMessage = streamingMessage;
+      _messages.add(streamingMessage);
+      _showTypingIndicator = true;
+      _streamingTextBuffer = '';
+    });
+
+    _scrollToBottom();
+
+    // Flush buffer periodically for smooth streaming
+    void flushBuffer() {
+      if (_streamingTextBuffer.isNotEmpty && mounted) {
+        setState(() {
+          final index = _messages.indexWhere((m) => m.id == _streamingMessage?.id);
+          if (index != -1) {
+            _messages[index] = ConversationChatMessage(
+              id: _streamingMessage!.id,
+              text: _streamingMessage!.text + _streamingTextBuffer,
+              createdAt: _streamingMessage!.createdAt,
+              sender: 'ai',
+              conversationId: provider.conversation.id,
+            );
+            _streamingMessage = _messages[index];
+          }
+          _streamingTextBuffer = '';
+        });
+        HapticFeedback.lightImpact();
+        _scrollToBottom();
+      }
+    }
+
     try {
       // Stream the AI response
       await for (var chunk in sendConversationMessageStream(provider.conversation.id, text.trim())) {
         if (chunk.type == MessageChunkType.data) {
-          // TODO: Could add real-time streaming display here if needed
+          // Add to buffer for batched updates
+          _streamingTextBuffer += chunk.text;
+
+          // Start timer for periodic flush if not already running
+          _streamingTimer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+            flushBuffer();
+          });
         } else if (chunk.type == MessageChunkType.done && chunk.message != null) {
-          // Add final AI message
+          // Cancel timer and flush any remaining buffer
+          _streamingTimer?.cancel();
+          _streamingTimer = null;
+          flushBuffer();
+
+          // Replace streaming message with final message
           final aiMessage = ConversationChatMessage(
             id: chunk.message!.id,
             text: chunk.message!.text,
@@ -146,7 +208,12 @@ class _ChatTabState extends State<ChatTab> {
           );
 
           setState(() {
-            _messages.add(aiMessage);
+            final index = _messages.indexWhere((m) => m.id == _streamingMessage?.id);
+            if (index != -1) {
+              _messages[index] = aiMessage;
+            }
+            _streamingMessage = null;
+            _showTypingIndicator = false;
             _isSending = false;
           });
           _scrollToBottom();
@@ -155,7 +222,16 @@ class _ChatTabState extends State<ChatTab> {
       }
     } catch (e) {
       debugPrint('Error sending message: $e');
+      _streamingTimer?.cancel();
+      _streamingTimer = null;
+
       setState(() {
+        // Remove the streaming message on error
+        if (_streamingMessage != null) {
+          _messages.removeWhere((m) => m.id == _streamingMessage?.id);
+        }
+        _streamingMessage = null;
+        _showTypingIndicator = false;
         _isSending = false;
       });
     }
@@ -236,6 +312,11 @@ class _ChatTabState extends State<ChatTab> {
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
+        // Top padding for breathing room
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 16),
+        ),
+
         // Chat messages
         SliverList(
           delegate: SliverChildBuilderDelegate(
@@ -249,17 +330,6 @@ class _ChatTabState extends State<ChatTab> {
             childCount: _messages.length,
           ),
         ),
-
-        // Loading indicator when sending
-        if (_isSending)
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(
-                child: CircularProgressIndicator(color: Colors.white54),
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -355,27 +425,49 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   Widget _buildAIMessage(ConversationChatMessage message) {
+    final isStreaming = _streamingMessage?.id == message.id;
+    final showTypingIndicator = isStreaming && _showTypingIndicator && message.text.isEmpty;
+
     return Padding(
       padding: const EdgeInsets.only(right: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4.0),
-                topRight: Radius.circular(16.0),
-                bottomRight: Radius.circular(16.0),
-                bottomLeft: Radius.circular(16.0),
-              ),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Text(
-              message.text,
-              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
-            ),
-          ),
+          showTypingIndicator
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4.0),
+                      topRight: Radius.circular(16.0),
+                      bottomRight: Radius.circular(16.0),
+                      bottomLeft: Radius.circular(16.0),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TypingIndicator(),
+                    ],
+                  ),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4.0),
+                      topRight: Radius.circular(16.0),
+                      bottomRight: Radius.circular(16.0),
+                      bottomLeft: Radius.circular(16.0),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Text(
+                    message.text,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+                  ),
+                ),
         ],
       ),
     );
