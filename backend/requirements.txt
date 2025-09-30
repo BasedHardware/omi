@@ -256,3 +256,7 @@ typesense==0.21.0
 pycountry==24.6.1
 google-cloud-translate==3.20.2
 langdetect==1.0.9
+# Agentic Chat Dependencies
+openai-agents==0.0.14
+mcp==0.9.0
+langchain-mcp-adapters==0.0.10

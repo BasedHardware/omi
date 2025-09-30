@@ -34,9 +34,13 @@ from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.llm.agentic_chat import execute_agentic_chat_stream, get_agent_config
 
 router = APIRouter()
 fc = FileChatTool()
+
+# Get agent configuration
+AGENT_CONFIG = get_agent_config()
 
 
 def filter_messages(messages, app_id):
@@ -63,6 +67,7 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
+    use_agent: Optional[bool] = None,  # NEW: Optional flag to enable/disable agent mode
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
@@ -151,23 +156,64 @@ def send_message(
 
         return ai_message, ask_for_nps
 
+    # Determine whether to use agentic chat
+    # Priority: explicit parameter > environment config
+    use_agentic = use_agent if use_agent is not None else AGENT_CONFIG.get('enabled', True)
+
     async def generate_stream():
         callback_data = {}
-        async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
-        ):
-            if chunk:
-                msg = chunk.replace("\n", "__CRLF__")
-                yield f'{msg}\n\n'
-            else:
-                response = callback_data.get('answer')
-                if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
+
+        # Choose between agentic chat and traditional LangGraph
+        if use_agentic:
+            print(f'[AGENTIC] Using agentic chat for user {uid}')
+            try:
+                async for chunk in execute_agentic_chat_stream(
+                    uid, messages, app, chat_session=chat_session, callback_data=callback_data
+                ):
+                    if chunk:
+                        msg = chunk.replace("\n", "__CRLF__")
+                        yield f'{msg}\n\n'
+                    else:
+                        response = callback_data.get('answer')
+                        if response:
+                            # Log agent actions
+                            agent_actions = callback_data.get('agent_actions', [])
+                            if agent_actions:
+                                print(f'[AGENTIC] Agent took {len(agent_actions)} actions: {[a.get("tool") for a in agent_actions]}')
+
+                            ai_message, ask_for_nps = process_message(response, callback_data)
+                            ai_message_dict = ai_message.dict()
+                            response_message = ResponseMessage(**ai_message_dict)
+                            response_message.ask_for_nps = ask_for_nps
+                            data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                            yield f"done: {data}\n\n"
+            except Exception as e:
+                print(f'[AGENTIC] Error in agentic chat: {e}')
+                # Fallback to traditional chat if enabled
+                if AGENT_CONFIG.get('fallback_enabled', True):
+                    print('[AGENTIC] Falling back to LangGraph chat')
+                    use_agentic = False  # Trigger fallback
+                else:
+                    raise
+
+        if not use_agentic:
+            # Traditional LangGraph-based chat
+            print(f'[LANGGRAPH] Using traditional chat for user {uid}')
+            async for chunk in execute_graph_chat_stream(
+                uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
+            ):
+                if chunk:
+                    msg = chunk.replace("\n", "__CRLF__")
+                    yield f'{msg}\n\n'
+                else:
+                    response = callback_data.get('answer')
+                    if response:
+                        ai_message, ask_for_nps = process_message(response, callback_data)
+                        ai_message_dict = ai_message.dict()
+                        response_message = ResponseMessage(**ai_message_dict)
+                        response_message.ask_for_nps = ask_for_nps
+                        data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                        yield f"done: {data}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
