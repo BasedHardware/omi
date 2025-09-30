@@ -109,8 +109,8 @@ class $AssetsImagesGen {
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
 
-  /// File path: assets/images/blob.png
-  AssetGenImage get blob => const AssetGenImage('assets/images/blob.png');
+  /// File path: assets/images/blob.webp
+  AssetGenImage get blob => const AssetGenImage('assets/images/blob.webp');
 
   /// File path: assets/images/calendar_logo.png
   AssetGenImage get calendarLogo =>
@@ -214,41 +214,41 @@ class $AssetsImagesGen {
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
 
-  /// File path: assets/images/omi-without-rope-turned-off.png
+  /// File path: assets/images/omi-without-rope-turned-off.webp
   AssetGenImage get omiWithoutRopeTurnedOff =>
-      const AssetGenImage('assets/images/omi-without-rope-turned-off.png');
+      const AssetGenImage('assets/images/omi-without-rope-turned-off.webp');
 
-  /// File path: assets/images/omi-without-rope.png
+  /// File path: assets/images/omi-without-rope.webp
   AssetGenImage get omiWithoutRope =>
-      const AssetGenImage('assets/images/omi-without-rope.png');
+      const AssetGenImage('assets/images/omi-without-rope.webp');
 
-  /// File path: assets/images/onboarding-bg-1.jpg
+  /// File path: assets/images/onboarding-bg-1.webp
   AssetGenImage get onboardingBg1 =>
-      const AssetGenImage('assets/images/onboarding-bg-1.jpg');
+      const AssetGenImage('assets/images/onboarding-bg-1.webp');
 
-  /// File path: assets/images/onboarding-bg-2.jpg
+  /// File path: assets/images/onboarding-bg-2.webp
   AssetGenImage get onboardingBg2 =>
-      const AssetGenImage('assets/images/onboarding-bg-2.jpg');
+      const AssetGenImage('assets/images/onboarding-bg-2.webp');
 
-  /// File path: assets/images/onboarding-bg-3.jpg
+  /// File path: assets/images/onboarding-bg-3.webp
   AssetGenImage get onboardingBg3 =>
-      const AssetGenImage('assets/images/onboarding-bg-3.jpg');
+      const AssetGenImage('assets/images/onboarding-bg-3.webp');
 
-  /// File path: assets/images/onboarding-bg-4.jpg
+  /// File path: assets/images/onboarding-bg-4.webp
   AssetGenImage get onboardingBg4 =>
-      const AssetGenImage('assets/images/onboarding-bg-4.jpg');
+      const AssetGenImage('assets/images/onboarding-bg-4.webp');
 
-  /// File path: assets/images/onboarding-bg-5-1.jpg
+  /// File path: assets/images/onboarding-bg-5-1.webp
   AssetGenImage get onboardingBg51 =>
-      const AssetGenImage('assets/images/onboarding-bg-5-1.jpg');
+      const AssetGenImage('assets/images/onboarding-bg-5-1.webp');
 
-  /// File path: assets/images/onboarding-bg-5-2.jpg
+  /// File path: assets/images/onboarding-bg-5-2.webp
   AssetGenImage get onboardingBg52 =>
-      const AssetGenImage('assets/images/onboarding-bg-5-2.jpg');
+      const AssetGenImage('assets/images/onboarding-bg-5-2.webp');
 
-  /// File path: assets/images/onboarding-bg-6.jpg
+  /// File path: assets/images/onboarding-bg-6.webp
   AssetGenImage get onboardingBg6 =>
-      const AssetGenImage('assets/images/onboarding-bg-6.jpg');
+      const AssetGenImage('assets/images/onboarding-bg-6.webp');
 
   /// File path: assets/images/onboarding.mp4
   String get onboarding => 'assets/images/onboarding.mp4';
