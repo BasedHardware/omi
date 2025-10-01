@@ -104,7 +104,7 @@ def process_voice_message_segment(path: str, uid: str):
 
     # send notification
     token = notification_db.get_token_only(uid)
-    send_chat_message_notification(token, "omi", "omi", ai_message.text, ai_message.id)
+    send_chat_message_notification(token, "omi", "omi", ai_message.text, ai_message.id, ai_message.chat_session_id)
 
     return [message.dict(), ai_message_resp]
 
@@ -231,12 +231,16 @@ async def process_voice_message_segment_stream(
 
                 # send notification
                 token = notification_db.get_token_only(uid)
-                send_chat_message_notification(token, "omi", "omi", ai_message.text, ai_message.id)
+                send_chat_message_notification(
+                    token, "omi", "omi", ai_message.text, ai_message.id, ai_message.chat_session_id
+                )
 
     return
 
 
-def send_chat_message_notification(token: str, app_name: str, app_id: str, message: str, message_id: str):
+def send_chat_message_notification(
+    token: str, app_name: str, app_id: str, message: str, message_id: str, chat_session_id: Optional[str] = None
+):
     ai_message = NotificationMessage(
         id=message_id,
         text=message,
@@ -244,6 +248,6 @@ def send_chat_message_notification(token: str, app_name: str, app_id: str, messa
         from_integration='true',
         type='text',
         notification_type='plugin',
-        navigate_to=f'/chat/{app_id}',
+        navigate_to=f'/chat/{app_id}?session={chat_session_id}' if chat_session_id else f'/chat/{app_id}',
     )
     send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

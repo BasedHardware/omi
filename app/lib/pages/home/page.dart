@@ -224,6 +224,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
     }
 
+    String? sessionId;
+    if (navigateToUri?.queryParameters.containsKey('session') == true) {
+      sessionId = navigateToUri!.queryParameters['session'];
+    }
+
     // Home controller
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     WidgetsBinding.instance.addObserver(this);
@@ -271,9 +276,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 selectedApp = await appProvider.getAppFromId(appId);
               }
               appProvider.setSelectedChatAppId(appId);
-              // Clear any selected threads to show welcome screen
-              await context.read<ChatSessionProvider>().switchToApp(appId);
-              await messageProvider.refreshMessages();
+
+              if (sessionId != null && sessionId.isNotEmpty) {
+                // Load and select the specific session from the notification
+                await context.read<ChatSessionProvider>().loadSessions();
+                await context.read<ChatSessionProvider>().selectSession(sessionId, appId, appProvider: appProvider);
+                await messageProvider.refreshMessages();
+              } else {
+                // No session specified, show welcome screen
+                await context.read<ChatSessionProvider>().switchToApp(appId);
+                await messageProvider.refreshMessages();
+              }
             }
           } else {
             if (mounted) {
