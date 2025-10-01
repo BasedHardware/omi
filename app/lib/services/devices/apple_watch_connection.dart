@@ -254,6 +254,16 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<void> performSetMicGain(int gain) async {
+    return;
+  }
+
+  @override
+  Future<int?> performGetMicGain() async {
+    return null;
+  }
+
+  @override
   Future performCameraStartPhotoController() {
     throw UnimplementedError();
   }

@@ -192,6 +192,16 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<void> performSetMicGain(int gain) async {
+    return;
+  }
+
+  @override
+  Future<int?> performGetMicGain() async {
+    return null;
+  }
+
+  @override
   Future<List<int>> performGetStorageList() {
     return Future.value(<int>[]);
   }
