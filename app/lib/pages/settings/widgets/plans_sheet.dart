@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:omi/gen/assets.gen.dart';
 
 import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -440,222 +441,222 @@ class _PlansSheetState extends State<PlansSheet> {
                   width: double.infinity,
                   child: Stack(
                     children: [
-                      Positioned.fill(
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 1,
-                              child: ClipRect(
-                                child: SizedBox(
-                                  height: 120,
-                                  child: AnimatedBuilder(
-                                    animation: widget.waveController,
-                                    builder: (context, child) {
-                                      const double totalWidth = 420.0;
-                                      final scrollOffset = (widget.waveController.value * totalWidth) % totalWidth;
-                                      return Stack(
-                                        children: [
-                                          Positioned(
-                                            left: -totalWidth + scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(60, (index) {
-                                                final heights = [
-                                                  20.0,
-                                                  32.0,
-                                                  45.0,
-                                                  26.0,
-                                                  52.0,
-                                                  39.0,
-                                                  32.0,
-                                                  45.0,
-                                                  28.0,
-                                                  36.0,
-                                                  41.0,
-                                                  24.0,
-                                                  48.0,
-                                                  37.0,
-                                                  30.0,
-                                                  43.0,
-                                                  22.0,
-                                                  34.0,
-                                                  47.0,
-                                                  29.0,
-                                                  50.0,
-                                                  38.0,
-                                                  33.0,
-                                                  44.0
-                                                ];
-                                                final height = heights[index % heights.length];
 
-                                                return Container(
-                                                  width: 4,
-                                                  height: height,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.red.withOpacity(0.7),
-                                                    borderRadius: BorderRadius.circular(2),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            left: scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(60, (index) {
-                                                final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
-                                                final height = heights[index % heights.length];
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: ClipRect(
+                              child: SizedBox(
+                                height: 120,
+                                child: AnimatedBuilder(
+                                  animation: widget.waveController,
+                                  builder: (context, child) {
+                                    const double totalWidth = 420.0;
+                                    final scrollOffset = (widget.waveController.value * totalWidth) % totalWidth;
+                                    return Stack(
+                                      children: [
+                                        Positioned(
+                                          left: -totalWidth + scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(60, (index) {
+                                              final heights = [
+                                                20.0,
+                                                32.0,
+                                                45.0,
+                                                26.0,
+                                                52.0,
+                                                39.0,
+                                                32.0,
+                                                45.0,
+                                                28.0,
+                                                36.0,
+                                                41.0,
+                                                24.0,
+                                                48.0,
+                                                37.0,
+                                                30.0,
+                                                43.0,
+                                                22.0,
+                                                34.0,
+                                                47.0,
+                                                29.0,
+                                                50.0,
+                                                38.0,
+                                                33.0,
+                                                44.0
+                                              ];
+                                              final height = heights[index % heights.length];
 
-                                                return Container(
-                                                  width: 4,
-                                                  height: height,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.red.withOpacity(0.7),
-                                                    borderRadius: BorderRadius.circular(2),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
+                                              return Container(
+                                                width: 4,
+                                                height: height,
+                                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withOpacity(0.7),
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              );
+                                            }),
                                           ),
-                                        ],
-                                      );
-                                    },
-                                  ),
+                                        ),
+                                        Positioned(
+                                          left: scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(60, (index) {
+                                              final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
+                                              final height = heights[index % heights.length];
+
+                                              return Container(
+                                                width: 4,
+                                                height: height,
+                                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withOpacity(0.7),
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              );
+                                            }),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ),
                             ),
-                            Expanded(
-                              flex: 1,
-                              child: ClipRect(
-                                child: SizedBox(
-                                  height: 120,
-                                  child: AnimatedBuilder(
-                                    animation: widget.notesController,
-                                    builder: (context, child) {
-                                      const double totalWidth = 440.0;
-                                      final scrollOffset = (widget.notesController.value * totalWidth) % totalWidth;
-                                      return Stack(
-                                        children: [
-                                          Positioned(
-                                            left: -totalWidth + scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(8, (index) {
-                                                return Container(
-                                                  width: 45,
-                                                  height: 55,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white.withOpacity(0.95),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    boxShadow: [
-                                                      BoxShadow(
-                                                        color: Colors.black.withOpacity(0.15),
-                                                        blurRadius: 4,
-                                                        offset: const Offset(0, 2),
+                          ),
+                          Expanded(
+                            flex: 1,
+                            child: ClipRect(
+                              child: SizedBox(
+                                height: 120,
+                                child: AnimatedBuilder(
+                                  animation: widget.notesController,
+                                  builder: (context, child) {
+                                    const double totalWidth = 440.0;
+                                    final scrollOffset = (widget.notesController.value * totalWidth) % totalWidth;
+                                    return Stack(
+                                      children: [
+                                        Positioned(
+                                          left: -totalWidth + scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(8, (index) {
+                                              return Container(
+                                                width: 45,
+                                                height: 55,
+                                                margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withOpacity(0.95),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.15),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(6),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Container(
+                                                        width: 26,
+                                                        height: 3,
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black,
+                                                          borderRadius: BorderRadius.circular(1.5),
+                                                        ),
                                                       ),
+                                                      const SizedBox(height: 4),
+                                                      ...List.generate(
+                                                          5,
+                                                          (i) => Container(
+                                                                width: i == 4 ? 24 : 35, // Last line shorter
+                                                                height: 2,
+                                                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors.grey[350],
+                                                                  borderRadius: BorderRadius.circular(1),
+                                                                ),
+                                                              )),
                                                     ],
                                                   ),
-                                                  child: Padding(
-                                                    padding: const EdgeInsets.all(6),
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Container(
-                                                          width: 26,
-                                                          height: 3,
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.black,
-                                                            borderRadius: BorderRadius.circular(1.5),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 4),
-                                                        ...List.generate(
-                                                            5,
-                                                            (i) => Container(
-                                                                  width: i == 4 ? 24 : 35, // Last line shorter
-                                                                  height: 2,
-                                                                  margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                  decoration: BoxDecoration(
-                                                                    color: Colors.grey[350],
-                                                                    borderRadius: BorderRadius.circular(1),
-                                                                  ),
-                                                                )),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
+                                                ),
+                                              );
+                                            }),
                                           ),
-                                          Positioned(
-                                            left: scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(8, (index) {
-                                                return Container(
-                                                  width: 45,
-                                                  height: 55,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white.withOpacity(0.95),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    boxShadow: [
-                                                      BoxShadow(
-                                                        color: Colors.black.withOpacity(0.15),
-                                                        blurRadius: 4,
-                                                        offset: const Offset(0, 2),
+                                        ),
+                                        Positioned(
+                                          left: scrollOffset,
+                                          top: 0,
+                                          bottom: 0,
+                                          child: Row(
+                                            children: List.generate(8, (index) {
+                                              return Container(
+                                                width: 45,
+                                                height: 55,
+                                                margin: const EdgeInsets.symmetric(horizontal: 5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withOpacity(0.95),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.15),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(6),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Container(
+                                                        width: 26,
+                                                        height: 3,
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black,
+                                                          borderRadius: BorderRadius.circular(1.5),
+                                                        ),
                                                       ),
+                                                      const SizedBox(height: 4),
+                                                      ...List.generate(
+                                                          5,
+                                                          (i) => Container(
+                                                                width: i == 4 ? 24 : 35, // Last line shorter
+                                                                height: 2,
+                                                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors.grey[350],
+                                                                  borderRadius: BorderRadius.circular(1),
+                                                                ),
+                                                              )),
                                                     ],
                                                   ),
-                                                  child: Padding(
-                                                    padding: const EdgeInsets.all(6),
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Container(
-                                                          width: 26,
-                                                          height: 3,
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.black,
-                                                            borderRadius: BorderRadius.circular(1.5),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 4),
-                                                        ...List.generate(
-                                                            5,
-                                                            (i) => Container(
-                                                                  width: i == 4 ? 24 : 35, // Last line shorter
-                                                                  height: 2,
-                                                                  margin: const EdgeInsets.symmetric(vertical: 2),
-                                                                  decoration: BoxDecoration(
-                                                                    color: Colors.grey[350],
-                                                                    borderRadius: BorderRadius.circular(1),
-                                                                  ),
-                                                                )),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
+                                                ),
+                                              );
+                                            }),
                                           ),
-                                        ],
-                                      );
-                                    },
-                                  ),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
+
                       ),
                       Positioned(
                         left: (MediaQuery.of(context).size.width - 120) / 2,
@@ -675,7 +676,8 @@ class _PlansSheetState extends State<PlansSheet> {
                           ),
                           child: ClipOval(
                             child: Image.asset(
-                              'assets/images/omi-without-rope.png',
+                              Assets.images.omiWithoutRope.path,
+
                               fit: BoxFit.cover,
                             ),
                           ),
@@ -806,6 +808,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
+
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -840,6 +843,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
+
                                   const SizedBox(height: 4),
                                   Text(
                                     'You already have the best value plan. No changes needed.',
@@ -963,6 +967,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                     isSelected: selectedPlan == 'monthly',
                                     planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
                                       (plan) => plan['interval'] == 'month',
+
                                     ),
                                     onTap: () {
                                       HapticFeedback.lightImpact();
@@ -977,6 +982,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(color: Colors.red.withOpacity(0.3)),
                                     ),
+
                                     child: Column(
                                       children: [
                                         const Icon(Icons.error_outline, color: Colors.red, size: 32),
@@ -1044,6 +1050,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                     isSelected: selectedPlan == 'monthly',
                                     planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
                                       (plan) => plan['interval'] == 'month',
+
                                     ),
                                     onTap: () {
                                       HapticFeedback.lightImpact();
@@ -1058,6 +1065,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(color: Colors.red.withOpacity(0.3)),
                                     ),
+
                                     child: Column(
                                       children: [
                                         const Icon(Icons.error_outline, color: Colors.red, size: 32),
@@ -1174,9 +1182,11 @@ class _PlansSheetState extends State<PlansSheet> {
                         final shouldShowResubscribeButton =
                             isCancelled && !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
 
+
                         if (!shouldShowResubscribeButton) {
                           return const SizedBox.shrink();
                         }
+
 
                         return SizedBox(
                           width: double.infinity,

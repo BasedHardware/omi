@@ -51,6 +51,7 @@ class _DeviceOnboardingWrapperState extends State<DeviceOnboardingWrapper> with 
     // Mark onboarding as completed and go to homepage
     SharedPreferencesUtil().onboardingCompleted = true;
     MixpanelManager().onboardingStepCompleted('Device Onboarding Completed');
+    PaintingBinding.instance.imageCache.clear();
     routeToPage(context, const HomePageWrapper(), replace: true);
   }
 

@@ -21,6 +21,15 @@ import 'package:uuid/uuid.dart';
 import 'chat_session_provider.dart';
 
 class MessageProvider extends ChangeNotifier {
+  static late MethodChannel _askAIChannel;
+
+  MessageProvider() {
+    if (PlatformService.isDesktop) {
+      _askAIChannel = const MethodChannel('com.omi/ask_ai');
+      _askAIChannel.setMethodCallHandler(_handleAskAIMethodCall);
+    }
+  }
+
   AppProvider? appProvider;
   ChatSessionProvider? chatSessionProvider;
   List<ServerMessage> messages = [];
@@ -254,7 +263,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> uploadFiles(List<File> files, String? appId) async {
+  Future<List<MessageFile>?> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
       var res = await uploadFilesServer(
@@ -264,13 +273,17 @@ class MessageProvider extends ChangeNotifier {
       );
       if (res != null) {
         uploadedFiles.addAll(res);
+        return res;
       } else {
         clearSelectedFiles();
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
       }
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
       notifyListeners();
+      return res;
     }
+
+    return null;
   }
 
   void removeLocalMessage(String id) {
@@ -625,5 +638,60 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
+  }
+
+  Future<void> _handleAskAIMethodCall(MethodCall call) async {
+    if (!PlatformService.isDesktop) {
+      return;
+    }
+    switch (call.method) {
+      case 'sendQuery':
+        final args = call.arguments as Map<dynamic, dynamic>;
+        final message = args['message'] as String;
+        final filePath = args['filePath'] as String?;
+
+        List<String>? fileIds;
+        if (filePath != null && filePath.isNotEmpty) {
+          final file = File(filePath);
+          final uploadedFilesResult = await uploadFiles([file], null);
+          if (uploadedFilesResult != null) {
+            fileIds = uploadedFilesResult.map((f) => f.id).toList();
+          } else {
+            _askAIChannel.invokeMethod('aiResponseChunk', {
+              'type': 'error',
+              'text': 'Failed to upload the attached file.',
+            });
+            return;
+          }
+        }
+
+        try {
+          await for (var chunk in sendMessageStreamServer(message, filesId: fileIds)) {
+            final chunkMap = {
+              'type': chunk.type.toString().split('.').last,
+              'text': chunk.text,
+              'messageId': chunk.messageId,
+            };
+            if (chunk.type == MessageChunkType.done && chunk.message != null) {
+              chunkMap['text'] = chunk.message!.text;
+            }
+            _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
+          }
+        } catch (e) {
+          final failedChunk = ServerMessageChunk.failedMessage();
+          final chunkMap = {
+            'type': failedChunk.type.toString().split('.').last,
+            'text': failedChunk.text,
+            'messageId': failedChunk.messageId,
+          };
+          _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
+        }
+        break;
+      default:
+        throw PlatformException(
+          code: 'Unimplemented',
+          details: 'Method ${call.method} not implemented.',
+        );
+    }
   }
 }

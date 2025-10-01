@@ -45,7 +45,8 @@ class CaptureProvider extends ChangeNotifier
   DateTime? _keepAliveLastExecutedAt;
 
   // Method channel for system audio permissions
-  static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
+  static late MethodChannel _screenCaptureChannel;
+  static late MethodChannel _controlBarChannel;
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -71,6 +72,11 @@ class CaptureProvider extends ChangeNotifier
   int _reconnectCountdown = 5;
   int get reconnectCountdown => _reconnectCountdown;
 
+  Timer? _recordingTimer;
+  int _recordingDuration = 0; // in seconds
+
+  int _getRecordingDuration() => _recordingDuration;
+
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
@@ -82,14 +88,19 @@ class CaptureProvider extends ChangeNotifier
       onConnectionStateChanged(isConnected);
     });
 
-    // Add app lifecycle listener to detect sleep/wake cycles
     if (PlatformService.isDesktop) {
+      _screenCaptureChannel = const MethodChannel('screenCapturePlatform');
+      _controlBarChannel = const MethodChannel('com.omi/floating_control_bar');
+
       _initializeAppLifecycleListener();
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _controlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
+      });
     }
   }
 
   void _initializeAppLifecycleListener() {
-    // Add this instance as a lifecycle observer
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -525,6 +536,7 @@ class CaptureProvider extends ChangeNotifier
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _connectionStateListener?.cancel();
+    _recordingTimer?.cancel();
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
@@ -537,6 +549,7 @@ class CaptureProvider extends ChangeNotifier
   void updateRecordingState(RecordingState state) {
     recordingState = state;
     notifyListeners();
+    _broadcastRecordingState();
   }
 
   streamRecording() async {
@@ -616,6 +629,7 @@ class CaptureProvider extends ChangeNotifier
           onByteReceived: _processSystemAudioByteReceived,
           onRecording: () {
             updateRecordingState(RecordingState.systemAudioRecord);
+            _startRecordingTimer();
             debugPrint('System audio recording started successfully.');
           },
           onStop: () {
@@ -752,6 +766,7 @@ class CaptureProvider extends ChangeNotifier
     _reconnectTimer = null;
     ServiceManager.instance().systemAudio.stop();
     _isPaused = false; // Clear paused state when stopping
+    _stopRecordingTimer();
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
     await _cleanupCurrentState();
   }
@@ -766,12 +781,32 @@ class CaptureProvider extends ChangeNotifier
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
     notifyListeners();
+    _broadcastRecordingState();
   }
 
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
     _isPaused = false; // Clear paused state
     await streamSystemAudioRecording(); // Re-trigger the recording flow
+    _broadcastRecordingState();
+  }
+
+  Future<void> _handleFloatingControlBarMethodCall(MethodCall call) async {
+    if (!PlatformService.isDesktop) return;
+
+    switch (call.method) {
+      case 'togglePauseResume':
+        if (isPaused) {
+          await resumeSystemAudioRecording();
+        } else if (recordingState == RecordingState.systemAudioRecord) {
+          await pauseSystemAudioRecording();
+        } else {
+          await streamSystemAudioRecording();
+        }
+        break;
+      default:
+        Logger.debug('FloatingControlBarChannel: Unhandled method ${call.method}');
+    }
   }
 
   @override
@@ -1106,6 +1141,37 @@ class CaptureProvider extends ChangeNotifier
     if (!_systemAudioCaching) {
       _flushSystemAudioBuffer();
     }
+  }
+
+  void _broadcastRecordingState() {
+    if (!PlatformService.isDesktop) return;
+
+    final stateData = {
+      'isRecording':
+          recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.deviceRecord,
+      'isPaused': _isPaused,
+      'duration': _getRecordingDuration(),
+      'isInitialising': recordingState == RecordingState.initialising,
+    };
+
+    _controlBarChannel.invokeMethod('updateRecordingState', stateData);
+  }
+
+  void _startRecordingTimer() {
+    _recordingDuration = 0;
+    _recordingTimer?.cancel();
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.deviceRecord) {
+        _recordingDuration++;
+        _broadcastRecordingState();
+      }
+    });
+  }
+
+  void _stopRecordingTimer() {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    _recordingDuration = 0;
   }
 
   Future<void> pauseDeviceRecording() async {

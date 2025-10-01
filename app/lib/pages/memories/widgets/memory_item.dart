@@ -41,7 +41,10 @@ class MemoryItem extends StatelessWidget {
       },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingL),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppStyles.spacingL,
+          vertical: AppStyles.spacingL,
+        ),
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
           borderRadius: BorderRadius.circular(16),
@@ -59,11 +62,18 @@ class MemoryItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Text(
-                    memory.content.decodeString,
-                    style: AppStyles.body,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        memory.content.decodeString,
+                        style: AppStyles.body,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+
                   ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
@@ -87,14 +97,19 @@ class MemoryItem extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () {
                         MixpanelManager().paywallOpened('Action Item');
-                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+                        routeToPage(
+                          context,
+                          const UsagePage(showUpgradeDialog: true),
+                        );
                         return;
                       },
                       child: Container(
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.01),
-                          borderRadius: const BorderRadius.all(Radius.circular(8)),
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(8),
+                          ),
                         ),
                         child: const Text(
                           'Upgrade to unlimited',
@@ -157,7 +172,9 @@ class MemoryItem extends StatelessWidget {
         height: 36,
         width: 36,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.1),
+
+          color: Colors.white.withOpacity(0.1),
+
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
         child: const Icon(
@@ -169,81 +186,71 @@ class MemoryItem extends StatelessWidget {
     );
   }
 
+
+  DateTime _getConversationDate(DateTime createdAt) {
+    return DateTime(createdAt.year, createdAt.month, createdAt.day);
+  }
+
+  void _ensureConversationInGroup(
+    ConversationProvider conversationProvider,
+    dynamic conversation,
+  ) {
+    final date = _getConversationDate(conversation.createdAt);
+    conversationProvider.groupedConversations.putIfAbsent(date, () => []);
+
+    final conversations = conversationProvider.groupedConversations[date]!;
+    if (!conversations.any((c) => c.id == conversation.id)) {
+      conversations.insert(0, conversation);
+    }
+  }
+
+
   Future<void> _navigateToConversation(BuildContext context) async {
     if (memory.conversationId == null) return;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
+
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+
     );
 
     final conversation = await getConversationById(memory.conversationId!);
 
-    if (context.mounted) {
-      Navigator.of(context).pop();
-    }
 
-    if (conversation != null && context.mounted) {
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+
+    if (conversation != null) {
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
+
+      _ensureConversationInGroup(conversationProvider, conversation);
+
+      final conversationDate = _getConversationDate(conversation.createdAt);
+      detailProvider.conversationIdx = 0;
+      detailProvider.selectedDate = conversationDate;
+
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) =>
-              ChangeNotifierProxyProvider2<ConversationProvider, AppProvider, ConversationDetailProvider>(
-            create: (context) {
-              var provider = ConversationDetailProvider();
-              provider.conversationIdx = 0;
-              provider.selectedDate = DateTime(
-                conversation.createdAt.year,
-                conversation.createdAt.month,
-                conversation.createdAt.day,
-              );
-              return provider;
-            },
-            update: (context, conversationProvider, appProvider, previous) {
-              if (previous == null) {
-                var provider = ConversationDetailProvider();
-                provider.conversationIdx = 0;
-                provider.selectedDate = DateTime(
-                  conversation.createdAt.year,
-                  conversation.createdAt.month,
-                  conversation.createdAt.day,
-                );
-                provider.conversationProvider = conversationProvider;
-                provider.appProvider = appProvider;
-                final date = DateTime(
-                  conversation.createdAt.year,
-                  conversation.createdAt.month,
-                  conversation.createdAt.day,
-                );
-                if (!conversationProvider.groupedConversations.containsKey(date)) {
-                  conversationProvider.groupedConversations[date] = [];
-                }
-                if (!conversationProvider.groupedConversations[date]!.any((c) => c.id == conversation.id)) {
-                  conversationProvider.groupedConversations[date]!.insert(0, conversation);
-                }
-                return provider;
-              }
-              previous.conversationProvider = conversationProvider;
-              previous.appProvider = appProvider;
-              return previous;
-            },
-            child: ConversationDetailPage(
-              conversation: conversation,
-            ),
-          ),
+          builder: (context) => ConversationDetailPage(conversation: conversation),
         ),
       );
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Conversation not found or has been deleted'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    } else {
+      _showConversationNotFoundError(context);
     }
   }
+
+  void _showConversationNotFoundError(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Conversation not found or has been deleted'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
 
   Widget _buildVisibilityButton(BuildContext context) {
     return PopupMenuButton<MemoryVisibility>(
@@ -334,22 +341,14 @@ class MemoryItem extends StatelessWidget {
                   ),
                   Text(
                     description,
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              const Icon(
-                Icons.check,
-                size: 18,
-                color: Colors.white,
-              ),
+            if (isSelected) const Icon(Icons.check, size: 18, color: Colors.white),
           ],
         ),
       ),

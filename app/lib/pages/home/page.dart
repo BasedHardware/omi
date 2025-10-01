@@ -28,12 +28,10 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -42,7 +40,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 
 import 'widgets/battery_info_widget.dart';
-import 'widgets/out_of_credits_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -58,23 +55,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (SharedPreferencesUtil().notificationsEnabled != await Permission.notification.isGranted) {
-        SharedPreferencesUtil().notificationsEnabled = await Permission.notification.isGranted;
-        AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+      if (mounted) {
+        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
       }
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
-      }
-      if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
-        SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
-        AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
-      }
-      if (mounted) {
-        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper', boundDeviceOnly: true);
-      }
-      if (mounted) {
-        await context.read<ConversationProvider>().getInitialConversations();
       }
     });
     _navigateToRoute = widget.navigateToRoute;

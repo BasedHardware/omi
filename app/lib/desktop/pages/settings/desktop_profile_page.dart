@@ -32,6 +32,7 @@ class DesktopProfilePage extends StatefulWidget {
 class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+  bool _isReloading = false;
 
   @override
   void initState() {
@@ -46,6 +47,25 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
     _fadeController.forward();
   }
 
+  Future<void> _handleReload() async {
+    if (_isReloading) return;
+
+    setState(() {
+      _isReloading = true;
+    });
+
+    _fadeController.reset();
+    _fadeController.forward();
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (mounted) {
+      setState(() {
+        _isReloading = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _fadeController.dispose();
@@ -58,62 +78,94 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
     final userName = SharedPreferencesUtil().givenName;
     final userEmail = SharedPreferencesUtil().email;
 
-    return Scaffold(
-      backgroundColor: ResponsiveHelper.backgroundPrimary,
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                ResponsiveHelper.backgroundPrimary,
-                ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
-              ],
-            ),
-          ),
-          child: Row(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: ResponsiveHelper.backgroundPrimary,
+          body: Stack(
             children: [
-              // Main content area
-              Expanded(
+              FadeTransition(
+                opacity: _fadeAnimation,
                 child: Container(
-                  padding: responsive.contentPadding(basePadding: 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  width: double.infinity,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        ResponsiveHelper.backgroundPrimary,
+                        ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
+                      ],
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      // Header with back button
-                      _buildHeader(responsive),
-
-                      const SizedBox(height: 32),
-
-                      // Main content
+                      // Main content area
                       Expanded(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Left column - Profile info
-                            Expanded(
-                              flex: 1,
-                              child: _buildProfileInfoCard(responsive, userName, userEmail),
-                            ),
+                        child: Container(
+                          padding: responsive.contentPadding(basePadding: 32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Header with back button
+                              _buildHeader(responsive),
 
-                            const SizedBox(width: 24),
+                              const SizedBox(height: 32),
 
-                            // Right column - Settings sections
-                            Expanded(
-                              flex: 2,
-                              child: _buildSettingsSections(responsive),
-                            ),
-                          ],
+                              // Main content
+                              Expanded(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Left column - Profile info
+                                    Expanded(
+                                      flex: 1,
+                                      child: _buildProfileInfoCard(responsive, userName, userEmail),
+                                    ),
+
+                                    const SizedBox(width: 24),
+
+                                    // Right column - Settings sections
+                                    Expanded(
+                                      flex: 2,
+                                      child: _buildSettingsSections(responsive),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
+              if (_isReloading)
+                Container(
+                  color: Colors.black54,
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
+                        SizedBox(height: 16),
+                        Text(
+                          'Loading profile...',
+                          style: TextStyle(
+                            color: ResponsiveHelper.textPrimary,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -423,7 +475,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                   color: ResponsiveHelper.infoColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
+                child: const Icon(
                   FontAwesomeIcons.chartLine,
                   size: 18,
                   color: ResponsiveHelper.infoColor,

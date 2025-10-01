@@ -104,17 +104,131 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     return groupedApps;
   }
 
-  Widget _buildAppsView() {
-    return Selector<AppProvider, ({bool isFilterActive, bool isSearchActive})>(
-      selector: (context, provider) => (
-        isFilterActive: provider.isFilterActive(),
-        isSearchActive: provider.isSearchActive(),
-      ),
-      builder: (context, state, child) {
-        if (state.isFilterActive || state.isSearchActive) {
-          return _buildFilteredAppsView();
+  Widget _buildFilteredAppsSlivers() {
+    return Selector<AppProvider, List<App>>(
+      selector: (context, provider) => provider.filteredApps,
+      builder: (context, filteredApps, child) {
+        if (filteredApps.isEmpty) {
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.3),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.search_off,
+                    size: 64,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No apps found',
+                    style: TextStyle(fontSize: 18, color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Try adjusting your search or filters',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
         }
-        return _buildCategorizedAppsView();
+
+        return SliverPadding(
+          padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
+          sliver: SliverList.separated(
+            itemCount: filteredApps.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final app = filteredApps[index];
+              return Selector<AppProvider, List<App>>(
+                selector: (context, provider) => provider.apps,
+                builder: (context, allApps, child) {
+                  final originalIndex = allApps.indexWhere(
+                    (appItem) => appItem.id == app.id,
+                  );
+                  return AppListItem(
+                    app: app,
+                    index: originalIndex,
+                  );
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCategorizedAppsSlivers() {
+    return Selector<AppProvider, List<App>>(
+      selector: (context, provider) => provider.apps,
+      builder: (context, apps, child) {
+        final groupedApps = _groupAppsByCategory(apps);
+
+        // Get most downloaded apps overall (sorted by installs)
+        final allApps = List<App>.from(apps);
+        allApps.sort((a, b) => b.installs.compareTo(a.installs));
+        final mostDownloadedApps = allApps.take(20).toList();
+
+        // Create list of category entries for sliver building
+        final List<MapEntry<String, List<App>>> categoryEntries = [];
+
+        // Add popular apps if not empty
+        if (mostDownloadedApps.isNotEmpty) {
+          categoryEntries.add(MapEntry('Popular Apps', mostDownloadedApps));
+        }
+
+        // Add other categories
+        final sortedEntries = groupedApps.entries.where((entry) => entry.key != 'Popular').toList();
+        sortedEntries.sort((a, b) {
+          final aKey = a.key.trim();
+          final bKey = b.key.trim();
+          if (aKey.isEmpty && bKey.isEmpty) return 0;
+          if (aKey.isEmpty) return 1;
+          if (bKey.isEmpty) return -1;
+          if (aKey.toLowerCase() == 'other' && bKey.toLowerCase() == 'other') return 0;
+          if (aKey.toLowerCase() == 'other') return 1;
+          if (bKey.toLowerCase() == 'other') return -1;
+          return aKey.compareTo(bKey);
+        });
+
+        categoryEntries.addAll(sortedEntries);
+
+        return SliverPadding(
+          padding: const EdgeInsets.only(top: 8, bottom: 100),
+          sliver: SliverList.builder(
+            itemCount: categoryEntries.length,
+            itemBuilder: (context, index) {
+              final entry = categoryEntries[index];
+              final categoryName = entry.key;
+              final categoryApps = entry.value;
+
+              return CategorySection(
+                categoryName: categoryName,
+                apps: categoryApps,
+                showViewAll: categoryName != 'Popular Apps',
+                onViewAll: () {
+                  final category = context.read<AddAppProvider>().categories.firstWhere(
+                        (cat) => cat.title == categoryName,
+                        orElse: () =>
+                            Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
+                      );
+                  routeToPage(
+                    context,
+                    CategoryAppsPage(
+                      category: category,
+                      apps: categoryApps,
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        );
       },
     );
   }
@@ -332,157 +446,26 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     );
   }
 
-  Widget _buildFilteredAppsView() {
-    return Selector<AppProvider, List<App>>(
-      selector: (context, provider) => provider.filteredApps,
-      builder: (context, filteredApps, child) {
-        if (filteredApps.isEmpty) {
-          return Padding(
-            padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.3),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.search_off,
-                  size: 64,
-                  color: Colors.grey.shade600,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'No apps found',
-                  style: TextStyle(fontSize: 18, color: Colors.white70),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Try adjusting your search or filters',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          );
-        } else {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
-            child: Column(
-              children: filteredApps.asMap().entries.map((entry) {
-                final index = entry.key;
-                final app = entry.value;
-                return Selector<AppProvider, List<App>>(
-                  selector: (context, provider) => provider.apps,
-                  builder: (context, allApps, child) {
-                    final originalIndex = allApps.indexWhere(
-                      (appItem) => appItem.id == app.id,
-                    );
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: index < filteredApps.length - 1 ? 8 : 0),
-                      child: AppListItem(
-                        app: app,
-                        index: originalIndex,
-                      ),
-                    );
-                  },
-                );
-              }).toList(),
-            ),
-          );
-        }
-      },
-    );
-  }
-
-  Widget _buildCategorizedAppsView() {
-    return Selector<AppProvider, List<App>>(
-      selector: (context, provider) => provider.apps,
-      builder: (context, apps, child) {
-        final groupedApps = _groupAppsByCategory(apps);
-
-        // Get most downloaded apps overall (sorted by installs)
-        final allApps = List<App>.from(apps);
-        allApps.sort((a, b) => b.installs.compareTo(a.installs));
-        final mostDownloadedApps = allApps.take(20).toList(); // Get top 20 most downloaded
-
-        return Column(
-          children: [
-            const SizedBox(height: 8),
-
-            // Popular Apps Section - First category, no view all
-            if (mostDownloadedApps.isNotEmpty)
-              CategorySection(
-                categoryName: 'Popular Apps',
-                apps: mostDownloadedApps,
-                showViewAll: false,
-                onViewAll: () {},
-              ),
-
-            // Other categories sections - sorted alphabetically
-            ...(() {
-              final sortedEntries = groupedApps.entries.where((entry) => entry.key != 'Popular').toList();
-
-              // Custom sorting: alphabetical but with blank/empty and "Other" at the end
-              sortedEntries.sort((a, b) {
-                final aKey = a.key.trim();
-                final bKey = b.key.trim();
-
-                // Handle blank/empty categories
-                if (aKey.isEmpty && bKey.isEmpty) return 0;
-                if (aKey.isEmpty) return 1; // a goes to end
-                if (bKey.isEmpty) return -1; // b goes to end
-
-                // Handle "Other" category
-                if (aKey.toLowerCase() == 'other' && bKey.toLowerCase() == 'other') return 0;
-                if (aKey.toLowerCase() == 'other') return 1; // a goes to end
-                if (bKey.toLowerCase() == 'other') return -1; // b goes to end
-
-                // Normal alphabetical sorting
-                return aKey.compareTo(bKey);
-              });
-
-              return sortedEntries;
-            })()
-                .map((entry) {
-              final categoryName = entry.key;
-              final categoryApps = entry.value;
-
-              return CategorySection(
-                categoryName: categoryName,
-                apps: categoryApps,
-                onViewAll: () {
-                  final category = context.read<AddAppProvider>().categories.firstWhere(
-                        (cat) => cat.title == categoryName,
-                        orElse: () =>
-                            Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
-                      );
-                  routeToPage(
-                    context,
-                    CategoryAppsPage(
-                      category: category,
-                      apps: categoryApps,
-                    ),
-                  );
-                },
-              );
-            }),
-
-            const SizedBox(height: 100),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // Wrap with NotificationListener to catch SelectAppNotification
     super.build(context);
     return NotificationListener<SelectAppNotification>(
         onNotification: _handleSelectAppNotification,
-        child: Selector<AppProvider,
-            ({bool isLoading, Map<String, dynamic> filters, bool isSearchActive, int filterCount})>(
+        child: Selector<
+            AppProvider,
+            ({
+              bool isLoading,
+              Map<String, dynamic> filters,
+              bool isSearchActive,
+              bool isFilterActive,
+              int filterCount
+            })>(
           selector: (context, provider) => (
             isLoading: provider.isLoading,
             filters: provider.filters,
             isSearchActive: provider.isSearchActive(),
+            isFilterActive: provider.isFilterActive(),
             filterCount: provider.filters.length
           ),
           builder: (context, state, child) {
@@ -716,9 +699,12 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                   const SliverToBoxAdapter(child: SizedBox(height: 0)),
 
                   // Main content - show shimmer when loading
-                  SliverToBoxAdapter(
-                    child: state.isLoading ? _buildShimmerAppsView() : _buildAppsView(),
-                  ),
+                  if (state.isLoading)
+                    SliverToBoxAdapter(child: _buildShimmerAppsView())
+                  else if (state.isFilterActive || state.isSearchActive)
+                    _buildFilteredAppsSlivers()
+                  else
+                    _buildCategorizedAppsSlivers(),
                 ],
               ),
             );

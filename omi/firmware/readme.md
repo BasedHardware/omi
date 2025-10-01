@@ -22,31 +22,9 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 - `boards/`: Custom board definitions and configurations
 - `scripts/`: Build and utility scripts
 
-## Building the Firmware
-
-There are two ways to build the firmware:
-
-### Option 1: Using nRF Connect for VS Code
+## Building and flashing the Firmware
 
 Follow the instructions in our [official documentation](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
-
-### Option 2: Using Docker
-
-This is the easiest method and works across all platforms:
-
-```bash
-./scripts/build-docker.sh
-```
-
-For detailed instructions, see [docker-build.md](./scripts/docker-build.md).
-
-
-## Flashing the Firmware
-
-Follow the instructions at https://docs.omi.me/doc/get_started/Flash_device
-
-For Docker builds, the output files will be in `build/docker_build/`.
-For nRF Connect builds, locate the `zephyr.uf2` file in your build output directory.
 
 ## Device-Specific Builds
 
@@ -60,9 +38,24 @@ To select the appropriate overlay file select the configuration in the nRF Conne
 
 To enable USB serial debugging:
 
-1. Uncomment the debug lines in `main.c`.
-2. Use the nRF Terminal in VS Code to view debug output.
-3. Full live-code debugging is also supported using the nRF Connect extension however this requires a J-Link debugger device and additional setup.
+### DevKit2
+
+1. Clone this repository and edit `firmware/devkit/prj_xiao_ble_sense_devkitv2-adafruit.conf`.
+2. Ensure the following settings are enabled (set to `y` and not commented out):
+   - `CONFIG_CONSOLE=y`
+   - `CONFIG_PRINTK=y`
+   - `CONFIG_LOG=y`
+   - `CONFIG_LOG_PRINTK=y`
+   - `CONFIG_UART_CONSOLE=y`
+3. Offline storage is currently experimental and must be disabled for logging. Ensure the following setting is disabled (set to `n` and not commented out):
+   - `CONFIG_OMI_ENABLE_OFFLINE_STORAGE=n`
+4. **NOTE:** Logging may be enabled with offline storage with the following settings. **These settings may affect the performance of data transfer via BLE or when writing to the SD card**:
+   - `CONFIG_LOG_PROCESS_THREAD_PRIORITY=5`
+   - `CONFIG_LOG_PROCESS_THREAD_CUSTOM_PRIORITY=y`
+5. Build and flash the debugging firmware according to the instructions in the [official documentation](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
+6. Use the nRF Serial Terminal in VS Code to view debug output.
+
+Full live-code debugging is also supported using the nRF Connect extension; however, this requires a J-Link debugger device and additional setup.
 
 ## Key Components
 

@@ -47,25 +47,28 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Image.asset(
-              Assets.images.stars.path,
-            ),
             widget.animatedBackground
-                ? AnimatedBuilder(
-                    animation: _animation,
-                    builder: (context, child) {
-                      return Image.asset(
+                ? RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _animation,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _animation.value,
+                          child: child,
+                        );
+                      },
+                      child: Image.asset(
                         Assets.images.blob.path,
-                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
-                            widget.sizeMultiplier *
-                            _animation.value,
-                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
-                            widget.sizeMultiplier *
-                            _animation.value,
-                      );
-                    },
+                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
+                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
+                        cacheHeight:
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
+                        cacheWidth:
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
+                      ),
+                    ),
                   )
-                : Container(),
+                : const SizedBox.shrink(),
             _buildDeviceImage()
           ],
         ),
@@ -77,36 +80,48 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
     final double imageHeight = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
     final double imageWidth = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
 
-    // Special stacked approach for "Omi" device
     if (widget.deviceName != null && widget.deviceName == 'Omi') {
       return Stack(
         alignment: Alignment.center,
         children: [
-          // Bottom layer: turned-off image (always visible)
+          // Base image
           Image.asset(
             Assets.images.omiWithoutRopeTurnedOff.path,
             height: imageHeight,
             width: imageWidth,
+            cacheHeight: imageHeight.round(),
+            cacheWidth: imageWidth.round(),
           ),
-          // Top layer: turned-on image (visible only when connected)
+          // Blue light overlay when connected TODO: improve this or just use the image itself
           AnimatedOpacity(
             opacity: widget.isConnected ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 300),
-            child: Image.asset(
-              Assets.images.omiWithoutRope.path,
-              height: imageHeight,
-              width: imageWidth,
+            child: Container(
+              width: imageWidth * 0.06,
+              height: imageHeight * 0.06,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.blue.withOpacity(0.8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.5),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       );
     }
 
-    // For all other devices, use the regular single image approach
     return Image.asset(
       _getImagePath(),
       height: imageHeight,
       width: imageWidth,
+      cacheHeight: imageHeight.round(),
+      cacheWidth: imageWidth.round(),
     );
   }
 
@@ -118,6 +133,10 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
 
     if (widget.deviceName != null && widget.deviceName!.contains('Omi DevKit')) {
       return Assets.images.omiDevkitWithoutRope.path;
+    }
+
+    if (widget.deviceName != null && widget.deviceName!.contains('Apple Watch')) {
+      return Assets.images.appleWatch.path;
     }
 
     // Default to omi device image, fallback to hero logo only if no device name

@@ -86,6 +86,17 @@ static ssize_t settings_dim_ratio_read_handler(struct bt_conn *conn,
                                                void *buf,
                                                uint16_t len,
                                                uint16_t offset);
+static ssize_t settings_mic_gain_write_handler(struct bt_conn *conn,
+                                               const struct bt_gatt_attr *attr,
+                                               const void *buf,
+                                               uint16_t len,
+                                               uint16_t offset,
+                                               uint8_t flags);
+static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
+                                              const struct bt_gatt_attr *attr,
+                                              void *buf,
+                                              uint16_t len,
+                                              uint16_t offset);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
@@ -150,6 +161,8 @@ static struct bt_uuid_128 settings_service_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10010, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_dim_ratio_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10011, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -158,6 +171,12 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            settings_dim_ratio_read_handler,
                            settings_dim_ratio_write_handler,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&settings_mic_gain_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_mic_gain_read_handler,
+                           settings_mic_gain_write_handler,
                            NULL),
 };
 
@@ -281,6 +300,46 @@ static ssize_t settings_dim_ratio_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_ratio, sizeof(current_ratio));
 }
 
+static ssize_t settings_mic_gain_write_handler(struct bt_conn *conn,
+                                               const struct bt_gatt_attr *attr,
+                                               const void *buf,
+                                               uint16_t len,
+                                               uint16_t offset,
+                                               uint8_t flags)
+{
+    if (len != 1) {
+        LOG_WRN("Invalid length for mic gain write: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint8_t new_gain = ((uint8_t *) buf)[0];
+    if (new_gain > 8) {
+        new_gain = 8; // Cap the value at level 8
+    }
+
+    LOG_INF("Received new mic gain level: %u", new_gain);
+    int err = app_settings_save_mic_gain(new_gain);
+    if (err) {
+        LOG_ERR("Failed to save mic gain setting: %d", err);
+    }
+
+    // Apply the gain immediately
+    mic_set_gain(new_gain);
+
+    return len;
+}
+
+static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
+                                              const struct bt_gatt_attr *attr,
+                                              void *buf,
+                                              uint16_t len,
+                                              uint16_t offset)
+{
+    uint8_t current_gain = app_settings_get_mic_gain();
+    LOG_INF("Reading mic gain: %u", current_gain);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_gain, sizeof(current_gain));
+}
+
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
@@ -309,6 +368,8 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #endif
     // LED dimming is always enabled now with PWM.
     features |= OMI_FEATURE_LED_DIMMING;
+    // Mic gain control is always enabled.
+    features |= OMI_FEATURE_MIC_GAIN;
 
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &features, sizeof(features));
 }

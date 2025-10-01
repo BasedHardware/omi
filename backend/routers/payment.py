@@ -382,10 +382,22 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     set_user_app_sub_customer_id(app_id, uid, customer_id)
             paid_app(app_id, uid)
 
-        # Regular user subscription
-        elif client_reference_id:
+        # Regular user subscription - check for sub_type metadata or client_reference_id
+        elif client_reference_id or session.get('metadata', {}).get('sub_type') == 'unlimited':
+            # Get uid from client_reference_id or fallback to metadata
+            uid = client_reference_id or session.get('metadata', {}).get('uid')
+
+            if not uid:
+                # It should not happen, ref id might be missing but never the metadata
+                print(f"[WEBHOOK ERROR] No uid found in checkout session {session.get('id')}")
+                return {"status": "error", "message": "No user identifier found"}
+
+            print(
+                f"Processing subscription for user {uid} (from {'client_reference_id' if client_reference_id else 'metadata'})"
+            )
+
             # Check if user already has an active subscription to prevent duplicates
-            existing_subscription = users_db.get_user_valid_subscription(client_reference_id)
+            existing_subscription = users_db.get_user_valid_subscription(uid)
             if existing_subscription and existing_subscription.stripe_subscription_id:
                 # If user already has a Stripe subscription, verify it's not the same one
                 if existing_subscription.stripe_subscription_id == session.get('subscription'):
@@ -393,19 +405,19 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     return {"status": "success", "message": "Subscription already processed."}
                 else:
                     print(
-                        f"User {client_reference_id} has existing subscription {existing_subscription.stripe_subscription_id}, processing new subscription {session.get('subscription')}"
+                        f"User {uid} has existing subscription {existing_subscription.stripe_subscription_id}, processing new subscription {session.get('subscription')}"
                     )
 
-            _update_subscription_from_session(client_reference_id, session)
-            subscription = users_db.get_user_subscription(client_reference_id)
+            _update_subscription_from_session(uid, session)
+            subscription = users_db.get_user_subscription(uid)
             if subscription and subscription.plan == PlanType.unlimited:
-                conversations_db.unlock_all_conversations(client_reference_id)
-                memories_db.unlock_all_memories(client_reference_id)
-                action_items_db.unlock_all_action_items(client_reference_id)
+                conversations_db.unlock_all_conversations(uid)
+                memories_db.unlock_all_memories(uid)
+                action_items_db.unlock_all_action_items(uid)
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
-                    stripe.Subscription.modify(subscription_id, metadata={"uid": client_reference_id})
+                    stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "sub_type": "unlimited"})
                 except Exception as e:
                     print(f"Error updating subscription metadata: {e}")
 
@@ -419,7 +431,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             plan_type = get_plan_type_from_price_id(price_id)
                             # Only send notification for unlimited plan subscriptions
                             if plan_type == PlanType.unlimited:
-                                await send_subscription_paid_personalized_notification(client_reference_id)
+                                await send_subscription_paid_personalized_notification(uid)
                         except ValueError:
                             print(f"Ignoring checkout session for subscription with unknown price_id: {price_id}")
 

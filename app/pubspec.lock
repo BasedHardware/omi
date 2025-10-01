@@ -361,14 +361,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.11"
-  desktop_webview_window:
-    dependency: transitive
-    description:
-      name: desktop_webview_window
-      sha256: "57cf20d81689d5cbb1adfd0017e96b669398a669d927906073b0e42fc64111c0"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.3"
   device_info_plus:
     dependency: "direct main"
     description:
@@ -821,22 +813,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.1"
-  flutter_web_auth_2:
-    dependency: "direct main"
-    description:
-      name: flutter_web_auth_2
-      sha256: "2483d1fd3c45fe1262446e8d5f5490f01b864f2e7868ffe05b4727e263cc0182"
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.0-alpha.3"
-  flutter_web_auth_2_platform_interface:
-    dependency: transitive
-    description:
-      name: flutter_web_auth_2_platform_interface
-      sha256: e25eb45c50b3eef5a80d0ae73c7ecf82e291c152387da8d2008bfd607ba43087
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.0-alpha.4"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -1663,6 +1639,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.15.0"
+  pigeon:
+    dependency: "direct dev"
+    description:
+      name: pigeon
+      sha256: "2073deca15d22f1a0f5862cc6edc9e8660b3be7fd94f03b49101db71a5316b0f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "26.0.1"
   platform:
     dependency: transitive
     description:
@@ -2420,14 +2404,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.7"
-  window_to_front:
-    dependency: transitive
-    description:
-      name: window_to_front
-      sha256: "7aef379752b7190c10479e12b5fd7c0b9d92adc96817d9e96c59937929512aee"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.3"
   xdg_directories:
     dependency: transitive
     description:
