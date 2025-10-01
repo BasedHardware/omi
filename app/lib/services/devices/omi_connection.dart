@@ -43,6 +43,13 @@ class OmiDeviceConnection extends DeviceConnection {
     void Function(int)? onBatteryLevelChange,
   }) async {
     try {
+      // Read initial battery level
+      final initialLevel = await performRetrieveBatteryLevel();
+      if (initialLevel != -1 && onBatteryLevelChange != null) {
+        debugPrint('Initial battery level: $initialLevel');
+        onBatteryLevelChange(initialLevel);
+      }
+
       final stream = transport.getCharacteristicStream(batteryServiceUuid, batteryLevelCharacteristicUuid);
 
       final subscription = stream.listen((value) {
