@@ -119,15 +119,15 @@ Retrieve your memories with optional filtering.
 
 **Query Parameters:**
 
-- `limit` (integer, optional): Maximum number of memories to return. Default: 100
+- `limit` (integer, optional): Maximum number of memories to return. Default: 25
 - `offset` (integer, optional): Number of memories to skip. Default: 0
-- `category` (string, optional): Filter by category (e.g., "personal", "work")
+- `categories` (string, optional): Comma-separated list of categories to filter by (e.g., "personal,work")
 
 **Example Request:**
 
 ```bash
 curl -H "Authorization: Bearer omi_dev_your_api_key" \
-  "https://api.omi.me/v1/dev/user/memories?limit=50&offset=0"
+  "https://api.omi.me/v1/dev/user/memories?limit=50&offset=0&categories=personal,work"
 ```
 
 **Response:**
@@ -136,28 +136,13 @@ curl -H "Authorization: Bearer omi_dev_your_api_key" \
 [
   {
     "id": "mem_789ghi",
-    "created_at": "2025-01-20T10:00:00Z",
-    "started_at": "2025-01-20T09:45:00Z",
-    "finished_at": "2025-01-20T10:15:00Z",
-    "transcript": "Discussed project roadmap...",
-    "structured": {
-      "title": "Project Planning Meeting",
-      "overview": "Team discussion about Q1 roadmap",
-      "emoji": "📋",
-      "category": "work",
-      "action_items": [
-        {
-          "description": "Review budget proposal",
-          "completed": false
-        }
-      ],
-      "events": []
-    },
-    "discarded": false,
-    "geolocation": {
-      "latitude": 37.7749,
-      "longitude": -122.4194
-    }
+    "content": "Discussed project roadmap for Q1 with team members...",
+    "category": "interesting"
+  },
+  {
+    "id": "mem_456def",
+    "content": "Reminder to call mom on her birthday next week",
+    "category": "system"
   }
 ]
 ```
@@ -168,18 +153,22 @@ curl -H "Authorization: Bearer omi_dev_your_api_key" \
 GET /v1/dev/user/action-items
 ```
 
-Retrieve all your action items.
+Retrieve all your action items with optional filtering.
 
 **Query Parameters:**
 
+- `conversation_id` (string, optional): Filter by conversation ID (use "null" for standalone items)
 - `completed` (boolean, optional): Filter by completion status
+- `start_date` (datetime, optional): Filter by start date (inclusive)
+- `end_date` (datetime, optional): Filter by end date (inclusive)
 - `limit` (integer, optional): Maximum number to return. Default: 100
+- `offset` (integer, optional): Number of items to skip. Default: 0
 
 **Example Request:**
 
 ```bash
 curl -H "Authorization: Bearer omi_dev_your_api_key" \
-  "https://api.omi.me/v1/dev/user/action-items?completed=false"
+  "https://api.omi.me/v1/dev/user/action-items?completed=false&limit=50"
 ```
 
 **Response:**
@@ -188,10 +177,23 @@ curl -H "Authorization: Bearer omi_dev_your_api_key" \
 [
   {
     "id": "action_101",
-    "memory_id": "mem_789ghi",
     "description": "Review budget proposal",
     "completed": false,
-    "created_at": "2025-01-20T10:15:00Z"
+    "created_at": "2025-01-20T10:15:00Z",
+    "updated_at": "2025-01-20T10:15:00Z",
+    "due_at": null,
+    "completed_at": null,
+    "conversation_id": "conv_202"
+  },
+  {
+    "id": "action_102",
+    "description": "Call dentist for appointment",
+    "completed": true,
+    "created_at": "2025-01-19T14:00:00Z",
+    "updated_at": "2025-01-20T09:00:00Z",
+    "due_at": "2025-01-25T00:00:00Z",
+    "completed_at": "2025-01-20T09:00:00Z",
+    "conversation_id": null
   }
 ]
 ```
@@ -202,43 +204,88 @@ curl -H "Authorization: Bearer omi_dev_your_api_key" \
 GET /v1/dev/user/conversations
 ```
 
-Retrieve your conversation transcripts.
+Retrieve your conversation transcripts. Only completed, non-discarded conversations are returned.
 
 **Query Parameters:**
 
 - `limit` (integer, optional): Maximum number to return. Default: 25
 - `offset` (integer, optional): Number to skip. Default: 0
-- `include_discarded` (boolean, optional): Include discarded conversations. Default: false
+- `start_date` (datetime, optional): Filter by start date (inclusive)
+- `end_date` (datetime, optional): Filter by end date (inclusive)
+- `categories` (string, optional): Comma-separated list of categories (e.g., "personal,business")
+- `include_transcript` (boolean, optional): Include full transcript segments. Default: false
 
 **Example Request:**
 
 ```bash
 curl -H "Authorization: Bearer omi_dev_your_api_key" \
-  "https://api.omi.me/v1/dev/user/conversations?limit=10"
+  "https://api.omi.me/v1/dev/user/conversations?limit=10&include_transcript=true"
 ```
 
-**Response:**
+**Response (without transcript):**
 
 ```json
 [
   {
     "id": "conv_202",
-    "created_at": "2025-01-20T14:00:00Z",
     "started_at": "2025-01-20T13:50:00Z",
     "finished_at": "2025-01-20T14:10:00Z",
-    "transcript_segments": [
-      {
-        "text": "Let's discuss the new feature",
-        "speaker": "SPEAKER_00",
-        "start": 0.0,
-        "end": 2.5,
-        "is_user": true
-      }
-    ],
+    "language": "en",
     "structured": {
       "title": "Feature Discussion",
-      "overview": "Brainstorming session for new features"
+      "overview": "Brainstorming session for new features",
+      "category": "business",
+      "action_items": [
+        {
+          "description": "Create mockups for new UI",
+          "completed": false,
+          "created_at": "2025-01-20T14:10:00Z"
+        }
+      ],
+      "events": []
     }
+  }
+]
+```
+
+**Response (with transcript):**
+
+```json
+[
+  {
+    "id": "conv_202",
+    "started_at": "2025-01-20T13:50:00Z",
+    "finished_at": "2025-01-20T14:10:00Z",
+    "language": "en",
+    "structured": {
+      "title": "Feature Discussion",
+      "overview": "Brainstorming session for new features",
+      "category": "business",
+      "action_items": [
+        {
+          "description": "Create mockups for new UI",
+          "completed": false,
+          "created_at": "2025-01-20T14:10:00Z"
+        }
+      ],
+      "events": []
+    },
+    "transcript_segments": [
+      {
+        "id": "seg_001",
+        "text": "Let's discuss the new feature",
+        "speaker_id": 0,
+        "start": 0.0,
+        "end": 2.5
+      },
+      {
+        "id": "seg_002",
+        "text": "I think we should focus on the user interface first",
+        "speaker_id": 1,
+        "start": 2.5,
+        "end": 5.8
+      }
+    ]
   }
 ]
 ```
