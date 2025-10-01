@@ -1,0 +1,386 @@
+---
+title: "Developer API"
+description: "Access your Omi data programmatically with the Developer API. Build custom integrations, analytics dashboards, and automation workflows using your memories, conversations, and action items."
+---
+
+## Overview
+
+The Omi Developer API provides read-only access to your personal Omi data, allowing you to build custom applications and integrations. Use it to create analytics dashboards, export data to other services, or build custom tools on top of your Omi data.
+
+## Getting Started
+
+### 1. Generate an API Key
+
+1. Open the Omi app
+2. Navigate to `Settings > Developer`
+3. Under the "Developer API Keys" section, click "Create Key"
+4. Give your key a descriptive name (e.g., "My Analytics Dashboard")
+5. Copy the key immediately - you won't be able to see it again!
+
+### 2. Making API Requests
+
+All API requests must include your API key in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer omi_dev_your_api_key_here" \
+  https://api.omi.me/v1/dev/user/memories
+```
+
+## Base URL
+
+```
+https://api.omi.me/v1/dev
+```
+
+For self-hosted instances, replace with your backend URL.
+
+## Endpoints
+
+### Key Management
+
+#### List API Keys
+
+```http
+GET /v1/dev/keys
+```
+
+Retrieve all your developer API keys (excluding the secret values).
+
+**Response:**
+
+```json
+[
+  {
+    "id": "key_123abc",
+    "name": "My Analytics Dashboard",
+    "key_prefix": "omi_dev_abc123",
+    "created_at": "2025-01-15T10:30:00Z",
+    "last_used_at": "2025-01-20T14:22:00Z"
+  }
+]
+```
+
+#### Create API Key
+
+```http
+POST /v1/dev/keys
+```
+
+Create a new developer API key.
+
+**Request Body:**
+
+```json
+{
+  "name": "My New Integration"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "key_456def",
+  "name": "My New Integration",
+  "key_prefix": "omi_dev_def456",
+  "key": "omi_dev_def456_full_secret_key_here",
+  "created_at": "2025-01-20T15:00:00Z",
+  "last_used_at": null
+}
+```
+
+<Warning>
+The full API key is only returned once during creation. Store it securely!
+</Warning>
+
+#### Revoke API Key
+
+```http
+DELETE /v1/dev/keys/{key_id}
+```
+
+Revoke a specific API key. This action cannot be undone.
+
+**Response:** `204 No Content`
+
+---
+
+### User Data (Read-Only)
+
+All user data endpoints require authentication via your Developer API key.
+
+#### Get Memories
+
+```http
+GET /v1/dev/user/memories
+```
+
+Retrieve your memories with optional filtering.
+
+**Query Parameters:**
+
+- `limit` (integer, optional): Maximum number of memories to return. Default: 100
+- `offset` (integer, optional): Number of memories to skip. Default: 0
+- `category` (string, optional): Filter by category (e.g., "personal", "work")
+
+**Example Request:**
+
+```bash
+curl -H "Authorization: Bearer omi_dev_your_api_key" \
+  "https://api.omi.me/v1/dev/user/memories?limit=50&offset=0"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "mem_789ghi",
+    "created_at": "2025-01-20T10:00:00Z",
+    "started_at": "2025-01-20T09:45:00Z",
+    "finished_at": "2025-01-20T10:15:00Z",
+    "transcript": "Discussed project roadmap...",
+    "structured": {
+      "title": "Project Planning Meeting",
+      "overview": "Team discussion about Q1 roadmap",
+      "emoji": "📋",
+      "category": "work",
+      "action_items": [
+        {
+          "description": "Review budget proposal",
+          "completed": false
+        }
+      ],
+      "events": []
+    },
+    "discarded": false,
+    "geolocation": {
+      "latitude": 37.7749,
+      "longitude": -122.4194
+    }
+  }
+]
+```
+
+#### Get Action Items
+
+```http
+GET /v1/dev/user/action-items
+```
+
+Retrieve all your action items.
+
+**Query Parameters:**
+
+- `completed` (boolean, optional): Filter by completion status
+- `limit` (integer, optional): Maximum number to return. Default: 100
+
+**Example Request:**
+
+```bash
+curl -H "Authorization: Bearer omi_dev_your_api_key" \
+  "https://api.omi.me/v1/dev/user/action-items?completed=false"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "action_101",
+    "memory_id": "mem_789ghi",
+    "description": "Review budget proposal",
+    "completed": false,
+    "created_at": "2025-01-20T10:15:00Z"
+  }
+]
+```
+
+#### Get Conversations
+
+```http
+GET /v1/dev/user/conversations
+```
+
+Retrieve your conversation transcripts.
+
+**Query Parameters:**
+
+- `limit` (integer, optional): Maximum number to return. Default: 25
+- `offset` (integer, optional): Number to skip. Default: 0
+- `include_discarded` (boolean, optional): Include discarded conversations. Default: false
+
+**Example Request:**
+
+```bash
+curl -H "Authorization: Bearer omi_dev_your_api_key" \
+  "https://api.omi.me/v1/dev/user/conversations?limit=10"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "conv_202",
+    "created_at": "2025-01-20T14:00:00Z",
+    "started_at": "2025-01-20T13:50:00Z",
+    "finished_at": "2025-01-20T14:10:00Z",
+    "transcript_segments": [
+      {
+        "text": "Let's discuss the new feature",
+        "speaker": "SPEAKER_00",
+        "start": 0.0,
+        "end": 2.5,
+        "is_user": true
+      }
+    ],
+    "structured": {
+      "title": "Feature Discussion",
+      "overview": "Brainstorming session for new features"
+    }
+  }
+]
+```
+
+## Authentication
+
+All API requests (except key creation) require authentication using your Developer API key:
+
+```http
+Authorization: Bearer omi_dev_your_api_key_here
+```
+
+## Rate Limits
+
+- **Rate Limit:** 100 requests per minute per API key
+- **Daily Limit:** 10,000 requests per day per user
+
+Rate limit headers are included in responses:
+
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1642694400
+```
+
+## Error Responses
+
+The API uses standard HTTP status codes:
+
+- `200 OK` - Request succeeded
+- `204 No Content` - Request succeeded with no response body
+- `400 Bad Request` - Invalid request parameters
+- `401 Unauthorized` - Invalid or missing API key
+- `403 Forbidden` - API key doesn't have required permissions
+- `404 Not Found` - Resource not found
+- `429 Too Many Requests` - Rate limit exceeded
+- `500 Internal Server Error` - Server error
+
+**Error Response Format:**
+
+```json
+{
+  "error": {
+    "message": "Invalid API key",
+    "code": "invalid_api_key"
+  }
+}
+```
+
+## Security Best Practices
+
+<Warning>
+Never commit API keys to version control or share them publicly!
+</Warning>
+
+1. **Store keys securely**: Use environment variables or secret management services
+2. **Rotate keys regularly**: Generate new keys and revoke old ones periodically
+3. **Use specific keys**: Create separate keys for different applications
+4. **Monitor usage**: Check the "last used" timestamp in your key list
+5. **Revoke immediately**: If a key is compromised, revoke it right away
+
+## Example Use Cases
+
+### Analytics Dashboard
+
+Build a custom dashboard to visualize your memory trends:
+
+```python
+import requests
+import pandas as pd
+
+api_key = "omi_dev_your_api_key"
+headers = {"Authorization": f"Bearer {api_key}"}
+
+response = requests.get(
+    "https://api.omi.me/v1/dev/user/memories",
+    headers=headers,
+    params={"limit": 1000}
+)
+
+memories = response.json()
+df = pd.DataFrame(memories)
+# Analyze and visualize your data
+```
+
+### Action Item Tracker
+
+Sync your Omi action items with your task management system:
+
+```javascript
+const API_KEY = process.env.OMI_API_KEY;
+
+async function syncActionItems() {
+  const response = await fetch(
+    'https://api.omi.me/v1/dev/user/action-items?completed=false',
+    {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`
+      }
+    }
+  );
+
+  const actionItems = await response.json();
+  // Sync with your task manager
+}
+```
+
+### Data Export
+
+Export your conversations to a local database:
+
+```bash
+#!/bin/bash
+API_KEY="omi_dev_your_api_key"
+
+curl -H "Authorization: Bearer $API_KEY" \
+  "https://api.omi.me/v1/dev/user/conversations?limit=1000" \
+  > conversations_backup.json
+```
+
+## Comparison with MCP
+
+| Feature | Developer API | MCP |
+|---------|--------------|-----|
+| **Purpose** | Direct HTTP API access | AI assistant integration |
+| **Access** | Read-only user data | Read/write with AI context |
+| **Use Case** | Custom apps, dashboards | Claude Desktop, AI agents |
+| **Authentication** | Bearer token | Environment variable |
+| **Best For** | Web apps, analytics | AI-powered workflows |
+
+Use the **Developer API** when you need programmatic access to your data for custom applications.
+
+Use **MCP** when you want AI assistants like Claude to interact with your Omi data.
+
+## Support
+
+For questions, issues, or feature requests:
+
+- **Documentation:** https://docs.omi.me
+- **GitHub Issues:** https://github.com/BasedHardware/omi/issues
+- **Discord:** Join our community at https://discord.gg/omi
+
+## License
+
+The Omi Developer API client libraries and examples are licensed under the MIT License.
