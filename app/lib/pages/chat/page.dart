@@ -912,7 +912,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               // Open drawer immediately for better UX, then load sessions
               scaffoldKey.currentState?.openEndDrawer();
               // Load sessions in background without blocking UI
-              context.read<ChatSessionProvider>().loadSessions(refresh: true);
+              context.read<ChatSessionProvider>().loadSessions();
             },
           ),
         ),
