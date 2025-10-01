@@ -20,28 +20,51 @@ fn apply_channel(channel: LedPwm, on: bool) {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn led_start() -> i32 {
+fn init_impl() -> Result<(), i32> {
     match hal::led_start() {
-        Ok(()) => 0,
+        Ok(()) => Ok(()),
         Err(err) => {
             util::log_error_fmt(format_args!("LED PWM device not ready ({:?})\n", err));
-            err.as_errno()
+            Err(err.as_errno())
         }
+    }
+}
+
+pub fn init() -> Result<(), i32> {
+    init_impl()
+}
+
+pub fn red(on: bool) {
+    apply_channel(LedPwm::red(), on);
+}
+
+pub fn green(on: bool) {
+    apply_channel(LedPwm::green(), on);
+}
+
+pub fn blue(on: bool) {
+    apply_channel(LedPwm::blue(), on);
+}
+
+#[no_mangle]
+pub extern "C" fn led_start() -> i32 {
+    match init_impl() {
+        Ok(()) => 0,
+        Err(err) => err,
     }
 }
 
 #[no_mangle]
 pub extern "C" fn set_led_red(on: bool) {
-    apply_channel(LedPwm::red(), on);
+    red(on);
 }
 
 #[no_mangle]
 pub extern "C" fn set_led_green(on: bool) {
-    apply_channel(LedPwm::green(), on);
+    green(on);
 }
 
 #[no_mangle]
 pub extern "C" fn set_led_blue(on: bool) {
-    apply_channel(LedPwm::blue(), on);
+    blue(on);
 }

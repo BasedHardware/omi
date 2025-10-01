@@ -90,48 +90,70 @@ unsafe extern "C" fn settings_set_cb(
 
 #[no_mangle]
 pub extern "C" fn app_settings_init() -> i32 {
-    if let Err(err) = settings().init() {
-        util::log_error_fmt(format_args!(
-            "Failed to initialize settings subsystem ({:?})\n",
-            err
-        ));
-        return err.as_errno();
-    }
-
-    let err = ensure_handler_registered();
-    if err != 0 {
-        return err;
-    }
-
-    match settings().load() {
-        Ok(()) => {
-            util::log_info("Settings initialized\n");
-            0
-        }
-        Err(err) => {
-            util::log_error_fmt(format_args!("Failed to load settings ({:?})\n", err));
-            err.as_errno()
-        }
+    match init_impl() {
+        Ok(()) => 0,
+        Err(err) => err,
     }
 }
 
 #[no_mangle]
 pub extern "C" fn app_settings_save_dim_ratio(new_ratio: u8) -> i32 {
-    DIM_RATIO.store(new_ratio, Ordering::Relaxed);
-    let bytes = [new_ratio];
-    match settings().save_one(dim_path(), &bytes) {
-        Ok(()) => {
-            util::log_info("Saved dim_ratio\n");
-            0
-        }
-        Err(err) => {
-            util::log_error_fmt(format_args!("Failed to save dim_ratio ({:?})\n", err));
-            err.as_errno()
-        }
+    match save_dim_ratio_impl(new_ratio) {
+        Ok(()) => 0,
+        Err(err) => err,
     }
 }
 
 #[no_mangle]
 pub extern "C" fn app_settings_get_dim_ratio() -> u8 {
     DIM_RATIO.load(Ordering::Relaxed)
+}
+
+fn init_impl() -> Result<(), i32> {
+    if let Err(err) = settings().init() {
+        util::log_error_fmt(format_args!(
+            "Failed to initialize settings subsystem ({:?})\n",
+            err
+        ));
+        return Err(err.as_errno());
+    }
+
+    let err = ensure_handler_registered();
+    if err != 0 {
+        return Err(err);
+    }
+
+    match settings().load() {
+        Ok(()) => {
+            util::log_info("Settings initialized\n");
+            Ok(())
+        }
+        Err(err) => {
+            util::log_error_fmt(format_args!("Failed to load settings ({:?})\n", err));
+            Err(err.as_errno())
+        }
+    }
+}
+
+fn save_dim_ratio_impl(new_ratio: u8) -> Result<(), i32> {
+    DIM_RATIO.store(new_ratio, Ordering::Relaxed);
+    let bytes = [new_ratio];
+    match settings().save_one(dim_path(), &bytes) {
+        Ok(()) => {
+            util::log_info("Saved dim_ratio\n");
+            Ok(())
+        }
+        Err(err) => {
+            util::log_error_fmt(format_args!("Failed to save dim_ratio ({:?})\n", err));
+            Err(err.as_errno())
+        }
+    }
+}
+
+pub fn init() -> Result<(), i32> {
+    init_impl()
+}
+
+pub fn save_dim_ratio(new_ratio: u8) -> Result<(), i32> {
+    save_dim_ratio_impl(new_ratio)
 }

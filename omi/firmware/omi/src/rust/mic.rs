@@ -69,34 +69,45 @@ unsafe extern "C" fn mic_thread(_p1: *mut c_void, _p2: *mut c_void, _p3: *mut c_
 
 #[no_mangle]
 pub extern "C" fn mic_start() -> i32 {
+    match start_impl() {
+        Ok(()) => 0,
+        Err(err) => err,
+    }
+}
+
+fn start_impl() -> Result<(), i32> {
     let dmic = match get_dmic() {
         Ok(d) => d,
-        Err(err) => return err,
+        Err(err) => return Err(err),
     };
 
     if let Err(err) = dmic.configure(MAX_SAMPLE_RATE, 1) {
         util::log_error_fmt(format_args!("Failed to configure DMIC ({:?})\n", err));
-        return err.as_errno();
+        return Err(err.as_errno());
     }
 
     if let Err(err) = dmic.trigger(hal::DMIC_TRIGGER_START) {
         util::log_error_fmt(format_args!("START trigger failed ({:?})\n", err));
-        return err.as_errno();
+        return Err(err.as_errno());
     }
 
     MIC_RUNNING.store(true, Ordering::Relaxed);
     if let Err(err) = spawn_thread() {
         MIC_RUNNING.store(false, Ordering::Relaxed);
         let _ = dmic.trigger(hal::DMIC_TRIGGER_STOP);
-        return err;
+        return Err(err);
     }
 
     util::log_info("Microphone started\n");
-    0
+    Ok(())
 }
 
 #[no_mangle]
 pub extern "C" fn set_mic_callback(callback: unsafe extern "C" fn(*mut i16)) {
+    set_callback_impl(callback);
+}
+
+fn set_callback_impl(callback: unsafe extern "C" fn(*mut i16)) {
     if (callback as usize) == 0 {
         *CALLBACK.lock() = None;
     } else {
@@ -106,6 +117,10 @@ pub extern "C" fn set_mic_callback(callback: unsafe extern "C" fn(*mut i16)) {
 
 #[no_mangle]
 pub extern "C" fn mic_off() {
+    off_impl();
+}
+
+fn off_impl() {
     if MIC_RUNNING.swap(false, Ordering::Relaxed) {
         if let Ok(dmic) = get_dmic() {
             let _ = dmic.trigger(hal::DMIC_TRIGGER_STOP);
@@ -121,6 +136,10 @@ pub extern "C" fn mic_off() {
 
 #[no_mangle]
 pub extern "C" fn mic_on() {
+    on_impl();
+}
+
+fn on_impl() {
     if MIC_RUNNING.load(Ordering::Relaxed) {
         return;
     }
@@ -146,4 +165,20 @@ pub extern "C" fn mic_on() {
     } else {
         util::log_info("Microphone restarted\n");
     }
+}
+
+pub fn start() -> Result<(), i32> {
+    start_impl()
+}
+
+pub fn set_callback(callback: unsafe extern "C" fn(*mut i16)) {
+    set_callback_impl(callback);
+}
+
+pub fn off() {
+    off_impl();
+}
+
+pub fn on() {
+    on_impl();
 }

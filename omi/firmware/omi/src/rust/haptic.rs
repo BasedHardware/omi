@@ -64,25 +64,10 @@ where
 
 #[no_mangle]
 pub extern "C" fn haptic_init() -> i32 {
-    let pin = match haptic_pin() {
-        Ok(pin) => pin,
-        Err(err) => {
-            util::log_error("Haptic GPIO pin not found\n");
-            return err.as_errno();
-        }
-    };
-
-    if !pin.is_ready() {
-        util::log_error("Haptic GPIO device not ready\n");
-        return HalError::DeviceNotReady.as_errno();
+    match init_impl() {
+        Ok(()) => 0,
+        Err(err) => err,
     }
-
-    if let Err(code) = with_work(|_| Ok(())) {
-        return code;
-    }
-
-    util::log_info("Haptic system initialized\n");
-    0
 }
 
 fn configure_output(pin: &hal::GpioPin) -> Result<(), i32> {
@@ -94,20 +79,73 @@ fn configure_output(pin: &hal::GpioPin) -> Result<(), i32> {
 
 #[no_mangle]
 pub extern "C" fn play_haptic_milli(duration_ms: u32) {
+    if let Err(code) = play_impl(duration_ms) {
+        util::log_error_fmt(format_args!("Failed to control haptic ({code})\n"));
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn haptic_off() {
+    if let Ok(pin) = haptic_pin() {
+        if let Err(err) = pin.set(false) {
+            util::log_error_fmt(format_args!("Failed to disable haptic pin ({:?})\n", err));
+        }
+    }
+}
+
+unsafe extern "C" fn haptic_ble_callback(value: u8) {
+    debug_assert!(matches!(ble::haptic_command_codec(), CodecSpec::Binary));
+    match value {
+        1 => play_milliseconds(100),
+        2 => play_milliseconds(300),
+        3 => play_milliseconds(500),
+        _ => util::log_error_fmt(format_args!(
+            "Haptic write: invalid value {} on {}\n",
+            value,
+            HapticCharacteristic::command.uuid()
+        )),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn register_haptic_service() {
+    register_service_impl();
+}
+
+fn init_impl() -> Result<(), i32> {
+    let pin = match haptic_pin() {
+        Ok(pin) => pin,
+        Err(err) => {
+            util::log_error("Haptic GPIO pin not found\n");
+            return Err(err.as_errno());
+        }
+    };
+
+    if !pin.is_ready() {
+        util::log_error("Haptic GPIO device not ready\n");
+        return Err(HalError::DeviceNotReady.as_errno());
+    }
+
+    with_work(|_| Ok(()))?;
+    util::log_info("Haptic system initialized\n");
+    Ok(())
+}
+
+fn play_impl(duration_ms: u32) -> Result<(), i32> {
     let pin = match haptic_pin() {
         Ok(pin) => pin,
         Err(err) => {
             util::log_error_fmt(format_args!("Haptic GPIO pin not found ({:?})\n", err));
-            return;
+            return Err(err.as_errno());
         }
     };
 
     if !pin.is_ready() {
         util::log_error("Haptic GPIO not ready\n");
-        return;
+        return Err(HalError::DeviceNotReady.as_errno());
     }
 
-    if let Err(code) = with_work(|work| {
+    with_work(|work| {
         let _ = work.cancel();
 
         if duration_ms == 0 {
@@ -126,36 +164,10 @@ pub extern "C" fn play_haptic_milli(duration_ms: u32) {
         work.schedule(bounded).map_err(|err| err.as_errno())?;
         util::log_info("Playing haptic\n");
         Ok(())
-    }) {
-        util::log_error_fmt(format_args!("Failed to control haptic ({code})\n"));
-    }
+    })
 }
 
-#[no_mangle]
-pub extern "C" fn haptic_off() {
-    if let Ok(pin) = haptic_pin() {
-        if let Err(err) = pin.set(false) {
-            util::log_error_fmt(format_args!("Failed to disable haptic pin ({:?})\n", err));
-        }
-    }
-}
-
-unsafe extern "C" fn haptic_ble_callback(value: u8) {
-    debug_assert!(matches!(ble::haptic_command_codec(), CodecSpec::Binary));
-    match value {
-        1 => play_haptic_milli(100),
-        2 => play_haptic_milli(300),
-        3 => play_haptic_milli(500),
-        _ => util::log_error_fmt(format_args!(
-            "Haptic write: invalid value {} on {}\n",
-            value,
-            HapticCharacteristic::command.uuid()
-        )),
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn register_haptic_service() {
+fn register_service_impl() {
     if SERVICE_REGISTERED.load(Ordering::Relaxed) {
         return;
     }
@@ -176,4 +188,18 @@ pub extern "C" fn register_haptic_service() {
         SERVICE_REGISTERED.store(true, Ordering::Relaxed);
         util::log_info("Haptic GATT service registered\n");
     }
+}
+
+pub fn init() -> Result<(), i32> {
+    init_impl()
+}
+
+pub fn play_milliseconds(duration_ms: u32) {
+    if let Err(code) = play_impl(duration_ms) {
+        util::log_error_fmt(format_args!("Failed to control haptic ({code})\n"));
+    }
+}
+
+pub fn register_service() {
+    register_service_impl();
 }

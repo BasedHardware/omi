@@ -255,7 +255,10 @@ pub extern "C" fn battery_get_percentage(out: *mut u8, battery_millivolt: u16) -
 
 #[no_mangle]
 pub extern "C" fn battery_charge_start() -> i32 {
-    0
+    match start_charging_impl() {
+        Ok(()) => 0,
+        Err(err) => err,
+    }
 }
 
 #[no_mangle]
@@ -331,22 +334,41 @@ unsafe extern "C" fn battery_chg_trampoline(_user_data: *mut c_void) {
 
 #[no_mangle]
 pub extern "C" fn battery_init() -> i32 {
+    match init_impl() {
+        Ok(()) => 0,
+        Err(err) => err,
+    }
+}
+
+fn start_charging_impl() -> Result<(), i32> {
+    Ok(())
+}
+
+fn init_impl() -> Result<(), i32> {
     let hw = hardware();
 
     if let Err(err) = hw.configure_pins() {
-        return error_code(err);
+        return Err(error_code(err));
     }
 
     if let Err(err) = hw.set_charging_handler(Some(battery_chg_trampoline), core::ptr::null_mut()) {
-        return error_code(err);
+        return Err(error_code(err));
     }
 
     if let Err(err) = hw.enable_charging_interrupt() {
-        return error_code(err);
+        return Err(error_code(err));
     }
 
     let _ = battery_enable_read();
     let _ = battery_charging_state_read();
 
-    0
+    Ok(())
+}
+
+pub fn init() -> Result<(), i32> {
+    init_impl()
+}
+
+pub fn start_charging() -> Result<(), i32> {
+    start_charging_impl()
 }

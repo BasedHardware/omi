@@ -4,6 +4,8 @@
 pub mod app_main;
 pub mod battery;
 pub mod ble;
+pub mod button;
+pub mod codec;
 pub mod ffi;
 pub mod hal;
 pub mod haptic;
@@ -13,6 +15,7 @@ pub mod mic;
 pub mod sd_card;
 pub mod settings;
 pub mod spi_flash;
+pub mod transport;
 pub mod util;
 
 use core::panic::PanicInfo;
