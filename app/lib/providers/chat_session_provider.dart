@@ -56,7 +56,10 @@ class ChatSessionProvider extends ChangeNotifier {
 
   Future<void> loadSessions({bool refresh = false}) async {
     // Load ALL user sessions efficiently in a single request
-    if (!refresh && _sessions.isNotEmpty) return;
+    // Only return early if we have multiple sessions (prevents race condition
+    // where createSession adds 1 session before initial load completes)
+    if (!refresh && _sessions.length > 1) return;
+
     _isLoading = true;
     notifyListeners();
     try {
@@ -64,7 +67,14 @@ class ChatSessionProvider extends ChangeNotifier {
 
       // 🚀 PERFORMANCE FIX: Use efficient single API call instead of 4000+ requests
       final list = await api.listAllUserChatSessions(uid: uid);
-      _sessions = list;
+
+      // Merge with any locally created sessions to preserve them
+      // (handles timing issues where createSession runs before loadSessions)
+      final serverSessionIds = list.map((s) => s.id).toSet();
+      final localOnlySessions = _sessions.where((s) => !serverSessionIds.contains(s.id)).toList();
+
+      // Combine: local-only sessions first (most recent), then server sessions
+      _sessions = [...localOnlySessions, ...list];
     } catch (e) {
       debugPrint('loadSessions error: $e');
     } finally {
