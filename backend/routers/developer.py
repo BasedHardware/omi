@@ -22,12 +22,12 @@ router = APIRouter()
 # ******************************************************
 
 
-@router.get("/dev/v1/keys", response_model=List[DevApiKey], tags=["developer"])
+@router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["developer"])
 def get_keys(uid: str = Depends(get_current_user_id)):
     return dev_api_key_db.get_dev_keys_for_user(uid)
 
 
-@router.post("/dev/v1/keys", response_model=DevApiKeyCreated, tags=["developer"])
+@router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["developer"])
 def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
@@ -36,7 +36,7 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
-@router.delete("/dev/v1/keys/{key_id}", status_code=204, tags=["developer"])
+@router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["developer"])
 def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     dev_api_key_db.delete_dev_key(uid, key_id)
     return
@@ -53,7 +53,7 @@ class CleanerMemory(BaseModel):
     category: MemoryCategory
 
 
-@router.get("/dev/v1/memories", tags=["developer"], response_model=List[CleanerMemory])
+@router.get("/v1/dev/user/memories", tags=["developer"], response_model=List[CleanerMemory])
 def get_memories(
     uid: str = Depends(get_uid_from_dev_api_key),
     limit: int = 25,
@@ -90,7 +90,7 @@ class ActionItemResponse(BaseModel):
     conversation_id: Optional[str] = None
 
 
-@router.get("/dev/v1/action-items", tags=["developer"], response_model=List[ActionItemResponse])
+@router.get("/v1/dev/user/action-items", tags=["developer"], response_model=List[ActionItemResponse])
 def get_action_items(
     uid: str = Depends(get_uid_from_dev_api_key),
     conversation_id: Optional[str] = None,
@@ -174,7 +174,7 @@ class Conversation(BaseModel):
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
 
 
-@router.get("/dev/v1/conversations", response_model=List[Conversation], tags=["developer"])
+@router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
 def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,

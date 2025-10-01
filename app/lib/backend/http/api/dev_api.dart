@@ -4,7 +4,7 @@ import 'package:omi/backend/schema/dev_api_key.dart';
 import 'package:omi/env/env.dart';
 
 class DevApi {
-  static final String _baseUrl = '${Env.apiBaseUrl}dev/v1';
+  static final String _baseUrl = '${Env.apiBaseUrl}v1/dev';
 
   static Future<List<DevApiKey>> getDevApiKeys() async {
     final response = await makeApiCall(
