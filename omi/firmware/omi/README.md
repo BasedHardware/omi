@@ -39,9 +39,9 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] Test with an on-battery device (without charger)
   - [x] Initialize project, basic main loop with tests and devkit firmware as libs
   - [x] Streaming and transcribing
-    - [x] Mic (1/2)
+    - [x] Mic
       - [x] Capturing audio bytes
-      - [ ] Activating the 2nd mic
+      - [x] Activating the 2nd mic
     - [x] BLE
     - [x] Encoding (OPUS) and transmitting
     - [x] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
@@ -60,7 +60,7 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [ ] Store files
     - [ ] Transfer via BLE
     - [ ] Transfer via Wi-Fi
-  - [x] Haptic (2/3)
+  - [x] Haptic
     - [x] Haptic on turning on/off
     - [x] Long press to chat with omi
     - [x] Recheck the mass production version, since the current motor is not good https://github.com/BasedHardware/omi/pull/2281#issuecomment-2841105447
