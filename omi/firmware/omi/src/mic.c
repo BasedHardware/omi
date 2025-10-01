@@ -239,16 +239,6 @@ void mic_on()
 void mic_set_gain(uint8_t gain_level)
 {
     // Map gain level (0-8) to hardware values
-    // Level 0: 0x00 = mute
-    // Level 1: 0x14 = -20dB
-    // Level 2: 0x1E = -10dB
-    // Level 3: 0x28 = +0dB
-    // Level 4: 0x2E = +6dB
-    // Level 5: 0x32 = +10dB
-    // Level 6: 0x3C = +20dB (default)
-    // Level 7: 0x46 = +30dB
-    // Level 8: 0x50 = +40dB (max)
-
     static const uint8_t gain_map[9] = {
         0x00, // Level 0: mute
         0x14, // Level 1: -20dB
@@ -256,7 +246,7 @@ void mic_set_gain(uint8_t gain_level)
         0x28, // Level 3: +0dB
         0x2E, // Level 4: +6dB
         0x32, // Level 5: +10dB
-        0x3C, // Level 6: +20dB
+        0x3C, // Level 6: +20dB (default)
         0x46, // Level 7: +30dB
         0x50  // Level 8: +40dB
     };
