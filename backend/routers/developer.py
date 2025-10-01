@@ -152,6 +152,7 @@ class Event(BaseModel):
 class SimpleStructured(BaseModel):
     title: str
     overview: str
+    emoji: str = '🧠'
     category: CategoryEnum
     action_items: List[ActionItem] = []
     events: List[Event] = []
@@ -167,10 +168,12 @@ class SimpleTranscriptSegment(BaseModel):
 
 class Conversation(BaseModel):
     id: str
+    created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     structured: SimpleStructured
     language: Optional[str] = None
+    source: Optional[str] = None
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
 
 
