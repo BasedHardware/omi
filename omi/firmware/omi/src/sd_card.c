@@ -1,5 +1,7 @@
-#include "sd_card.h"
+#include "lib/dk2/sd_card.h"
 
+#include <stdio.h>
+#include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/fs/ext2.h>
@@ -14,6 +16,7 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define DISK_DRIVE_NAME "SDMMC"
 #define DISK_MOUNT_PT "/ext"
 #define FS_RET_OK 0
+#define METADATA_FILE_PATH "/ext/audio_metadata.bin"
 
 static struct fs_mount_t mp = {
     .type = FS_EXT2,
@@ -25,6 +28,14 @@ static struct fs_mount_t mp = {
 static const char *disk_mount_pt = DISK_MOUNT_PT;
 static bool is_mounted = false;
 
+// Current write file tracking
+static uint8_t current_write_file = 1;
+static uint32_t current_file_size = 0;
+static uint32_t current_file_start_time_sec = 0;
+
+// Mutex for thread-safe SD card access
+static K_MUTEX_DEFINE(sd_mutex);
+
 // Get the device pointer for the SDHC SPI slot from the device tree
 static const struct device *const sd_dev = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
 static const struct gpio_dt_spec sd_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sdcard_en_pin), gpios, {0});
@@ -35,20 +46,38 @@ static int sd_enable_power(bool enable)
     gpio_pin_configure_dt(&sd_en, GPIO_OUTPUT);
     if (enable) {
         ret = gpio_pin_set_dt(&sd_en, 1);
-        pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+        if (ret < 0) {
+            LOG_ERR("Failed to set SD card power pin: %d", ret);
+            return ret;
+        }
+        // PM operations are optional - some drivers don't support them
+        int pm_ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+        if (pm_ret < 0 && pm_ret != -ENOSYS) {
+            LOG_WRN("PM resume not supported or failed: %d (continuing anyway)", pm_ret);
+        }
+        // Give SD card time to power up and stabilize
+        k_msleep(100);
     } else {
-        ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
-        // gpio_pin_set_dt(&sd_en,    0);
+        // PM operations are optional - some drivers don't support them
+        int pm_ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
+        if (pm_ret < 0 && pm_ret != -ENOSYS) {
+            LOG_WRN("PM suspend not supported or failed: %d (continuing anyway)", pm_ret);
+        }
+        ret = gpio_pin_set_dt(&sd_en, 0);
+        if (ret < 0) {
+            LOG_ERR("Failed to clear SD card power pin: %d", ret);
+            return ret;
+        }
     }
-    return ret;
+    return 0;
 }
 
-static int sd_unmount()
+static int sd_unmount(void)
 {
     int ret;
     ret = fs_unmount(&mp);
     if (ret) {
-        LOG_INF("Disk unmounted error (%d) .", ret);
+        LOG_INF("Disk unmounted error (%d)", ret);
         return ret;
     }
 
@@ -58,20 +87,34 @@ static int sd_unmount()
     return 0;
 }
 
-static int sd_mount()
+static int sd_mount(void)
 {
     int ret;
+
+    if (is_mounted) {
+        LOG_INF("Disk already mounted.");
+        return 0;
+    }
+
+    // Check if SD card device is ready
+    if (!device_is_ready(sd_dev)) {
+        LOG_ERR("SD card device not ready");
+        return -ENODEV;
+    }
+
+    // Power on SD card (bootloader powered it down)
+    ret = sd_enable_power(true);
+    if (ret < 0) {
+        LOG_ERR("Failed to power on SD card (%d)", ret);
+        return ret;
+    }
+
+    // Following the test code pattern for disk initialization
     do {
         static const char *disk_pdrv = DISK_DRIVE_NAME;
         uint64_t memory_size_mb;
         uint32_t block_count;
         uint32_t block_size;
-
-        ret = sd_enable_power(true);
-        if (ret < 0) {
-            LOG_ERR("Failed to power on SD card (%d)", ret);
-            return ret;
-        }
 
         if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL) != 0) {
             LOG_ERR("Storage init ERROR!");
@@ -98,12 +141,8 @@ static int sd_mount()
             break;
         }
     } while (0);
-    mp.mnt_point = disk_mount_pt;
 
-    if (is_mounted) {
-        LOG_INF("Disk already mounted.");
-        return 0;
-    }
+    mp.mnt_point = disk_mount_pt;
 
     if (fs_mount(&mp) != FS_RET_OK) {
         LOG_INF("File system not found, creating file system...");
@@ -116,7 +155,7 @@ static int sd_mount()
 
         ret = fs_mount(&mp);
         if (ret != FS_RET_OK) {
-            LOG_INF("Error mounting disk %d.", ret);
+            LOG_ERR("Error mounting disk [%d]", ret);
             sd_enable_power(false);
             return ret;
         }
@@ -128,15 +167,326 @@ static int sd_mount()
     return ret;
 }
 
+static int ensure_audio_directory(void)
+{
+    struct fs_dirent entry;
+    int ret = fs_stat(AUDIO_FILE_PATH_PREFIX, &entry);
+
+    if (ret != 0) {
+        ret = fs_mkdir(AUDIO_FILE_PATH_PREFIX);
+        if (ret != 0 && ret != -EEXIST) {
+            LOG_ERR("Failed to create audio directory: %d", ret);
+            return ret;
+        }
+    }
+    return 0;
+}
+
+static void get_audio_file_path(uint8_t file_num, char *path_buf, size_t buf_size)
+{
+    snprintf(path_buf, buf_size, "%s/audio_%03d.bin", AUDIO_FILE_PATH_PREFIX, file_num);
+}
+
+static int save_metadata(void)
+{
+    struct fs_file_t file;
+    fs_file_t_init(&file);
+
+    int ret = fs_open(&file, METADATA_FILE_PATH, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC);
+    if (ret < 0) {
+        LOG_ERR("Failed to open metadata file: %d", ret);
+        return ret;
+    }
+
+    // Write current file tracking info
+    struct {
+        uint8_t current_file;
+        uint32_t current_size;
+        uint32_t current_start_time;
+    } metadata = {
+        .current_file = current_write_file,
+        .current_size = current_file_size,
+        .current_start_time = current_file_start_time_sec,
+    };
+
+    ret = fs_write(&file, &metadata, sizeof(metadata));
+    fs_close(&file);
+
+    return ret < 0 ? ret : 0;
+}
+
+static int load_metadata(void)
+{
+    struct fs_file_t file;
+    fs_file_t_init(&file);
+
+    int ret = fs_open(&file, METADATA_FILE_PATH, FS_O_READ);
+    if (ret < 0) {
+        // File doesn't exist, use defaults
+        current_write_file = 1;
+        current_file_size = 0;
+        current_file_start_time_sec = 0;
+        return 0;
+    }
+
+    struct {
+        uint8_t current_file;
+        uint32_t current_size;
+        uint32_t current_start_time;
+    } metadata;
+
+    ret = fs_read(&file, &metadata, sizeof(metadata));
+    fs_close(&file);
+
+    if (ret == sizeof(metadata)) {
+        current_write_file = metadata.current_file;
+        current_file_size = metadata.current_size;
+        current_file_start_time_sec = metadata.current_start_time;
+        return 0;
+    }
+
+    return -EIO;
+}
+
 int app_sd_init(void)
 {
-    LOG_INF("TODO: SD card module initialized (Device: %s)", sd_dev->name);
+    LOG_INF("SD card module initializing (Device: %s)", sd_dev->name);
     return 0;
+}
+
+int app_sd_mount(void)
+{
+    k_mutex_lock(&sd_mutex, K_FOREVER);
+
+    int ret = sd_mount();
+    if (ret != 0) {
+        k_mutex_unlock(&sd_mutex);
+        return ret;
+    }
+
+    ret = ensure_audio_directory();
+    if (ret != 0) {
+        sd_unmount();
+        k_mutex_unlock(&sd_mutex);
+        return ret;
+    }
+
+    ret = load_metadata();
+
+    k_mutex_unlock(&sd_mutex);
+    return ret;
+}
+
+int app_sd_unmount(void)
+{
+    k_mutex_lock(&sd_mutex, K_FOREVER);
+
+    if (is_mounted) {
+        save_metadata();
+    }
+
+    int ret = sd_unmount();
+    k_mutex_unlock(&sd_mutex);
+    return ret;
 }
 
 int app_sd_off(void)
 {
-    sd_mount();
-    sd_unmount();
+    return app_sd_unmount();
+}
+
+int app_sd_write_audio(uint8_t *data, uint32_t length, uint32_t current_time_sec)
+{
+    if (!is_mounted || data == NULL || length == 0) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&sd_mutex, K_FOREVER);
+
+    // Check if we need to rotate to a new file
+    if (current_file_size + length > MAX_FILE_SIZE_BYTES) {
+        // Save current file metadata
+        save_metadata();
+
+        // Move to next file
+        current_write_file++;
+        if (current_write_file > MAX_AUDIO_FILES) {
+            // Wrap around and overwrite oldest file
+            current_write_file = 1;
+        }
+
+        current_file_size = 0;
+        current_file_start_time_sec = current_time_sec;
+
+        LOG_INF("Rotating to new audio file: %d", current_write_file);
+    }
+
+    // Open current file for append
+    char file_path[64];
+    get_audio_file_path(current_write_file, file_path, sizeof(file_path));
+
+    struct fs_file_t file;
+    fs_file_t_init(&file);
+
+    int ret = fs_open(&file, file_path, FS_O_CREATE | FS_O_WRITE | FS_O_APPEND);
+    if (ret < 0) {
+        LOG_ERR("Failed to open audio file %s: %d", file_path, ret);
+        k_mutex_unlock(&sd_mutex);
+        return ret;
+    }
+
+    // Write data
+    ret = fs_write(&file, data, length);
+    fs_close(&file);
+
+    if (ret < 0) {
+        LOG_ERR("Failed to write to audio file: %d", ret);
+        k_mutex_unlock(&sd_mutex);
+        return ret;
+    }
+
+    current_file_size += ret;
+
+    // Periodically save metadata
+    static uint32_t write_count = 0;
+    if (++write_count % 100 == 0) {
+        save_metadata();
+    }
+
+    k_mutex_unlock(&sd_mutex);
+    return ret;
+}
+
+int app_sd_read_audio(uint8_t file_num, uint8_t *buf, uint32_t length, uint32_t offset)
+{
+    if (!is_mounted || buf == NULL || length == 0 || file_num == 0 || file_num > MAX_AUDIO_FILES) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&sd_mutex, K_FOREVER);
+
+    char file_path[64];
+    get_audio_file_path(file_num, file_path, sizeof(file_path));
+
+    struct fs_file_t file;
+    fs_file_t_init(&file);
+
+    int ret = fs_open(&file, file_path, FS_O_READ);
+    if (ret < 0) {
+        k_mutex_unlock(&sd_mutex);
+        return ret;
+    }
+
+    ret = fs_seek(&file, offset, FS_SEEK_SET);
+    if (ret < 0) {
+        fs_close(&file);
+        k_mutex_unlock(&sd_mutex);
+        return ret;
+    }
+
+    ret = fs_read(&file, buf, length);
+    fs_close(&file);
+
+    k_mutex_unlock(&sd_mutex);
+    return ret;
+}
+
+int app_sd_get_file_list(struct audio_file_metadata *metadata_array, uint8_t max_count)
+{
+    if (!is_mounted || metadata_array == NULL || max_count == 0) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&sd_mutex, K_FOREVER);
+
+    uint8_t count = 0;
+
+    for (uint8_t i = 1; i <= MAX_AUDIO_FILES && count < max_count; i++) {
+        char file_path[64];
+        get_audio_file_path(i, file_path, sizeof(file_path));
+
+        struct fs_dirent entry;
+        int ret = fs_stat(file_path, &entry);
+
+        if (ret == 0 && entry.type == FS_DIR_ENTRY_FILE && entry.size > 0) {
+            metadata_array[count].file_num = i;
+            metadata_array[count].file_size = entry.size;
+            metadata_array[count].is_active = (i == current_write_file);
+
+            // For active file, use current tracking info
+            if (i == current_write_file) {
+                metadata_array[count].start_offset_sec = current_file_start_time_sec;
+                // Estimate duration based on typical audio bitrate
+                // Assuming ~5KB/s for opus audio
+                metadata_array[count].duration_sec = entry.size / 5000;
+            } else {
+                // For completed files, estimate from size
+                metadata_array[count].start_offset_sec = 0; // Will need to be calculated
+                metadata_array[count].duration_sec = entry.size / 5000;
+            }
+
+            count++;
+        }
+    }
+
+    k_mutex_unlock(&sd_mutex);
+    return count;
+}
+
+int app_sd_delete_file(uint8_t file_num)
+{
+    if (!is_mounted || file_num == 0 || file_num > MAX_AUDIO_FILES) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&sd_mutex, K_FOREVER);
+
+    char file_path[64];
+    get_audio_file_path(file_num, file_path, sizeof(file_path));
+
+    int ret = fs_unlink(file_path);
+
+    // If we deleted the current write file, reset
+    if (file_num == current_write_file && ret == 0) {
+        current_file_size = 0;
+        save_metadata();
+    }
+
+    k_mutex_unlock(&sd_mutex);
+    return ret;
+}
+
+int app_sd_delete_all_files(void)
+{
+    if (!is_mounted) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&sd_mutex, K_FOREVER);
+
+    int deleted = 0;
+    for (uint8_t i = 1; i <= MAX_AUDIO_FILES; i++) {
+        char file_path[64];
+        get_audio_file_path(i, file_path, sizeof(file_path));
+
+        if (fs_unlink(file_path) == 0) {
+            deleted++;
+        }
+    }
+
+    // Reset tracking
+    current_write_file = 1;
+    current_file_size = 0;
+    current_file_start_time_sec = 0;
+    save_metadata();
+
+    k_mutex_unlock(&sd_mutex);
+
+    LOG_INF("Deleted %d audio files", deleted);
     return 0;
+}
+
+bool app_sd_is_ready(void)
+{
+    return is_mounted;
 }

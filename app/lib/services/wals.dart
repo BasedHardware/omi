@@ -253,45 +253,75 @@ class SDCardWalSync implements IWalSync {
     String deviceId = _device!.id;
     List<Wal> wals = [];
     var storageFiles = await _getStorageList(deviceId);
-    if (storageFiles.isEmpty) {
+
+    if (storageFiles.isEmpty || storageFiles.length < 2) {
       return [];
-    }
-    var totalBytes = storageFiles[0];
-    if (totalBytes <= 0) {
-      return [];
-    }
-    var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
-    if (storageOffset > totalBytes) {
-      // bad state?
-      debugPrint("SDCard bad state, offset > total");
-      storageOffset = 0;
     }
 
-    //> 10s
+    // New format: [file_count, total_size, file1_size, file1_start_time_sec, file2_size, file2_start_time_sec, ...]
+    var fileCount = storageFiles[0];
+    var totalBytes = storageFiles[1];
+
+    if (totalBytes <= 0 || fileCount <= 0) {
+      return [];
+    }
+
     BleAudioCodec codec = await _getAudioCodec(deviceId);
-    if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
-      var seconds = ((totalBytes - storageOffset) / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
-      var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
 
-      // Device model
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-      var pd = await _device!.getDeviceInfo(connection);
-      String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    // Device model
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var pd = await _device!.getDeviceInfo(connection);
+    String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
-      wals.add(Wal(
-        codec: codec,
-        timerStart: timerStart,
-        status: WalStatus.miss,
-        storage: WalStorage.sdcard,
-        seconds: seconds,
-        storageOffset: storageOffset,
-        storageTotalBytes: totalBytes,
-        fileNum: 1,
-        device: _device!.id,
-        deviceModel: deviceModel,
-        totalFrames: seconds * codec.getFramesPerSecond(),
-        syncedFrameOffset: 0, // SD card WALs start unsynced
-      ));
+    // Get the current time for fallback timestamp calculation
+    int currentTimeMs = DateTime.now().millisecondsSinceEpoch;
+
+    // Process individual files (starting from index 2, each file has 2 entries: size and start_time)
+    for (int i = 0; i < fileCount; i++) {
+      int dataIndex = 2 + (i * 2);
+
+      if (dataIndex + 1 >= storageFiles.length) {
+        break; // Not enough data
+      }
+
+      int fileSize = storageFiles[dataIndex];
+      int fileStartOffsetSec = storageFiles[dataIndex + 1];
+      int fileNum = i + 1; // File numbers are 1-based
+
+      // Only add files that have content > 10s
+      if (fileSize > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
+        var seconds = (fileSize / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
+
+        // Calculate timestamp:
+        // The device stores start_offset_sec as seconds since device boot when file was created
+        // We need to convert this to an actual Unix timestamp
+        // If we have a valid start offset, estimate based on current time minus duration
+        // Otherwise, fall back to current time minus estimated duration
+        int timerStart;
+        if (fileStartOffsetSec > 0) {
+          // Estimate: current_time - (current_device_uptime - file_start_offset)
+          // Since we don't know current device uptime precisely, use file age estimation
+          timerStart = (currentTimeMs ~/ 1000) - seconds;
+        } else {
+          // Fallback to spreading files backward in time
+          timerStart = (currentTimeMs ~/ 1000) - (seconds * (fileCount - i));
+        }
+
+        wals.add(Wal(
+          codec: codec,
+          timerStart: timerStart,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          seconds: seconds,
+          storageOffset: 0,
+          storageTotalBytes: fileSize,
+          fileNum: fileNum,
+          device: _device!.id,
+          deviceModel: deviceModel,
+          totalFrames: seconds * codec.getFramesPerSecond(),
+          syncedFrameOffset: 0,
+        ));
+      }
     }
 
     return wals;
@@ -357,13 +387,13 @@ class SDCardWalSync implements IWalSync {
   Future _readStorageBytesToFile(Wal wal, Function(File f, int offset) callback) async {
     var deviceId = wal.device;
 
-    // Move the offset
+    // Move the offset - file numbers are 1-based
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
     int timerStart = wal.timerStart;
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    debugPrint("_readStorageBytesToFile ${offset}");
+    debugPrint("_readStorageBytesToFile file: $fileNum, offset: $offset");
 
     // Read
     List<List<int>> bytesData = [];
@@ -553,7 +583,8 @@ class SDCardWalSync implements IWalSync {
       }
     }
 
-    // Clear file only if everything succeeded
+    // Delete file only if everything succeeded
+    debugPrint("Deleting SD card file ${wal.fileNum} after successful sync");
     await _writeToStorage(wal.device, wal.fileNum, 1, 0);
 
     return resp;

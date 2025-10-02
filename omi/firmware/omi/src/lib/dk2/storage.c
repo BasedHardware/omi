@@ -9,13 +9,16 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/sys/atomic.h>
 
-#include "sdcard.h"
+#include "sd_card.h"
+#include "settings.h"
 #include "transport.h"
-#include "utils.h"
 
 LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
+
+#define SETTINGS_STORAGE_OFFSET_KEY "storage/offset"
 
 #define MAX_PACKET_LENGTH 256
 #define OPUS_ENTRY_LENGTH 80
@@ -55,9 +58,18 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
 
-extern uint8_t file_count;
-extern uint32_t file_num_array[2];
 void broadcast_storage_packet(struct k_work *work_item);
+
+// File list cache
+static struct audio_file_metadata file_list[MAX_AUDIO_FILES];
+static uint8_t file_count = 0;
+
+// Helper function to refresh file list
+static void refresh_file_list(void)
+{
+    file_count = app_sd_get_file_list(file_list, MAX_AUDIO_FILES);
+    LOG_INF("File list refreshed: %d files found", file_count);
+}
 
 static struct bt_gatt_attr storage_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&storage_service_uuid),
@@ -101,13 +113,33 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
                                            uint16_t len,
                                            uint16_t offset)
 {
-    k_msleep(10);
-    uint32_t amount[2] = {0};
-    for (int i = 0; i < 2; i++) {
-        amount[i] = file_num_array[i];
+    // Use cached file list (no heavy operations on BLE stack)
+    if (file_count <= 0) {
+        // No files available
+        uint32_t empty[2] = {0, 0};
+        return bt_gatt_attr_read(conn, attr, buf, len, offset, empty, sizeof(empty));
     }
-    ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, 2 * sizeof(uint32_t));
-    return result;
+
+    // Send file count and total size info from cache
+    uint32_t total_size = 0;
+    for (int i = 0; i < file_count; i++) {
+        total_size += file_list[i].file_size;
+    }
+
+    // Format: [file_count, total_size, file1_size, file1_start_time_sec, file2_size, file2_start_time_sec, ...]
+    // Each file gets 2 entries: size and start_offset_sec
+    // Use static to avoid stack overflow
+    static uint32_t response[MAX_AUDIO_FILES * 2 + 2];
+    response[0] = file_count;
+    response[1] = total_size;
+
+    for (int i = 0; i < file_count && i < MAX_AUDIO_FILES; i++) {
+        response[i * 2 + 2] = file_list[i].file_size;
+        response[i * 2 + 3] = file_list[i].start_offset_sec;
+    }
+
+    size_t response_size = (file_count * 2 + 2) * sizeof(uint32_t);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, response, response_size);
 }
 
 uint8_t transport_started = 0;
@@ -128,31 +160,38 @@ uint32_t remaining_length = 0;
 static int setup_storage_tx()
 {
     transport_started = (uint8_t) 0;
-    // offset = 0;
     LOG_INF("about to transmit storage\n");
     k_msleep(1000);
-    int res = move_read_pointer(current_read_num);
-    if (res) {
-        LOG_INF("bad pointer");
+
+    // Validate file number
+    if (current_read_num == 0 || current_read_num > MAX_AUDIO_FILES) {
+        LOG_ERR("Invalid file number: %d", current_read_num);
         transport_started = 0;
         current_read_num = 1;
         remaining_length = 0;
         return -1;
     }
 
-    LOG_INF("current read ptr %d", current_read_num);
-
-    remaining_length = file_num_array[current_read_num - 1];
-    if (current_read_num == file_count) {
-        remaining_length = get_file_size(file_count);
+    // Find file in list
+    int file_idx = -1;
+    for (int i = 0; i < file_count; i++) {
+        if (file_list[i].file_num == current_read_num) {
+            file_idx = i;
+            break;
+        }
     }
 
-    remaining_length = remaining_length - offset;
+    if (file_idx < 0) {
+        LOG_ERR("File %d not found in list", current_read_num);
+        transport_started = 0;
+        return -1;
+    }
 
-    // offset=offset_;
+    remaining_length = file_list[file_idx].file_size - offset;
+
     LOG_INF("remaining length: %d", remaining_length);
     LOG_INF("offset: %d", offset);
-    LOG_INF("file: %d", current_read_num);
+    LOG_INF("file: %d (size: %d)", current_read_num, file_list[file_idx].file_size);
 
     return 0;
 }
@@ -175,32 +214,50 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
     }
     LOG_PRINTK("command successful: command: %d file: %d size: %d \n", command, file_num, size);
 
-    if (file_num == 0) {
-        LOG_INF("invalid file count 0");
+    if (file_num == 0 || file_num > MAX_AUDIO_FILES) {
+        LOG_INF("invalid file number: %d", file_num);
         return INVALID_FILE_SIZE;
     }
-    if (file_num > file_count) // invalid file count
-    {
-        LOG_INF("invalid file count");
+
+    // Validate file exists in our file list
+    bool file_found = false;
+    for (int i = 0; i < file_count; i++) {
+        if (file_list[i].file_num == file_num) {
+            file_found = true;
+            break;
+        }
+    }
+
+    if (!file_found) {
+        LOG_INF("file %d not found in list", file_num);
         return INVALID_FILE_SIZE;
-        // add audio all?
     }
     if (command == READ_COMMAND) // read
     {
-        uint32_t temp = file_num_array[file_num - 1];
-        if (file_num == (file_count)) {
-            LOG_INF("file_count == final file");
-            offset = size - (size % SD_BLE_SIZE); // round down to nearest SD_BLE_SIZE
-            current_read_num = file_num;
-            transport_started = 1;
-        } else if (temp == 0) {
+        // Find the file in our list
+        int file_idx = -1;
+        for (int i = 0; i < file_count; i++) {
+            if (file_list[i].file_num == file_num) {
+                file_idx = i;
+                break;
+            }
+        }
+
+        if (file_idx < 0) {
+            LOG_ERR("File %d not in list", file_num);
+            return INVALID_FILE_SIZE;
+        }
+
+        uint32_t file_size = file_list[file_idx].file_size;
+
+        if (file_size == 0) {
             LOG_INF("file size is 0");
             return ZERO_FILE_SIZE;
-        } else if (size > temp) {
-            LOG_INF("requested size is too large");
+        } else if (size > file_size) {
+            LOG_INF("requested size %d is too large for file size %d", size, file_size);
             return 5;
         } else {
-            LOG_INF("valid command, setting up ");
+            LOG_INF("valid command, setting up file %d at offset %d", file_num, size);
             offset = size - (size % SD_BLE_SIZE);
             current_read_num = file_num;
             transport_started = 1;
@@ -270,23 +327,28 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
 // }
 
 static void write_to_gatt(struct bt_conn *conn)
-{ // unsafe. designed for max speeds. udp?
-
+{
     uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
 
-    int r = read_audio_data(storage_write_buffer, packet_size, offset);
+    int r = app_sd_read_audio(current_read_num, storage_write_buffer, packet_size, offset);
+    if (r < 0) {
+        LOG_ERR("Failed to read from SD card: %d", r);
+        remaining_length = 0;
+        return;
+    }
+
     offset = offset + packet_size;
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, packet_size);
     if (err) {
         LOG_PRINTK("error writing to gatt: %d\n", err);
     } else {
-        remaining_length = remaining_length - SD_BLE_SIZE;
+        remaining_length = remaining_length - packet_size;
     }
-    // LOG_PRINTK("wrote to gatt %d\n",err);
 }
 
 void storage_write(void)
 {
+    uint32_t idle_count = 0;
     while (1) {
         struct bt_conn *conn = get_current_connection();
 
@@ -296,35 +358,38 @@ void storage_write(void)
         }
         // probably prefer to implement using work orders for delete,nuke,etc...
         if (delete_started) {
-            LOG_INF("delete:%d\n", delete_started);
-            int err = clear_audio_file(1);
+            LOG_INF("delete:%d\n", delete_num);
+            int err = app_sd_delete_file(delete_num);
             offset = 0;
-            save_offset(offset);
 
             if (err) {
-                LOG_PRINTK("error clearing\n");
+                LOG_PRINTK("error deleting file\n");
             } else {
                 uint8_t result_buffer[1] = {200};
                 if (conn) {
                     bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer, 1);
                 }
+                // Refresh file list after delete
+                refresh_file_list();
             }
             delete_started = 0;
             k_msleep(10);
         }
         if (nuke_started) {
-            clear_audio_directory();
-            save_offset(0);
+            app_sd_delete_all_files();
+            offset = 0;
             nuke_started = 0;
+            // Refresh file list after nuke
+            refresh_file_list();
         }
         if (stop_started) {
             remaining_length = 0;
             stop_started = 0;
-            save_offset(offset);
+            // Note: offset is now per-file, saved in app_sd metadata
         }
         if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
             LOG_PRINTK("no heartbeat sent\n");
-            save_offset(offset);
+            // Note: offset tracking is now handled by app_sd
             // k_yield();
             // continue;
         }
@@ -333,8 +398,7 @@ void storage_write(void)
             if (conn == NULL) {
                 LOG_ERR("invalid connection");
                 remaining_length = 0;
-                save_offset(offset);
-                // save offset to flash
+                app_settings_save_storage_offset(offset);
                 continue;
                 // k_yield();
             }
@@ -348,11 +412,19 @@ void storage_write(void)
                 if (stop_started) {
                     stop_started = 0;
                 } else {
-                    LOG_PRINTK("done. attempting to download more files\n");
+                    LOG_PRINTK("file %d transfer complete\n", current_read_num);
                     uint8_t stop_result[1] = {100};
                     int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
                     k_sleep(K_MSEC(10));
+                    offset = 0; // Reset offset for next file
                 }
+            }
+        } else {
+            // Idle - periodically refresh file list (every ~60 seconds of idle time)
+            idle_count++;
+            if (idle_count >= 60000) {
+                refresh_file_list();
+                idle_count = 0;
             }
         }
         k_yield();
@@ -361,6 +433,13 @@ void storage_write(void)
 
 int storage_init()
 {
+    // Load saved offset from settings
+    app_settings_load_storage_offset(&offset);
+
+    // Initialize file list cache
+    LOG_INF("Initializing storage file list...");
+    refresh_file_list();
+
     k_thread_create(&storage_thread,
                     storage_stack,
                     K_THREAD_STACK_SIZEOF(storage_stack),

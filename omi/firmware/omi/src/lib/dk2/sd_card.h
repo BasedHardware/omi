@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <zephyr/kernel.h>
 
-#define MAX_AUDIO_FILES 25                     // Max 25 files (512MB / 20MB)
+#define MAX_AUDIO_FILES 24                     // Max 24 files (512MB / 20MB - 1)
 #define MAX_FILE_SIZE_BYTES (20 * 1024 * 1024) // 20MB per file
 #define AUDIO_FILE_PATH_PREFIX "/ext/audio"
 

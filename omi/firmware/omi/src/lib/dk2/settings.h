@@ -42,4 +42,36 @@ int app_settings_save_mic_gain(uint8_t new_gain);
  */
 uint8_t app_settings_get_mic_gain(void);
 
+/**
+ * @brief Save the storage offset setting.
+ *
+ * @param offset_val The offset value to save.
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_save_storage_offset(uint32_t offset_val);
+
+/**
+ * @brief Load the storage offset setting.
+ *
+ * @param offset_val Pointer to store the loaded offset value.
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_load_storage_offset(uint32_t *offset_val);
+
+/**
+ * @brief Save the base timestamp for SD card file timing.
+ *
+ * @param timestamp_ms Base timestamp in milliseconds (Unix epoch).
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_save_base_timestamp(uint64_t timestamp_ms);
+
+/**
+ * @brief Get the saved base timestamp.
+ *
+ * @param timestamp_ms Pointer to store the timestamp.
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_get_base_timestamp(uint64_t *timestamp_ms);
+
 #endif // SETTINGS_H

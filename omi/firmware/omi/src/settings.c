@@ -13,6 +13,8 @@ LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 // In-memory cache for the settings
 static uint8_t dim_light_ratio = DEFAULT_DIM_LIGHT_RATIO;
 static uint8_t mic_gain = DEFAULT_MIC_GAIN;
+static uint32_t storage_offset = 0;
+static uint64_t base_timestamp_ms = 0;
 
 static int settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg)
 {
@@ -38,6 +40,30 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         rc = read_cb(cb_arg, &mic_gain, sizeof(mic_gain));
         if (rc >= 0) {
             LOG_INF("Loaded mic_gain: %u", mic_gain);
+            return 0;
+        }
+        return rc;
+    }
+
+    if (settings_name_steq(name, "storage_offset", &next) && !next) {
+        if (len != sizeof(storage_offset)) {
+            return -EINVAL;
+        }
+        rc = read_cb(cb_arg, &storage_offset, sizeof(storage_offset));
+        if (rc >= 0) {
+            LOG_INF("Loaded storage_offset: %u", storage_offset);
+            return 0;
+        }
+        return rc;
+    }
+
+    if (settings_name_steq(name, "base_timestamp", &next) && !next) {
+        if (len != sizeof(base_timestamp_ms)) {
+            return -EINVAL;
+        }
+        rc = read_cb(cb_arg, &base_timestamp_ms, sizeof(base_timestamp_ms));
+        if (rc >= 0) {
+            LOG_INF("Loaded base_timestamp: %llu ms", base_timestamp_ms);
             return 0;
         }
         return rc;
@@ -97,4 +123,46 @@ int app_settings_save_mic_gain(uint8_t new_gain)
 uint8_t app_settings_get_mic_gain(void)
 {
     return mic_gain;
+}
+
+int app_settings_save_storage_offset(uint32_t offset_val)
+{
+    storage_offset = offset_val;
+    int err = settings_save_one("omi/storage_offset", &storage_offset, sizeof(storage_offset));
+    if (err) {
+        LOG_ERR("Failed to save storage_offset (err %d)", err);
+    } else {
+        LOG_INF("Saved storage_offset: %u", storage_offset);
+    }
+    return err;
+}
+
+int app_settings_load_storage_offset(uint32_t *offset_val)
+{
+    if (offset_val == NULL) {
+        return -EINVAL;
+    }
+    *offset_val = storage_offset;
+    return 0;
+}
+
+int app_settings_save_base_timestamp(uint64_t timestamp_ms)
+{
+    base_timestamp_ms = timestamp_ms;
+    int err = settings_save_one("omi/base_timestamp", &base_timestamp_ms, sizeof(base_timestamp_ms));
+    if (err) {
+        LOG_ERR("Failed to save base_timestamp (err %d)", err);
+    } else {
+        LOG_INF("Saved base_timestamp: %llu ms", base_timestamp_ms);
+    }
+    return err;
+}
+
+int app_settings_get_base_timestamp(uint64_t *timestamp_ms)
+{
+    if (timestamp_ms == NULL) {
+        return -EINVAL;
+    }
+    *timestamp_ms = base_timestamp_ms;
+    return 0;
 }

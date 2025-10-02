@@ -23,7 +23,6 @@
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
-#include "sdcard.h"
 #include "settings.h"
 #include "speaker.h"
 #include "storage.h"
@@ -34,6 +33,7 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 #endif
 
 // Counters for tracking function calls
+extern uint32_t storage_write_count;
 extern uint32_t gatt_notify_count;
 extern uint32_t write_to_tx_queue_count;
 
@@ -41,11 +41,17 @@ extern uint32_t write_to_tx_queue_count;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
-extern uint32_t file_num_array[2];
 extern bool storage_is_on;
 #endif
 
 extern bool is_connected;
+
+// Time tracking for SD card timestamps
+static uint32_t device_boot_time_sec = 0;
+static uint64_t base_timestamp_ms = 0;
+static bool has_base_timestamp = false;
+
+static uint8_t heartbeat_count = 0;
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
@@ -54,7 +60,7 @@ uint16_t current_package_index = 0;
 // Internal
 //
 
-struct k_mutex write_sdcard_mutex;
+extern struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
@@ -97,6 +103,12 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
                                               void *buf,
                                               uint16_t len,
                                               uint16_t offset);
+static ssize_t settings_timestamp_write_handler(struct bt_conn *conn,
+                                                const struct bt_gatt_attr *attr,
+                                                const void *buf,
+                                                uint16_t len,
+                                                uint16_t offset,
+                                                uint8_t flags);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
@@ -163,6 +175,8 @@ static struct bt_uuid_128 settings_dim_ratio_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10011, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_timestamp_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -177,6 +191,12 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            settings_mic_gain_read_handler,
                            settings_mic_gain_write_handler,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&settings_timestamp_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_WRITE,
+                           NULL,
+                           settings_timestamp_write_handler,
                            NULL),
 };
 
@@ -340,6 +360,36 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_gain, sizeof(current_gain));
 }
 
+static ssize_t settings_timestamp_write_handler(struct bt_conn *conn,
+                                                const struct bt_gatt_attr *attr,
+                                                const void *buf,
+                                                uint16_t len,
+                                                uint16_t offset,
+                                                uint8_t flags)
+{
+    if (len != 8) {
+        LOG_WRN("Invalid length for timestamp write: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint64_t timestamp_ms = 0;
+    memcpy(&timestamp_ms, buf, sizeof(timestamp_ms));
+
+    LOG_INF("Received base timestamp: %llu ms", timestamp_ms);
+
+    // Save to settings (flash) instead of SD card for reliability
+    int err = app_settings_save_base_timestamp(timestamp_ms);
+    if (err) {
+        LOG_ERR("Failed to save base timestamp: %d", err);
+    } else {
+        base_timestamp_ms = timestamp_ms;
+        has_base_timestamp = true;
+        LOG_INF("Base timestamp saved successfully");
+    }
+
+    return len;
+}
+
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
@@ -445,6 +495,21 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     current_mtu = MAX(mtu, CONFIG_BT_L2CAP_TX_MTU);
 
     LOG_INF("Transport connected");
+
+    // Record device boot time for timestamp calculations
+    device_boot_time_sec = k_uptime_get() / 1000;
+
+    // Try to load previously saved base timestamp from settings
+    if (!has_base_timestamp) {
+        uint64_t saved_timestamp = 0;
+        if (app_settings_get_base_timestamp(&saved_timestamp) == 0 && saved_timestamp > 0) {
+            base_timestamp_ms = saved_timestamp;
+            has_base_timestamp = true;
+            LOG_INF("Loaded saved base timestamp: %llu ms", base_timestamp_ms);
+        } else {
+            LOG_INF("No base timestamp found, waiting for app to send one");
+        }
+    }
 
     // Log initial connection parameters
     double connection_interval = info.le.interval * 1.25; // in ms
@@ -743,9 +808,21 @@ static uint16_t buffer_offset = 0;
 // }
 // for improving ble bandwidth
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+
+// Mutex for thread-safe SD card access (shared with storage.c)
+extern struct k_mutex write_sdcard_mutex;
+
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-bool write_to_storage(void)
-{ // max possible packing
+
+static uint32_t get_current_time_offset_sec(void)
+{
+    // Return seconds since device boot
+    return (uint32_t) (k_uptime_get() / 1000);
+}
+
+// Internal function called by SD writer thread
+static bool write_to_storage_internal(void)
+{
     if (!read_from_tx_queue()) {
         return false;
     }
@@ -753,25 +830,37 @@ bool write_to_storage(void)
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
 
-    // buffer_offset = buffer_offset+amount_to_fill;
-    // check if adding the new packet will cause a overflow
+    // Check if adding the new packet will cause an overflow
     if (buffer_offset + packet_size > MAX_WRITE_SIZE - 1) {
-
         storage_temp_data[buffer_offset] = tx_buffer_size;
-        uint8_t *write_ptr = storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+
+        // Write to SD card using new API
+        uint32_t current_time = get_current_time_offset_sec();
+        int ret = app_sd_write_audio(storage_temp_data, MAX_WRITE_SIZE, current_time);
+        if (ret < 0) {
+            LOG_ERR("Failed to write to SD card: %d", ret);
+            return false;
+        }
+        storage_write_count++;
 
         buffer_offset = packet_size;
         storage_temp_data[0] = tx_buffer_size;
         memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
 
     } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - 1) {
-        // exact frame needed
+        // Exact frame needed
         storage_temp_data[buffer_offset] = tx_buffer_size;
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
         buffer_offset = 0;
-        uint8_t *write_ptr = (uint8_t *) storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+
+        // Write to SD card using new API
+        uint32_t current_time = get_current_time_offset_sec();
+        int ret = app_sd_write_audio(storage_temp_data, MAX_WRITE_SIZE, current_time);
+        if (ret < 0) {
+            LOG_ERR("Failed to write to SD card: %d", ret);
+            return false;
+        }
+        storage_write_count++;
     } else {
         storage_temp_data[buffer_offset] = tx_buffer_size;
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
@@ -780,19 +869,7 @@ bool write_to_storage(void)
 
     return true;
 }
-#endif
 
-static bool use_storage = true;
-#define MAX_FILES 10
-#define MAX_AUDIO_FILE_SIZE 300000
-static int recent_file_size_updated = 0;
-static uint8_t heartbeat_count = 0;
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-void update_file_size()
-{
-    file_num_array[0] = get_file_size(1);
-    file_num_array[1] = get_offset();
-}
 #endif
 
 void test_pusher(void)
@@ -822,6 +899,18 @@ void test_pusher(void)
         if (conn) {
             bt_conn_unref(conn);
         }
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        // Queue SD write when BLE is not connected or not subscribed
+        if (!valid && app_sd_is_ready()) {
+            // Drain entire ring buffer with mutex protection
+            k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+
+            // Keep processing packets until ring buffer is empty
+            bool ret = write_to_storage_internal();
+
+            k_mutex_unlock(&write_sdcard_mutex);
+        }
+#endif
         runs_count++;
         k_yield();
     }
@@ -835,63 +924,40 @@ void pusher(void)
         // Load current connection
         //
         struct bt_conn *conn = current_connection;
-        // updating the most recent file size is expensive!
-        static bool file_size_updated = true;
-        static bool connection_was_true = false;
-        if (conn && !connection_was_true) {
-            k_msleep(100);
-            file_size_updated = false;
-            connection_was_true = true;
-        } else if (!conn) {
-            connection_was_true = false;
-        }
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-        if (!file_size_updated) {
-            LOG_PRINTK("updating file size\n");
-            update_file_size();
 
-            file_size_updated = true;
-        }
-#endif
         if (conn) {
             conn = bt_conn_ref(conn);
         }
+
         bool valid = true;
         if (current_mtu < MINIMAL_PACKET_SIZE) {
             valid = false;
         } else if (!conn) {
             valid = false;
         } else {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
         }
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-        if (!valid && !storage_is_on) {
-            bool result = false;
-            if (file_num_array[1] < MAX_STORAGE_BYTES) {
-                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-                if (is_sd_on()) {
-                    result = write_to_storage();
-                }
-                k_mutex_unlock(&write_sdcard_mutex);
-            }
-            if (result) {
-                heartbeat_count++;
-                if (heartbeat_count == 255) {
-                    update_file_size();
-                    heartbeat_count = 0;
-                    LOG_PRINTK("drawing\n");
-                }
-            } else {
-            }
+        // Queue SD write when BLE is not connected or not subscribed
+        if (!valid && app_sd_is_ready()) {
+            queue_sd_write();
         }
 #endif
+
+        // Send via BLE if connected and subscribed
         if (valid) {
             bool sent = push_to_gatt(conn);
             if (!sent) {
-                // k_sleep(K_MSEC(50));
+                // Could not send, queue write to SD card as backup
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+                if (app_sd_is_ready()) {
+                    queue_sd_write();
+                }
+#endif
             }
         }
+
         if (conn) {
             bt_conn_unref(conn);
         }
@@ -932,7 +998,7 @@ int transport_off()
     // Turn off other peripherals
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-    sd_off();
+    app_sd_off();
     k_mutex_unlock(&write_sdcard_mutex);
 #endif
 
@@ -952,8 +1018,6 @@ int transport_off()
 // periodic advertising
 int transport_start()
 {
-    k_mutex_init(&write_sdcard_mutex);
-
     int err = 0;
 
     // Pull the nfsw control high

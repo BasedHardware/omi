@@ -10,18 +10,23 @@
 #include "lib/dk2/led.h"
 #include "lib/dk2/lib/battery/battery.h"
 #include "lib/dk2/mic.h"
+#include "lib/dk2/sd_card.h"
 #include "lib/dk2/settings.h"
+#include "lib/dk2/storage.h"
 #include "lib/dk2/transport.h"
-#include "sd_card.h"
 #include "spi_flash.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
+
+// Mutex for SD card access (used by transport and storage)
+K_MUTEX_DEFINE(write_sdcard_mutex);
 
 bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 
 // TODO: remove these metrics
+uint32_t storage_write_count = 0;
 uint32_t gatt_notify_count = 0;
 uint32_t total_mic_buffer_bytes = 0;
 uint32_t broadcast_audio_count = 0;
@@ -112,10 +117,15 @@ static int suspend_unused_modules(void)
         LOG_ERR("Can not suspend the spi flash module: %d", err);
     }
 
+#ifndef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    // Suspend SD card if offline storage is not enabled
     err = app_sd_off();
     if (err) {
-        LOG_ERR("Can not suspend the sd card module: %d", err);
+        LOG_ERR("Failed to suspend SD card: %d", err);
+    } else {
+        LOG_INF("SD card suspended (offline storage disabled)");
     }
+#endif
 
     return 0;
 }
@@ -195,6 +205,29 @@ int main(void)
     activate_button_work();
 #endif
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    // Mount SD card (bootloader already initialized it)
+    LOG_INF("Mounting SD card...");
+
+    // Longer delay since bootloader did init/suspend cycle
+    k_msleep(2000);
+
+    ret = app_sd_mount();
+    if (ret == 0) {
+        LOG_INF("SD card mounted successfully");
+
+        // Initialize storage service
+        ret = storage_init();
+        if (ret) {
+            LOG_ERR("Failed to initialize storage service (err %d)", ret);
+        } else {
+            LOG_INF("Storage service initialized");
+        }
+    } else {
+        LOG_WRN("SD card not mounted, offline storage disabled (err %d)", ret);
+    }
+#endif
+
     // Initialize Haptic driver
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     ret = haptic_init();
@@ -242,11 +275,13 @@ int main(void)
 
     while (1) {
         // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
-        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u",
+        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u, Storage "
+                "writes: %u",
                 total_mic_buffer_bytes,
                 gatt_notify_count,
                 broadcast_audio_count,
-                write_to_tx_queue_count);
+                write_to_tx_queue_count,
+                storage_write_count);
 
         // Update LED state based on connection and charging status
         set_led_state();

@@ -14,6 +14,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsServiceUuid = '19b10010-e8f2-537e-4f6c-d104768a1214';
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsTimestampCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -24,6 +25,27 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+
+    // Send current timestamp to device for SD card file timestamping
+    await _sendCurrentTimestamp();
+  }
+
+  Future<void> _sendCurrentTimestamp() async {
+    try {
+      final currentTimeMs = DateTime.now().millisecondsSinceEpoch;
+      final bytes = ByteData(8);
+      bytes.setUint64(0, currentTimeMs, Endian.little);
+
+      await transport.writeCharacteristic(
+        settingsServiceUuid,
+        settingsTimestampCharacteristicUuid,
+        bytes.buffer.asUint8List(),
+      );
+
+      debugPrint('Sent current timestamp to device: $currentTimeMs ms');
+    } catch (e) {
+      debugPrint('OmiDeviceConnection: Error sending timestamp: $e');
+    }
   }
 
   @override
@@ -154,22 +176,40 @@ class OmiDeviceConnection extends DeviceConnection {
           await transport.readCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid);
 
       List<int> storageLengths = [];
-      if (storageValue.isNotEmpty) {
-        int totalEntries = (storageValue.length / 4).toInt();
-        debugPrint('Storage list: $totalEntries items');
+      if (storageValue.isNotEmpty && storageValue.length >= 8) {
+        // First 4 bytes: file count
+        int fileCount =
+            (storageValue[0] | (storageValue[1] << 8) | (storageValue[2] << 16) | (storageValue[3] << 24)) & 0xFFFFFFFF;
 
-        for (int i = 0; i < totalEntries; i++) {
-          int baseIndex = i * 4;
-          var result = ((storageValue[baseIndex] |
-                      (storageValue[baseIndex + 1] << 8) |
-                      (storageValue[baseIndex + 2] << 16) |
-                      (storageValue[baseIndex + 3] << 24)) &
-                  0xFFFFFFFF)
-              .toSigned(32);
-          storageLengths.add(result);
+        // Next 4 bytes: total size
+        int totalSize =
+            (storageValue[4] | (storageValue[5] << 8) | (storageValue[6] << 16) | (storageValue[7] << 24)) & 0xFFFFFFFF;
+
+        debugPrint('Storage: $fileCount files, total size: $totalSize bytes');
+
+        // Format: [file_count, total_size, file1_size, file1_start_time, file2_size, file2_start_time, ...]
+        storageLengths.add(fileCount);
+        storageLengths.add(totalSize);
+
+        // Parse individual file data (starting from index 8)
+        // Each file has 2 entries: size (4 bytes) and start_time_sec (4 bytes)
+        int remainingBytes = storageValue.length - 8;
+        int dataEntries = remainingBytes ~/ 4;
+
+        for (int i = 0; i < dataEntries && i < (fileCount * 2); i++) {
+          int baseIndex = 8 + (i * 4);
+          if (baseIndex + 3 < storageValue.length) {
+            var value = ((storageValue[baseIndex] |
+                        (storageValue[baseIndex + 1] << 8) |
+                        (storageValue[baseIndex + 2] << 16) |
+                        (storageValue[baseIndex + 3] << 24)) &
+                    0xFFFFFFFF)
+                .toSigned(32);
+            storageLengths.add(value);
+          }
         }
       }
-      debugPrint('Storage lengths: ${storageLengths.length} items: ${storageLengths.join(', ')}');
+      debugPrint('Storage info: ${storageLengths.length} entries: ${storageLengths.join(', ')}');
       return storageLengths;
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error reading storage list: $e');
