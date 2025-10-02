@@ -1,0 +1,134 @@
+---
+title: 'Speaker Diarization'
+description: 'Automatic speaker identification using voice embeddings'
+---
+
+## Overview
+
+Speaker diarization identifies "who spoke when" in conversations by analyzing voice characteristics. Omi uses ECAPA-TDNN embeddings with BIC clustering to automatically detect and label different speakers.
+
+## How It Works
+
+### 1. Voice Activity Detection (VAD)
+- Uses WebRTC VAD to detect precise speech boundaries
+- Splits segments at natural pauses (>300ms) and sentence breaks
+- Filters out non-speech regions and very short segments (<200ms)
+
+### 2. Embedding Extraction
+- Extracts 192-dimensional ECAPA-TDNN embeddings for each speech segment
+- ECAPA-TDNN achieves 0.80% EER (Equal Error Rate) on VoxCeleb
+- Embeddings capture unique voice characteristics like pitch, tone, and prosody
+
+### 3. Optimal Speaker Count Selection
+- Uses BIC (Bayesian Information Criterion) to determine number of speakers
+- Validates with silhouette score (>0.15 threshold for meaningful separation)
+- Automatically handles 1-6 speakers without manual configuration
+
+### 4. Clustering & Assignment
+- Applies k-means++ clustering on embeddings
+- Assigns speaker labels (SPEAKER_0, SPEAKER_1, etc.)
+- Merges contiguous segments from same speaker
+
+## Integration
+
+Speaker diarization runs automatically during conversation post-processing:
+
+```python
+from utils.stt.speaker_diarization import diarize_segments
+
+# After transcription
+segments_dict = [s.dict() for s in transcript_segments]
+diarized = diarize_segments(segments_dict, audio_path, duration)
+
+# Segments now have accurate speaker labels
+for seg in diarized:
+    print(f"{seg['speaker']}: {seg['text']}")
+```
+
+## Performance
+
+- **Latency**: ~10-15 seconds for 3-minute audio
+- **Accuracy**: High for 2-5 speakers with distinct voices
+- **Model Loading**: ECAPA loads on server startup (~2-3 seconds)
+
+## Configuration
+
+Environment variables:
+
+```bash
+# Maximum seconds to merge contiguous segments with same speaker
+MAX_MERGE_SECONDS=6
+```
+
+## Architecture
+
+### Processing Pipeline
+
+```
+Audio → Transcription → Post-processing → Diarization
+                         (async)           ↓
+                                    VAD Split
+                                           ↓
+                                    Extract Embeddings
+                                           ↓
+                                    BIC Clustering
+                                           ↓
+                                    Assign Labels
+```
+
+### Key Components
+
+- **`_vad_split_segments()`**: Splits transcripts at speech boundaries
+- **`_extract_embedding()`**: Extracts ECAPA embeddings from audio
+- **`_select_optimal_k()`**: Determines optimal number of speakers using BIC
+- **`_simple_kmeans()`**: Clusters embeddings with k-means++
+- **`diarize_segments()`**: Main orchestration function
+
+## Future Improvements
+
+1. **Better Clustering**: Implement HDBSCAN or spectral clustering for improved separation
+2. **Dynamic K Selection**: Add adaptive thresholds based on audio characteristics
+3. **Embedding Refinement**: Fine-tune ECAPA on conversation-specific data
+4. **Temporal Smoothing**: Add HMM or consistency constraints to prevent rapid speaker switches
+
+## Testing
+
+### Unit Tests
+
+Run unit tests for clustering algorithms:
+
+```bash
+cd backend/testing
+python test_speaker_diarization.py
+```
+
+### Integration Test
+
+Test with real audio:
+
+```bash
+# 1. Place your test audio file
+cp your_conversation.wav backend/testing/test_audio.wav
+
+# 2. Run integration test
+cd backend/testing
+python test_speaker_diarization.py --integration
+```
+
+The integration test will show:
+- Number of speakers detected
+- Number of segments per speaker
+- Validation of speaker label format
+
+## Privacy & Security
+
+- All processing happens server-side
+- Embeddings are not stored permanently
+- No voice biometric data is retained after processing
+- Speaker labels are anonymized (SPEAKER_0, SPEAKER_1, etc.)
+
+## References
+
+- [ECAPA-TDNN Paper](https://arxiv.org/abs/2005.07143)
+- [SpeechBrain Toolkit](https://speechbrain.github.io/)
+- [BIC for Model Selection](https://en.wikipedia.org/wiki/Bayesian_information_criterion) 
