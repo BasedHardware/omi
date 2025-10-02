@@ -205,7 +205,34 @@ int get_chunk_counters(uint32_t *start_counter, uint32_t *current_counter);
  */
 void get_chunk_counter_snapshot(uint32_t *start_counter, uint32_t *current_counter);
 
+/**
+ * @brief Prepare a chunk file for streaming over Bluetooth
+ *
+ * Validates that the chunk_id exists within the valid range and prepares
+ * the file for streaming by setting up the read buffer.
+ *
+ * @param chunk_id The chunk identifier to stream (must be within valid range)
+ * @param out_size Pointer to store the file size in bytes (can be NULL)
+ * @return 0 if successful, negative errno code if error:
+ *         -EINVAL if chunk_id is out of valid range
+ *         -ENOENT if no chunks exist or file not found
+ *         SDCARD_ERR_CHUNKING_DISABLED if chunking is disabled
+ */
 int stream_chunk_file(uint32_t chunk_id, uint32_t *out_size);
+
+/**
+ * @brief Delete a chunk file from SD card
+ *
+ * Validates that the chunk_id exists within the valid range before deletion.
+ * Automatically updates chunk counters and persists them to SD card.
+ * If deleting the start or end chunk, adjusts counters to maintain consistency.
+ *
+ * @param chunk_id The chunk identifier to delete (must be within valid range)
+ * @return 0 if successful, negative errno code if error:
+ *         -EINVAL if chunk_id is out of valid range
+ *         -ENOENT if no chunks exist or file not found
+ *         SDCARD_ERR_CHUNKING_DISABLED if chunking is disabled
+ */
 int delete_chunk_file(uint32_t chunk_id);
 
 #endif

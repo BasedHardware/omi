@@ -145,8 +145,6 @@ int mount_sd_card(void)
         }
         LOG_INF("result of opendir: %d",err);
         initialize_audio_file(1);
-        struct fs_dirent file_count_entry;
-        file_count = get_file_contents(&audio_dir_entry, &file_count_entry);
         file_count = 1;
         if (file_count < 0) 
         {
@@ -668,22 +666,13 @@ int initialize_chunk_file(void)
         atomic_set(&chunk_cycle_counter, 0);     // Thread-safe: Reset cycle counter for new chunk
         chunk_active = true;
         atomic_set(&should_rotate_flag, 0);      // Thread-safe: Reset rotation flag for new chunk
-        LOG_INF("H - Debug: NEW AUDIO CHUNK CREATED: %s", current_chunk_filename);
-        LOG_INF("H - Debug: File path: %s", write_buffer);
-        LOG_INF("H - Debug: Chunk will rotate in %d cycles (%d seconds)", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
-        // H - Debug TEMP debugs
-        printf("H - Debug: NEW AUDIO CHUNK CREATED: %s\n", current_chunk_filename);
-        printf("H - Debug: File path: %s\n", write_buffer);
-        printf("H - Debug: Chunk will rotate in %d cycles (%d seconds)\n", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
-        printf("H - Debug: Chunk start counter: %d\n", chunk_start_counter);
-        printf("H - Debug: Chunk current counter: %d\n", chunk_current_counter);
-        printf("H - Debug: Chunk active: %d\n", chunk_active);
-        printf("H - Debug: Chunk duration cycles: %d\n", CHUNK_DURATION_CYCLES);
-        printf("H - Debug: Chunk duration seconds: %d\n", CHUNK_DURATION_CYCLES / 2);
-        printf("H - Debug: Chunking enabled: %d\n", chunking_enabled);
-        printf("H - Debug: SD enabled: %d\n", sd_enabled);
-        printf("H - Debug: System boot complete: %d\n", system_boot_complete);
-        // END TEMP debugs
+        LOG_INF("NEW AUDIO CHUNK CREATED: %s", current_chunk_filename);
+        LOG_DBG("File path: %s", write_buffer);
+        LOG_DBG("Chunk will rotate in %d cycles (%d seconds)", CHUNK_DURATION_CYCLES, CHUNK_DURATION_CYCLES / 2);
+        LOG_DBG("Chunk start counter: %d", chunk_start_counter);
+        LOG_DBG("Chunk current counter: %d", chunk_current_counter);
+        LOG_DBG("Chunking state: active=%d enabled=%d sd_enabled=%d boot_complete=%d", 
+                chunk_active, chunking_enabled, sd_enabled, system_boot_complete);
     } else {
         LOG_ERR("Failed to create chunk file: %d", ret);
         // Reset chunk state on failure
@@ -762,10 +751,7 @@ static int chunk_id_to_path(uint32_t chunk_id, char *out_path, size_t path_len)
                        SDCARD_MOUNT_POINT,
                        (int)chunk_id);
 
-    printf("[sdcard] chunk_id_to_path: %s\n", out_path);
-    printf("[sdcard] chunk_id: %d\n", chunk_id);
-    printf("[sdcard] path_len: %d\n", path_len);
-    printf("[sdcard] len: %d\n", len);
+    LOG_DBG("chunk_id_to_path: chunk_id=%d path=%s len=%d", chunk_id, out_path, len);
     if (len < 0 || (size_t)len >= path_len) {
         return -ENAMETOOLONG;
     }
@@ -778,24 +764,35 @@ int stream_chunk_file(uint32_t chunk_id, uint32_t *out_size)
         return SDCARD_ERR_CHUNKING_DISABLED;
     }
 
+    // Validate chunk_id is within valid range
+    if (chunk_start_counter == 0 && chunk_current_counter == 0) {
+        LOG_WRN("No chunks exist to stream (chunk_id=%u)", chunk_id);
+        return -ENOENT;
+    }
+
+    if (chunk_id < chunk_start_counter || chunk_id > chunk_current_counter) {
+        LOG_WRN("Chunk ID %u out of valid range [%u, %u]", 
+                chunk_id, chunk_start_counter, chunk_current_counter);
+        return -EINVAL;
+    }
+
     int ret = chunk_id_to_path(chunk_id, read_buffer, sizeof(read_buffer));
     if (ret) {
-        printf("[sdcard] chunk_id_to_path failed for %u: %d\n", chunk_id, ret);
+        LOG_ERR("chunk_id_to_path failed for %u: %d", chunk_id, ret);
         return ret;
     }
 
-    printf("[sdcard] chunk_id_to_path succeeded for %u: %s\n", chunk_id, read_buffer);
+    LOG_DBG("Streaming chunk %u from path: %s", chunk_id, read_buffer);
     struct fs_dirent entry;
     ret = fs_stat(read_buffer, &entry);
     if (ret) {
-        LOG_ERR("chunk %u not found", chunk_id);  
-        printf("[sdcard] chunk %u not found\n", chunk_id);
+        LOG_ERR("chunk %u not found", chunk_id);
         return -ENOENT;
     }
 
     if (out_size != NULL) {
         *out_size = (uint32_t)entry.size;
-        printf("[sdcard] chunk %u size: %u\n", chunk_id, *out_size);
+        LOG_DBG("chunk %u size: %u", chunk_id, *out_size);
     }
 
     return 0;
@@ -807,6 +804,18 @@ int delete_chunk_file(uint32_t chunk_id)
         return SDCARD_ERR_CHUNKING_DISABLED;
     }
 
+    // Validate chunk_id is within valid range
+    if (chunk_start_counter == 0 && chunk_current_counter == 0) {
+        LOG_WRN("No chunks exist to delete (chunk_id=%u)", chunk_id);
+        return -ENOENT;
+    }
+
+    if (chunk_id < chunk_start_counter || chunk_id > chunk_current_counter) {
+        LOG_WRN("Chunk ID %u out of valid range [%u, %u]", 
+                chunk_id, chunk_start_counter, chunk_current_counter);
+        return -EINVAL;
+    }
+
     char path[MAX_PATH_LENGTH];
     int ret = chunk_id_to_path(chunk_id, path, sizeof(path));
     if (ret) {
@@ -816,7 +825,7 @@ int delete_chunk_file(uint32_t chunk_id)
     ret = fs_unlink(path);
     if (ret) {
         if (ret == -EIO) {
-            printf("[sdcard] fs_unlink returned -EIO for %s, treating as success\n", path);
+            LOG_WRN("fs_unlink returned -EIO for %s, treating as success", path);
         } else {
             LOG_ERR("Failed to delete chunk %u: %d", chunk_id, ret);
             return ret;
