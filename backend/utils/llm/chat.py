@@ -13,6 +13,7 @@ from models.app import App
 from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
 from models.other import Person
+from models.tools import DatabaseToolSelection
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 
@@ -463,6 +464,72 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
         '    ', ''
     ).strip()
     return llm_mini.invoke(prompt).content
+
+
+# **********************************************
+# ************* DATABASE TOOLS *****************
+# **********************************************
+
+
+def determine_database_tools(question: str, date_filters_available: bool) -> DatabaseToolSelection:
+    """
+    Determine which database tools should be called based on the user's question.
+
+    Args:
+        question: The parsed user question
+        date_filters_available: Whether date filters were extracted from the question
+
+    Returns:
+        DatabaseToolSelection indicating which tools to use and their parameters
+    """
+    prompt = f'''
+    Based on the user's question, determine which database tools should be used to retrieve relevant information.
+    
+    Available tools:
+    1. get_memories: Retrieve known facts, preferences, and general knowledge about the user
+    2. get_conversations: Retrieve past conversations, meetings, and discussion transcripts
+    3. get_action_items: Retrieve tasks, todos, and action items
+    
+    Guidelines for tool selection:
+    - Use memories for: facts, preferences, habits, stored knowledge about the user
+    - Use conversations for: specific discussions, meetings, past interactions, dialogue history
+    - Use action_items for: tasks, todos, things to do, pending work
+    
+    IMPORTANT: Select MULTIPLE tools when the question could benefit from different types of information.
+    - Hybrid questions (e.g., "What did I have for lunch?") → use_memories=True, use_conversations=True
+    - Work-related questions → use_conversations=True, use_action_items=True
+    - Comprehensive questions → may need all 3 tools
+    
+    Be efficient but comprehensive:
+    - Don't select tools that are clearly irrelevant
+    - DO select multiple tools if they could provide complementary context
+    - When in doubt between 1 or 2 tools, choose 2 for better context
+    
+    Length specification:
+    - Specify length ONLY if the user explicitly mentions a number (e.g., "last 5 conversations", "top 3 tasks")
+    - If no specific number is mentioned, leave length as null (we'll use smart defaults)
+    
+    Examples:
+    - "What have I been working on?" → use_conversations=True, use_action_items=True
+    - "What are my preferences?" → use_memories=True
+    - "What did I eat for lunch?" → use_memories=True, use_conversations=True (both could have info!)
+    - "Summarize my meetings last week" → use_conversations=True
+    - "What tasks do I have?" → use_action_items=True
+    - "Tell me about my last 5 conversations" → use_conversations=True, conversations_length=5
+    - "What are my top 3 action items?" → use_action_items=True, action_items_length=3
+    - "Give me a productivity overview" → use_conversations=True, use_action_items=True, use_memories=True
+    
+    User's Question:
+    {question}
+    
+    Date Filters Available: {date_filters_available}
+    '''.replace(
+        '    ', ''
+    ).strip()
+
+    with_parser = llm_mini.with_structured_output(DatabaseToolSelection)
+    response: DatabaseToolSelection = with_parser.invoke(prompt)
+    return response
 
 
 # **********************************************
