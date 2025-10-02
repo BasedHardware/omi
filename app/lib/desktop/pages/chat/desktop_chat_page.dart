@@ -34,6 +34,7 @@ import 'package:omi/ui/atoms/omi_message_input.dart';
 import 'package:omi/ui/atoms/omi_send_button.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_section_header.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -66,6 +67,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   // GlobalKey for the add button to get its position
   final GlobalKey _addButtonKey = GlobalKey();
 
+  late FocusNode _focusNode;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -73,6 +76,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   void initState() {
     apps = prefs.appsList;
     scrollController = ScrollController();
+    _focusNode = FocusNode();
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -143,12 +147,34 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _requestFocusIfPossible();
+  }
+
+  void _requestFocusIfPossible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusNode.canRequestFocus) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  Future<void> _handleReload() async {
+    final messageProvider = context.read<MessageProvider>();
+    if (!messageProvider.isLoadingMessages) {
+      messageProvider.refreshMessages();
+    }
+  }
+
+  @override
   void dispose() {
     textController.dispose();
     scrollController.dispose();
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -156,58 +182,80 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
-      builder: (context, provider, connectivityProvider, appProvider, child) {
-        return Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                ResponsiveHelper.backgroundPrimary,
-                ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              children: [
-                // Animated background pattern
-                _buildAnimatedBackground(),
-
-                // Main content with glassmorphism
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    children: [
-                      _buildModernHeader(appProvider),
-                      if (provider.isLoadingMessages) _buildLoadingBar(),
-                      Expanded(
-                        child: _animationsInitialized
-                            ? FadeTransition(
-                                opacity: _fadeAnimation,
-                                child: SlideTransition(
-                                  position: _slideAnimation,
-                                  child: _buildChatContent(provider, connectivityProvider),
-                                ),
-                              )
-                            : _buildChatContent(provider, connectivityProvider),
+    return VisibilityDetector(
+        key: const Key('desktop-chat-page'),
+        onVisibilityChanged: (visibilityInfo) {
+          if (visibilityInfo.visibleFraction > 0.1) {
+            _requestFocusIfPossible();
+          }
+        },
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+          },
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            child: GestureDetector(
+              onTap: () {
+                if (!_focusNode.hasFocus) {
+                  _focusNode.requestFocus();
+                }
+              },
+              child: Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
+                builder: (context, provider, connectivityProvider, appProvider, child) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          ResponsiveHelper.backgroundPrimary,
+                          ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
+                        ],
                       ),
-                      _buildFloatingInputArea(provider, connectivityProvider),
-                    ],
-                  ),
-                ),
-              ],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Stack(
+                        children: [
+                          _buildAnimatedBackground(),
+
+                          // Main content with glassmorphism
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.02),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildModernHeader(appProvider),
+                                if (provider.isLoadingMessages) _buildLoadingBar(),
+                                Expanded(
+                                  child: _animationsInitialized
+                                      ? FadeTransition(
+                                          opacity: _fadeAnimation,
+                                          child: SlideTransition(
+                                            position: _slideAnimation,
+                                            child: _buildChatContent(provider, connectivityProvider),
+                                          ),
+                                        )
+                                      : _buildChatContent(provider, connectivityProvider),
+                                ),
+                                _buildFloatingInputArea(provider, connectivityProvider),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        );
-      },
-    );
+        ));
   }
 
   Widget _buildAnimatedBackground() {
@@ -1265,7 +1313,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         ),
       ],
     ).then((String? result) {
-      if (result != null) {
+      if (result != null && mounted) {
         switch (result) {
           case 'camera':
             context.read<MessageProvider>().captureImage();

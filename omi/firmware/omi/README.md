@@ -39,15 +39,15 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] Test with an on-battery device (without charger)
   - [x] Initialize project, basic main loop with tests and devkit firmware as libs
   - [x] Streaming and transcribing
-    - [x] Mic (1/2)
+    - [x] Mic
       - [x] Capturing audio bytes
-      - [ ] Activating the 2nd mic
+      - [x] Activating the 2nd mic
     - [x] BLE
     - [x] Encoding (OPUS) and transmitting
     - [x] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
       - [x] android, fixed by increasing the BLE connnection interval (7ms) - but tbh i don't think this is a good solution since our devkit work fine without tunning the connection interval. 100 rps, 50 bytes each is not a big deal! https://github.com/BasedHardware/omi/pull/2248#issuecomment-2820156590 
       - [x] iOS, they doesn't allow increasing the connnection interval(CI). the feasible CI on iOS is about 15ms.
-  - [x] LEDs (3/4)
+  - [x] LEDs
     - [x] Charging
     - [x] BLE connected
     - [x] BLE disconnected
@@ -60,7 +60,7 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [ ] Store files
     - [ ] Transfer via BLE
     - [ ] Transfer via Wi-Fi
-  - [x] Haptic (2/3)
+  - [x] Haptic
     - [x] Haptic on turning on/off
     - [x] Long press to chat with omi
     - [x] Recheck the mass production version, since the current motor is not good https://github.com/BasedHardware/omi/pull/2281#issuecomment-2841105447

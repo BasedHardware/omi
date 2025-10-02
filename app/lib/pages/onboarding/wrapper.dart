@@ -242,6 +242,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // Complete onboarding and go to homepage
           SharedPreferencesUtil().onboardingCompleted = true;
           MixpanelManager().onboardingStepCompleted('Welcome Skipped');
+          PaintingBinding.instance.imageCache.clear();
           routeToPage(context, const HomePageWrapper(), replace: true);
         },
       ),
