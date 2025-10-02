@@ -226,23 +226,26 @@ def extract_action_items(
     • Order by: due date → urgency → alphabetical
 
     DUE DATE EXTRACTION (CRITICAL):
-    IMPORTANT: All due dates must be in the FUTURE. If a relative time resolves to the past, use the next occurrence.
+    IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
 
     For each action item, extract the due_at datetime based on timing mentioned:
-    - "today", "by today", "by end of day", "by evening" → END of current day (23:59:59) in user's timezone ({tz}), converted to UTC
-    - "tomorrow", "by tomorrow" → END of next day (23:59:59) in {tz}, converted to UTC
-    - "this week", "by this week" → END of current week (Sunday 23:59:59) in {tz}, converted to UTC
-    - "next week", "by next week" → END of next week (Sunday 23:59:59) in {tz}, converted to UTC
-    - Specific dates → END of that day (23:59:59) in {tz}, converted to UTC
-    - "urgent" or "ASAP" → 2 hours from {started_at}
-    - "high priority" → END of today (23:59:59 in {tz})
-    - "by [time of day]" (e.g., "by evening", "by noon", "by morning") → END of current day (23:59:59) in {tz}, converted to UTC
+    - "today", "by today", "by end of day", "by evening" → END of current day (23:59:59) in user's timezone ({tz}), converted to UTC with 'Z' suffix
+    - "tomorrow", "by tomorrow" → END of next day (23:59:59) in {tz}, converted to UTC with 'Z' suffix
+    - "this week", "by this week" → END of current week (Sunday 23:59:59) in {tz}, converted to UTC with 'Z' suffix
+    - "next week", "by next week" → END of next week (Sunday 23:59:59) in {tz}, converted to UTC with 'Z' suffix
+    - Specific dates → END of that day (23:59:59) in {tz}, converted to UTC with 'Z' suffix
+    - "urgent" or "ASAP" → 2 hours from {started_at}, converted to UTC with 'Z' suffix
+    - "high priority" → END of today (23:59:59 in {tz}), converted to UTC with 'Z' suffix
+    - "by [time of day]" (e.g., "by evening", "by noon", "by morning") → END of current day (23:59:59) in {tz}, converted to UTC with 'Z' suffix
     - No specific time or "when convenient" → leave due_at as null
 
-    Examples of correct date parsing:
-    - If {started_at} is "2025-10-02T12:59:00+05:30" (Oct 2, 12:59 PM IST)
-    - "by evening today" → 2025-10-02T23:59:59+05:30 → converted to UTC
-    - "tomorrow" → 2025-10-03T23:59:59+05:30 → converted to UTC
+    CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-02T18:29:59Z")
+    DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
+
+    Examples of CORRECT date parsing:
+    - If {started_at} is "2025-10-02T12:59:00+05:30" (Oct 2, 12:59 PM IST) and {tz} is "Asia/Kolkata"
+    - "by evening today" → Calculate 2025-10-02 23:59:59 IST → Convert to UTC → "2025-10-02T18:29:59Z"
+    - "tomorrow" → Calculate 2025-10-03 23:59:59 IST → Convert to UTC → "2025-10-03T18:29:59Z"
 
     Reference time: {started_at}
     User timezone: {tz}

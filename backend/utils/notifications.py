@@ -220,8 +220,14 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
         token=token,
         # Set high priority to ensure delivery even when app is in background
         android=messaging.AndroidConfig(priority='high'),
+        # iOS requires specific headers for background data-only messages
         apns=messaging.APNSConfig(
-            headers={'apns-priority': '10'}, payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True))
+            headers={
+                'apns-push-type': 'background',
+                'apns-priority': '5',
+                'apns-topic': 'com.friend-app-with-wearable.ios12',
+            },
+            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
         ),
     )
 
@@ -255,8 +261,14 @@ def send_action_item_update_message(user_id: str, action_item_id: str, descripti
         data=data,
         token=token,
         android=messaging.AndroidConfig(priority='high'),
+        # iOS requires specific headers for background data-only messages
         apns=messaging.APNSConfig(
-            headers={'apns-priority': '10'}, payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True))
+            headers={
+                'apns-push-type': 'background',
+                'apns-priority': '5',
+                'apns-topic': 'com.friend-app-with-wearable.ios12',
+            },
+            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
         ),
     )
 
@@ -288,8 +300,14 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
         data=data,
         token=token,
         android=messaging.AndroidConfig(priority='high'),
+        # iOS requires specific headers for background data-only messages
         apns=messaging.APNSConfig(
-            headers={'apns-priority': '10'}, payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True))
+            headers={
+                'apns-push-type': 'background',
+                'apns-priority': '5',
+                'apns-topic': 'com.friend-app-with-wearable.ios12',
+            },
+            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
         ),
     )
 
