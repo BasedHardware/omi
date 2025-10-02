@@ -77,19 +77,36 @@ def get_conversations(
     offset: int = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
+    folder_id: Optional[str] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    print('get_conversations', uid, limit, offset, statuses)
-    # force convos statuses to processing, completed on the empty filter
-    if len(statuses) == 0:
-        statuses = "processing,completed"
-    conversations = conversations_db.get_conversations(
-        uid,
-        limit,
-        offset,
-        include_discarded=include_discarded,
-        statuses=statuses.split(",") if len(statuses) > 0 else [],
-    )
+    print('get_conversations', uid, limit, offset, statuses, folder_id)
+
+    # If folder_id is provided, use folder-specific query
+    if folder_id is not None:
+        import database.folders as folders_db
+
+        # Get conversation IDs in folder
+        conversation_ids = folders_db.get_conversations_in_folder(
+            uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
+        )
+        # Fetch full conversations with proper decryption
+        if not conversation_ids:
+            conversations = []
+        else:
+            conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+    else:
+        # Existing logic
+        # force convos statuses to processing, completed on the empty filter
+        if len(statuses) == 0:
+            statuses = "processing,completed"
+        conversations = conversations_db.get_conversations(
+            uid,
+            limit,
+            offset,
+            include_discarded=include_discarded,
+            statuses=statuses.split(",") if len(statuses) > 0 else [],
+        )
 
     for conv in conversations:
         if conv.get('is_locked', False):

@@ -254,6 +254,7 @@ class Conversation(BaseModel):
     status: Optional[ConversationStatus] = ConversationStatus.completed
     is_locked: bool = False
     data_protection_level: Optional[str] = None
+    folder_id: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)
