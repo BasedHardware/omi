@@ -246,7 +246,7 @@ def filter_conversations_by_date(uid, start_date, end_date):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations_by_id(uid, conversation_ids):
+def get_conversations_by_id(uid, conversation_ids, include_discarded=False):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
@@ -257,7 +257,7 @@ def get_conversations_by_id(uid, conversation_ids):
     for doc in docs:
         if doc.exists:
             data = doc.to_dict()
-            if data.get('discarded'):
+            if not include_discarded and data.get('discarded'):
                 continue
             conversations.append(data)
 

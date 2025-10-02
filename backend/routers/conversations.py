@@ -94,7 +94,9 @@ def get_conversations(
         if not conversation_ids:
             conversations = []
         else:
-            conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+            conversations = conversations_db.get_conversations_by_id(
+                uid, conversation_ids, include_discarded=include_discarded
+            )
     else:
         # Existing logic
         # force convos statuses to processing, completed on the empty filter

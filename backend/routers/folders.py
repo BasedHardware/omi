@@ -108,7 +108,7 @@ def get_folder_conversations(
     if not conversation_ids:
         return []
 
-    conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+    conversations = conversations_db.get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
     return conversations
 
 
