@@ -257,22 +257,3 @@ async def execute_conversation_chat_stream(
     yield None
     return
 
-
-# TODO: Add additional conversation-specific nodes as needed
-# Examples of nodes you might want to add:
-#
-# def analyze_conversation_participants(state: ConversationGraphState):
-#     """Analyze who participated in the conversation"""
-#     pass
-#
-# def extract_action_items(state: ConversationGraphState):
-#     """Extract action items from conversation"""
-#     pass
-#
-# def summarize_conversation(state: ConversationGraphState):
-#     """Generate a summary of the conversation"""
-#     pass
-#
-# def identify_key_topics(state: ConversationGraphState):
-#     """Identify main topics discussed"""
-#     pass
