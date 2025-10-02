@@ -136,6 +136,32 @@ class Message(BaseModel):
 
         return '\n'.join(formatted_messages)
 
+    @staticmethod
+    def get_messages_as_dict(
+        messages: List['Message'], use_user_name_if_available: bool = False, use_plugin_name_if_available: bool = False
+    ) -> List[dict]:
+        sorted_messages = sorted(messages, key=lambda m: m.created_at)
+
+        def get_sender_name(message: Message) -> str:
+            if message.sender == 'human':
+                return 'user'
+            # elif use_plugin_name_if_available and message.app_id is not None:
+            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
+            #     if plugin:
+            #         return plugin.name RESTORE ME
+            return message.sender # TODO: use app id
+
+        formatted_messages = [
+            {
+                'role': get_sender_name(message),
+                'content': message.text,
+            }
+            for message in sorted_messages
+        ]
+
+        return formatted_messages
+
+
 
 class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
