@@ -24,14 +24,14 @@ class ActionItemNotificationHandler {
         return;
       }
 
-      // Use action item ID hash as notification ID to ensure uniqueness and allow cancellation
+      // Use action item ID hash as notification ID
       final notificationId = actionItemId.hashCode;
 
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '⏰ Action Item Reminder',
+          title: '⏰ Omi Reminder',
           body: description,
           payload: {
             'action_item_id': actionItemId,
