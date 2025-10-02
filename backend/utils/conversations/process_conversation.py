@@ -57,6 +57,7 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
+from utils.notifications import send_action_item_data_message
 
 
 def _get_structured(
@@ -325,6 +326,17 @@ def _save_action_items(uid: str, conversation: Conversation):
         # Save new action items
         action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
         print(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+        # Send FCM data messages for action items with due dates
+        for idx, action_item in enumerate(conversation.structured.action_items):
+            if action_item.due_at and idx < len(action_item_ids):
+                action_item_id = action_item_ids[idx]
+                send_action_item_data_message(
+                    user_id=uid,
+                    action_item_id=action_item_id,
+                    description=action_item.description,
+                    due_at=action_item.due_at.isoformat(),
+                )
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):

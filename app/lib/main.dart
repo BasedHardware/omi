@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -43,6 +45,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -55,6 +58,38 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:window_manager/window_manager.dart';
+
+/// Background message handler for FCM data messages
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+
+  await AwesomeNotifications().initialize(
+    null,
+    [
+      NotificationChannel(
+        channelKey: 'channel',
+        channelName: 'Omi Notifications',
+        channelDescription: 'Notification channel for Omi',
+        defaultColor: const Color(0xFF9D50DD),
+        ledColor: Colors.white,
+      )
+    ],
+  );
+
+  final data = message.data;
+  final messageType = data['type'];
+  const channelKey = 'channel';
+
+  // Handle action item messages
+  if (messageType == 'action_item_reminder') {
+    await ActionItemNotificationHandler.handleReminderMessage(data, channelKey);
+  } else if (messageType == 'action_item_update') {
+    await ActionItemNotificationHandler.handleUpdateMessage(data, channelKey);
+  } else if (messageType == 'action_item_delete') {
+    await ActionItemNotificationHandler.handleDeletionMessage(data);
+  }
+}
 
 Future _init() async {
   // Env
@@ -88,6 +123,12 @@ Future _init() async {
 
   await PlatformManager.initializeServices();
   await NotificationService.instance.initialize();
+
+  // Register FCM background message handler
+  if (!PlatformService.isDesktop) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
+
   await SharedPreferencesUtil.init();
 
   bool isAuth = (await AuthService.instance.getIdToken()) != null;

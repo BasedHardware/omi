@@ -132,6 +132,10 @@ class Event(BaseModel):
         )
 
 
+class ActionItemsExtraction(BaseModel):
+    action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
+
+
 class Structured(BaseModel):
     title: str = Field(description="A title/name for this conversation", default='')
     overview: str = Field(
