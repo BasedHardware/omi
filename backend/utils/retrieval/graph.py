@@ -35,11 +35,13 @@ from utils.llm.chat import (
     retrieve_is_file_question,
     select_structured_filters,
     extract_question_from_conversation,
+    determine_database_tools,
 )
 from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
+from database.tools import get_memories_tool, get_conversations_tool, get_action_items_tool
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -104,6 +106,7 @@ class GraphState(TypedDict):
     date_filters: Optional[DateRangeFilters]
 
     memories_found: Optional[List[Conversation]]
+    database_tools_context: Optional[str]
 
     parsed_question: Optional[str]
     answer: Optional[str]
@@ -321,6 +324,7 @@ def query_vectors(state: GraphState):
 def qa_handler(state: GraphState):
     uid = state.get("uid")
     memories = state.get("memories_found", [])
+    database_tools_context = state.get("database_tools_context")
 
     all_person_ids = []
     for m in memories:
@@ -333,6 +337,22 @@ def qa_handler(state: GraphState):
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
+    # Build context from both vector search and database tools
+    context_parts = []
+
+    # Add vector search context
+    if memories:
+        vector_context = Conversation.conversations_to_string(memories, False, people=people)
+        if vector_context:
+            context_parts.append(f"<vector_search_results>\n{vector_context}\n</vector_search_results>")
+
+    # Add database tools context
+    if database_tools_context:
+        context_parts.append(f"<database_tools_results>\n{database_tools_context}\n</database_tools_results>")
+
+    # Combine all context
+    combined_context = '\n\n'.join(context_parts) if context_parts else ""
+
     # streaming
     streaming = state.get("streaming")
     if streaming:
@@ -340,7 +360,7 @@ def qa_handler(state: GraphState):
         response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
-            Conversation.conversations_to_string(memories, False, people=people),
+            combined_context,
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
@@ -353,7 +373,7 @@ def qa_handler(state: GraphState):
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Conversation.conversations_to_string(memories, False, people=people),
+        combined_context,
         state.get("plugin_selected"),
         cited=state.get("cited"),
         messages=state.get("messages"),
@@ -394,6 +414,76 @@ def file_chat_question(state: GraphState):
     return {'answer': answer, 'ask_for_nps': True}
 
 
+def database_tools(state: GraphState):
+    """
+    Determine which database tools to call and execute them.
+    Uses structured output to decide, then directly calls functions.
+    """
+    print("database_tools node")
+
+    question = state.get("parsed_question", "")
+    if not question:
+        print("No question found, skipping database tools")
+        return {"database_tools_context": None}
+
+    # Get date filters from state
+    date_filters = state.get("date_filters", {})
+    dates_range = None
+    if date_filters and date_filters.get("start") and date_filters.get("end"):
+        dates_range = [date_filters["start"], date_filters["end"]]
+        print(f"Date range found: {dates_range[0]} to {dates_range[1]}")
+
+    # Ask LLM which tools to use via structured output
+    tool_selection = determine_database_tools(question, date_filters_available=bool(dates_range))
+    print(f"Tool selection: {tool_selection.dict()}")
+
+    # Check if any tools were selected
+    if not (tool_selection.use_memories or tool_selection.use_conversations or tool_selection.use_action_items):
+        print("No database tools selected")
+        return {"database_tools_context": None}
+
+    # Execute selected tools directly
+    uid = state.get("uid")
+    results = []
+
+    if tool_selection.use_memories:
+        try:
+            print(f"Retrieving memories (length={tool_selection.memories_length})")
+            memories_result = get_memories_tool(uid, dates_range=dates_range, length=tool_selection.memories_length)
+            results.append(f"<memories>\n{memories_result}\n</memories>")
+            print(f"Retrieved memories: {len(memories_result)} chars")
+        except Exception as e:
+            print(f"Error retrieving memories: {e}")
+
+    if tool_selection.use_conversations:
+        try:
+            print(f"Retrieving conversations (length={tool_selection.conversations_length})")
+            conversations_result = get_conversations_tool(
+                uid, dates_range=dates_range, length=tool_selection.conversations_length
+            )
+            results.append(f"<conversations>\n{conversations_result}\n</conversations>")
+            print(f"Retrieved conversations: {len(conversations_result)} chars")
+        except Exception as e:
+            print(f"Error retrieving conversations: {e}")
+
+    if tool_selection.use_action_items:
+        try:
+            print(f"Retrieving action items (length={tool_selection.action_items_length})")
+            action_items_result = get_action_items_tool(
+                uid, dates_range=dates_range, length=tool_selection.action_items_length
+            )
+            results.append(f"<action_items>\n{action_items_result}\n</action_items>")
+            print(f"Retrieved action items: {len(action_items_result)} chars")
+        except Exception as e:
+            print(f"Error retrieving action items: {e}")
+
+    # Combine all results
+    combined_context = "\n\n".join(results) if results else None
+    print(f"Database tools context: {len(combined_context) if combined_context else 0} chars")
+
+    return {"database_tools_context": combined_context}
+
+
 workflow = StateGraph(GraphState)
 
 workflow.add_edge(START, "determine_conversation")
@@ -417,9 +507,11 @@ workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
 workflow.add_node("retrieve_topics_filters", retrieve_topics_filters)
 workflow.add_node("retrieve_date_filters", retrieve_date_filters)
+workflow.add_node("database_tools", database_tools)
 
 workflow.add_edge("retrieve_topics_filters", "query_vectors")
-workflow.add_edge("retrieve_date_filters", "query_vectors")
+workflow.add_edge("retrieve_date_filters", "database_tools")
+workflow.add_edge("database_tools", "query_vectors")
 
 workflow.add_node("query_vectors", query_vectors)
 
