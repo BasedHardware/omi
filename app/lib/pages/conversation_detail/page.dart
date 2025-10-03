@@ -28,6 +28,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
+import 'widgets/chat_tab.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -128,8 +129,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller = TabController(length: 4, vsync: this, initialIndex: 1); // Start with summary tab
     _controller!.addListener(() {
+      // Dismiss keyboard when switching tabs for clean UX
+      FocusScope.of(context).unfocus();
+
       setState(() {
         switch (_controller!.index) {
           case 0:
@@ -140,6 +144,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             break;
           case 2:
             selectedTab = ConversationTab.actionItems;
+            break;
+          case 3:
+            selectedTab = ConversationTab.chat;
             break;
           default:
             debugPrint('Invalid tab index: ${_controller!.index}');
@@ -205,6 +212,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         return 'Conversation';
       case ConversationTab.actionItems:
         return 'Action Items';
+      case ConversationTab.chat:
+        return 'Chat';
     }
   }
 
@@ -300,6 +309,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         child: Scaffold(
           key: scaffoldKey,
           extendBody: true,
+          resizeToAvoidBottomInset: selectedTab != ConversationTab.chat, // Don't resize on chat tab
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
             automaticallyImplyLeading: false,
@@ -578,14 +588,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 child: Column(
                   children: [
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Builder(builder: (context) {
-                          return TabBarView(
-                            controller: _controller,
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              TranscriptWidgets(
+                      child: Builder(builder: (context) {
+                        return TabBarView(
+                          controller: _controller,
+                          physics: const NeverScrollableScrollPhysics(),
+                          children: [
+                            // Other tabs with padding
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: TranscriptWidgets(
                                 searchQuery: _searchQuery,
                                 currentResultIndex: getCurrentResultIndexForHighlighting(),
                                 onTapWhenSearchEmpty: () {
@@ -598,7 +609,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   }
                                 },
                               ),
-                              SummaryTab(
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: SummaryTab(
                                 searchQuery: _searchQuery,
                                 currentResultIndex: getCurrentResultIndexForHighlighting(),
                                 onTapWhenSearchEmpty: () {
@@ -611,11 +625,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   }
                                 },
                               ),
-                              ActionItemsTab(),
-                            ],
-                          );
-                        }),
-                      ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: ActionItemsTab(),
+                            ),
+                            // Chat tab with NO padding - 100% width
+                            ChatTab(),
+                          ],
+                        );
+                      }),
                     ),
                   ],
                 ),
@@ -646,6 +665,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             break;
                           case ConversationTab.actionItems:
                             index = 2;
+                            break;
+                          case ConversationTab.chat:
+                            index = 3;
                             break;
                         }
                         _controller!.animateTo(index);

@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets/chat_actions_sheet.dart';
 import 'package:omi/widgets/conversation_bottom_bar/tab_button.dart';
 import 'package:provider/provider.dart';
 
@@ -14,7 +15,7 @@ enum ConversationBottomBarMode {
   detail // For viewing completed conversations
 }
 
-enum ConversationTab { transcript, summary, actionItems }
+enum ConversationTab { transcript, summary, actionItems, chat }
 
 class ConversationBottomBar extends StatelessWidget {
   final ConversationBottomBarMode mode;
@@ -81,8 +82,9 @@ class ConversationBottomBar extends StatelessWidget {
                   _buildSummaryTab(context),
                   const SizedBox(width: 4),
                   _buildActionItemsTab(),
+                  const SizedBox(width: 4),
+                  _buildChatTab(context),
                 ],
-              _ => [_buildSummaryTab(context)],
             },
           ],
         ),
@@ -189,6 +191,30 @@ class ConversationBottomBar extends StatelessWidget {
       icon: FontAwesomeIcons.listCheck,
       isSelected: selectedTab == ConversationTab.actionItems,
       onTap: () => onTabSelected(ConversationTab.actionItems),
+    );
+  }
+
+  Widget _buildChatTab(BuildContext context) {
+    void handleTap() {
+      if (selectedTab == ConversationTab.chat) {
+        // Show chat actions bottom sheet when already on chat tab
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => const ChatActionsBottomSheet(),
+        );
+      } else {
+        onTabSelected(ConversationTab.chat);
+      }
+    }
+
+    return TabButton(
+      icon: FontAwesomeIcons.solidComment,
+      isSelected: selectedTab == ConversationTab.chat,
+      onTap: handleTap,
+      showDropdownArrow: true, // Add dropdown arrow like summary
+      onDropdownPressed: handleTap,
     );
   }
 }
