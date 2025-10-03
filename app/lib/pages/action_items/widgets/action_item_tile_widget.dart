@@ -21,6 +21,7 @@ class ActionItemTileWidget extends StatefulWidget {
   final bool isSelected;
   final VoidCallback? onLongPress;
   final VoidCallback? onSelectionToggle;
+  final bool isSnoozedTab;
 
   const ActionItemTileWidget({
     super.key,
@@ -32,6 +33,7 @@ class ActionItemTileWidget extends StatefulWidget {
     this.isSelected = false,
     this.onLongPress,
     this.onSelectionToggle,
+    this.isSnoozedTab = false,
   });
 
   @override
@@ -99,7 +101,13 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     IconData icon;
     String dueDateText;
 
-    if (widget.actionItem.completed) {
+    // For snoozed tab, always show actual date/time instead of relative labels
+    if (widget.isSnoozedTab) {
+      chipColor = Colors.grey.withOpacity(0.2);
+      textColor = Colors.grey.shade400;
+      icon = Icons.calendar_today;
+      dueDateText = _formatDueDate(dueDate, showFullDate: true);
+    } else if (widget.actionItem.completed) {
       chipColor = Colors.grey.withOpacity(0.2);
       textColor = Colors.grey.shade500;
       icon = Icons.check_circle_outline;
@@ -163,7 +171,31 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     return date1.year == date2.year && date1.month == date2.month && date1.day == date2.day;
   }
 
-  String _formatDueDate(DateTime date) {
+  String _formatDueDate(DateTime date, {bool showFullDate = false}) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    if (showFullDate) {
+      final now = DateTime.now();
+      final hour = date.hour;
+      final minute = date.minute;
+      final hasTime = hour != 0 || minute != 0;
+
+      String dateStr = '${months[date.month - 1]} ${date.day}';
+
+      if (date.year != now.year) {
+        dateStr += ', ${date.year}';
+      }
+
+      if (hasTime && !(hour == 23 && minute == 59)) {
+        final period = hour >= 12 ? 'PM' : 'AM';
+        final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+        final displayMinute = minute.toString().padLeft(2, '0');
+        dateStr += ', $displayHour:$displayMinute $period';
+      }
+
+      return dateStr;
+    }
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final targetDate = DateTime(date.year, date.month, date.day);
@@ -178,7 +210,6 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return weekdays[date.weekday - 1];
     } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return '${months[date.month - 1]} ${date.day}';
     }
   }

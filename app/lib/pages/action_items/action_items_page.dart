@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +27,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   final ScrollController _scrollController = ScrollController();
   Set<String> _exportedToAppleReminders = <String>{};
   final AppReviewService _appReviewService = AppReviewService();
+
+  // Tab state: 0 = To Do, 1 = Done, 2 = snoozed
+  int _selectedTabIndex = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -70,7 +74,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // checks if it's the first action item completed
-  Future<void> _onActionItemCompleted() async {
+  Future<void> _onActionItemCompleted({bool isSnoozed = false}) async {
+    MixpanelManager().actionItemCompleted(fromTab: isSnoozed ? 'Snoozed' : 'To Do');
+
     final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
 
     if (!hasCompletedFirst) {
@@ -116,9 +122,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, child) {
-        // Get incomplete and complete items
-        final incompleteItems = provider.incompleteItems;
-        final completedItems = provider.completedItems;
+        // Get categorized items based on tab
+        final todoItems = provider.todoItems;
+        final doneItems = provider.doneItems;
+        final snoozedItems = provider.snoozedItems;
+
+        // Get current tab items
+        final currentTabItems = _selectedTabIndex == 0
+            ? todoItems
+            : _selectedTabIndex == 1
+                ? doneItems
+                : snoozedItems;
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -189,33 +203,28 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Header with subheading and add button
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'To-Do\'s',
+                                    'Action Items',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 20,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[800],
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${incompleteItems.length}',
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Tap to edit • Long press to select • Swipe for actions',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ],
@@ -231,19 +240,39 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          // Help text for editing
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Tap to edit • Long press to select • Swipe for actions',
-                                style: TextStyle(
-                                  color: Colors.grey.shade500,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 16),
+
+                          // Segmented Control - Full width like action items
+                          Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1C1C1E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.all(2),
+                            child: CupertinoSlidingSegmentedControl<int>(
+                              groupValue: _selectedTabIndex,
+                              onValueChanged: (int? value) {
+                                if (value != null) {
+                                  setState(() {
+                                    _selectedTabIndex = value;
+                                  });
+                                  HapticFeedback.selectionClick();
+
+                                  // Track tab change
+                                  final tabName = value == 0 ? 'To Do' : (value == 1 ? 'Done' : 'Snoozed');
+                                  MixpanelManager().actionItemTabChanged(tabName);
+                                }
+                              },
+                              backgroundColor: Colors.transparent,
+                              thumbColor: const Color(0xFF2C2C2E),
+                              padding: const EdgeInsets.all(0),
+                              children: {
+                                0: _buildTabLabel('To Do', todoItems.length),
+                                1: _buildTabLabel('Done', doneItems.length),
+                                2: _buildTabLabel('Snoozed', snoozedItems.length),
+                              },
+                            ),
                           ),
                           const SizedBox(height: 16),
                         ],
@@ -251,75 +280,66 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ),
                   ),
 
-                // Incomplete Items
-                if (provider.actionItems.isNotEmpty) _buildFlatIncompleteItems(incompleteItems, provider),
-
-                // Completed Section Header
-                if (provider.actionItems.isNotEmpty)
+                // Info banner for snoozed tab
+                if (provider.actionItems.isNotEmpty && _selectedTabIndex == 2)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text(
-                                    'Completed',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[800],
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${completedItems.length}',
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 12.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1C1C1E),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.grey[800]!,
+                            width: 1,
                           ),
-                        ],
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.grey[500],
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Old tasks are auto-snoozed after 3 days to keep your To Do list clean. You can still complete or delete them here.',
+                                style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 12,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
 
-                // Completed Items
-                if (provider.actionItems.isNotEmpty && completedItems.isNotEmpty)
-                  _buildFlatCompletedItems(completedItems, provider)
-                else if (provider.actionItems.isNotEmpty)
+                // Current Tab Items
+                if (provider.actionItems.isNotEmpty && currentTabItems.isNotEmpty)
+                  _buildTabItems(currentTabItems, provider)
+                else if (provider.actionItems.isNotEmpty && currentTabItems.isEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Container(
-                        height: 52,
+                        height: 120,
                         decoration: BoxDecoration(
                           color: const Color(0xFF1F1F25),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Center(
                           child: Text(
-                            'No completed items yet',
+                            _getEmptyTabMessage(),
                             style: TextStyle(
                               color: Colors.grey.shade400,
                               fontSize: 14,
                             ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ),
@@ -373,7 +393,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildFlatIncompleteItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
+  Widget _buildTabItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
@@ -394,25 +414,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildFlatCompletedItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          if (index < items.length) {
-            final item = items[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: _buildDismissibleActionItem(
-                item: item,
-                provider: provider,
-              ),
-            );
-          }
-          return null;
-        },
-        childCount: items.length,
-      ),
-    );
+  String _getEmptyTabMessage() {
+    switch (_selectedTabIndex) {
+      case 0: // To Do
+        return '🎉 All caught up!\nNo pending action items';
+      case 1: // Done
+        return 'No completed items yet';
+      case 2: // Snoozed
+        return '✅ No snoozed tasks\n\nOld tasks are auto-snoozed after 3 days to keep your To Do list clean';
+      default:
+        return 'No items';
+    }
   }
 
   Widget _buildDismissibleActionItem({
@@ -493,7 +505,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         onToggle: (newState) {
           provider.updateActionItemState(item, newState);
           if (newState) {
-            _onActionItemCompleted();
+            _onActionItemCompleted(isSnoozed: _selectedTabIndex == 2);
           }
         },
         exportedToAppleReminders: _exportedToAppleReminders,
@@ -502,6 +514,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         isSelected: provider.isItemSelected(item.id),
         onLongPress: () => _handleItemLongPress(item, provider),
         onSelectionToggle: () => provider.toggleItemSelection(item.id),
+        isSnoozedTab: _selectedTabIndex == 2,
       ),
     );
   }
@@ -671,6 +684,40 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         constraints: const BoxConstraints(maxWidth: 400),
         padding: const EdgeInsets.all(32.0),
         child: _buildFirstTimeEmptyState(),
+      ),
+    );
+  }
+
+  Widget _buildTabLabel(String label, int count) {
+    final int tabIndex = label == 'To Do' ? 0 : (label == 'Done' ? 1 : 2);
+    final bool isSelected = _selectedTabIndex == tabIndex;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isSelected ? Colors.white : Colors.grey[500],
+            ),
+          ),
+          if (count > 0) ...[
+            const SizedBox(width: 4),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
