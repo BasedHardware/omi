@@ -74,7 +74,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // checks if it's the first action item completed
-  Future<void> _onActionItemCompleted() async {
+  Future<void> _onActionItemCompleted({bool isSnoozed = false}) async {
+    MixpanelManager().actionItemCompleted(fromTab: isSnoozed ? 'Snoozed' : 'To Do');
+
     final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
 
     if (!hasCompletedFirst) {
@@ -256,6 +258,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                     _selectedTabIndex = value;
                                   });
                                   HapticFeedback.selectionClick();
+
+                                  // Track tab change
+                                  final tabName = value == 0 ? 'To Do' : (value == 1 ? 'Done' : 'Snoozed');
+                                  MixpanelManager().actionItemTabChanged(tabName);
                                 }
                               },
                               backgroundColor: Colors.transparent,
@@ -499,7 +505,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         onToggle: (newState) {
           provider.updateActionItemState(item, newState);
           if (newState) {
-            _onActionItemCompleted();
+            _onActionItemCompleted(isSnoozed: _selectedTabIndex == 2);
           }
         },
         exportedToAppleReminders: _exportedToAppleReminders,
