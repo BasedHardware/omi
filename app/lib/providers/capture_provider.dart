@@ -583,8 +583,15 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
+
+    bool wasPaused = _isPaused;
+
     await _resetStateVariables();
     await _resetState();
+
+    if (wasPaused) {
+      await pauseDeviceRecording();
+    }
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
