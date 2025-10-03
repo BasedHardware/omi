@@ -508,6 +508,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         isSelected: provider.isItemSelected(item.id),
         onLongPress: () => _handleItemLongPress(item, provider),
         onSelectionToggle: () => provider.toggleItemSelection(item.id),
+        isSnoozedTab: _selectedTabIndex == 2,
       ),
     );
   }
