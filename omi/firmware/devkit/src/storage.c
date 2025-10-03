@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/l2cap.h>
@@ -10,6 +11,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
 
 #include "sdcard.h"
 #include "transport.h"
@@ -20,6 +22,13 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define MAX_PACKET_LENGTH 256
 #define OPUS_ENTRY_LENGTH 80
 #define FRAME_PREFIX_LENGTH 3
+
+#define STORAGE_STATUS_OK 0x00
+#define STORAGE_STATUS_DOWNLOAD_COMPLETE 0x64
+#define STORAGE_STATUS_DELETE_COMPLETE 0xC8
+#define STORAGE_STATUS_CHUNK_STREAM_BEGIN 0x70
+#define STORAGE_STATUS_CHUNK_STREAM_COMPLETE 0x71
+#define STORAGE_STATUS_CHUNK_STREAM_ERROR 0x72
 
 #define READ_COMMAND 0
 #define DELETE_COMMAND 1
@@ -46,17 +55,50 @@ static struct bt_uuid_128 storage_write_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295781, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
 static struct bt_uuid_128 storage_read_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295782, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
+static struct bt_uuid_128 storage_chunk_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295783, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
+static struct bt_uuid_128 storage_chunk_send_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295784, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
+static struct bt_uuid_128 storage_chunk_delete_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295785, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
 static ssize_t storage_read_characteristic(struct bt_conn *conn,
                                            const struct bt_gatt_attr *attr,
                                            void *buf,
                                            uint16_t len,
                                            uint16_t offset);
+static ssize_t storage_chunk_characteristic(struct bt_conn *conn,
+                                            const struct bt_gatt_attr *attr,
+                                            void *buf,
+                                            uint16_t len,
+                                            uint16_t offset);
+static void storage_chunk_ccc_cfg_changed(const struct bt_gatt_attr *attr,
+                                          uint16_t value);
+static ssize_t storage_chunk_send_write(struct bt_conn *conn,
+                                        const struct bt_gatt_attr *attr,
+                                        const void *buf,
+                                        uint16_t len,
+                                        uint16_t attr_offset,
+                                        uint8_t flags);
+static ssize_t storage_chunk_delete_write(struct bt_conn *conn,
+                                          const struct bt_gatt_attr *attr,
+                                          const void *buf,
+                                          uint16_t len,
+                                          uint16_t attr_offset,
+                                          uint8_t flags);
+
+#define STORAGE_ATTR_CHUNK_VALUE_INDEX 8  // Index of storage_chunk characteristic (READ+NOTIFY)
+
+static atomic_t chunk_send_pending = ATOMIC_INIT(0);
+static atomic_t chunk_delete_pending = ATOMIC_INIT(0);
+static atomic_t pending_chunk_send_id = ATOMIC_INIT(0);
+static atomic_t pending_chunk_delete_id = ATOMIC_INIT(0);
 
 K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
 
 extern uint8_t file_count;
 extern uint32_t file_num_array[2];
+extern bool chunking_enabled;
 void broadcast_storage_packet(struct k_work *work_item);
 
 static struct bt_gatt_attr storage_service_attr[] = {
@@ -75,6 +117,25 @@ static struct bt_gatt_attr storage_service_attr[] = {
                            NULL,
                            NULL),
     BT_GATT_CCC(storage_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&storage_chunk_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ,
+                           storage_chunk_characteristic,
+                           NULL,
+                           NULL),
+    BT_GATT_CCC(storage_chunk_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&storage_chunk_send_uuid.uuid,
+                           BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_WRITE,
+                           NULL,
+                           storage_chunk_send_write,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&storage_chunk_delete_uuid.uuid,
+                           BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_WRITE,
+                           NULL,
+                           storage_chunk_delete_write,
+                           NULL),
 
 };
 
@@ -93,6 +154,131 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
     } else {
         LOG_ERR("Invalid CCC value: %u", value);
     }
+}
+
+static void storage_chunk_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
+{
+    ARG_UNUSED(attr);
+
+    if (value == BT_GATT_CCC_NOTIFY) {
+        LOG_DBG("Chunk counter notifications enabled");
+    } else {
+        LOG_DBG("Chunk counter notifications disabled");
+    }
+}
+
+static ssize_t storage_chunk_characteristic(struct bt_conn *conn,
+                                            const struct bt_gatt_attr *attr,
+                                            void *buf,
+                                            uint16_t len,
+                                            uint16_t offset)
+{
+    uint32_t counters[2] = {0};
+    get_chunk_counter_snapshot(&counters[0], &counters[1]);
+
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, counters, sizeof(counters));
+}
+
+static ssize_t storage_chunk_send_write(struct bt_conn *conn,
+                                        const struct bt_gatt_attr *attr,
+                                        const void *buf,
+                                        uint16_t len,
+                                        uint16_t attr_offset,
+                                        uint8_t flags)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(attr);
+    ARG_UNUSED(attr_offset);
+    ARG_UNUSED(flags);
+
+    if (!chunking_enabled) {
+        LOG_WRN("chunk send ignored, chunking disabled");
+        return BT_GATT_ERR(BT_ATT_ERR_WRITE_NOT_PERMITTED);
+    }
+
+    if (len != sizeof(uint32_t)) {
+        LOG_WRN("chunk send invalid len %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint32_t chunk_id = sys_get_le32(buf);
+    if (chunk_id == 0U) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_PDU);
+    }
+
+    // Validate chunk_id is within valid range
+    uint32_t start_counter = 0;
+    uint32_t current_counter = 0;
+    get_chunk_counter_snapshot(&start_counter, &current_counter);
+
+    if (start_counter == 0 && current_counter == 0) {
+        LOG_WRN("Chunk send rejected: no chunks exist (id=%u)", chunk_id);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
+    if (chunk_id < start_counter || chunk_id > current_counter) {
+        LOG_WRN("Chunk send rejected: id=%u out of range [%u, %u]", 
+                chunk_id, start_counter, current_counter);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
+    LOG_DBG("Chunk send request received (id=%u)", chunk_id);
+
+    atomic_set(&pending_chunk_send_id, (int)chunk_id);
+    atomic_set(&chunk_send_pending, 1);
+
+    return len;
+}
+
+static ssize_t storage_chunk_delete_write(struct bt_conn *conn,
+                                          const struct bt_gatt_attr *attr,
+                                          const void *buf,
+                                          uint16_t len,
+                                          uint16_t attr_offset,
+                                          uint8_t flags)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(attr);
+    ARG_UNUSED(attr_offset);
+    ARG_UNUSED(flags);
+
+    if (!chunking_enabled) {
+        LOG_WRN("chunk delete ignored, chunking disabled");
+        return BT_GATT_ERR(BT_ATT_ERR_WRITE_NOT_PERMITTED);
+    }
+
+    if (len != sizeof(uint32_t)) {
+        LOG_WRN("chunk delete invalid len %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint32_t chunk_id = sys_get_le32(buf);
+    if (chunk_id == 0U) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_PDU);
+    }
+
+    // Validate chunk_id is within valid range
+    uint32_t start_counter = 0;
+    uint32_t current_counter = 0;
+    get_chunk_counter_snapshot(&start_counter, &current_counter);
+
+    if (start_counter == 0 && current_counter == 0) {
+        LOG_WRN("Chunk delete rejected: no chunks exist (id=%u)", chunk_id);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
+    if (chunk_id < start_counter || chunk_id > current_counter) {
+        LOG_WRN("Chunk delete rejected: id=%u out of range [%u, %u]", 
+                chunk_id, start_counter, current_counter);
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    }
+
+    LOG_DBG("Chunk delete request received (id=%u)", chunk_id);
+
+    atomic_set(&pending_chunk_delete_id, (int)chunk_id);
+    atomic_set(&chunk_delete_pending, 1);
+
+    return len;
 }
 
 static ssize_t storage_read_characteristic(struct bt_conn *conn,
@@ -124,6 +310,170 @@ static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
 static uint8_t current_read_num = 1;
 uint32_t remaining_length = 0;
+
+static uint32_t chunk_stream_offset = 0;
+static uint32_t chunk_stream_remaining = 0;
+static uint32_t chunk_stream_total = 0;
+static uint32_t chunk_stream_id = 0;
+
+static void storage_notify_chunk_begin(uint32_t chunk_id, uint32_t total_len)
+{
+    struct bt_conn *conn = get_current_connection();
+    if (!conn) {
+        return;
+    }
+
+    uint8_t frame[9];
+    frame[0] = STORAGE_STATUS_CHUNK_STREAM_BEGIN;
+    sys_put_le32(chunk_id, &frame[1]);
+    sys_put_le32(total_len, &frame[5]);
+    bt_gatt_notify(conn, &storage_service.attrs[1], frame, sizeof(frame));
+}
+
+static void storage_notify_chunk_complete(uint32_t chunk_id, uint32_t total_len)
+{
+    struct bt_conn *conn = get_current_connection();
+    if (!conn) {
+        return;
+    }
+
+    uint8_t frame[9];
+    frame[0] = STORAGE_STATUS_CHUNK_STREAM_COMPLETE;
+    sys_put_le32(chunk_id, &frame[1]);
+    sys_put_le32(total_len, &frame[5]);
+    bt_gatt_notify(conn, &storage_service.attrs[1], frame, sizeof(frame));
+}
+
+static void storage_notify_chunk_error(uint32_t chunk_id, uint32_t offset, uint8_t err)
+{
+    struct bt_conn *conn = get_current_connection();
+    if (!conn) {
+        return;
+    }
+
+    uint8_t frame[10];
+    frame[0] = STORAGE_STATUS_CHUNK_STREAM_ERROR;
+    sys_put_le32(chunk_id, &frame[1]);
+    sys_put_le32(offset, &frame[5]);
+    frame[9] = err;
+    bt_gatt_notify(conn, &storage_service.attrs[1], frame, sizeof(frame));
+}
+
+static void reset_chunk_stream_state(void)
+{
+    chunk_stream_offset = 0;
+    chunk_stream_remaining = 0;
+    chunk_stream_total = 0;
+    chunk_stream_id = 0;
+}
+
+static bool prepare_chunk_stream(uint32_t chunk_id)
+{
+    uint32_t file_size = 0;
+    int err = stream_chunk_file(chunk_id, &file_size);
+    if (err) {
+        LOG_ERR("stream_chunk_file failed for %u: %d", chunk_id, err);
+        reset_chunk_stream_state();
+        storage_notify_chunk_error(chunk_id, 0U, (uint8_t)err);
+        return false;
+    }
+    LOG_DBG("Chunk %u streaming prepared (size=%u bytes)", chunk_id, file_size);
+    chunk_stream_offset = 0;
+    chunk_stream_remaining = file_size;
+    chunk_stream_total = file_size;
+    chunk_stream_id = chunk_id;
+    storage_notify_chunk_begin(chunk_id, chunk_stream_total);
+    return true;
+}
+
+bool chunk_stream_active(void)
+{
+    return chunk_stream_remaining > 0;
+}
+
+uint32_t chunk_stream_take(uint8_t *buffer, uint32_t max_len)
+{
+    uint32_t to_read = MIN(chunk_stream_remaining, max_len);
+    if (to_read == 0) {
+        return 0;
+    }
+
+    int rc = read_audio_data(buffer, to_read, chunk_stream_offset);
+    if (rc <= 0) {
+        LOG_ERR("Failed to read chunk data: %d", rc);
+        uint8_t err_code = (rc < 0) ? (uint8_t)(-rc) : 0xEE;
+        storage_notify_chunk_error(chunk_stream_id, chunk_stream_offset, err_code);
+        reset_chunk_stream_state();
+        return 0;
+    }
+
+    chunk_stream_offset += (uint32_t)rc;
+    chunk_stream_remaining -= (uint32_t)rc;
+    LOG_DBG("Chunk stream read %u bytes (offset=%u remaining=%u)",
+            (uint32_t)rc,
+            chunk_stream_offset,
+            chunk_stream_remaining);
+    return (uint32_t)rc;
+}
+
+static void handle_chunk_requests(struct bt_conn *conn)
+{
+    if (atomic_cas(&chunk_delete_pending, 1, 0)) {
+        uint32_t delete_id = (uint32_t)atomic_get(&pending_chunk_delete_id);
+        LOG_DBG("Processing chunk delete request (id=%u)", delete_id);
+        int err = delete_chunk_file(delete_id);
+        if (err) {
+            LOG_ERR("delete_chunk_file failed for %u: %d", delete_id, err);
+        } else {
+            uint32_t counters[2] = {0};
+            get_chunk_counter_snapshot(&counters[0], &counters[1]);
+            LOG_INF("Chunk %u deleted successfully (start=%u current=%u)",
+                    delete_id,
+                    counters[0],
+                    counters[1]);
+            bt_gatt_notify(conn,
+                        &storage_service.attrs[STORAGE_ATTR_CHUNK_VALUE_INDEX],
+                        counters,
+                        sizeof(counters));
+        }
+    }
+
+    if (atomic_cas(&chunk_send_pending, 1, 0)) {
+        uint32_t send_id = (uint32_t)atomic_get(&pending_chunk_send_id);
+        if (prepare_chunk_stream(send_id)) {
+            LOG_DBG("Chunk %u ready for streaming", send_id);
+        }
+    }
+}
+
+static void stream_chunk_if_ready(struct bt_conn *conn)
+{
+    if (!chunk_stream_active() || conn == NULL) {
+        return;
+    }
+
+    uint32_t bytes = chunk_stream_take(storage_write_buffer, SD_BLE_SIZE);
+    if (bytes == 0) {
+        return;
+    }
+
+    int err = bt_gatt_notify(conn, &storage_service.attrs[1], storage_write_buffer, bytes);
+    if (err) {
+        LOG_ERR("Failed to notify chunk data: %d", err);
+        storage_notify_chunk_error(chunk_stream_id, chunk_stream_offset, (uint8_t)err);
+        reset_chunk_stream_state();
+        return;
+    }
+
+    LOG_DBG("Notified %u bytes of chunk data", bytes);
+
+    if (!chunk_stream_active()) {
+        LOG_DBG("Chunk stream complete");
+        storage_notify_chunk_complete(chunk_stream_id, chunk_stream_total);
+        reset_chunk_stream_state();
+    }
+}
+
 
 static int setup_storage_tx()
 {
@@ -289,6 +639,12 @@ void storage_write(void)
 {
     while (1) {
         struct bt_conn *conn = get_current_connection();
+
+        // Only process chunk operations if chunking is enabled
+        if (chunking_enabled) {
+            handle_chunk_requests(conn);
+            stream_chunk_if_ready(conn);
+        }
 
         if (transport_started) {
             LOG_INF("transpor started in side : %d", transport_started);
