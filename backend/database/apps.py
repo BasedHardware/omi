@@ -93,6 +93,82 @@ def set_app_popular_db(app_id: str, popular: bool):
     app_ref.update({'is_popular': popular})
 
 
+def search_apps_db(
+    uid: str,
+    category: str | None = None,
+    capability: str | None = None,
+    my_apps: bool = False,
+    installed_apps: bool = False,
+    enabled_app_ids: List[str] | None = None,
+) -> List:
+    """
+    Optimized search function that applies filters at database level.
+    Uses smart filter ordering to minimize data fetched from Firestore.
+
+    Note: Rating filter is NOT applied here as rating_avg is calculated from Redis,
+    not stored in Firestore. Apply rating filter after fetching from DB.
+
+    Args:
+        uid: User ID for private apps and filtering
+        category: Filter by category ID
+        capability: Filter by capability ID
+        my_apps: Only return user's own apps
+        installed_apps: Only return user's enabled apps
+        enabled_app_ids: Pre-fetched list of enabled app IDs (for installed_apps filter)
+
+    Returns:
+        List of app dictionaries matching the filters
+    """
+    filters = []
+
+    # 1. Apply most restrictive filter first
+    if my_apps:
+        filters.append(FieldFilter('uid', '==', uid))
+
+    elif installed_apps and enabled_app_ids:
+        if len(enabled_app_ids) > 30:
+            filters.append(FieldFilter('approved', '==', True))
+            filters.append(FieldFilter('private', '==', False))
+        else:
+            if enabled_app_ids:
+                filters.append(FieldFilter('id', 'in', enabled_app_ids))
+
+    else:
+        # Default: Public approved apps
+        filters.append(FieldFilter('approved', '==', True))
+        filters.append(FieldFilter('private', '==', False))
+
+    # 2. Add category filter
+    if category and not my_apps:  # Don't add if already filtering by my_apps
+        filters.append(FieldFilter('category', '==', category))
+
+    # 3. Add capability filter
+    if capability and not my_apps:
+        filters.append(FieldFilter('capabilities', 'array-contains', capability))
+
+    # Execute query with all filters
+    if filters:
+        query = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters))
+        apps = [doc.to_dict() for doc in query.stream()]
+    else:
+        apps = []
+
+    # Post-filter for installed_apps with > 30 enabled apps
+    if installed_apps and enabled_app_ids and len(enabled_app_ids) > 30:
+        enabled_set = set(enabled_app_ids)
+        apps = [app for app in apps if app.get('id') in enabled_set]
+
+    # Post-filter for category if my_apps is enabled
+    if my_apps and category:
+        apps = [app for app in apps if app.get('category') == category]
+
+    # Post-filter for capability if my_apps is enabled
+    if my_apps and capability:
+        apps = [app for app in apps if capability in app.get('capabilities', [])]
+
+    return apps
+
+
 # This returns public unapproved apps for a user
 def get_public_unapproved_apps_db(uid: str) -> List:
     filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('private', '==', False)]

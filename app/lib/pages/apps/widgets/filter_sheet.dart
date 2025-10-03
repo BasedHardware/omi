@@ -170,8 +170,8 @@ class FilterBottomSheet extends StatelessWidget {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
-                          provider.filterApps();
                           Navigator.of(context).pop();
+                          Future.microtask(() => provider.applyFilters());
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
