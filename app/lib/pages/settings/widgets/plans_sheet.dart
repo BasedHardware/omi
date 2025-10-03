@@ -441,6 +441,7 @@ class _PlansSheetState extends State<PlansSheet> {
                   width: double.infinity,
                   child: Stack(
                     children: [
+
                       Row(
                         children: [
                           Expanded(
@@ -655,6 +656,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             ),
                           ),
                         ],
+
                       ),
                       Positioned(
                         left: (MediaQuery.of(context).size.width - 120) / 2,
@@ -675,6 +677,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           child: ClipOval(
                             child: Image.asset(
                               Assets.images.omiWithoutRope.path,
+
                               fit: BoxFit.cover,
                             ),
                           ),
@@ -805,6 +808,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
+
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -839,6 +843,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
+
                                   const SizedBox(height: 4),
                                   Text(
                                     'You already have the best value plan. No changes needed.',
@@ -962,6 +967,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                     isSelected: selectedPlan == 'monthly',
                                     planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
                                       (plan) => plan['interval'] == 'month',
+
                                     ),
                                     onTap: () {
                                       HapticFeedback.lightImpact();
@@ -976,6 +982,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(color: Colors.red.withOpacity(0.3)),
                                     ),
+
                                     child: Column(
                                       children: [
                                         const Icon(Icons.error_outline, color: Colors.red, size: 32),
@@ -1043,6 +1050,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                     isSelected: selectedPlan == 'monthly',
                                     planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
                                       (plan) => plan['interval'] == 'month',
+
                                     ),
                                     onTap: () {
                                       HapticFeedback.lightImpact();
@@ -1057,6 +1065,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(color: Colors.red.withOpacity(0.3)),
                                     ),
+
                                     child: Column(
                                       children: [
                                         const Icon(Icons.error_outline, color: Colors.red, size: 32),
@@ -1173,9 +1182,11 @@ class _PlansSheetState extends State<PlansSheet> {
                         final shouldShowResubscribeButton =
                             isCancelled && !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
 
+
                         if (!shouldShowResubscribeButton) {
                           return const SizedBox.shrink();
                         }
+
 
                         return SizedBox(
                           width: double.infinity,

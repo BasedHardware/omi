@@ -12,6 +12,7 @@ import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -1229,10 +1230,9 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       selectedApp = await appProvider.getAppFromId(appId);
     }
     appProvider.setSelectedChatAppId(appId);
+    // Clear any selected threads to show welcome screen
+    await context.read<ChatSessionProvider>().switchToApp(appId);
     await messageProvider.refreshMessages();
-    if (messageProvider.messages.isEmpty) {
-      messageProvider.sendInitialAppMessage(selectedApp);
-    }
   }
 
   void _handleWebAppTap() {

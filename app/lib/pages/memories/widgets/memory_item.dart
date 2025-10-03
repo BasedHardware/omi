@@ -62,6 +62,7 @@ class MemoryItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
+
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -72,6 +73,7 @@ class MemoryItem extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
+
                   ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
@@ -170,7 +172,9 @@ class MemoryItem extends StatelessWidget {
         height: 36,
         width: 36,
         decoration: BoxDecoration(
+
           color: Colors.white.withOpacity(0.1),
+
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
         child: const Icon(
@@ -181,6 +185,7 @@ class MemoryItem extends StatelessWidget {
       ),
     );
   }
+
 
   DateTime _getConversationDate(DateTime createdAt) {
     return DateTime(createdAt.year, createdAt.month, createdAt.day);
@@ -199,16 +204,20 @@ class MemoryItem extends StatelessWidget {
     }
   }
 
+
   Future<void> _navigateToConversation(BuildContext context) async {
     if (memory.conversationId == null) return;
 
     showDialog(
       context: context,
       barrierDismissible: false,
+
       builder: (context) => const Center(child: CircularProgressIndicator()),
+
     );
 
     final conversation = await getConversationById(memory.conversationId!);
+
 
     if (!context.mounted) return;
     Navigator.of(context).pop();
@@ -241,6 +250,7 @@ class MemoryItem extends StatelessWidget {
       ),
     );
   }
+
 
   Widget _buildVisibilityButton(BuildContext context) {
     return PopupMenuButton<MemoryVisibility>(

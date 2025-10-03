@@ -20,6 +20,7 @@ import 'memories/desktop_memories_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -248,10 +249,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 selectedApp = await appProvider.getAppFromId(appId);
               }
               appProvider.setSelectedChatAppId(appId);
+              // Clear any selected threads to show welcome screen
+              await context.read<ChatSessionProvider>().switchToApp(appId);
               await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
-              }
             }
           } else {
             if (mounted) {
@@ -374,63 +374,65 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               body: Stack(
                 children: [
                   // Main app content
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: ResponsiveHelper.backgroundPrimary,
-                    ),
-                    child: Row(
-                      children: [
-                        // Sidebar
-                        _buildSidebar(responsive, homeProvider),
+                  Positioned.fill(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: ResponsiveHelper.backgroundPrimary,
+                      ),
+                      child: Row(
+                        children: [
+                          // Sidebar
+                          _buildSidebar(responsive, homeProvider),
 
-                        // Main content area with rounded container
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
+                          // Main content area with rounded container
+                          Expanded(
                             child: Container(
-                              decoration: BoxDecoration(
-                                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-                                  width: 1,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.05),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 4),
+                              padding: const EdgeInsets.all(12),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                                    width: 1,
                                   ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    primaryFocus?.unfocus();
-                                  },
-                                  child: PageView(
-                                    controller: _controller,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    children: [
-                                      const DesktopConversationsPage(),
-                                      const DesktopChatPage(),
-                                      const DesktopMemoriesPage(),
-                                      const DesktopActionsPage(),
-                                      DesktopAppsPage(
-                                        onNavigateToCreateApp: navigateToCreateApp,
-                                      ),
-                                      DesktopAddAppPage(
-                                        onNavigateBack: navigateBackToApps,
-                                      ),
-                                    ],
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.05),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      primaryFocus?.unfocus();
+                                    },
+                                    child: PageView(
+                                      controller: _controller,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      children: [
+                                        const DesktopConversationsPage(),
+                                        const DesktopChatPage(),
+                                        const DesktopMemoriesPage(),
+                                        const DesktopActionsPage(),
+                                        DesktopAppsPage(
+                                          onNavigateToCreateApp: navigateToCreateApp,
+                                        ),
+                                        DesktopAddAppPage(
+                                          onNavigateBack: navigateBackToApps,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],

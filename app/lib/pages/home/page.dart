@@ -21,6 +21,7 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -209,6 +210,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
     }
 
+    String? sessionId;
+    if (navigateToUri?.queryParameters.containsKey('session') == true) {
+      sessionId = navigateToUri!.queryParameters['session'];
+    }
+
     // Home controller
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     WidgetsBinding.instance.addObserver(this);
@@ -256,9 +262,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 selectedApp = await appProvider.getAppFromId(appId);
               }
               appProvider.setSelectedChatAppId(appId);
-              await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
+
+              if (sessionId != null && sessionId.isNotEmpty) {
+                // Load and select the specific session from the notification
+                await context.read<ChatSessionProvider>().loadSessions();
+                await context.read<ChatSessionProvider>().selectSession(sessionId, appId, appProvider: appProvider);
+                await messageProvider.refreshMessages();
+              } else {
+                // No session specified, show welcome screen
+                await context.read<ChatSessionProvider>().switchToApp(appId);
+                await messageProvider.refreshMessages();
               }
             }
           } else {
