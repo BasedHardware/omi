@@ -1,7 +1,7 @@
+#include <ff.h>
 #include <stdlib.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/fs/ext2.h>
 #include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -9,17 +9,19 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/storage/disk_access.h>
 
-#define DISK_DRIVE_NAME "SDMMC"
-#define DISK_MOUNT_PT "/ext"
+#define DISK_DRIVE_NAME "SD"
+#define DISK_MOUNT_PT "/SD:"
 
 static const struct device *const sdcard = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
 static const struct gpio_dt_spec sd_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sdcard_en_pin), gpios, {0});
 
+static FATFS fat_fs;
+
 static struct fs_mount_t mp = {
-    .type = FS_EXT2,
-    .flags = FS_MOUNT_FLAG_NO_FORMAT,
+    .type = FS_FATFS,
+    .fs_data = &fat_fs,
     .storage_dev = (void *) DISK_DRIVE_NAME,
-    .mnt_point = "/ext",
+    .mnt_point = DISK_MOUNT_PT,
 };
 
 #define FS_RET_OK 0
@@ -105,62 +107,64 @@ static int cmd_lsdir(const struct shell *shell, size_t argc, char **argv)
 static int cmd_mount(const struct shell *shell, size_t argc, char **argv)
 {
     int res;
-    do {
-        static const char *disk_pdrv = DISK_DRIVE_NAME;
-        uint64_t memory_size_mb;
-        uint32_t block_count;
-        uint32_t block_size;
-
-        res = sd_enable_power(true);
-        if (res < 0) {
-            shell_error(shell, "Failed to power on SD card (%d)", res);
-            return res;
-        }
-
-        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL) != 0) {
-            shell_error(shell, "Storage init ERROR!");
-            break;
-        }
-
-        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_COUNT, &block_count)) {
-            shell_error(shell, "Unable to get sector count");
-            break;
-        }
-        shell_print(shell, "Block count %u", block_count);
-
-        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_SIZE, &block_size)) {
-            shell_error(shell, "Unable to get sector size");
-            break;
-        }
-        shell_print(shell, "Sector size %u\n", block_size);
-
-        memory_size_mb = (uint64_t) block_count * block_size;
-        shell_print(shell, "Memory Size(MB) %u\n", (uint32_t) (memory_size_mb >> 20));
-
-        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_DEINIT, NULL) != 0) {
-            shell_error(shell, "Storage deinit ERROR!");
-            break;
-        }
-    } while (0);
-    mp.mnt_point = disk_mount_pt;
+    static const char *disk_pdrv = DISK_DRIVE_NAME;
+    uint64_t memory_size_mb;
+    uint32_t block_count;
+    uint32_t block_size;
 
     if (is_mounted) {
         shell_print(shell, "Disk already mounted.\n");
         return 0;
     }
 
-    if (fs_mount(&mp) != FS_RET_OK) {
-        shell_print(shell, "File system not found, creating file system...\n");
-        res = fs_mkfs(FS_EXT2, (uintptr_t) mp.storage_dev, NULL, 0);
+    res = sd_enable_power(true);
+    if (res < 0) {
+        shell_error(shell, "Failed to power on SD card (%d)", res);
+        return res;
+    }
+
+    // Initialize disk with retry logic like devkit
+    res = disk_access_init(disk_pdrv);
+    shell_print(shell, "disk_access_init: %d\n", res);
+    if (res != 0) {
+        shell_print(shell, "Init failed, retrying after delay...\n");
+        k_msleep(1000);
+        res = disk_access_init(disk_pdrv);
+        if (res != 0) {
+            shell_error(shell, "Storage init failed: %d", res);
+            sd_enable_power(false);
+            return res;
+        }
+    }
+
+    // Get disk information
+    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_COUNT, &block_count) == 0) {
+        shell_print(shell, "Block count %u", block_count);
+    }
+
+    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_GET_SECTOR_SIZE, &block_size) == 0) {
+        shell_print(shell, "Sector size %u", block_size);
+        memory_size_mb = (uint64_t) block_count * block_size;
+        shell_print(shell, "Memory Size(MB) %u\n", (uint32_t) (memory_size_mb >> 20));
+    }
+
+    // Keep disk initialized and try to mount
+    mp.mnt_point = disk_mount_pt;
+    res = fs_mount(&mp);
+    if (res != FS_RET_OK) {
+        shell_print(shell, "Mount failed (possibly EXT2 format), formatting to FATFS...\n");
+        res = fs_mkfs(FS_FATFS, (uintptr_t) mp.storage_dev, NULL, 0);
         if (res != 0) {
             shell_error(shell, "Error formatting filesystem [%d]", res);
+            disk_access_init(disk_pdrv); // Ensure disk is still initialized
             sd_enable_power(false);
             return res;
         }
 
         res = fs_mount(&mp);
         if (res != FS_RET_OK) {
-            shell_print(shell, "Error mounting disk %d.\n", res);
+            shell_error(shell, "Error mounting disk %d", res);
+            disk_access_init(disk_pdrv); // Ensure disk is still initialized
             sd_enable_power(false);
             return res;
         }
@@ -169,7 +173,7 @@ static int cmd_mount(const struct shell *shell, size_t argc, char **argv)
     shell_print(shell, "Disk mounted.\n");
     is_mounted = true;
 
-    return res;
+    return 0;
 }
 
 static int cmd_unmount(const struct shell *shell, size_t argc, char **argv)
@@ -184,6 +188,66 @@ static int cmd_unmount(const struct shell *shell, size_t argc, char **argv)
         shell_print(shell, "Error unmounting disk.\n");
     }
     return res;
+}
+
+static int cmd_format(const struct shell *shell, size_t argc, char **argv)
+{
+    int res;
+    static const char *disk_pdrv = DISK_DRIVE_NAME;
+
+    // Unmount if currently mounted
+    if (is_mounted) {
+        shell_print(shell, "Unmounting disk before format...\n");
+        res = fs_unmount(&mp);
+        if (res != 0) {
+            shell_error(shell, "Failed to unmount disk: %d\n", res);
+            return res;
+        }
+        is_mounted = false;
+    }
+
+    // Ensure SD card is powered
+    res = sd_enable_power(true);
+    if (res < 0) {
+        shell_error(shell, "Failed to power on SD card: %d\n", res);
+        return res;
+    }
+
+    //// Initialize disk with retry logic
+    // res = disk_access_init(disk_pdrv);
+    // shell_print(shell, "disk_access_init: %d\n", res);
+    // if (res != 0) {
+    //     shell_print(shell, "Init failed, retrying after delay...\n");
+    //     k_msleep(1000);
+    //     res = disk_access_init(disk_pdrv);
+    //     if (res != 0) {
+    //         shell_error(shell, "Storage init failed: %d\n", res);
+    //         sd_enable_power(false);
+    //         return res;
+    //     }
+    // }
+
+    shell_print(shell, "Formatting filesystem to FATFS...\n");
+    res = fs_mkfs(FS_FATFS, (uintptr_t) DISK_DRIVE_NAME, NULL, 0);
+
+    if (res != 0) {
+        shell_error(shell, "Error formatting filesystem: %d\n", res);
+        sd_enable_power(false);
+        return res;
+    }
+
+    shell_print(shell, "Filesystem formatted successfully.\n");
+
+    // Ask if user wants to remount
+    if (argc > 1 && strcmp(argv[1], "remount") == 0) {
+        shell_print(shell, "Remounting...\n");
+        return cmd_mount(shell, 1, NULL);
+    } else {
+        shell_print(shell, "Format complete. Use 'sd mount' to mount the disk.\n");
+        sd_enable_power(false);
+    }
+
+    return 0;
 }
 
 static int cmd_write(const struct shell *shell, size_t argc, char **argv)
@@ -346,14 +410,56 @@ static int cmd_readline(const struct shell *shell, size_t argc, char **argv)
     return 0;
 }
 
+static int cmd_stats(const struct shell *shell, size_t argc, char **argv)
+{
+    int res;
+    struct fs_statvfs stats;
+
+    if (!is_mounted) {
+        shell_error(shell, "Disk is not mounted.\n");
+        return -ENOEXEC;
+    }
+
+    res = fs_statvfs(DISK_MOUNT_PT, &stats);
+    if (res != 0) {
+        shell_error(shell, "Error getting disk statistics: %d\n", res);
+        return res;
+    }
+
+    shell_print(shell, "Disk statistics for %s:", DISK_MOUNT_PT);
+    shell_print(shell, "Block size: %lu bytes", stats.f_bsize);
+    shell_print(shell, "Fragment size: %lu bytes", stats.f_frsize);
+    shell_print(shell, "Total blocks: %lu", stats.f_blocks);
+    shell_print(shell, "Free blocks: %lu", stats.f_bfree);
+
+    // Calculate and display disk usage in human-readable format
+    uint64_t total_size = (uint64_t) stats.f_blocks * stats.f_frsize;
+    uint64_t free_size = (uint64_t) stats.f_bfree * stats.f_frsize;
+    uint64_t used_size = total_size - free_size;
+
+    shell_print(shell, "");
+    shell_print(shell, "Total size: %llu bytes (%.2f MB)", total_size, (float) total_size / (1024 * 1024));
+    shell_print(shell, "Used space: %llu bytes (%.2f MB)", used_size, (float) used_size / (1024 * 1024));
+    shell_print(shell, "Free space: %llu bytes (%.2f MB)", free_size, (float) free_size / (1024 * 1024));
+
+    if (total_size > 0) {
+        float usage_percent = ((float) used_size / total_size) * 100.0f;
+        shell_print(shell, "Disk usage: %.2f%%", usage_percent);
+    }
+
+    return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_sd_cmds,
                                SHELL_CMD_ARG(ls, NULL, "list dir", cmd_lsdir, 2, 0),
                                SHELL_CMD_ARG(mount, NULL, "mount sd", cmd_mount, 1, 0),
                                SHELL_CMD_ARG(unmount, NULL, "unmount sd", cmd_unmount, 1, 0),
+                               SHELL_CMD_ARG(format, NULL, "format sd card [remount]", cmd_format, 1, 1),
                                SHELL_CMD_ARG(write, NULL, "write to file", cmd_write, 3, 0),
                                SHELL_CMD_ARG(read, NULL, "read from file", cmd_read, 2, 0),
                                SHELL_CMD_ARG(rm, NULL, "remove file", cmd_rm, 2, 0),
                                SHELL_CMD_ARG(readline, NULL, "read specific line from file", cmd_readline, 3, 0),
+                               SHELL_CMD_ARG(stats, NULL, "display disk statistics", cmd_stats, 1, 0),
                                SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(sd, &sub_sd_cmds, "sd", NULL);
