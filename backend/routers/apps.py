@@ -40,6 +40,9 @@ from database.redis_db import (
     delete_app_cache_by_id,
     is_username_taken,
     save_username,
+    get_conversation_summary_app_ids,
+    add_conversation_summary_app_id,
+    remove_conversation_summary_app_id,
 )
 from utils.apps import (
     get_available_apps,
@@ -1053,3 +1056,45 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
     delete_api_key_db(app_id, key_id)
 
     return {'status': 'ok', 'message': 'API key deleted'}
+
+
+# ******************************************************
+# ******** CONVERSATION SUMMARY APP IDS ****************
+# ******************************************************
+
+
+@router.get('/v1/summary-app-ids', tags=['v1'])
+def get_summary_app_ids(secret_key: str = Header(...)):
+    """Get all conversation summary app IDs from Redis"""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    app_ids = get_conversation_summary_app_ids()
+    print(app_ids)
+    return {'app_ids': app_ids or []}
+
+
+@router.post('/v1/summary-app-ids/{app_id}', tags=['v1'])
+def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
+    """Add an app ID to the conversation summary apps list"""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    success = add_conversation_summary_app_id(app_id)
+    if success:
+        return {'status': 'ok', 'message': f'App {app_id} added to conversation summary apps'}
+    else:
+        return {'status': 'ok', 'message': f'App {app_id} already exists in conversation summary apps'}
+
+
+@router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'])
+def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
+    """Remove an app ID from the conversation summary apps list"""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    success = remove_conversation_summary_app_id(app_id)
+    if success:
+        return {'status': 'ok', 'message': f'App {app_id} removed from conversation summary apps'}
+    else:
+        raise HTTPException(status_code=404, detail=f'App {app_id} not found in conversation summary apps')
