@@ -84,10 +84,26 @@ Content:
 
 
 def extract_action_items(
-    transcript: str, started_at: datetime, language_code: str, tz: str, photos: List[ConversationPhoto] = None
+    transcript: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    photos: List[ConversationPhoto] = None,
+    existing_action_items: List[dict] = None,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
+
+    Args:
+        transcript: Conversation transcript
+        started_at: When the conversation started
+        language_code: Language code for the conversation
+        tz: User's timezone
+        photos: Optional conversation photos
+        existing_action_items: Recent action items for deduplication (from past 2 days)
+
+    Returns:
+        List of extracted ActionItem objects
     """
     context_parts = []
     if transcript and transcript.strip():
@@ -103,9 +119,38 @@ def extract_action_items(
 
     full_context = "\n\n".join(context_parts)
 
+    existing_items_context = ""
+    if existing_action_items:
+        items_list = []
+        for item in existing_action_items:
+            desc = item.get('description', '')
+            due = item.get('due_at')
+            due_str = due.strftime('%Y-%m-%d %H:%M UTC') if due else 'No due date'
+            completed = '✓ Completed' if item.get('completed', False) else 'Pending'
+            items_list.append(f"  • {desc} (Due: {due_str}) [{completed}]")
+
+        existing_items_context = f"\n\nEXISTING ACTION ITEMS FROM PAST 2 DAYS ({len(items_list)} items):\n" + "\n".join(
+            items_list
+        )
+
     prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract high-quality, actionable tasks from the provided content.
 
-    The content language is {language_code}. Use the same language {language_code} for your response.
+    The content language is {language_code}. Use the same language {language_code} for your response.{existing_items_context}
+
+    CRITICAL DEDUPLICATION RULES (Check BEFORE extracting):
+    • DO NOT extract action items that are >95% similar to existing ones listed above
+    • Check both the description AND the due date/timeframe
+    • Consider semantic similarity, not just exact word matches
+    • Examples of what counts as DUPLICATES (DO NOT extract):
+      - "Call John" vs "Phone John" → DUPLICATE
+      - "Finish report by Friday" (existing) vs "Complete report by end of week" → DUPLICATE
+      - "Buy milk" (existing) vs "Get milk from store" → DUPLICATE
+      - "Email Sarah about meeting" (existing) vs "Send email to Sarah regarding the meeting" → DUPLICATE
+    • Examples of what is NOT duplicate (OK to extract):
+      - "Buy groceries" (existing) vs "Buy milk" → NOT duplicate (different scope)
+      - "Call dentist" (existing) vs "Call plumber" → NOT duplicate (different person/service)
+      - "Submit report by March 1st" (existing) vs "Submit report by March 15th" → NOT duplicate (different deadlines)
+    • If you're unsure whether something is a duplicate, err on the side of treating it as a duplicate (DON'T extract)
 
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
@@ -227,25 +272,38 @@ def extract_action_items(
 
     DUE DATE EXTRACTION (CRITICAL):
     IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
+    IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
 
-    For each action item, extract the due_at datetime based on timing mentioned:
-    - "today", "by today", "by end of day", "by evening" → END of current day (23:59:59) in user's timezone ({tz}), converted to UTC with 'Z' suffix
-    - "tomorrow", "by tomorrow" → END of next day (23:59:59) in {tz}, converted to UTC with 'Z' suffix
-    - "this week", "by this week" → END of current week (Sunday 23:59:59) in {tz}, converted to UTC with 'Z' suffix
-    - "next week", "by next week" → END of next week (Sunday 23:59:59) in {tz}, converted to UTC with 'Z' suffix
-    - Specific dates → END of that day (23:59:59) in {tz}, converted to UTC with 'Z' suffix
-    - "urgent" or "ASAP" → 2 hours from {started_at}, converted to UTC with 'Z' suffix
-    - "high priority" → END of today (23:59:59 in {tz}), converted to UTC with 'Z' suffix
-    - "by [time of day]" (e.g., "by evening", "by noon", "by morning") → END of current day (23:59:59) in {tz}, converted to UTC with 'Z' suffix
-    - No specific time or "when convenient" → leave due_at as null
+    Step-by-step date parsing process:
+    1. IDENTIFY THE DATE:
+       - "today" → current date from {started_at}
+       - "tomorrow" → next day from {started_at}
+       - "Monday", "Tuesday", etc. → next occurrence of that weekday
+       - "next week" → same day next week
+       - Specific date (e.g., "March 15") → that date
 
-    CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-02T18:29:59Z")
-    DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
+    2. IDENTIFY THE TIME (if mentioned):
+       - "before 10am", "by 10am", "at 10am" → 10:00 AM
+       - "before 3pm", "by 3pm", "at 3pm" → 3:00 PM
+       - "in the morning" → 9:00 AM
+       - "in the afternoon" → 2:00 PM
+       - "in the evening", "by evening" → 6:00 PM
+       - "at noon" → 12:00 PM
+       - "by midnight", "by end of day" → 11:59 PM
+       - No time mentioned → 11:59 PM (end of day)
+
+    3. COMBINE DATE + TIME in user's timezone ({tz}), then convert to UTC with 'Z' suffix
 
     Examples of CORRECT date parsing:
-    - If {started_at} is "2025-10-02T12:59:00+05:30" (Oct 2, 12:59 PM IST) and {tz} is "Asia/Kolkata"
-    - "by evening today" → Calculate 2025-10-02 23:59:59 IST → Convert to UTC → "2025-10-02T18:29:59Z"
-    - "tomorrow" → Calculate 2025-10-03 23:59:59 IST → Convert to UTC → "2025-10-03T18:29:59Z"
+    If {started_at} is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
+    - "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 IST" → Convert to UTC → "2025-10-04T04:30:00Z"
+    - "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 IST" → Convert to UTC → "2025-10-03T12:30:00Z"
+    - "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 IST" → Convert to UTC → "2025-10-04T18:29:00Z"
+    - "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 IST" → Convert to UTC → "2025-10-06T08:30:00Z"
+    - "urgent" or "ASAP" → 2 hours from {started_at} → "2025-10-03T15:25:00Z"
+
+    CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-04T04:30:00Z")
+    DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
 
     Reference time: {started_at}
     User timezone: {tz}
@@ -269,6 +327,7 @@ def extract_action_items(
                 'language_code': language_code,
                 'started_at': started_at.isoformat(),
                 'tz': tz,
+                'existing_items_context': existing_items_context,
             }
         )
 
@@ -286,7 +345,12 @@ def extract_action_items(
 
 
 def get_transcript_structure(
-    transcript: str, started_at: datetime, language_code: str, tz: str, photos: List[ConversationPhoto] = None
+    transcript: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    photos: List[ConversationPhoto] = None,
+    existing_action_items: List[dict] = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -360,7 +424,7 @@ def get_transcript_structure(
         event.created = False
 
     # Extract action items separately
-    action_items = extract_action_items(transcript, started_at, language_code, tz, photos)
+    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
     response.action_items = action_items
 
     return response
@@ -373,6 +437,7 @@ def get_reprocess_transcript_structure(
     tz: str,
     title: str,
     photos: List[ConversationPhoto] = None,
+    existing_action_items: List[dict] = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -446,7 +511,7 @@ def get_reprocess_transcript_structure(
         event.created = False
 
     # Extract action items separately
-    action_items = extract_action_items(transcript, started_at, language_code, tz, photos)
+    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
     response.action_items = action_items
 
     return response

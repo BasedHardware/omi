@@ -69,12 +69,27 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
+
+        # Fetch existing action items from past 2 days for deduplication
+        existing_action_items = None
+        try:
+            two_days_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+            existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
+        except Exception as e:
+            print(f"Error fetching existing action items for deduplication: {e}")
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
-                structured = get_transcript_structure(conversation.text, conversation.started_at, language_code, tz)
+                structured = get_transcript_structure(
+                    conversation.text,
+                    conversation.started_at,
+                    language_code,
+                    tz,
+                    existing_action_items=existing_action_items,
+                )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.message:
@@ -103,6 +118,7 @@ def _get_structured(
                     tz,
                     conversation.structured.title,
                     photos=conversation.photos,
+                    existing_action_items=existing_action_items,
                 ),
                 False,
             )
@@ -115,7 +131,12 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         return (
             get_transcript_structure(
-                transcript_text, conversation.started_at, language_code, tz, photos=conversation.photos
+                transcript_text,
+                conversation.started_at,
+                language_code,
+                tz,
+                photos=conversation.photos,
+                existing_action_items=existing_action_items,
             ),
             False,
         )
