@@ -30,7 +30,8 @@
 // OMI
 #include <zephyr/pm/device.h>
 #include <zephyr/storage/disk_access.h>
-#define DISK_DRIVE_NAME "SDMMC"
+#define DISK_DRIVE_NAME "SD"
+#define LEGACY_DISK_DRIVE_NAME "SDMMC"
 
 #if defined(CONFIG_BOOT_DISABLE_CACHES)
 #include <zephyr/cache.h>
@@ -479,6 +480,7 @@ int main(void)
 
     // OMI
     static const char *disk_pdrv = DISK_DRIVE_NAME;
+    static const char *legacy_disk_pdrv = LEGACY_DISK_DRIVE_NAME;
 
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
@@ -492,13 +494,15 @@ int main(void)
     k_sleep(K_MSEC(1000));
 
     pm_device_action_run(sdcard, PM_DEVICE_ACTION_RESUME);
-    disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL);
+    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL) != 0) {
+        disk_access_ioctl(legacy_disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL);
+    }
     k_sleep(K_MSEC(1000));
 
-    disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_DEINIT, NULL);
+    if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_DEINIT, NULL) != 0) {
+        disk_access_ioctl(legacy_disk_pdrv, DISK_IOCTL_CTRL_DEINIT, NULL) != 0);
+    }
     pm_device_action_run(sdcard, PM_DEVICE_ACTION_SUSPEND);
-    // Power down SD card completely for clean state
-    gpio_pin_set_dt(&sd_en, 0);
     // #
 
 #if !defined(MCUBOOT_DIRECT_XIP)

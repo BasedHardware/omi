@@ -35,13 +35,44 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 // Counters for tracking function calls
 extern uint32_t storage_write_count;
 extern uint32_t gatt_notify_count;
+extern uint32_t broadcast_audio_failed_count;
 extern uint32_t write_to_tx_queue_count;
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+struct k_mutex sd_write_mutex;
 extern struct bt_gatt_service storage_service;
 extern bool storage_is_on;
+
+// Forward declaration for the SD card recovery handler
+static void sd_card_recovery_handler(struct k_work *work);
+
+// Work item for SD card recovery
+K_WORK_DELAYABLE_DEFINE(sd_recovery_work, sd_card_recovery_handler);
+
+// Function to handle SD card recovery after errors
+static void sd_card_recovery_handler(struct k_work *work)
+{
+    LOG_INF("Attempting SD card recovery");
+
+    // First unmount the SD card
+    app_sd_unmount();
+
+    // Wait a bit before remounting
+    k_sleep(K_MSEC(1000));
+
+    // Try to remount
+    int ret = app_sd_mount();
+    if (ret == 0) {
+        LOG_INF("SD card recovery successful");
+    } else {
+        LOG_ERR("SD card recovery failed: %d", ret);
+        // Try again later
+        k_work_schedule(&sd_recovery_work, K_SECONDS(60));
+    }
+}
+
 #endif
 
 extern bool is_connected;
@@ -59,8 +90,6 @@ uint16_t current_package_index = 0;
 //
 // Internal
 //
-
-extern struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
@@ -707,12 +736,29 @@ static bool read_from_tx_queue()
     return true;
 }
 
+static uint32_t read_multiple_from_tx_queue(uint8_t *dest_buffer, uint32_t max_packages)
+{
+    uint32_t packages_read = 0;
+    uint32_t package_size = CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE;
+
+    while (packages_read < max_packages) {
+        uint32_t bytes_read = ring_buf_get(&ring_buf, dest_buffer + (packages_read * package_size), package_size);
+        if (bytes_read != package_size) {
+            // No more complete packages available
+            break;
+        }
+        packages_read++;
+    }
+
+    return packages_read;
+}
+
 //
 // Pusher
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 4096);
+K_THREAD_STACK_DEFINE(pusher_stack, 8192); // Increased from 4096 for BLE and SD operations
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 
@@ -809,9 +855,6 @@ static uint16_t buffer_offset = 0;
 // for improving ble bandwidth
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 
-// Mutex for thread-safe SD card access (shared with storage.c)
-extern struct k_mutex write_sdcard_mutex;
-
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 
 static uint32_t get_current_time_offset_sec(void)
@@ -820,12 +863,82 @@ static uint32_t get_current_time_offset_sec(void)
     return (uint32_t) (k_uptime_get() / 1000);
 }
 
-// Internal function called by SD writer thread
-static bool write_to_storage_internal(void)
+// Internal function called by SD writer thread - batch version
+static uint32_t write_multiple_to_storage_internal(uint32_t max_packages)
+{
+    // Allocate buffer for multiple packages
+    static uint8_t batch_buffer[20 * (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)];
+
+    // Limit max_packages to buffer size
+    if (max_packages > 20) {
+        max_packages = 20;
+    }
+
+    uint32_t packages_read = read_multiple_from_tx_queue(batch_buffer, max_packages);
+    if (packages_read == 0) {
+        return 0;
+    }
+
+    uint32_t package_size = CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE;
+    uint32_t packages_written = 0;
+
+    for (uint32_t i = 0; i < packages_read; i++) {
+        uint8_t *package = batch_buffer + (i * package_size);
+        uint32_t pkg_data_size = package[0] + (package[1] << 8);
+        uint8_t *buffer = package + 2;
+        uint8_t packet_size = (uint8_t) (pkg_data_size + OPUS_PREFIX_LENGTH);
+
+        // Check if adding the new packet will cause an overflow
+        if (buffer_offset + packet_size > MAX_WRITE_SIZE - 1) {
+            storage_temp_data[buffer_offset] = pkg_data_size;
+
+            // Write to SD card using new API
+            uint32_t current_time = get_current_time_offset_sec();
+            int ret = app_sd_write_audio(storage_temp_data, MAX_WRITE_SIZE, current_time);
+            if (ret < 0) {
+                LOG_ERR("Failed to write to SD card: %d", ret);
+                return packages_written;
+            }
+            storage_write_count++;
+
+            buffer_offset = packet_size;
+            storage_temp_data[0] = pkg_data_size;
+            memcpy(storage_temp_data + 1, buffer, pkg_data_size);
+
+        } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - 1) {
+            // Exact frame needed
+            storage_temp_data[buffer_offset] = pkg_data_size;
+            memcpy(storage_temp_data + buffer_offset + 1, buffer, pkg_data_size);
+            buffer_offset = 0;
+
+            // Write to SD card using new API
+            uint32_t current_time = get_current_time_offset_sec();
+            int ret = app_sd_write_audio(storage_temp_data, MAX_WRITE_SIZE, current_time);
+            if (ret < 0) {
+                LOG_ERR("Failed to write to SD card: %d", ret);
+                return packages_written;
+            }
+            storage_write_count++;
+        } else {
+            storage_temp_data[buffer_offset] = pkg_data_size;
+            memcpy(storage_temp_data + buffer_offset + 1, buffer, pkg_data_size);
+            buffer_offset = buffer_offset + packet_size;
+        }
+
+        packages_written++;
+    }
+
+    return packages_written;
+}
+
+// Warn: fire & forget, keep the audio syncing in real-time
+static bool write_to_storage(void)
 {
     if (!read_from_tx_queue()) {
         return false;
     }
+
+    int err = 0; // Initialize to 0 (success)
 
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
@@ -839,9 +952,19 @@ static bool write_to_storage_internal(void)
         int ret = app_sd_write_audio(storage_temp_data, MAX_WRITE_SIZE, current_time);
         if (ret < 0) {
             LOG_ERR("Failed to write to SD card: %d", ret);
-            return false;
+            err = ret;
+
+            // If we get ENOSPC (-28) or other serious error, schedule recovery
+            if (ret == -28) { // ENOSPC - No space left
+                LOG_ERR("SD card appears to be full");
+                // Try to unmount and remount later to recover
+                k_work_schedule(&sd_recovery_work, K_SECONDS(30));
+                return false;
+            }
+        } else {
+            storage_write_count++;
+            err = 0; // Write succeeded
         }
-        storage_write_count++;
 
         buffer_offset = packet_size;
         storage_temp_data[0] = tx_buffer_size;
@@ -858,25 +981,27 @@ static bool write_to_storage_internal(void)
         int ret = app_sd_write_audio(storage_temp_data, MAX_WRITE_SIZE, current_time);
         if (ret < 0) {
             LOG_ERR("Failed to write to SD card: %d", ret);
-            return false;
+            err = ret;
+        } else {
+            storage_write_count++;
+            err = 0; // Write succeeded
         }
-        storage_write_count++;
     } else {
+        // Just accumulating data in buffer, not writing yet - this is success
         storage_temp_data[buffer_offset] = tx_buffer_size;
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
         buffer_offset = buffer_offset + packet_size;
+        err = 0; // Buffering is successful
     }
 
-    return true;
+    return err == 0;
 }
 
 #endif
 
 void test_pusher(void)
 {
-    uint32_t runs_count = 0;
     while (1) {
-        k_sleep(K_MSEC(1));
         struct bt_conn *conn = current_connection;
         if (conn) {
             conn = bt_conn_ref(conn);
@@ -886,7 +1011,7 @@ void test_pusher(void)
             valid = false;
         } else if (!conn) {
             valid = false;
-        } else if (runs_count % 100 == 0) {
+        } else {
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
         if (valid) {
@@ -900,18 +1025,20 @@ void test_pusher(void)
             bt_conn_unref(conn);
         }
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-        // Queue SD write when BLE is not connected or not subscribed
-        if (!valid && app_sd_is_ready()) {
-            // Drain entire ring buffer with mutex protection
-            k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-
-            // Keep processing packets until ring buffer is empty
-            bool ret = write_to_storage_internal();
-
-            k_mutex_unlock(&write_sdcard_mutex);
+        if (!valid && app_sd_is_ready() && app_sd_is_writable()) {
+            k_mutex_lock(&sd_write_mutex, K_FOREVER);
+            bool write = write_to_storage();
+            if (!write) {
+                k_sleep(K_MSEC(50));
+            }
+            k_mutex_unlock(&sd_write_mutex);
+        } else if (!valid && app_sd_is_ready() && !app_sd_is_writable()) {
+            // SD card is mounted but not writable (full or write-protected)
+            LOG_WRN("SD card not writable, skipping storage");
+            // Sleep to avoid tight loop
+            k_sleep(K_MSEC(100));
         }
 #endif
-        runs_count++;
         k_yield();
     }
 }
@@ -997,9 +1124,9 @@ int transport_off()
 
     // Turn off other peripherals
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+    k_mutex_lock(&sd_write_mutex, K_FOREVER);
     app_sd_off();
-    k_mutex_unlock(&write_sdcard_mutex);
+    k_mutex_unlock(&sd_write_mutex);
 #endif
 
     mic_off();
@@ -1079,6 +1206,7 @@ int transport_start()
 #endif
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    k_mutex_init(&sd_write_mutex);
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif

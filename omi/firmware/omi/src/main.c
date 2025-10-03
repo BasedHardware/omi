@@ -30,6 +30,7 @@ uint32_t storage_write_count = 0;
 uint32_t gatt_notify_count = 0;
 uint32_t total_mic_buffer_bytes = 0;
 uint32_t broadcast_audio_count = 0;
+uint32_t broadcast_audio_failed_count = 0;
 uint32_t write_to_tx_queue_count = 0;
 
 static void codec_handler(uint8_t *data, size_t len)
@@ -37,7 +38,7 @@ static void codec_handler(uint8_t *data, size_t len)
     broadcast_audio_count++;
     int err = broadcast_audio_packets(data, len);
     if (err) {
-        LOG_ERR("Failed to broadcast audio packets: %d", err);
+        broadcast_audio_failed_count++;
     }
 }
 
@@ -275,11 +276,12 @@ int main(void)
 
     while (1) {
         // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
-        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u, Storage "
-                "writes: %u",
+        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, Broadcast failures: %u, TX "
+                "queue writes: %u, Storage writes: %u",
                 total_mic_buffer_bytes,
                 gatt_notify_count,
                 broadcast_audio_count,
+                broadcast_audio_failed_count,
                 write_to_tx_queue_count,
                 storage_write_count);
 

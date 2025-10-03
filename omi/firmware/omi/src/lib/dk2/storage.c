@@ -55,7 +55,7 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
                                            uint16_t len,
                                            uint16_t offset);
 
-K_THREAD_STACK_DEFINE(storage_stack, 4096);
+K_THREAD_STACK_DEFINE(storage_stack, 8192); // Increased from 4096 for file I/O operations
 static struct k_thread storage_thread;
 
 void broadcast_storage_packet(struct k_work *work_item);

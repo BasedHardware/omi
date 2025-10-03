@@ -31,13 +31,19 @@ LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
  * data, needs to free that block.
  */
 #define MAX_BLOCK_SIZE BLOCK_SIZE(MAX_SAMPLE_RATE, 2)
-#define BLOCK_COUNT 4
+#define BLOCK_COUNT 8
 
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
 
 static const struct device *dmic_dev;
 static volatile mix_handler callback_func = NULL;
 static volatile bool mic_running = false;
+
+// Pre-allocated processing buffers to avoid k_malloc() in audio path
+static int16_t left_buffer[MAX_SAMPLE_RATE / 10]; // 100ms worth of samples
+static int16_t right_buffer[MAX_SAMPLE_RATE / 10];
+static int16_t mono_buffer[MAX_SAMPLE_RATE / 10];
+static K_MUTEX_DEFINE(process_mutex);
 
 static inline void
 deinterleave_stereo(const int16_t *restrict interleaved, size_t frames, int16_t *restrict left, int16_t *restrict right)
@@ -71,39 +77,21 @@ static void process_audio_buffer(void *buffer, uint32_t size)
     size_t frames = size / (BYTES_PER_SAMPLE * CHANNELS);
     int16_t *inter = (int16_t *) buffer;
 
-    /* Allocate contiguous L and R */
-    int16_t *left = k_malloc(frames * BYTES_PER_SAMPLE);
-    int16_t *right = k_malloc(frames * BYTES_PER_SAMPLE);
+    /* Lock mutex to protect pre-allocated buffers */
+    k_mutex_lock(&process_mutex, K_FOREVER);
 
-    if (!left || !right) {
-        LOG_ERR("Out of memory for deinterleave (frames=%zu)", frames);
-        if (left)
-            k_free(left);
-        if (right)
-            k_free(right);
-        /* Still free original slab block */
-        k_mem_slab_free(&mem_slab, buffer);
-        return;
+    /* Use pre-allocated buffers - no k_malloc() needed */
+    deinterleave_stereo(inter, frames, left_buffer, right_buffer);
+    mixdown_to_mono(left_buffer, right_buffer, frames, mono_buffer);
+
+    if (callback_func) {
+        callback_func(mono_buffer);
     }
 
-    deinterleave_stereo(inter, frames, left, right);
-
-    /* Mix to mono and call mono callback */
-    int16_t *mono = k_malloc(frames * BYTES_PER_SAMPLE);
-    if (!mono) {
-        LOG_ERR("Out of memory for mono mix (frames=%zu)", frames);
-    } else {
-        mixdown_to_mono(left, right, frames, mono);
-        if (callback_func) {
-            callback_func((int16_t *) mono);
-        }
-        k_free(mono);
-    }
-
-    /* Clean up */
-    k_free(left);
-    k_free(right);
+    /* Free the slab block */
     k_mem_slab_free(&mem_slab, buffer);
+
+    k_mutex_unlock(&process_mutex);
 }
 
 static void mic_thread_function(void *p1, void *p2, void *p3)
@@ -127,7 +115,7 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
     }
 }
 
-#define MIC_THREAD_STACK_SIZE 2048
+#define MIC_THREAD_STACK_SIZE 4096 // Increased from 2048 for audio processing
 #define MIC_THREAD_PRIORITY 5
 K_THREAD_DEFINE(mic_thread_id,
                 MIC_THREAD_STACK_SIZE,
