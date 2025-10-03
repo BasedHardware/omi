@@ -387,7 +387,8 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
             fc.thumbnail = thumb_path
             # cleanup file thumb
             thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
+            if thumb_file.exists():
+                thumb_file.unlink()
 
     # save db
     files_chat_dict = [fc.dict() for fc in files_chat]
