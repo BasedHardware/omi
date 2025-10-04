@@ -39,28 +39,23 @@ static const struct device *dmic_dev;
 static volatile mix_handler callback_func = NULL;
 static volatile bool mic_running = false;
 
-static inline void
-deinterleave_stereo(const int16_t *restrict interleaved, size_t frames, int16_t *restrict left, int16_t *restrict right)
-{
-    /* interleaved: L0, R0, L1, R1, ... */
-    for (size_t i = 0, j = 0; i < frames; ++i, j += 2) {
-        left[i] = interleaved[j + 0];
-        right[i] = interleaved[j + 1];
-    }
-}
+#define MAX_FRAMES (MAX_SAMPLE_RATE / 10)
+static int16_t mono_buffer[MAX_FRAMES];
 
 static inline void
-mixdown_to_mono(const int16_t *restrict left, const int16_t *restrict right, size_t frames, int16_t *restrict mono_out)
+interleaved_stereo_to_mono(const int16_t *restrict interleaved, size_t frames, int16_t *restrict mono_out)
 {
-    /* simple 0.5*(L+R) with saturation */
-    for (size_t i = 0; i < frames; ++i) {
-        int32_t s = (int32_t) left[i] + (int32_t) right[i];
-        s >>= 1; /* divide by 2 to avoid clipping */
-        if (s > 32767)
-            s = 32767;
-        if (s < -32768)
-            s = -32768;
-        mono_out[i] = (int16_t) s;
+    /* Mix L and R channels directly from interleaved format: L0, R0, L1, R1, ... */
+    for (size_t i = 0, j = 0; i < frames; ++i, j += 2) {
+        int32_t left = (int32_t) interleaved[j + 0];
+        int32_t right = (int32_t) interleaved[j + 1];
+        int32_t sum = left + right;
+        sum >>= 1; /* divide by 2 to avoid clipping */
+        if (sum > 32767)
+            sum = 32767;
+        if (sum < -32768)
+            sum = -32768;
+        mono_out[i] = (int16_t) sum;
     }
 }
 
@@ -71,38 +66,19 @@ static void process_audio_buffer(void *buffer, uint32_t size)
     size_t frames = size / (BYTES_PER_SAMPLE * CHANNELS);
     int16_t *inter = (int16_t *) buffer;
 
-    /* Allocate contiguous L and R */
-    int16_t *left = k_malloc(frames * BYTES_PER_SAMPLE);
-    int16_t *right = k_malloc(frames * BYTES_PER_SAMPLE);
-
-    if (!left || !right) {
-        LOG_ERR("Out of memory for deinterleave (frames=%zu)", frames);
-        if (left)
-            k_free(left);
-        if (right)
-            k_free(right);
-        /* Still free original slab block */
+    /* Verify we don't exceed static buffer size */
+    if (frames > MAX_FRAMES) {
+        LOG_ERR("Frame count %zu exceeds MAX_FRAMES %d", frames, MAX_FRAMES);
         k_mem_slab_free(&mem_slab, buffer);
         return;
     }
 
-    deinterleave_stereo(inter, frames, left, right);
+    interleaved_stereo_to_mono(inter, frames, mono_buffer);
 
-    /* Mix to mono and call mono callback */
-    int16_t *mono = k_malloc(frames * BYTES_PER_SAMPLE);
-    if (!mono) {
-        LOG_ERR("Out of memory for mono mix (frames=%zu)", frames);
-    } else {
-        mixdown_to_mono(left, right, frames, mono);
-        if (callback_func) {
-            callback_func((int16_t *) mono);
-        }
-        k_free(mono);
+    if (callback_func) {
+        callback_func(mono_buffer);
     }
 
-    /* Clean up */
-    k_free(left);
-    k_free(right);
     k_mem_slab_free(&mem_slab, buffer);
 }
 
