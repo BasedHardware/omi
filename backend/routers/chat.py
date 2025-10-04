@@ -1,3 +1,4 @@
+import os
 import uuid
 import re
 import base64
@@ -34,6 +35,9 @@ from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+
+if os.getenv('CHAT_AGENTIC') == 'true':
+    from utils.retrieval.agentic_graph import execute_graph_chat_stream
 
 router = APIRouter()
 fc = FileChatTool()

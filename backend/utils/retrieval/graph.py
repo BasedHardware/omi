@@ -3,7 +3,13 @@ import uuid
 import asyncio
 from typing import List, Optional, Tuple, AsyncGenerator
 
-from langchain.callbacks.base import BaseCallbackHandler
+# TODO Remove after complete upgrade to langchain>=1.0.0
+try:
+    from langchain_core.callbacks import BaseCallbackHandler
+except ImportError:
+    # Fallback for langchain<1.0.0
+    from langchain.callbacks.base import BaseCallbackHandler
+
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
