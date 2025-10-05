@@ -1,5 +1,5 @@
-#ifndef SD_H
-#define SD_H
+#ifndef SD_CARD_H
+#define SD_CARD_H
 
 #include <zephyr/kernel.h>
 
@@ -18,4 +18,4 @@ int app_sd_init(void);
  */
 int app_sd_off(void);
 
-#endif // SD_H
+#endif // SD_CARD_H

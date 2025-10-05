@@ -112,11 +112,6 @@ static int suspend_unused_modules(void)
         LOG_ERR("Can not suspend the spi flash module: %d", err);
     }
 
-    err = app_sd_off();
-    if (err) {
-        LOG_ERR("Can not suspend the sd card module: %d", err);
-    }
-
     return 0;
 }
 
@@ -205,6 +200,13 @@ int main(void)
         play_haptic_milli(100);
     }
 #endif
+
+    // SD Card
+    ret = app_sd_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize SD Card (err %d)", ret);
+        return ret;
+    }
 
     // Indicate transport initialization
     LOG_PRINTK("\n");

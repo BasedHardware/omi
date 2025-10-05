@@ -1,8 +1,8 @@
 #include "sd_card.h"
 
+#include <ff.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/fs/ext2.h>
 #include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -11,15 +11,18 @@
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define DISK_DRIVE_NAME "SDMMC"
-#define DISK_MOUNT_PT "/ext"
+#define DISK_DRIVE_NAME "SD"
+#define DISK_MOUNT_PT "/SD:"
 #define FS_RET_OK 0
 
+static FATFS fat_fs;
+
 static struct fs_mount_t mp = {
-    .type = FS_EXT2,
+    .type = FS_FATFS,
+    .fs_data = &fat_fs,
     .flags = FS_MOUNT_FLAG_NO_FORMAT,
     .storage_dev = (void *) DISK_DRIVE_NAME,
-    .mnt_point = "/ext",
+    .mnt_point = DISK_MOUNT_PT,
 };
 
 static const char *disk_mount_pt = DISK_MOUNT_PT;
@@ -73,8 +76,10 @@ static int sd_mount()
             return ret;
         }
 
-        if (disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL) != 0) {
-            LOG_ERR("Storage init ERROR!");
+        int init_ret;
+        init_ret = disk_access_ioctl(disk_pdrv, DISK_IOCTL_CTRL_INIT, NULL);
+        if (init_ret != 0) {
+            LOG_ERR("Storage init ERROR! (%d)", init_ret);
             break;
         }
 
@@ -107,7 +112,7 @@ static int sd_mount()
 
     if (fs_mount(&mp) != FS_RET_OK) {
         LOG_INF("File system not found, creating file system...");
-        ret = fs_mkfs(FS_EXT2, (uintptr_t) mp.storage_dev, NULL, 0);
+        ret = fs_mkfs(FS_FATFS, (uintptr_t) mp.storage_dev, NULL, 0);
         if (ret != 0) {
             LOG_ERR("Error formatting filesystem [%d]", ret);
             sd_enable_power(false);
@@ -130,7 +135,11 @@ static int sd_mount()
 
 int app_sd_init(void)
 {
-    LOG_INF("TODO: SD card module initialized (Device: %s)", sd_dev->name);
+    int ret = sd_mount();
+    if (ret != 0) {
+        return ret;
+    }
+    LOG_INF("SD card module initialized (Device: %s)", sd_dev->name);
     return 0;
 }
 
