@@ -116,8 +116,8 @@ workflows:
           xcode-project use-profiles
 
           # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          BUILD_NAME=1.0.74
+          BUILD_NUMBER=433
           flutter build ipa \
             --release \
             --build-name=$BUILD_NAME \
