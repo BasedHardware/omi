@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/utils/mutex.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -129,9 +130,22 @@ class DeviceService implements IDeviceService {
     _connection = null;
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
+
+    // If device not in discovered list, try to get it from SharedPreferences
+    // This allows background reconnection without scanning
     if (device == null) {
-      debugPrint("device is null");
-      return;
+      debugPrint("Device not in discovered list, checking stored device");
+      device = _getStoredDevice(id);
+      if (device != null) {
+        debugPrint("Using stored device for direct reconnection: ${device.name}");
+        // Add to devices list so it's available for future connections
+        if (!_devices.any((d) => d.id == device!.id)) {
+          _devices.add(device);
+        }
+      } else {
+        debugPrint("No stored device available for $id");
+        return;
+      }
     }
 
     _connection = DeviceConnectionFactory.create(device);
@@ -242,5 +256,18 @@ class DeviceService implements IDeviceService {
   @override
   DateTime? getFirstConnectedAt() {
     return _firstConnectedAt;
+  }
+
+  // Helper method to get stored device from SharedPreferences
+  BtDevice? _getStoredDevice(String id) {
+    try {
+      final storedDevice = SharedPreferencesUtil().btDevice;
+      if (storedDevice.id == id && storedDevice.id.isNotEmpty) {
+        return storedDevice;
+      }
+    } catch (e) {
+      debugPrint('Error getting stored device: $e');
+    }
+    return null;
   }
 }
