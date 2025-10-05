@@ -19,6 +19,7 @@ file(GLOB dk2_sources
     src/lib/dk2/codec.c
     src/lib/dk2/transport.c
     src/lib/dk2/button.c
+    src/lib/dk2/monitor.c
 )
 
 if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)

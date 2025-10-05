@@ -24,6 +24,7 @@
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
+#include "monitor.h"
 #include "settings.h"
 #include "speaker.h"
 #include "storage.h"
@@ -32,10 +33,6 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
 static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
 #endif
-
-// Counters for tracking function calls
-extern uint32_t gatt_notify_count;
-extern uint32_t write_to_tx_queue_count;
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
 
@@ -601,7 +598,7 @@ static struct ring_buf ring_buf;
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
     // Increment the counter
-    write_to_tx_queue_count++;
+    monitor_inc_tx_queue_write();
 
     if (size > CODEC_OUTPUT_MAX_BYTES) {
         return false;
@@ -683,7 +680,7 @@ static bool push_to_gatt(struct bt_conn *conn)
             // Try send notification
             int err =
                 bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-            gatt_notify_count++;
+            monitor_inc_gatt_notify();
 
             // Log failure
             if (err) {
@@ -778,6 +775,7 @@ bool write_to_storage(void)
         buffer_offset = buffer_offset + packet_size;
     }
 
+    monitor_inc_storage_write();
     return true;
 }
 #endif
