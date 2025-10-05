@@ -4,6 +4,11 @@ from datetime import datetime, timezone
 
 import database.action_items as action_items_db
 from utils.other import endpoints as auth
+from utils.notifications import (
+    send_action_item_data_message,
+    send_action_item_update_message,
+    send_action_item_deletion_message,
+)
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -68,6 +73,15 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
 
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
+
+    # Send FCM data message if action item has a due date
+    if request.due_at:
+        send_action_item_data_message(
+            user_id=uid,
+            action_item_id=action_item_id,
+            description=request.description,
+            due_at=request.due_at.isoformat(),
+        )
 
     return ActionItemResponse(**action_item)
 
@@ -157,6 +171,16 @@ def update_action_item(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+
+    # Send FCM update message if due_at changed
+    if 'due_at' in update_data and update_data['due_at']:
+        send_action_item_update_message(
+            user_id=uid,
+            action_item_id=action_item_id,
+            description=updated_item.get('description', ''),
+            due_at=update_data['due_at'].isoformat(),
+        )
+
     return ActionItemResponse(**updated_item)
 
 
@@ -189,6 +213,9 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
     success = action_items_db.delete_action_item(uid, action_item_id)
     if not success:
         raise HTTPException(status_code=404, detail="Action item not found")
+
+    # Send FCM deletion message to cancel scheduled notification
+    send_action_item_deletion_message(user_id=uid, action_item_id=action_item_id)
 
     return {"status": "Ok"}
 
@@ -242,11 +269,20 @@ def create_action_items_batch(
     # Create batch
     created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
 
-    # Fetch created items
+    # Fetch created items and send FCM messages
     created_items = []
-    for item_id in created_ids:
+    for idx, item_id in enumerate(created_ids):
         item = action_items_db.get_action_item(uid, item_id)
         if item:
             created_items.append(ActionItemResponse(**item))
+
+            # Send FCM data message if action item has a due date
+            if idx < len(action_items) and action_items[idx].due_at:
+                send_action_item_data_message(
+                    user_id=uid,
+                    action_item_id=item_id,
+                    description=action_items[idx].description,
+                    due_at=action_items[idx].due_at.isoformat(),
+                )
 
     return {"action_items": created_items, "created_count": len(created_items)}

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -40,6 +41,9 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   bool _hasNetworkError = false;
   bool _isReloading = false;
   late FocusNode _focusNode;
+
+  // Tab state: 0 = To Do, 1 = Done, 2 = Snoozed
+  int _selectedTabIndex = 0;
 
   void _requestFocusIfPossible() {
     if (mounted && _focusNode.canRequestFocus) {
@@ -151,10 +155,18 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               },
               child: Consumer<ActionItemsProvider>(
                 builder: (context, provider, _) {
-                  // Get incomplete and complete items
-                  final incompleteItems = provider.incompleteItems;
-                  final completedItems = provider.completedItems;
+                  // Get categorized items based on new logic
+                  final todoItems = provider.todoItems;
+                  final doneItems = provider.doneItems;
+                  final snoozedItems = provider.snoozedItems;
                   final allItems = provider.actionItems;
+
+                  // Get current tab items
+                  final currentTabItems = _selectedTabIndex == 0
+                      ? todoItems
+                      : _selectedTabIndex == 1
+                          ? doneItems
+                          : snoozedItems;
 
                   return Stack(
                     children: [
@@ -182,18 +194,17 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                                 ),
                                 child: Column(
                                   children: [
-                                    _buildHeader(incompleteItems),
+                                    _buildHeader(todoItems, doneItems, snoozedItems),
                                     Expanded(
                                       child: _animationsInitialized
                                           ? FadeTransition(
                                               opacity: _fadeAnimation,
                                               child: SlideTransition(
                                                 position: _slideAnimation,
-                                                child: _buildActionsContent(
-                                                    provider, allItems, incompleteItems, completedItems),
+                                                child: _buildActionsContent(provider, allItems, currentTabItems),
                                               ),
                                             )
-                                          : _buildActionsContent(provider, allItems, incompleteItems, completedItems),
+                                          : _buildActionsContent(provider, allItems, currentTabItems),
                                     ),
                                   ],
                                 ),
@@ -202,7 +213,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                           ),
                         ),
                       ),
-
                       if (_isReloading)
                         Container(
                           decoration: BoxDecoration(
@@ -269,50 +279,90 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-  Widget _buildHeader(List<ActionItemWithMetadata> incompleteItems) {
+  Widget _buildHeader(List<ActionItemWithMetadata> todoItems, List<ActionItemWithMetadata> doneItems,
+      List<ActionItemWithMetadata> snoozedItems) {
     return Container(
       padding: const EdgeInsets.all(20),
-      child: Row(
+      child: Column(
         children: [
-          // Title section
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
+          // Title and create button row
+          Row(
+            children: [
+              // Title section
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      FontAwesomeIcons.listCheck,
-                      color: ResponsiveHelper.textSecondary,
-                      size: 18,
+                    Row(
+                      children: [
+                        Icon(
+                          FontAwesomeIcons.listCheck,
+                          color: ResponsiveHelper.textSecondary,
+                          size: 18,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Action Items',
+                          style: TextStyle(
+                            color: ResponsiveHelper.textPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(height: 4),
                     Text(
-                      'Action Items',
+                      'Tap to edit • Long press to select • Swipe for actions',
                       style: TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
+                        color: ResponsiveHelper.textSecondary,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${incompleteItems.length} pending tasks',
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              // Create button
+              OmiButton(
+                label: 'Create',
+                onPressed: _showCreateActionItemDialog,
+                icon: FontAwesomeIcons.plus,
+              ),
+            ],
           ),
-          // Create button
-          OmiButton(
-            label: 'Create',
-            onPressed: _showCreateActionItemDialog,
-            icon: FontAwesomeIcons.plus,
+          const SizedBox(height: 16),
+
+          // Segmented Control - Full width like mobile
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.all(2),
+            child: CupertinoSlidingSegmentedControl<int>(
+              groupValue: _selectedTabIndex,
+              onValueChanged: (int? value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedTabIndex = value;
+                  });
+                  HapticFeedback.selectionClick();
+
+                  // Track tab change
+                  final tabName = value == 0 ? 'To Do' : (value == 1 ? 'Done' : 'Snoozed');
+                  MixpanelManager().actionItemTabChanged(tabName);
+                }
+              },
+              backgroundColor: Colors.transparent,
+              thumbColor: ResponsiveHelper.backgroundSecondary,
+              padding: const EdgeInsets.all(0),
+              children: {
+                0: _buildTabLabel('To Do', todoItems.length),
+                1: _buildTabLabel('Done', doneItems.length),
+                2: _buildTabLabel('Snoozed', snoozedItems.length),
+              },
+            ),
           ),
         ],
       ),
@@ -367,11 +417,44 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     }
   }
 
+  Widget _buildTabLabel(String label, int count) {
+    final int tabIndex = label == 'To Do' ? 0 : (label == 'Done' ? 1 : 2);
+    final bool isSelected = _selectedTabIndex == tabIndex;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+            ),
+          ),
+          if (count > 0) ...[
+            const SizedBox(width: 4),
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionsContent(
     ActionItemsProvider provider,
     List<ActionItemWithMetadata> allItems,
-    List<ActionItemWithMetadata> incompleteItems,
-    List<ActionItemWithMetadata> completedItems,
+    List<ActionItemWithMetadata> currentTabItems,
   ) {
     if (_hasNetworkError && allItems.isEmpty) {
       return _buildErrorState();
@@ -388,74 +471,71 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
-        // Pending tasks section
-        if (incompleteItems.isNotEmpty) _buildFlatView(incompleteItems, false),
-
-        // Completed tasks section
-        if (completedItems.isNotEmpty) ...[
+        // Info banner for snoozed tab
+        if (allItems.isNotEmpty && _selectedTabIndex == 2)
           SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              child: Row(
-                children: [
-                  const Text(
-                    'Completed',
-                    style: TextStyle(
-                      color: ResponsiveHelper.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 12.0),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: ResponsiveHelper.textTertiary.withOpacity(0.3),
+                    width: 1,
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: ResponsiveHelper.textTertiary,
                     ),
-                    child: Text(
-                      '${completedItems.length}',
-                      style: const TextStyle(
-                        color: ResponsiveHelper.textTertiary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Old tasks are auto-snoozed after 3 days to keep your To Do list clean. You can still complete or delete them here.',
+                        style: TextStyle(
+                          color: ResponsiveHelper.textSecondary,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          _buildFlatView(completedItems, true),
-        ] else ...[
+
+        // Current Tab Items
+        if (allItems.isNotEmpty && currentTabItems.isNotEmpty)
+          _buildFlatView(currentTabItems, _selectedTabIndex == 1)
+        else if (allItems.isNotEmpty && currentTabItems.isEmpty)
           SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(
-                    FontAwesomeIcons.circleCheck,
-                    color: ResponsiveHelper.textTertiary,
-                    size: 16,
-                  ),
-                  SizedBox(width: 12),
-                  Text(
-                    'No completed items yet',
-                    style: TextStyle(
-                      color: ResponsiveHelper.textTertiary,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Container(
+                height: 120,
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Text(
+                    _getEmptyTabMessage(),
+                    style: const TextStyle(
+                      color: ResponsiveHelper.textSecondary,
                       fontSize: 14,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ],
 
         // Loading indicator for pagination
         if (provider.isFetching)
@@ -762,8 +842,23 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
+  String _getEmptyTabMessage() {
+    switch (_selectedTabIndex) {
+      case 0: // To Do
+        return '🎉 All caught up!\nNo pending action items';
+      case 1: // Done
+        return 'No completed items yet';
+      case 2: // Snoozed
+        return '✅ No snoozed tasks\n\nOld tasks are auto-snoozed after 3 days to keep your To Do list clean';
+      default:
+        return 'No items';
+    }
+  }
+
   Widget _buildFlatView(List<ActionItemWithMetadata> items, bool showCompleted) {
-    final filteredItems = items.where((item) => item.completed == showCompleted).toList();
+    // For the new tab system, we don't need to filter by completion status
+    // since the provider already returns the correct items for each tab
+    final filteredItems = items;
 
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -772,6 +867,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
           Widget itemWidget = DesktopActionItem(
             actionItem: item,
+            isSnoozedTab: _selectedTabIndex == 2,
           );
 
           return AnimatedContainer(

@@ -727,4 +727,16 @@ class MixpanelManager {
   void actionItemsDateFilterCleared() {
     track('Action Items Date Filter Cleared');
   }
+
+  void actionItemTabChanged(String tabName) {
+    track('Action Item Tab Changed', properties: {
+      'tab_name': tabName,
+    });
+  }
+
+  void actionItemCompleted({required String fromTab}) {
+    track('Action Item Completed', properties: {
+      'from_tab': fromTab,
+    });
+  }
 }

@@ -57,6 +57,7 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
+from utils.notifications import send_action_item_data_message
 
 
 def _get_structured(
@@ -68,12 +69,27 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
+
+        # Fetch existing action items from past 2 days for deduplication
+        existing_action_items = None
+        try:
+            two_days_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+            existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
+        except Exception as e:
+            print(f"Error fetching existing action items for deduplication: {e}")
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
-                structured = get_transcript_structure(conversation.text, conversation.started_at, language_code, tz)
+                structured = get_transcript_structure(
+                    conversation.text,
+                    conversation.started_at,
+                    language_code,
+                    tz,
+                    existing_action_items=existing_action_items,
+                )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.message:
@@ -102,6 +118,7 @@ def _get_structured(
                     tz,
                     conversation.structured.title,
                     photos=conversation.photos,
+                    existing_action_items=existing_action_items,
                 ),
                 False,
             )
@@ -114,7 +131,12 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         return (
             get_transcript_structure(
-                transcript_text, conversation.started_at, language_code, tz, photos=conversation.photos
+                transcript_text,
+                conversation.started_at,
+                language_code,
+                tz,
+                photos=conversation.photos,
+                existing_action_items=existing_action_items,
             ),
             False,
         )
@@ -325,6 +347,17 @@ def _save_action_items(uid: str, conversation: Conversation):
         # Save new action items
         action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
         print(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+        # Send FCM data messages for action items with due dates
+        for idx, action_item in enumerate(conversation.structured.action_items):
+            if action_item.due_at and idx < len(action_item_ids):
+                action_item_id = action_item_ids[idx]
+                send_action_item_data_message(
+                    user_id=uid,
+                    action_item_id=action_item_id,
+                    description=action_item.description,
+                    due_at=action_item.due_at.isoformat(),
+                )
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
