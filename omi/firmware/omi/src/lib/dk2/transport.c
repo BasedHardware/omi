@@ -1054,7 +1054,7 @@ int transport_start()
     struct k_thread *thread = k_thread_create(&pusher_thread,
                                               pusher_stack,
                                               K_THREAD_STACK_SIZEOF(pusher_stack),
-                                              (k_thread_entry_t) test_pusher,
+                                              (k_thread_entry_t) pusher,
                                               NULL,
                                               NULL,
                                               NULL,
