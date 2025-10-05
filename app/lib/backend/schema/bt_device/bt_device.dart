@@ -233,6 +233,16 @@ class BtDevice {
     }
   }
 
+  /// Get the display name for the device
+  /// Returns custom name if set, otherwise returns the actual device name
+  String getDisplayName() {
+    final customName = SharedPreferencesUtil().getCustomDeviceName(id);
+    if (customName.isNotEmpty) {
+      return customName;
+    }
+    return name;
+  }
+
   BtDevice copyWith(
       {String? name,
       String? id,

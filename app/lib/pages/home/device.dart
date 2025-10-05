@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/settings/change_device_name_widget.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -157,14 +158,38 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   // Device Title and Status
                   Column(
                     children: [
-                      Text(
-                        provider.pairedDevice?.name ?? 'Unknown Device',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
+                      GestureDetector(
+                        onTap: () async {
+                          await showDialog(
+                            context: context,
+                            builder: (c) => ChangeDeviceNameWidget(
+                              device: provider.pairedDevice,
+                              onNameChanged: () {
+                                setState(() {}); // Refresh the UI
+                              },
+                            ),
+                          );
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              provider.pairedDevice?.getDisplayName() ?? 'Unknown Device',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.edit,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
+                          ],
                         ),
-                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
                       Container(
@@ -203,7 +228,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   const SizedBox(height: 32),
                   DeviceAnimationWidget(
                     isConnected: provider.connectedDevice != null,
-                    deviceName: provider.connectedDevice?.name ?? provider.pairedDevice?.name,
+                    deviceName: provider.connectedDevice?.getDisplayName() ?? provider.pairedDevice?.getDisplayName(),
                     animatedBackground: provider.connectedDevice != null,
                   ),
 
@@ -308,9 +333,18 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                                 isLast: true,
                                 isRedBackground: true,
                                 onTap: () async {
+                                  // Save device ID before clearing for custom name cleanup
+                                  final deviceId = SharedPreferencesUtil().btDevice.id;
+
                                   await SharedPreferencesUtil()
                                       .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                                   SharedPreferencesUtil().deviceName = '';
+
+                                  // Clear custom device name when unpairing
+                                  if (deviceId.isNotEmpty) {
+                                    SharedPreferencesUtil().clearCustomDeviceName(deviceId);
+                                  }
+
                                   if (provider.connectedDevice != null) {
                                     await _bleDisconnectDevice(provider.connectedDevice!);
                                   }
@@ -337,10 +371,26 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                           child: Column(
                             children: [
                               _buildSectionRow(
+                                'Device Name',
+                                provider.pairedDevice?.getDisplayName() ?? 'Unknown Device',
+                                hasArrow: true,
+                                isFirst: true,
+                                onTap: () async {
+                                  await showDialog(
+                                    context: context,
+                                    builder: (c) => ChangeDeviceNameWidget(
+                                      device: provider.pairedDevice,
+                                      onNameChanged: () {
+                                        setState(() {}); // Refresh the UI
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildSectionRow(
                                 'Product Name',
                                 provider.pairedDevice?.name ?? 'Unknown Device',
                                 hasArrow: false,
-                                isFirst: true,
                               ),
                               _buildSectionRow(
                                 'Model Number',
