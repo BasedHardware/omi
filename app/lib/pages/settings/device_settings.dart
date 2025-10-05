@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/settings/change_device_name_widget.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
@@ -146,7 +147,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               Stack(
                 children: [
                   Column(
-                    children: deviceSettingsWidgets(provider.pairedDevice, context),
+                    children: deviceSettingsWidgets(provider.pairedDevice, context, () {
+                      setState(() {}); // Refresh the UI when device name changes
+                    }),
                   ),
                   if (!provider.isConnected)
                     ClipRRect(
@@ -558,12 +561,33 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 }
 
-List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
+List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context, VoidCallback onUpdate) {
   var provider = Provider.of<DeviceProvider>(context, listen: true);
 
   return [
+    GestureDetector(
+      onTap: () async {
+        await showDialog(
+          context: context,
+          builder: (c) => ChangeDeviceNameWidget(
+            device: device,
+            onNameChanged: () {
+              onUpdate(); // Trigger parent widget rebuild
+            },
+          ),
+        );
+      },
+      child: ListTile(
+        title: const Text('Device Name'),
+        subtitle: Text(device?.getDisplayName() ?? 'Omi DevKit'),
+        trailing: const Icon(
+          Icons.edit,
+          size: 20,
+        ),
+      ),
+    ),
     ListTile(
-      title: const Text('Device Name'),
+      title: const Text('Product Name'),
       subtitle: Text(device?.name ?? 'Omi DevKit'),
     ),
     ListTile(
