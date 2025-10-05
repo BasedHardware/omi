@@ -420,8 +420,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               backgroundColor: Theme.of(context).colorScheme.primary,
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
-                length: 4,
-                initialIndex: homeProvider.selectedIndex,
+                length: 5,
+                initialIndex: homeProvider.selectedIndex.clamp(0, 4),
                 child: GestureDetector(
                   onTap: () {
                     primaryFocus?.unfocus();
