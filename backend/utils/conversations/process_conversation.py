@@ -180,19 +180,33 @@ def _get_conversation_obj(
     return conversation
 
 
-# Get default conversation summary app IDs from environment variable
-CONVERSATION_SUMMARIZED_APP_IDS = os.getenv(
-    'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
-).split(',')
-
-
-# Function to get default memory apps
+# Function to get conversation summary apps from Redis
 def get_default_conversation_summarized_apps():
+    """
+    Get conversation summary apps from Redis.
+    Falls back to environment variable if Redis is empty.
+    """
     default_apps = []
-    for app_id in CONVERSATION_SUMMARIZED_APP_IDS:
-        app_data = get_app_by_id_db(app_id.strip())
-        if app_data:
-            default_apps.append(App(**app_data))
+
+    # Try to get from Redis first
+    redis_app_ids = redis_db.get_conversation_summary_app_ids()
+
+    if redis_app_ids:
+        # Use apps from Redis
+        for app_id in redis_app_ids:
+            app_data = get_app_by_id_db(app_id.strip())
+            if app_data:
+                default_apps.append(App(**app_data))
+    else:
+        # Fallback to environment variable for backward compatibility
+        env_app_ids = os.getenv(
+            'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
+        ).split(',')
+
+        for app_id in env_app_ids:
+            app_data = get_app_by_id_db(app_id.strip())
+            if app_data:
+                default_apps.append(App(**app_data))
 
     return default_apps
 
