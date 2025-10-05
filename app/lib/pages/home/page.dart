@@ -89,6 +89,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
+  final GlobalKey<State<ChatPage>> _chatPageKey = GlobalKey<State<ChatPage>>();
   final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
@@ -113,12 +114,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         break;
       case 2:
+        final chatState = _chatPageKey.currentState;
+        if (chatState != null) {
+          (chatState as dynamic).scrollToTop();
+        }
+        break;
+      case 3:
         final memoriesState = _memoriesPageKey.currentState;
         if (memoriesState != null) {
           (memoriesState as dynamic).scrollToTop();
         }
         break;
-      case 3:
+      case 4:
         final appsState = _appsPageKey.currentState;
         if (appsState != null) {
           appsState.scrollToTop();
@@ -177,6 +184,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _pages = [
       ConversationsPage(key: _conversationsPageKey),
       ActionItemsPage(key: _actionItemsPageKey),
+      ChatPage(key: _chatPageKey),
       MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
     ];
@@ -522,12 +530,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         ),
                                         // Center space for record button - only when no OMI device is connected
                                         if (!isOmiDeviceConnected) const SizedBox(width: 80),
-                                        // Memories tab
+                                        // Chat tab
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Memories');
+                                              MixpanelManager().bottomNavigationTabClicked('Chat');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 2) {
                                                 _scrollToTop(2);
@@ -543,7 +551,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
                                                     Icon(
-                                                      FontAwesomeIcons.brain,
+                                                      FontAwesomeIcons.solidComment,
                                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
@@ -560,11 +568,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Apps');
                                               primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 3) {
-                                                _scrollToTop(3);
+                                              if (home.selectedIndex == 4) {
+                                                _scrollToTop(4);
                                                 return;
                                               }
-                                              home.setIndex(3);
+                                              home.setIndex(4);
                                             },
                                             child: SizedBox(
                                               height: 90,
@@ -575,7 +583,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   children: [
                                                     Icon(
                                                       FontAwesomeIcons.puzzlePiece,
-                                                      color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                                      color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
                                                   ],
@@ -720,77 +728,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
-              ),
-              // Chat Button - Only show on home page (index 0)
-              Consumer<HomeProvider>(
-                builder: (context, provider, child) {
-                  if (provider.selectedIndex == 0) {
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().bottomNavigationTabClicked('Chat');
-                        // Navigate to chat page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatPage(isPivotBottom: false),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        height: 36,
-                        margin: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.all(0.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(17.5),
-                            border: Border.all(
-                              color: Colors.pink.withValues(alpha: 0.3),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.solidComment,
-                                size: 14,
-                                color: Colors.white70,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Ask',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  } else {
-                    return const SizedBox.shrink();
-                  }
-                },
               ),
             ],
           ),

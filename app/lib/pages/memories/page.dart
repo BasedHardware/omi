@@ -236,6 +236,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         return PopScope(
           canPop: true,
           child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Memories'),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
             backgroundColor: Theme.of(context).colorScheme.primary,
             body: RefreshIndicator(
               onRefresh: () async {
@@ -573,7 +577,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                           )
                         else
                           SliverPadding(
-                            padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
+                            padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 80),
                             sliver: SliverList(
                               delegate: SliverChildBuilderDelegate(
                                 (context, index) {
@@ -616,7 +620,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   Widget _buildShimmerMemoryList() {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
+      padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 80),
       child: ListView.builder(
         itemCount: 8, // Show 8 shimmer items
         itemBuilder: (context, index) {

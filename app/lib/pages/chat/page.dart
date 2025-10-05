@@ -67,7 +67,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   void initState() {
     apps = prefs.appsList;
     scrollController = ScrollController();
-    textFieldFocusNode = FocusNode();
+    textFieldFocusNode = context.read<HomeProvider>().chatFieldFocusNode;
     textController.addListener(() {
       setState(() {});
     });
@@ -117,7 +117,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   void dispose() {
     textController.dispose();
     scrollController.dispose();
-    textFieldFocusNode.dispose();
     super.dispose();
   }
 
@@ -447,7 +446,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                             left: 0,
                             right: 16,
                             top: provider.selectedFiles.isNotEmpty ? 0 : 16,
-                            bottom: widget.isPivotBottom ? 20 : (textFieldFocusNode.hasFocus ? 20 : 40),
+                            bottom: widget.isPivotBottom 
+                                ? 20 
+                                : textFieldFocusNode.hasFocus 
+                                    ? MediaQuery.of(context).viewInsets.bottom + 20
+                                    : MediaQuery.of(context).padding.bottom + 80,
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.end,
@@ -762,10 +765,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     return AppBar(
       backgroundColor: Theme.of(context).colorScheme.surface,
       elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => Navigator.of(context).pop(),
-      ),
+      automaticallyImplyLeading: false,
       title: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
           return _buildAppSelection(context, appProvider);
