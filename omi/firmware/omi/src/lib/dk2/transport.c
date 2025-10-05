@@ -17,13 +17,13 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
+#include "../../sd_card.h"
 #include "accel.h"
 #include "button.h"
 #include "config.h"
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
-#include "sdcard.h"
 #include "settings.h"
 #include "speaker.h"
 #include "storage.h"
@@ -41,7 +41,7 @@ extern uint32_t write_to_tx_queue_count;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
-extern uint32_t file_num_array[2];
+extern uint32_t file_num_array[MAX_AUDIO_FILES];
 extern bool storage_is_on;
 #endif
 
@@ -1014,15 +1014,16 @@ int transport_start()
 
 #endif
 
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
-    bt_gatt_service_register(&storage_service);
-#endif
-
     // Start advertising
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    // Register storage service for offline audio
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
+    bt_gatt_service_register(&storage_service);
+#endif
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d)", err);

@@ -11,7 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
-#include "sdcard.h"
+#include "../../sd_card.h"
 #include "transport.h"
 #include "utils.h"
 
@@ -56,7 +56,7 @@ K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
 
 extern uint8_t file_count;
-extern uint32_t file_num_array[2];
+extern uint32_t file_num_array[MAX_AUDIO_FILES];
 void broadcast_storage_packet(struct k_work *work_item);
 
 static struct bt_gatt_attr storage_service_attr[] = {

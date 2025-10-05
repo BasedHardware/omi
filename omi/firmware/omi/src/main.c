@@ -12,6 +12,9 @@
 #include "lib/dk2/mic.h"
 #include "lib/dk2/settings.h"
 #include "lib/dk2/transport.h"
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+#include "lib/dk2/storage.h"
+#endif
 #include "sd_card.h"
 #include "spi_flash.h"
 
@@ -207,6 +210,16 @@ int main(void)
         LOG_ERR("Failed to initialize SD Card (err %d)", ret);
         return ret;
     }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    // Initialize storage service for offline audio
+    ret = storage_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize storage service (err %d)", ret);
+    } else {
+        LOG_INF("Storage service initialized");
+    }
+#endif
 
     // Indicate transport initialization
     LOG_PRINTK("\n");

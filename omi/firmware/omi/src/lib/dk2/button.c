@@ -14,9 +14,11 @@
 
 #include "led.h"
 #include "mic.h"
-#include "sdcard.h"
 #include "speaker.h"
 #include "transport.h"
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+#include "../../sd_card.h"
+#endif
 
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -322,7 +324,9 @@ void turnoff_all()
 
     // Turn off SD card if offline storage is enabled
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    sd_off();
+    if (is_sd_on()) {
+        sd_off();
+    }
 #endif
 
     // Turn off speaker if enabled
