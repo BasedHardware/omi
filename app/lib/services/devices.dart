@@ -228,7 +228,7 @@ class DeviceService implements IDeviceService {
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {
-        debugPrint(e.toString());
+        debugPrint(e.cause);
         return null;
       }
 
