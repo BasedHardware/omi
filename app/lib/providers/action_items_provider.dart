@@ -47,6 +47,49 @@ class ActionItemsProvider extends ChangeNotifier {
 
   List<ActionItemWithMetadata> get completedItems => _actionItems.where((item) => item.completed == true).toList();
 
+  // New categorization with 3-day cutoff for tabs
+  List<ActionItemWithMetadata> get todoItems {
+    final now = DateTime.now();
+    final threeDaysAgo = now.subtract(const Duration(days: 3));
+
+    return _actionItems.where((item) {
+      if (item.completed) return false;
+
+      // Check if within 3 days based on due_at or created_at
+      if (item.dueAt != null) {
+        return item.dueAt!.isAfter(threeDaysAgo) || item.dueAt!.isAtSameMomentAs(threeDaysAgo);
+      } else if (item.createdAt != null) {
+        return item.createdAt!.isAfter(threeDaysAgo) || item.createdAt!.isAtSameMomentAs(threeDaysAgo);
+      }
+
+      // If no dates, include in To Do by default
+      return true;
+    }).toList();
+  }
+
+  List<ActionItemWithMetadata> get doneItems {
+    return _actionItems.where((item) => item.completed == true).toList();
+  }
+
+  List<ActionItemWithMetadata> get snoozedItems {
+    final now = DateTime.now();
+    final threeDaysAgo = now.subtract(const Duration(days: 3));
+
+    return _actionItems.where((item) {
+      if (item.completed) return false;
+
+      // Check if past 3 days based on due_at or created_at
+      if (item.dueAt != null) {
+        return item.dueAt!.isBefore(threeDaysAgo);
+      } else if (item.createdAt != null) {
+        return item.createdAt!.isBefore(threeDaysAgo);
+      }
+
+      // If no dates, don't include in snoozed
+      return false;
+    }).toList();
+  }
+
   ActionItemsProvider() {
     _preload();
   }

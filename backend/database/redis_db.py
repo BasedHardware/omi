@@ -540,6 +540,29 @@ def delete_cached_mcp_api_key(hashed_key: str):
 
 
 # ******************************************************
+# ****************** DEV API KEYS **********************
+# ******************************************************
+
+
+def cache_dev_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
+    """Caches the user_id for a given hashed Developer API key."""
+    r.set(f'dev_api_key:{hashed_key}', user_id, ex=ttl)
+
+
+@try_catch_decorator
+def get_cached_dev_api_key_user_id(hashed_key: str) -> Optional[str]:
+    """Retrieves the user_id for a given hashed Developer API key from cache."""
+    user_id = r.get(f'dev_api_key:{hashed_key}')
+    return user_id.decode() if user_id else None
+
+
+@try_catch_decorator
+def delete_cached_dev_api_key(hashed_key: str):
+    """Deletes a cached Developer API key."""
+    r.delete(f'dev_api_key:{hashed_key}')
+
+
+# ******************************************************
 # **************** DATA MIGRATION STATUS ***************
 # ******************************************************
 
@@ -635,3 +658,31 @@ def set_silent_user_notification_sent(uid: str, ttl: int = 60 * 60 * 24):
 def has_silent_user_notification_been_sent(uid: str) -> bool:
     """Check if silent user notification was already sent to user recently"""
     return r.exists(f'users:{uid}:silent_notification_sent')
+
+
+# ******************************************************
+# ******** CONVERSATION SUMMARY APP IDS ****************
+# ******************************************************
+
+CONVERSATION_SUMMARY_APPS_KEY = 'conversation_summary_app_ids'
+
+
+@try_catch_decorator
+def get_conversation_summary_app_ids() -> List[str]:
+    """Get list of conversation summary app IDs from Redis"""
+    app_ids = r.smembers(CONVERSATION_SUMMARY_APPS_KEY)
+    return [app_id.decode('utf-8') if isinstance(app_id, bytes) else app_id for app_id in app_ids] if app_ids else []
+
+
+@try_catch_decorator
+def add_conversation_summary_app_id(app_id: str) -> bool:
+    """Add an app ID to the conversation summary apps set"""
+    result = r.sadd(CONVERSATION_SUMMARY_APPS_KEY, app_id)
+    return result > 0
+
+
+@try_catch_decorator
+def remove_conversation_summary_app_id(app_id: str) -> bool:
+    """Remove an app ID from the conversation summary apps set"""
+    result = r.srem(CONVERSATION_SUMMARY_APPS_KEY, app_id)
+    return result > 0

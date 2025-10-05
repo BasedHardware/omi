@@ -419,6 +419,25 @@ abstract class DeviceConnection {
 
   Future<int?> performGetLedDimRatio();
 
+  Future<void> setMicGain(int gain) async {
+    if (await isConnected()) {
+      return await performSetMicGain(gain);
+    }
+    _showDeviceDisconnectedNotification();
+  }
+
+  Future<void> performSetMicGain(int gain);
+
+  Future<int?> getMicGain() async {
+    if (await isConnected()) {
+      return await performGetMicGain();
+    }
+    _showDeviceDisconnectedNotification();
+    return null;
+  }
+
+  Future<int?> performGetMicGain();
+
   void _showDeviceDisconnectedNotification() {
     NotificationService.instance.createNotification(
       title: '${device.name} Disconnected',

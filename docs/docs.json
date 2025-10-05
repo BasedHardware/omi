@@ -63,7 +63,13 @@
           },
           "doc/developer/Protocol",
           "doc/developer/Contribution",
-          "doc/developer/MCP",
+          {
+            "group": "APIs & Integrations",
+            "pages": [
+              "doc/developer/api",
+              "doc/developer/MCP"
+            ]
+          },
           {
             "group": "Audio & Testing",
             "pages": [

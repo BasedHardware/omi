@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -69,10 +70,16 @@ class AppListItem extends StatelessWidget {
                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                       },
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.shade600),
-                          strokeWidth: 2,
+                      placeholder: (context, url) => Shimmer.fromColors(
+                        baseColor: const Color(0xFF1F1F25),
+                        highlightColor: const Color(0xFF35343B),
+                        child: Container(
+                          width: double.infinity,
+                          height: double.infinity,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F25),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                       errorWidget: (context, url, error) => Icon(

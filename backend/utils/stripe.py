@@ -38,7 +38,7 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
         cancel_url = urljoin(base_url, 'v1/payments/cancel')
-        
+
         # session creation parameters
         session_params = {
             'client_reference_id': uid,
@@ -53,11 +53,21 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
             'success_url': success_url,
             'cancel_url': cancel_url,
             'allow_promotion_codes': True,
+            'metadata': {
+                'uid': uid,
+                'sub_type': 'unlimited',
+            },
+            'subscription_data': {
+                'metadata': {
+                    'uid': uid,
+                    'sub_type': 'unlimited',
+                }
+            },
         }
-        
+
         if idempotency_key:
             session_params['idempotency_key'] = idempotency_key
-            
+
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
     except Exception as e:

@@ -57,6 +57,7 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
+from utils.notifications import send_action_item_data_message
 
 
 def _get_structured(
@@ -68,12 +69,27 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
+
+        # Fetch existing action items from past 2 days for deduplication
+        existing_action_items = None
+        try:
+            two_days_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+            existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
+        except Exception as e:
+            print(f"Error fetching existing action items for deduplication: {e}")
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
-                structured = get_transcript_structure(conversation.text, conversation.started_at, language_code, tz)
+                structured = get_transcript_structure(
+                    conversation.text,
+                    conversation.started_at,
+                    language_code,
+                    tz,
+                    existing_action_items=existing_action_items,
+                )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.message:
@@ -102,6 +118,7 @@ def _get_structured(
                     tz,
                     conversation.structured.title,
                     photos=conversation.photos,
+                    existing_action_items=existing_action_items,
                 ),
                 False,
             )
@@ -114,7 +131,12 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         return (
             get_transcript_structure(
-                transcript_text, conversation.started_at, language_code, tz, photos=conversation.photos
+                transcript_text,
+                conversation.started_at,
+                language_code,
+                tz,
+                photos=conversation.photos,
+                existing_action_items=existing_action_items,
             ),
             False,
         )
@@ -158,19 +180,33 @@ def _get_conversation_obj(
     return conversation
 
 
-# Get default conversation summary app IDs from environment variable
-CONVERSATION_SUMMARIZED_APP_IDS = os.getenv(
-    'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
-).split(',')
-
-
-# Function to get default memory apps
+# Function to get conversation summary apps from Redis
 def get_default_conversation_summarized_apps():
+    """
+    Get conversation summary apps from Redis.
+    Falls back to environment variable if Redis is empty.
+    """
     default_apps = []
-    for app_id in CONVERSATION_SUMMARIZED_APP_IDS:
-        app_data = get_app_by_id_db(app_id.strip())
-        if app_data:
-            default_apps.append(App(**app_data))
+
+    # Try to get from Redis first
+    redis_app_ids = redis_db.get_conversation_summary_app_ids()
+
+    if redis_app_ids:
+        # Use apps from Redis
+        for app_id in redis_app_ids:
+            app_data = get_app_by_id_db(app_id.strip())
+            if app_data:
+                default_apps.append(App(**app_data))
+    else:
+        # Fallback to environment variable for backward compatibility
+        env_app_ids = os.getenv(
+            'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
+        ).split(',')
+
+        for app_id in env_app_ids:
+            app_data = get_app_by_id_db(app_id.strip())
+            if app_data:
+                default_apps.append(App(**app_data))
 
     return default_apps
 
@@ -325,6 +361,17 @@ def _save_action_items(uid: str, conversation: Conversation):
         # Save new action items
         action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
         print(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+        # Send FCM data messages for action items with due dates
+        for idx, action_item in enumerate(conversation.structured.action_items):
+            if action_item.due_at and idx < len(action_item_ids):
+                action_item_id = action_item_ids[idx]
+                send_action_item_data_message(
+                    user_id=uid,
+                    action_item_id=action_item_id,
+                    description=action_item.description,
+                    due_at=action_item.due_at.isoformat(),
+                )
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
