@@ -19,7 +19,13 @@ file(GLOB dk2_sources
     src/lib/dk2/codec.c
     src/lib/dk2/transport.c
     src/lib/dk2/button.c
+    src/lib/dk2/monitor.c
 )
+
+if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
+    list(APPEND dk2_sources src/lib/dk2/storage.c)
+endif()
+
 target_sources(app PRIVATE ${dk2_sources} ${app_sources})
 
 if(CONFIG_OMI_CODEC_OPUS)

@@ -10,8 +10,12 @@
 #include "lib/dk2/led.h"
 #include "lib/dk2/lib/battery/battery.h"
 #include "lib/dk2/mic.h"
+#include "lib/dk2/monitor.h"
 #include "lib/dk2/settings.h"
 #include "lib/dk2/transport.h"
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+#include "lib/dk2/storage.h"
+#endif
 #include "sd_card.h"
 #include "spi_flash.h"
 
@@ -21,25 +25,19 @@ bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 
-// TODO: remove these metrics
-uint32_t gatt_notify_count = 0;
-uint32_t total_mic_buffer_bytes = 0;
-uint32_t broadcast_audio_count = 0;
-uint32_t write_to_tx_queue_count = 0;
-
 static void codec_handler(uint8_t *data, size_t len)
 {
-    broadcast_audio_count++;
+    monitor_inc_broadcast_audio();
     int err = broadcast_audio_packets(data, len);
     if (err) {
-        LOG_ERR("Failed to broadcast audio packets: %d", err);
+        monitor_inc_broadcast_audio_failed();
     }
 }
 
 static void mic_handler(int16_t *buffer)
 {
     // Track total bytes processed (each sample is 2 bytes)
-    total_mic_buffer_bytes += 1;
+    monitor_inc_mic_buffer();
 
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
     if (err) {
@@ -112,11 +110,6 @@ static int suspend_unused_modules(void)
         LOG_ERR("Can not suspend the spi flash module: %d", err);
     }
 
-    err = app_sd_off();
-    if (err) {
-        LOG_ERR("Can not suspend the sd card module: %d", err);
-    }
-
     return 0;
 }
 
@@ -133,6 +126,13 @@ int main(void)
     if (ret) {
         LOG_ERR("Failed to suspend unused modules (err %d)", ret);
         ret = 0;
+    }
+
+    // Initialize monitoring system
+    LOG_INF("Initializing monitoring system...\n");
+    ret = monitor_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize monitoring system (err %d)", ret);
     }
 
     // Initialize settings
@@ -206,6 +206,23 @@ int main(void)
     }
 #endif
 
+    // SD Card
+    ret = app_sd_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize SD Card (err %d)", ret);
+        return ret;
+    }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    // Initialize storage service for offline audio
+    ret = storage_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize storage service (err %d)", ret);
+    } else {
+        LOG_INF("Storage service initialized");
+    }
+#endif
+
     // Indicate transport initialization
     LOG_PRINTK("\n");
     LOG_INF("Initializing transport...\n");
@@ -241,12 +258,8 @@ int main(void)
     LOG_INF("Device initialized successfully\n");
 
     while (1) {
-        // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
-        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u",
-                total_mic_buffer_bytes,
-                gatt_notify_count,
-                broadcast_audio_count,
-                write_to_tx_queue_count);
+        // Log all metrics
+        monitor_log_metrics();
 
         // Update LED state based on connection and charging status
         set_led_state();

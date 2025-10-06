@@ -11,7 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
-#include "sdcard.h"
+#include "../../sd_card.h"
 #include "transport.h"
 #include "utils.h"
 
@@ -56,7 +56,7 @@ K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
 
 extern uint8_t file_count;
-extern uint32_t file_num_array[2];
+extern uint32_t file_num_array[MAX_AUDIO_FILES];
 void broadcast_storage_packet(struct k_work *work_item);
 
 static struct bt_gatt_attr storage_service_attr[] = {
@@ -128,7 +128,6 @@ uint32_t remaining_length = 0;
 static int setup_storage_tx()
 {
     transport_started = (uint8_t) 0;
-    // offset = 0;
     LOG_INF("about to transmit storage\n");
     k_msleep(1000);
     int res = move_read_pointer(current_read_num);
@@ -142,17 +141,23 @@ static int setup_storage_tx()
 
     LOG_INF("current read ptr %d", current_read_num);
 
-    remaining_length = file_num_array[current_read_num - 1];
+    uint32_t file_size = file_num_array[current_read_num - 1];
     if (current_read_num == file_count) {
-        remaining_length = get_file_size(file_count);
+        file_size = get_file_size(file_count);
     }
 
-    remaining_length = remaining_length - offset;
+    // Validate offset against file size
+    if (offset >= file_size) {
+        LOG_ERR("Offset %d exceeds file size %d", offset, file_size);
+        offset = 0; // Reset to start
+    }
 
-    // offset=offset_;
+    remaining_length = file_size - offset;
+
     LOG_INF("remaining length: %d", remaining_length);
     LOG_INF("offset: %d", offset);
     LOG_INF("file: %d", current_read_num);
+    LOG_INF("file size: %d", file_size);
 
     return 0;
 }
@@ -275,12 +280,18 @@ static void write_to_gatt(struct bt_conn *conn)
     uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
 
     int r = read_audio_data(storage_write_buffer, packet_size, offset);
+    if (r < 0) {
+        LOG_ERR("Failed to read audio data: %d", r);
+        remaining_length = 0; // Stop transfer on error
+        return;
+    }
+
     offset = offset + packet_size;
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, packet_size);
     if (err) {
         LOG_PRINTK("error writing to gatt: %d\n", err);
     } else {
-        remaining_length = remaining_length - SD_BLE_SIZE;
+        remaining_length = remaining_length - packet_size; // FIX: Use packet_size, not SD_BLE_SIZE
     }
     // LOG_PRINTK("wrote to gatt %d\n",err);
 }

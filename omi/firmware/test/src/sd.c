@@ -9,7 +9,7 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/storage/disk_access.h>
 
-#define DISK_DRIVE_NAME "SDMMC"
+#define DISK_DRIVE_NAME "SD"
 #define DISK_MOUNT_PT "/ext"
 
 static const struct device *const sdcard = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
