@@ -137,6 +137,7 @@ Future _init() async {
 
   await GrowthbookUtil.init();
   if (!PlatformService.isWindows) {
+    ble.FlutterBluePlus.setOptions(restoreState: true);
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
 
@@ -222,9 +223,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.detached) {
+
+    if (state == AppLifecycleState.paused) {
+      _onAppPaused();
+    } else if (state == AppLifecycleState.detached) {
       _deinit();
     }
+  }
+
+  void _onAppPaused() {
+    imageCache.clear();
+    imageCache.clearLiveImages();
   }
 
   @override
