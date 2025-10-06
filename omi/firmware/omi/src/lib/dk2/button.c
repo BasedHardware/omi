@@ -325,7 +325,7 @@ void turnoff_all()
     // Turn off SD card if offline storage is enabled
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     if (is_sd_on()) {
-        sd_off();
+        app_sd_off();
     }
 #endif
 

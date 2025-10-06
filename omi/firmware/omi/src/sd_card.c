@@ -250,13 +250,6 @@ int app_sd_init(void)
     return 0;
 }
 
-int app_sd_off(void)
-{
-    sd_mount();
-    sd_unmount();
-    return 0;
-}
-
 char *generate_new_audio_header(uint8_t num)
 {
     if (num > 99)
@@ -531,16 +524,15 @@ int get_offset(void)
     return offset_ptr[0];
 }
 
-void sd_off(void)
+int app_sd_off(void)
 {
-    sd_enabled = false;
-    // Power management handled by sd_enable_power
-}
-
-void sd_on(void)
-{
-    sd_enabled = true;
-    // Power management handled by sd_enable_power
+    if (is_mounted) {
+        sd_unmount();
+    } else {
+        sd_enable_power(false);
+        sd_enabled = false;
+    }
+    return 0;
 }
 
 bool is_sd_on(void)

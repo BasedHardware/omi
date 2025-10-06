@@ -927,15 +927,6 @@ int transport_off()
     }
 #endif
 
-    // Turn off other peripherals
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-    sd_off();
-    k_mutex_unlock(&write_sdcard_mutex);
-#endif
-
-    mic_off();
-
     // Ensure all Bluetooth resources are cleaned up
     is_connected = false;
     current_mtu = 0;
