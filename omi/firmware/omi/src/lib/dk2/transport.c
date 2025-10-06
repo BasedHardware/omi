@@ -34,7 +34,7 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
 #endif
 
-#define MAX_STORAGE_BYTES 0xFFFF0000
+#define MAX_STORAGE_BYTES 0x1E000000 // 480MB
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
