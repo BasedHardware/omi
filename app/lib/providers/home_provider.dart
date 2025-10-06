@@ -83,6 +83,12 @@ class HomeProvider extends ChangeNotifier {
   void setIndex(int index) {
     selectedIndex = index;
     notifyListeners();
+
+    if (index == 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        chatFieldFocusNode.requestFocus();
+      });
+    }
   }
 
   void setIsLoading(bool loading) {
