@@ -16,7 +16,7 @@
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "lib/dk2/storage.h"
 #endif
-#include "sd_card.h"
+#include "lib/dk2/sd_card.h"
 #include "spi_flash.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
