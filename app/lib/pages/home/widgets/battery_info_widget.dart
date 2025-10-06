@@ -32,7 +32,7 @@ class BatteryInfoWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Selector<HomeProvider, bool>(
       selector: (context, state) => state.selectedIndex == 0,
-      builder: (context, isMemoriesPage, child) {
+      builder: (context, isConversationPage, child) {
         return Consumer<DeviceProvider>(
           builder: (context, deviceProvider, child) {
             if (deviceProvider.connectedDevice != null) {
@@ -155,13 +155,13 @@ class BatteryInfoWidget extends StatelessWidget {
                         width: MediaQuery.sizeOf(context).width * 0.05,
                         height: MediaQuery.sizeOf(context).width * 0.05,
                       ),
-                      isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
-                      deviceProvider.isConnecting && isMemoriesPage
+                      isConversationPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
+                      deviceProvider.isConnecting && isConversationPage
                           ? Text(
                               "Searching",
                               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
                             )
-                          : isMemoriesPage
+                          : isConversationPage
                               ? Text(
                                   "Connect Device",
                                   style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),

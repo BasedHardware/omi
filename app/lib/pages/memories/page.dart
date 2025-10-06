@@ -57,6 +57,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   bool get wantKeepAlive => true;
 
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   MemoryCategory? _selectedCategory;
   final ScrollController _scrollController = ScrollController();
 
@@ -69,6 +70,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _scrollController.dispose();
     _removeDeleteNotification();
     super.dispose();
@@ -337,7 +339,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         padding: WidgetStateProperty.all(
                                           const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                         ),
-                                        focusNode: home.memoriesSearchFieldFocusNode,
+                                        focusNode: _searchFocusNode,
                                         controller: _searchController,
                                         trailing: provider.searchQuery.isNotEmpty
                                             ? [

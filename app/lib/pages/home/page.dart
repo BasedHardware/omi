@@ -16,7 +16,6 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -39,6 +38,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 
 import 'widgets/battery_info_widget.dart';
+import 'package:omi/widgets/app_selection_dropdown.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -90,7 +90,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<State<ChatPage>> _chatPageKey = GlobalKey<State<ChatPage>>();
-  final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
 
@@ -114,18 +113,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         break;
       case 2:
-        final chatState = _chatPageKey.currentState;
-        if (chatState != null) {
-          (chatState as dynamic).scrollToTop();
-        }
-        break;
-      case 3:
-        final memoriesState = _memoriesPageKey.currentState;
-        if (memoriesState != null) {
-          (memoriesState as dynamic).scrollToTop();
-        }
-        break;
-      case 4:
         final appsState = _appsPageKey.currentState;
         if (appsState != null) {
           appsState.scrollToTop();
@@ -161,7 +148,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {
-    '/facts': const MemoriesPage(),
+    // No additional screens needed
   };
   bool? previousConnection;
 
@@ -185,7 +172,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ConversationsPage(key: _conversationsPageKey),
       ActionItemsPage(key: _actionItemsPageKey),
       ChatPage(key: _chatPageKey),
-      MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
@@ -208,9 +194,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       switch (pageAlias) {
-        case "memories":
-          homePageIdx = 2;
-          break;
         case "apps":
           homePageIdx = 3;
           break;
@@ -302,11 +285,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "facts":
-          MyApp.navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => const MemoriesPage(),
-            ),
-          );
           break;
         default:
       }
@@ -420,8 +398,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               backgroundColor: Theme.of(context).colorScheme.primary,
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
-                length: 5,
-                initialIndex: homeProvider.selectedIndex.clamp(0, 4),
+                length: 4,
+                initialIndex: homeProvider.selectedIndex,
                 child: GestureDetector(
                   onTap: () {
                     primaryFocus?.unfocus();
@@ -444,8 +422,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         builder: (context, home, deviceProvider, child) {
                           if (home.isChatFieldFocused ||
                               home.isConvoSearchFieldFocused ||
-                              home.isAppsSearchFieldFocused ||
-                              home.isMemoriesSearchFieldFocused) {
+                              home.isAppsSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
                             // Check if OMI device is connected
@@ -487,7 +464,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
                                                     Icon(
-                                                      FontAwesomeIcons.house,
+                                                      home.selectedIndex == 0 ? FontAwesomeIcons.solidHouse : FontAwesomeIcons.house,
                                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
@@ -536,7 +513,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Chat');
-                                              primaryFocus?.unfocus();
                                               if (home.selectedIndex == 2) {
                                                 _scrollToTop(2);
                                                 return;
@@ -568,11 +544,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Apps');
                                               primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 4) {
-                                                _scrollToTop(4);
+                                              if (home.selectedIndex == 3) {
+                                                _scrollToTop(3);
                                                 return;
                                               }
-                                              home.setIndex(4);
+                                              home.setIndex(3);
                                             },
                                             child: SizedBox(
                                               height: 90,
@@ -583,8 +559,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   children: [
                                                     Icon(
                                                       FontAwesomeIcons.puzzlePiece,
-                                                      color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
+                                                      color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                                       size: 24,
+                                                      weight: home.selectedIndex == 3 ? 900 : 400,
                                                     ),
                                                   ],
                                                 ),
@@ -695,7 +672,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const BatteryInfoWidget(),
-          const SizedBox.shrink(),
+          // Add app selection dropdown in the center for chat page
+          Consumer<HomeProvider>(
+            builder: (context, homeProvider, child) {
+              if (homeProvider.selectedIndex == 2) { // Chat page index
+                return const AppSelectionDropdown(isFloating: false);
+              }
+              return const SizedBox.shrink();
+            },
+          ),
           Row(
             children: [
               Container(
