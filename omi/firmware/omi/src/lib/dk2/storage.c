@@ -11,7 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
-#include "../../sd_card.h"
+#include "sd_card.h"
 #include "transport.h"
 #include "utils.h"
 
@@ -366,7 +366,13 @@ void storage_write(void)
                 }
             }
         }
-        k_yield();
+
+        // Sleep when there's no work
+        if (remaining_length == 0 && !delete_started && !nuke_started && !stop_started) {
+            k_msleep(10);
+        } else {
+            k_yield();
+        }
     }
 }
 

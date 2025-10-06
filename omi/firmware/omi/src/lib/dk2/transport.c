@@ -17,7 +17,6 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
-#include "../../sd_card.h"
 #include "accel.h"
 #include "button.h"
 #include "config.h"
@@ -25,6 +24,7 @@
 #include "haptic.h"
 #include "mic.h"
 #include "monitor.h"
+#include "sd_card.h"
 #include "settings.h"
 #include "speaker.h"
 #include "storage.h"
