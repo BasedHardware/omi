@@ -197,6 +197,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "apps":
           homePageIdx = 3;
           break;
+        case "chat":
+          homePageIdx = 2;
+          break;
       }
     }
 
@@ -257,17 +260,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
             }
           }
-          // Navigate to chat page directly since it's no longer in the tab bar
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ChatPage(isPivotBottom: false),
-                ),
-              );
-            }
-          });
           break;
         case "settings":
           // Use context from the current widget instead of navigator key for bottom sheet
@@ -667,54 +659,59 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
+      title: Stack(
         children: [
-          const BatteryInfoWidget(),
-          // Add app selection dropdown in the center for chat page
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const BatteryInfoWidget(),
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1F1F25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(
+                        FontAwesomeIcons.gear,
+                        size: 16,
+                        color: Colors.white70,
+                      ),
+                      onPressed: () {
+                        HapticFeedback.mediumImpact();
+                        MixpanelManager().pageOpened('Settings');
+                        String language = SharedPreferencesUtil().userPrimaryLanguage;
+                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                        SettingsDrawer.show(context);
+                        if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                          if (context.mounted) {
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           Consumer<HomeProvider>(
             builder: (context, homeProvider, child) {
               if (homeProvider.selectedIndex == 2) { // Chat page index
-                return const AppSelectionDropdown(isFloating: false);
+                return const Center(
+                  child: AppSelectionDropdown(isFloating: false),
+                );
               }
               return const SizedBox.shrink();
             },
-          ),
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1F1F25),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    FontAwesomeIcons.gear,
-                    size: 16,
-                    color: Colors.white70,
-                  ),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
-                    }
-                  },
-                ),
-              ),
-            ],
           ),
         ],
       ),
