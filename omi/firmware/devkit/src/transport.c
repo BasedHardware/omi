@@ -372,6 +372,31 @@ void broadcast_battery_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
+K_MSGQ_DEFINE(battery_notify_q, sizeof(uint8_t), 8, 4);
+
+#define BATTERY_NOTIFY_STACK    1024
+#define BATTERY_NOTIFY_PRIO     K_PRIO_PREEMPT(8)
+
+static void battery_notify_thread(void *a, void *b, void *c)
+{
+    uint8_t battery_percentage;
+
+    for (;;) {
+        if (k_msgq_get(&battery_notify_q, &battery_percentage, K_FOREVER) == 0) {
+            struct bt_conn *conn = get_current_connection();
+
+            if (!conn) {
+                continue;
+            }
+            // Use the Zephyr BAS function to set (and notify) the battery level
+            int err = bt_bas_set_battery_level(battery_percentage);
+            if (err) {
+                LOG_ERR("Error updating battery level: %d", err);
+            }
+        }
+    }
+}
+
 void broadcast_battery_level(struct k_work *work_item)
 {
     uint16_t battery_millivolt;
@@ -380,18 +405,20 @@ void broadcast_battery_level(struct k_work *work_item)
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
-
-        // Use the Zephyr BAS function to set (and notify) the battery level
-        int err = bt_bas_set_battery_level(battery_percentage);
-        if (err) {
-            LOG_ERR("Error updating battery level: %d", err);
-        }
+        
+        k_msgq_put(&battery_notify_q, &battery_percentage, K_NO_WAIT);
     } else {
         LOG_ERR("Failed to read battery level");
     }
 
     k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 }
+
+K_THREAD_DEFINE(battery_notify_tid,
+                BATTERY_NOTIFY_STACK,
+                battery_notify_thread,
+                NULL, NULL, NULL,
+                BATTERY_NOTIFY_PRIO, 0, 0);               
 
 //
 // Connection Callbacks
@@ -418,7 +445,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     current_mtu = info.le.data_len->tx_max_len;
     LOG_INF("Transport connected");
     LOG_DBG("Interval: %d, latency: %d, timeout: %d", info.le.interval, info.le.latency, info.le.timeout);
-    LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
+    // LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)",
             info.le.data_len->tx_max_len,
             info.le.data_len->tx_max_time,
