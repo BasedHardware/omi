@@ -68,6 +68,7 @@ from utils.transcripts import (
     enhance_transcript_segments,
     flush_transcript_enhancement,
     apply_speaker_merges,
+    EnhancementResult,
 )
 from utils.webhooks import get_audio_bytes_webhook_seconds
 
