@@ -9,7 +9,7 @@ from models.conversation import Structured
 
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
-llm_nano = ChatOpenAI(model='gpt5-nano')
+llm_nano = ChatOpenAI(model='gpt-5-nano')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
