@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -450,6 +451,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final displayText = _getSegmentDisplayText(data);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
+    final bool isEnhanced = data.isEnhanced;
 
     return Container(
         key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
@@ -583,6 +585,35 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    if (isEnhanced) ...[
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          SvgPicture.asset(
+                                            Assets.images.aiMagic,
+                                            height: 14,
+                                            colorFilter: ColorFilter.mode(
+                                              isUser
+                                                  ? Colors.white.withValues(alpha: 0.9)
+                                                  : Colors.grey.shade200.withValues(alpha: 0.9),
+                                              BlendMode.srcIn,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Improved',
+                                            style: TextStyle(
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.8)
+                                                  : Colors.grey.shade200.withValues(alpha: 0.8),
+                                              fontSize: 11,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
                                     RichText(
                                       textAlign: TextAlign.left,
                                       text: TextSpan(

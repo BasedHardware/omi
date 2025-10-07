@@ -74,6 +74,8 @@ class TranscriptSegment {
     return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';
   }
 
+  bool get isEnhanced => enhancedText != null && enhancedText!.isNotEmpty;
+
   String get displayText {
     if (enhancedText != null && enhancedText!.isNotEmpty) {
       return enhancedText!;

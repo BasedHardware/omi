@@ -13,7 +13,7 @@ from utils.llm.clients import llm_nano
 
 logger = logging.getLogger(__name__)
 
-_MIN_CHAR_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MIN_CHARS', '160'))
+_MIN_CHAR_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MIN_CHARS', '140'))
 _MIN_SEGMENT_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MIN_SEGMENTS', '3'))
 _MAX_CHAR_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MAX_CHARS', '1200'))
 
