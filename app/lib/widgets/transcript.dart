@@ -330,6 +330,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return _decodedTextCache[text]!;
   }
 
+  String _getSegmentDisplayText(TranscriptSegment segment) {
+    return _getDecodedText(segment.displayText);
+  }
+
   // Create highlighted text spans
   List<InlineSpan> _highlightSearchMatchesWithKeys(
     String text,
@@ -346,7 +350,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     int globalMatchIndex = 0;
     for (int i = 0; i < segmentIndex; i++) {
-      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
+      final segmentText = _getSegmentDisplayText(widget.segments[i]).toLowerCase();
       final matches = RegExp(RegExp.escape(lowerQuery), caseSensitive: false).allMatches(segmentText);
       globalMatchIndex += matches.length;
     }
@@ -443,6 +447,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
     final suggestion = widget.suggestions[data.id];
+    final displayText = _getSegmentDisplayText(data);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
 
@@ -589,13 +594,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                         ),
                                         children: widget.searchQuery.isNotEmpty
                                             ? _highlightSearchMatchesWithKeys(
-                                                _getDecodedText(data.text),
+                                                displayText,
                                                 widget.searchQuery,
                                                 segmentIdx,
                                               )
                                             : [
                                                 TextSpan(
-                                                  text: _getDecodedText(data.text),
+                                                  text: displayText,
                                                 )
                                               ],
                                       ),

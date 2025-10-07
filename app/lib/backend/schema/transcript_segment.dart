@@ -41,6 +41,8 @@ class TranscriptSegment {
   double end;
   List<Translation> translations = [];
   bool speechProfileProcessed;
+  String? rawText;
+  String? enhancedText;
 
   TranscriptSegment({
     required this.id,
@@ -52,8 +54,19 @@ class TranscriptSegment {
     required this.end,
     required this.translations,
     this.speechProfileProcessed = true,
+    this.rawText,
+    this.enhancedText,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
+    text = text.trim();
+    rawText = (rawText ?? text).trim();
+    enhancedText = enhancedText?.trim();
+    if (enhancedText != null && enhancedText!.isEmpty) {
+      enhancedText = null;
+    }
+    if (enhancedText != null) {
+      text = enhancedText!;
+    }
   }
 
   @override
@@ -61,13 +74,33 @@ class TranscriptSegment {
     return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';
   }
 
-  String getTimestampString() {
-    var start = Duration(seconds: this.start.toInt());
-    var end = Duration(seconds: this.end.toInt());
-    return '${start.inHours.toString().padLeft(2, '0')}:${(start.inMinutes % 60).toString().padLeft(2, '0')}:${(start.inSeconds % 60).toString().padLeft(2, '0')} - ${end.inHours.toString().padLeft(2, '0')}:${(end.inMinutes % 60).toString().padLeft(2, '0')}:${(end.inSeconds % 60).toString().padLeft(2, '0')}';
+  String get displayText {
+    if (enhancedText != null && enhancedText!.isNotEmpty) {
+      return enhancedText!;
+    }
+    if (rawText != null && rawText!.isNotEmpty) {
+      return rawText!;
+    }
+    return text;
   }
 
-  // Factory constructor to create a new Message instance from a map
+  void setEnhancedText(String? value) {
+    final cleaned = value?.trim();
+    if (cleaned == null || cleaned.isEmpty) {
+      enhancedText = null;
+      text = (rawText ?? text).trim();
+      return;
+    }
+    enhancedText = cleaned;
+    text = cleaned;
+  }
+
+  String getTimestampString() {
+    final startDuration = Duration(seconds: start.toInt());
+    final endDuration = Duration(seconds: end.toInt());
+    return '${startDuration.inHours.toString().padLeft(2, '0')}:${(startDuration.inMinutes % 60).toString().padLeft(2, '0')}:${(startDuration.inSeconds % 60).toString().padLeft(2, '0')} - ${endDuration.inHours.toString().padLeft(2, '0')}:${(endDuration.inMinutes % 60).toString().padLeft(2, '0')}:${(endDuration.inSeconds % 60).toString().padLeft(2, '0')}';
+  }
+
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
     return TranscriptSegment(
       id: (json['id'] ?? '') as String,
@@ -79,10 +112,11 @@ class TranscriptSegment {
       end: double.tryParse(json['end'].toString()) ?? 0.0,
       translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
       speechProfileProcessed: (json['speech_profile_processed'] ?? true) as bool,
+      rawText: json['raw_text'] as String?,
+      enhancedText: json['enhanced_text'] as String?,
     );
   }
 
-  // Method to convert a Message instance into a map
   Map<String, dynamic> toJson() {
     return {
       'text': text,
@@ -92,6 +126,9 @@ class TranscriptSegment {
       'start': start,
       'end': end,
       'translations': translations.map((t) => t.toJson()).toList(),
+      'speech_profile_processed': speechProfileProcessed,
+      'raw_text': rawText,
+      'enhanced_text': enhancedText,
     };
   }
 
@@ -111,21 +148,39 @@ class TranscriptSegment {
 
     if (segments.isEmpty) return updateSegments;
 
-    // Replace existing segments with the same ID
-    Map<String, TranscriptSegment> updateSegmentMap = {};
+    final Map<String, TranscriptSegment> updateSegmentMap = {};
     for (var segment in updateSegments) {
       updateSegmentMap[segment.id] = segment;
     }
     for (int i = 0; i < segments.length; i++) {
-      String segmentId = segments[i].id;
+      final segmentId = segments[i].id;
       if (updateSegmentMap.containsKey(segmentId)) {
         segments[i] = updateSegmentMap[segmentId]!;
         updateSegmentMap.remove(segmentId);
       }
     }
 
-    // remaining
     return updateSegments.where((segment) => updateSegmentMap.containsKey(segment.id)).toList();
+  }
+
+  static void _appendSegment(TranscriptSegment target, TranscriptSegment source) {
+    target.text = '${target.text} ${source.text}'.trim();
+
+    final targetRaw = (target.rawText ?? target.text).trim();
+    final sourceRaw = (source.rawText ?? source.text).trim();
+    target.rawText = '$targetRaw $sourceRaw'.trim();
+
+    if (source.enhancedText != null && source.enhancedText!.isNotEmpty) {
+      final joined = <String>[];
+      if (target.enhancedText != null && target.enhancedText!.isNotEmpty) {
+        joined.add(target.enhancedText!);
+      }
+      joined.add(source.enhancedText!);
+      final mergedEnhanced = joined.join(' ').trim();
+      target.setEnhancedText(mergedEnhanced);
+    }
+
+    target.end = source.end;
   }
 
   static combineSegments(
@@ -144,17 +199,14 @@ class TranscriptSegment {
       segment.end += toAddSeconds;
     }
 
-    var joinedSimilarSegments = <TranscriptSegment>[];
+    final joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {
-      // TODO: bad edge case because of using deepgram
-      // - previous segments before ws2 is switched on the backend, (duration of speech profile) will not be assigned.
-      bool isNotEmpty = joinedSimilarSegments.isNotEmpty;
-      bool isSameUser = isNotEmpty && joinedSimilarSegments.last.isUser == newSegment.isUser;
-      bool isSameSpeaker = isNotEmpty && joinedSimilarSegments.last.speaker == newSegment.speaker;
+      final isNotEmpty = joinedSimilarSegments.isNotEmpty;
+      final isSameUser = isNotEmpty && joinedSimilarSegments.last.isUser == newSegment.isUser;
+      final isSameSpeaker = isNotEmpty && joinedSimilarSegments.last.speaker == newSegment.speaker;
 
       if (isNotEmpty && isSameSpeaker && isSameUser) {
-        joinedSimilarSegments.last.text += ' ${newSegment.text}';
-        joinedSimilarSegments.last.end = newSegment.end;
+        _appendSegment(joinedSimilarSegments.last, newSegment);
       } else {
         joinedSimilarSegments.add(newSegment);
       }
@@ -162,18 +214,27 @@ class TranscriptSegment {
 
     if (joinedSimilarSegments.isEmpty) return;
 
-    bool isNotEmpty = segments.isNotEmpty;
-    bool isSameUser = isNotEmpty && segments.last.isUser == joinedSimilarSegments[0].isUser;
-    bool isSameSpeaker = isNotEmpty && segments.last.speaker == joinedSimilarSegments[0].speaker;
-    bool withinThreshold = isNotEmpty && (joinedSimilarSegments[0].start - segments.last.end < 30);
+    final existingNotEmpty = segments.isNotEmpty;
+    final sameUser = existingNotEmpty && segments.last.isUser == joinedSimilarSegments[0].isUser;
+    final sameSpeaker = existingNotEmpty && segments.last.speaker == joinedSimilarSegments[0].speaker;
+    final withinThreshold = existingNotEmpty && (joinedSimilarSegments[0].start - segments.last.end < 30);
 
-    if (isNotEmpty && isSameSpeaker && isSameUser && withinThreshold) {
-      segments.last.text += ' ${joinedSimilarSegments[0].text}';
-      segments.last.end = joinedSimilarSegments[0].end;
+    if (existingNotEmpty && sameSpeaker && sameUser && withinThreshold) {
+      _appendSegment(segments.last, joinedSimilarSegments[0]);
       joinedSimilarSegments.removeAt(0);
     }
 
     segments.addAll(joinedSimilarSegments);
+
+    for (var i = 0; i < segments.length; i++) {
+      segments[i].text =
+          segments[i].text.trim().replaceAll('  ', ' ').replaceAll(' ,', ',').replaceAll(' .', '.').replaceAll(' ?', '?');
+      segments[i].rawText = (segments[i].rawText ?? segments[i].text).trim();
+      if (segments[i].enhancedText != null) {
+        final cleaned = segments[i].enhancedText!.trim();
+        segments[i].setEnhancedText(cleaned.isEmpty ? null : cleaned);
+      }
+    }
   }
 
   static String segmentsAsString(
@@ -181,14 +242,14 @@ class TranscriptSegment {
     bool includeTimestamps = false,
   }) {
     String transcript = '';
-    var userName = SharedPreferencesUtil().givenName;
-    var people = SharedPreferencesUtil().cachedPeople;
-    var peopleMap = {for (var p in people) p.id: p.name};
+    final userName = SharedPreferencesUtil().givenName;
+    final people = SharedPreferencesUtil().cachedPeople;
+    final peopleMap = {for (var p in people) p.id: p.name};
 
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (var segment in segments) {
-      var segmentText = segment.text.trim();
-      var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
+      final segmentText = segment.displayText.trim();
+      final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
       if (segment.isUser) {
         transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: $segmentText ';
       } else {

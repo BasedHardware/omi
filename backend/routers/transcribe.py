@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import struct
 import time
@@ -63,9 +64,11 @@ from utils.stt.streaming import (
 from utils.subscription import has_transcription_credits
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
+from utils.transcripts.enhancer import enhance_transcript_segments, flush_transcript_enhancement
 from utils.webhooks import get_audio_bytes_webhook_seconds
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
@@ -301,6 +304,28 @@ async def _listen(
 
     async def _create_conversation(conversation_data: dict):
         conversation = Conversation(**conversation_data)
+        try:
+            pending_enhancements = await flush_transcript_enhancement(uid, conversation.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed flushing transcript enhancement buffer for uid=%s conversation=%s: %s",
+                uid,
+                conversation.id,
+                exc,
+            )
+            pending_enhancements = {}
+        if pending_enhancements:
+            updated = False
+            for segment in conversation.transcript_segments:
+                if segment.id in pending_enhancements:
+                    segment.set_enhanced_text(pending_enhancements[segment.id])
+                    updated = True
+            if updated:
+                conversations_db.update_conversation_segments(
+                    uid,
+                    conversation.id,
+                    [segment.dict() for segment in conversation.transcript_segments],
+                )
         if conversation.status != ConversationStatus.processing:
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
             conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
@@ -872,6 +897,35 @@ async def _listen(
             current_conversation_id = conversation.id
 
             if transcript_segments:
+                enhancements = {}
+                try:
+                    enhancements = await enhance_transcript_segments(
+                        uid,
+                        conversation.id,
+                        conversation.transcript_segments[starts:ends],
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Transcript enhancement failed for uid=%s conversation=%s: %s",
+                        uid,
+                        conversation.id,
+                        exc,
+                    )
+                if enhancements:
+                    for segment in conversation.transcript_segments[starts:ends]:
+                        enhanced_value = enhancements.get(segment.id)
+                        if enhanced_value:
+                            segment.set_enhanced_text(enhanced_value)
+                    for segment in transcript_segments:
+                        enhanced_value = enhancements.get(segment.id)
+                        if enhanced_value:
+                            segment.set_enhanced_text(enhanced_value)
+                    conversations_db.update_conversation_segments(
+                        uid,
+                        conversation.id,
+                        [segment.dict() for segment in conversation.transcript_segments],
+                    )
+
                 updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
                 await websocket.send_json(updates_segments)
 
