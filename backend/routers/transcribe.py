@@ -64,7 +64,12 @@ from utils.stt.streaming import (
 from utils.subscription import has_transcription_credits
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
-from utils.transcripts.enhancer import enhance_transcript_segments, flush_transcript_enhancement
+from utils.transcripts import (
+    enhance_transcript_segments,
+    flush_transcript_enhancement,
+    apply_speaker_merges,
+    suggest_speaker_merges,
+)
 from utils.webhooks import get_audio_bytes_webhook_seconds
 
 router = APIRouter()
@@ -911,6 +916,7 @@ async def _listen(
                         conversation.id,
                         exc,
                     )
+                update_indices = set(range(starts, ends))
                 if enhancements:
                     for segment in conversation.transcript_segments[starts:ends]:
                         enhanced_value = enhancements.get(segment.id)
@@ -925,10 +931,50 @@ async def _listen(
                         conversation.id,
                         [segment.dict() for segment in conversation.transcript_segments],
                     )
-
-                updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
+ 
+                try:
+                    recent_window_start = max(0, starts - 8)
+                    merge_instructions = await suggest_speaker_merges(
+                        conversation.transcript_segments[recent_window_start:ends]
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Speaker merge suggestion failed for uid=%s conversation=%s: %s",
+                        uid,
+                        conversation.id,
+                        exc,
+                    )
+                    merge_instructions = []
+ 
+                if merge_instructions:
+                    changed_indices = apply_speaker_merges(conversation.transcript_segments, merge_instructions)
+                    if changed_indices:
+                        conversations_db.update_conversation_segments(
+                            uid,
+                            conversation.id,
+                            [segment.dict() for segment in conversation.transcript_segments],
+                        )
+                        update_indices.update(changed_indices)
+                        for segment in transcript_segments:
+                            index_in_conversation = next(
+                                (
+                                    idx
+                                    for idx in changed_indices
+                                    if conversation.transcript_segments[idx].id == segment.id
+                                ),
+                                None,
+                            )
+                            if index_in_conversation is not None:
+                                refreshed = conversation.transcript_segments[index_in_conversation]
+                                segment.speaker = refreshed.speaker
+                                segment.speaker_id = refreshed.speaker_id
+                                segment.person_id = refreshed.person_id
+ 
+                updates_segments = [
+                    conversation.transcript_segments[idx].dict() for idx in sorted(update_indices)
+                ]
                 await websocket.send_json(updates_segments)
-
+ 
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments], current_conversation_id)
 
