@@ -23,19 +23,13 @@ class AppListItem extends StatelessWidget {
     // Use Selector to only rebuild when this specific app's state or loading state changes
     return Selector<AppProvider, ({bool enabled, bool isLoading})>(
       selector: (context, provider) {
-        // Find the current app state
-        final currentApp = provider.apps.firstWhere(
-          (a) => a.id == app.id,
-          orElse: () => app,
-        );
-
         // Check if this specific app is loading
         final isLoading = index != -1 &&
             provider.appLoading.isNotEmpty &&
             index < provider.appLoading.length &&
             provider.appLoading[index];
 
-        return (enabled: currentApp.enabled, isLoading: isLoading);
+        return (enabled: app.enabled, isLoading: isLoading);
       },
       builder: (context, state, child) {
         return GestureDetector(
