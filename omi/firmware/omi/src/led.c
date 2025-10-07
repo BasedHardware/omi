@@ -1,10 +1,10 @@
-#include "lib/dk2/led.h"
+#include "lib/core/led.h"
 
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/logging/log.h>
 
-#include "lib/dk2/settings.h"
-#include "lib/dk2/utils.h"
+#include "lib/core/settings.h"
+#include "lib/core/utils.h"
 
 LOG_MODULE_REGISTER(led, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -22,7 +22,7 @@ int led_start()
     return 0;
 }
 
-static void set_led_pwm(const struct pwm_dt_spec *led, bool on)
+static void set_led_on_off(const struct pwm_dt_spec *led, bool on)
 {
     if (!pwm_is_ready_dt(led)) {
         LOG_ERR("LED PWM device not ready");
@@ -43,15 +43,56 @@ static void set_led_pwm(const struct pwm_dt_spec *led, bool on)
 
 void set_led_red(bool on)
 {
-    set_led_pwm(&led_red, on);
+    set_led_on_off(&led_red, on);
 }
 
 void set_led_green(bool on)
 {
-    set_led_pwm(&led_green, on);
+    set_led_on_off(&led_green, on);
 }
 
 void set_led_blue(bool on)
 {
-    set_led_pwm(&led_blue, on);
+    set_led_on_off(&led_blue, on);
+}
+
+void set_led_pwm(led_color_t color, uint8_t level)
+{
+    const struct pwm_dt_spec *led;
+
+    switch (color) {
+    case LED_RED:
+        led = &led_red;
+        break;
+    case LED_GREEN:
+        led = &led_green;
+        break;
+    case LED_BLUE:
+        led = &led_blue;
+        break;
+    default:
+        LOG_ERR("Invalid LED color");
+        return;
+    }
+
+    if (!pwm_is_ready_dt(led)) {
+        LOG_ERR("LED PWM device not ready");
+        return;
+    }
+
+    if (level > 100) {
+        level = 100;
+    }
+
+    uint32_t pulse_width_ns = (led->period * level) / 100;
+    pwm_set_pulse_dt(led, pulse_width_ns);
+}
+
+void led_off(void)
+{
+    set_led_red(false);
+    k_msleep(10);
+    set_led_green(false);
+    k_msleep(10);
+    set_led_blue(false);
 }

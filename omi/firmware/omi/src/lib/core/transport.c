@@ -26,7 +26,6 @@
 #include "monitor.h"
 #include "sd_card.h"
 #include "settings.h"
-#include "speaker.h"
 #include "storage.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 

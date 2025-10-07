@@ -1,4 +1,4 @@
-#include "lib/dk2/settings.h"
+#include "lib/core/settings.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>

@@ -1,4 +1,4 @@
-#include "lib/dk2/sd_card.h"
+#include "lib/core/sd_card.h"
 
 #include <ff.h>
 #include <string.h>
