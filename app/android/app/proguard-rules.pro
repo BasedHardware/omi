@@ -30,8 +30,6 @@
 -dontwarn android.content.res.**
 -dontwarn org.slf4j.impl.StaticLoggerBinder
 
--dontwarn lombok.Generated
-
 -keep class org.xmlpull.** { *; }
 -keepclassmembers class org.xmlpull.** { *; }
 
