@@ -161,7 +161,8 @@ class AppProvider extends BaseProvider {
       notifyListeners();
       return;
     }
-    notifyListeners();
+
+    await performServerSearch();
   }
 
   bool _hasServerSideFilters() {
@@ -172,13 +173,14 @@ class AppProvider extends BaseProvider {
   }
 
   Future<void> performServerSearch() async {
-    if (isSearching) return;
+    if (isSearching) {
+      return;
+    }
 
     try {
       isSearching = true;
       notifyListeners();
 
-      // Get category filter if active
       String? categoryFilter;
       if (filters.containsKey('Category') && filters['Category'] is Category) {
         categoryFilter = (filters['Category'] as Category).id;
@@ -221,10 +223,8 @@ class AppProvider extends BaseProvider {
       );
 
       searchResults = result.apps;
-      filteredApps = result.apps; // Use server results directly
+      filteredApps = result.apps;
     } catch (e) {
-      debugPrint('Error performing server search: $e');
-      // Fallback to local search
       filterApps();
     } finally {
       isSearching = false;
@@ -242,8 +242,18 @@ class AppProvider extends BaseProvider {
   }
 
   void filterApps() {
-    if (apps.isEmpty) {
+    if (_hasServerSideFilters() && searchResults.isNotEmpty) {
+      filteredApps = searchResults;
+      return;
+    }
+
+    if (apps.isEmpty && searchResults.isEmpty) {
       filteredApps = [];
+      return;
+    }
+
+    if (apps.isEmpty && searchResults.isNotEmpty) {
+      filteredApps = searchResults;
       return;
     }
 
@@ -329,7 +339,7 @@ class AppProvider extends BaseProvider {
         notifyListeners(); // This should notify as it affects UI state
       }
     } else {
-      print("Error: Attempted to set loading state for invalid index $index");
+      debugPrint("Error: Attempted to set loading state for invalid index $index");
     }
   }
 

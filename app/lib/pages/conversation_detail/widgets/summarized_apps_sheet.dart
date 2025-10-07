@@ -12,6 +12,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 class SummarizedAppsBottomSheet extends StatelessWidget {
   const SummarizedAppsBottomSheet({super.key});
@@ -117,7 +118,7 @@ class _SheetHeader extends StatelessWidget {
   }
 }
 
-class _AppsList extends StatelessWidget {
+class _AppsList extends StatefulWidget {
   final ConversationDetailProvider provider;
   final String? currentAppId;
 
@@ -126,25 +127,160 @@ class _AppsList extends StatelessWidget {
     required this.currentAppId,
   });
 
+  @override
+  State<_AppsList> createState() => _AppsListState();
+}
+
+class _AppsListState extends State<_AppsList> {
   // Track app installation state
   static final Map<String, bool> _installingApps = {};
 
+  List<App>? _suggestedApps;
+  List<App>? _enabledApps;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchApps();
+  }
+
+  Future<void> _fetchApps() async {
+    // Fetch both suggested apps and enabled conversation apps in parallel
+    try {
+      final results = await Future.wait([
+        widget.provider.getSuggestedAppsFromAPI(),
+        widget.provider.getEnabledConversationAppsFromAPI(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _suggestedApps = results[0];
+          _enabledApps = results[1];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching apps: $e');
+      if (mounted) {
+        setState(() {
+          _suggestedApps = [];
+          _enabledApps = [];
+        });
+      }
+    }
+  }
+
+  Widget _buildShimmerLoading() {
+    return ListView(
+      children: [
+        // Auto option shimmer
+        _buildShimmerListItem(),
+
+        // Suggested Apps section shimmer
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            'Suggested Apps',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        _buildShimmerListItem(),
+        _buildShimmerListItem(),
+
+        // Other Apps section shimmer
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            'Available Apps',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        _buildShimmerListItem(),
+        _buildShimmerListItem(),
+        _buildShimmerListItem(),
+      ],
+    );
+  }
+
+  Widget _buildShimmerListItem() {
+    return Shimmer.fromColors(
+      baseColor: const Color(0xFF1F1F25),
+      highlightColor: const Color(0xFF35343B),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            // Leading icon placeholder
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F1F25),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Title and subtitle placeholders
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F1F25),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 200,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F1F25),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final availableApps = provider.appsList.where((app) => app.worksWithMemories() && app.enabled).toList();
-    final suggestedAppIds = provider.getSuggestedApps();
-    final lastUsedApp = provider.getLastUsedSummarizationApp();
+    // Show shimmer loading while fetching apps
+    final isLoading = _suggestedApps == null || _enabledApps == null;
 
-    // Convert suggested app IDs to App objects
-    final suggestedApps = suggestedAppIds
-        .map((appId) => provider.appsList.firstWhereOrNull((app) => app.id == appId))
-        .where((app) => app != null)
-        .cast<App>()
-        .toList();
+    if (isLoading) {
+      return _buildShimmerLoading();
+    }
+
+    // Use API-fetched apps instead of provider.appsList
+    final enabledApps = _enabledApps ?? [];
+
+    // Get last used app ID and find it in the enabled apps
+    final lastUsedAppId = widget.provider.getLastUsedSummarizationAppId();
+    final lastUsedApp = lastUsedAppId != null ? enabledApps.firstWhereOrNull((app) => app.id == lastUsedAppId) : null;
+
+    // Use API-fetched suggested apps if available
+    final suggestedApps = _suggestedApps ?? [];
+    final suggestedAppIds = suggestedApps.map((app) => app.id).toList();
 
     // Filter out suggested apps and last used app from other apps
-    final otherApps = availableApps
-        .where((app) => !provider.isAppSuggested(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
+    final otherApps = enabledApps
+        .where((app) => !suggestedAppIds.contains(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
         .toList();
 
     return ListView(
@@ -152,11 +288,11 @@ class _AppsList extends StatelessWidget {
         // Auto option
         _AppListItem(
           app: null,
-          isSelected: currentAppId == null,
+          isSelected: widget.currentAppId == null,
           onTap: () => _handleAutoAppTap(context),
           trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
           subtitle: 'Let Omi automatically choose the best app for this summary.',
-          provider: provider,
+          provider: widget.provider,
         ),
 
         // Suggested Apps section
@@ -173,15 +309,15 @@ class _AppsList extends StatelessWidget {
             ),
           ),
           ...suggestedApps.map((app) {
-            final isAvailable = provider.isSuggestedAppAvailable(app.id);
-            final isInstalling = _AppsList._installingApps[app.id] == true;
+            final isAvailable = widget.provider.isSuggestedAppAvailable(app.id);
+            final isInstalling = _AppsListState._installingApps[app.id] == true;
             return _AppListItem(
               app: app,
-              isSelected: app.id == currentAppId,
+              isSelected: app.id == widget.currentAppId,
               onTap: () => isAvailable ? _handleAppTap(context, app) : _handleUnavailableAppTap(context, app),
               isSuggested: true,
               isInstalling: isInstalling,
-              provider: provider,
+              provider: widget.provider,
             );
           }),
         ],
@@ -203,17 +339,17 @@ class _AppsList extends StatelessWidget {
           if (lastUsedApp != null)
             _AppListItem(
               app: lastUsedApp,
-              isSelected: lastUsedApp.id == currentAppId,
+              isSelected: lastUsedApp.id == widget.currentAppId,
               onTap: () => _handleAppTap(context, lastUsedApp),
               isLastUsed: true,
-              provider: provider,
+              provider: widget.provider,
             ),
           // Then show other apps
           ...otherApps.map((app) => _AppListItem(
                 app: app,
-                isSelected: app.id == currentAppId,
+                isSelected: app.id == widget.currentAppId,
                 onTap: () => _handleAppTap(context, app),
-                provider: provider,
+                provider: widget.provider,
               )),
         ],
 
@@ -266,12 +402,14 @@ class _AppsList extends StatelessWidget {
 
   void _handleUnavailableAppTap(BuildContext context, App app) async {
     // Check if app is already being installed
-    if (_AppsList._installingApps[app.id] == true) {
+    if (_AppsListState._installingApps[app.id] == true) {
       return;
     }
 
     // Set installing state
-    _AppsList._installingApps[app.id] = true;
+    setState(() {
+      _AppsListState._installingApps[app.id] = true;
+    });
 
     try {
       final appProvider = context.read<AppProvider>();
@@ -299,33 +437,41 @@ class _AppsList extends StatelessWidget {
         conversationProvider.trackLastUsedSummarizationApp(app.id);
 
         // Close the bottom sheet
-        Navigator.pop(context);
+        if (mounted) Navigator.pop(context);
 
         // Set the app for reprocessing and reprocess the conversation
         conversationProvider.setSelectedAppForReprocessing(installedApp);
         await conversationProvider.reprocessConversation(appId: app.id);
       } else {
         // Installation failed
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to install ${app.name}. Please try again.'),
+              duration: const Duration(seconds: 3),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Handle installation error
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to install ${app.name}. Please try again.'),
+            content: Text('Error installing ${app.name}: ${e.toString()}'),
             duration: const Duration(seconds: 3),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      // Handle installation error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error installing ${app.name}: ${e.toString()}'),
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
       // Clear installing state
-      _AppsList._installingApps[app.id] = false;
+      if (mounted) {
+        setState(() {
+          _AppsListState._installingApps[app.id] = false;
+        });
+      }
     }
   }
 }

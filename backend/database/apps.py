@@ -125,13 +125,18 @@ def search_apps_db(
     if my_apps:
         filters.append(FieldFilter('uid', '==', uid))
 
-    elif installed_apps and enabled_app_ids:
+    elif installed_apps:
+        if not enabled_app_ids or len(enabled_app_ids) == 0:
+            # User has no enabled apps
+            return []
+
         if len(enabled_app_ids) > 30:
+            # Firestore 'in' limited to 30 items
             filters.append(FieldFilter('approved', '==', True))
             filters.append(FieldFilter('private', '==', False))
         else:
-            if enabled_app_ids:
-                filters.append(FieldFilter('id', 'in', enabled_app_ids))
+            # Query by specific IDs
+            filters.append(FieldFilter('id', 'in', enabled_app_ids))
 
     else:
         # Default: Public approved apps
