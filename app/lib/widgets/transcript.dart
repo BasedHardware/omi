@@ -781,12 +781,40 @@ class LiteTranscriptWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Text(
-      processedText,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-      textAlign: TextAlign.right,
+    final hasEnhanced = segments.any((segment) => segment.isEnhanced);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (hasEnhanced) ...[
+          SvgPicture.asset(
+            Assets.images.aiMagic,
+            height: 14,
+            colorFilter: ColorFilter.mode(
+              Colors.grey.shade200.withValues(alpha: 0.9),
+              BlendMode.srcIn,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Improved',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey.shade300.withValues(alpha: 0.9),
+                  fontStyle: FontStyle.italic,
+                ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            processedText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+            textAlign: TextAlign.right,
+          ),
+        ),
+      ],
     );
   }
 }
