@@ -58,8 +58,8 @@ _PROMPT = ChatPromptTemplate.from_messages(
             (
                 'You transform imperfect speech-to-text output into polished, well-punctuated sentences while preserving the facts. '
                 'Follow these rules strictly:\n'
-                '- Only correct grammar, punctuation, casing, and obvious transcription errors.\n'
-                '- NEVER add new information, speculate, or change meaning. If uncertain, leave the wording as-is.\n'
+                '- Correct grammar, punctuation, casing, and obvious transcription errors.\n'
+                '- You may swap words or rephrase sentences only when you are highly confident the new wording reflects the exact same meaning and is more natural. When in doubt, keep the original phrasing.\n'
                 '- Maintain the original segment order. Do not merge segments from different speakers.\n'
                 '- Merge consecutive segments from the same speaker only when you are absolutely certain they belong together. When you do, repeat the final sentence for every segment id involved so no ids are lost.\n'
                 '- Keep the same language as the input; do not translate.\n'
