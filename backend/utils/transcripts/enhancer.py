@@ -13,8 +13,8 @@ from utils.llm.clients import llm_nano
 
 logger = logging.getLogger(__name__)
 
-_MIN_CHAR_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MIN_CHARS', '140'))
-_MIN_SEGMENT_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MIN_SEGMENTS', '3'))
+_MIN_CHAR_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MIN_CHARS', '220'))
+_MIN_SEGMENT_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MIN_SEGMENTS', '4'))
 _MAX_CHAR_THRESHOLD = int(os.getenv('TRANSCRIPT_ENHANCER_MAX_CHARS', '1200'))
 
 _buffers: Dict[str, List[Dict[str, str]]] = {}
@@ -37,9 +37,14 @@ _PROMPT = ChatPromptTemplate.from_messages(
         (
             'system',
             (
-                'You transform imperfect speech-to-text output into polished, well-punctuated sentences. '
-                'Preserve each speaker\'s intent, merge fragments when appropriate, remove filler words, '
-                'and keep dialogue natural. NEVER invent new facts. '
+                'You transform imperfect speech-to-text output into polished, well-punctuated sentences while preserving the facts. '
+                'Follow these rules strictly:\n'
+                '- Only correct grammar, punctuation, casing, and obvious transcription errors.\n'
+                '- NEVER add new information, speculate, or change meaning. If uncertain, leave the wording as-is.\n'
+                '- Maintain the original segment order. Do not merge segments from different speakers.\n'
+                '- You may merge consecutive segments from the same speaker to form full sentences. When you do, repeat the final sentence for every segment id involved so no ids are lost.\n'
+                '- Keep the same language as the input; do not translate.\n'
+                '- Trim extra whitespace but keep meaningful pauses or ellipses.\n'
                 'Return JSON ONLY using this schema:\n{format_instructions}'
             ),
         ),
