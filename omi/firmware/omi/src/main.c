@@ -66,7 +66,7 @@ static void boot_ready_sequence(void)
             float t = (float) i / steps;
             // Ease-in-out quadratic
             float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) (eased * 100.0f);
+            uint8_t level = (uint8_t) (eased * 50.0f);
             set_led_pwm(LED_GREEN, level);
             k_msleep(delay_ms);
         }
@@ -75,12 +75,14 @@ static void boot_ready_sequence(void)
         for (int i = 0; i <= steps; i++) {
             float t = (float) i / steps;
             float eased = t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            uint8_t level = (uint8_t) ((1.0f - eased) * 100.0f);
+            uint8_t level = (uint8_t) ((1.0f - eased) * 70.0f);
             set_led_pwm(LED_GREEN, level);
             k_msleep(delay_ms);
         }
     }
+    k_msleep(10);
     led_off();
+    k_msleep(10);
 }
 
 void set_led_state()
