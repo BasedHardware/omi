@@ -32,7 +32,7 @@ _prompt = ChatPromptTemplate.from_messages(
                 'Your task is ONLY to flag cases where a non-user segment was mislabeled and should adopt an earlier speaker label. '
                 'Rules:\n'
                 '- Never modify segments marked as coming from the user.\n'
-                '- Only reassign a segment to an earlier speaker when you are highly confident they are actually the same person.\n'
+                '- Only reassign a segment to an earlier speaker when you are nearly certain they are the same person. If there is any doubt, do nothing.\n'
                 '- Do not invent new speakers; rely on the existing ids.\n'
                 '- When unsure, do nothing.\n'
                 '- Keep the conversation order untouched.\n'

@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -21,13 +22,31 @@ _buffers: Dict[str, List[Dict[str, str]]] = {}
 _locks: Dict[str, asyncio.Lock] = {}
 
 
+@dataclass
+class MergeInstruction:
+    segment_id: str
+    adopt_segment_id: str
+
+
+@dataclass
+class EnhancementResult:
+    enhancements: Dict[str, str]
+    merges: List[MergeInstruction]
+
+
 class EnhancedSegmentModel(BaseModel):
     id: str = Field(..., description='The segment identifier to rewrite')
     text: str = Field(..., description='Enhanced transcript text for this segment')
 
 
+class MergeInstructionModel(BaseModel):
+    segment_id: str = Field(..., description='Segment that should reuse an earlier speaker label')
+    adopt_segment_id: str = Field(..., description='Earlier segment whose speaker label should be copied')
+
+
 class EnhancedSegmentsResponse(BaseModel):
     segments: List[EnhancedSegmentModel] = Field(default_factory=list)
+    merges: List[MergeInstructionModel] = Field(default_factory=list)
 
 
 _parser = PydanticOutputParser(pydantic_object=EnhancedSegmentsResponse)
@@ -42,7 +61,7 @@ _PROMPT = ChatPromptTemplate.from_messages(
                 '- Only correct grammar, punctuation, casing, and obvious transcription errors.\n'
                 '- NEVER add new information, speculate, or change meaning. If uncertain, leave the wording as-is.\n'
                 '- Maintain the original segment order. Do not merge segments from different speakers.\n'
-                '- You may merge consecutive segments from the same speaker to form full sentences. When you do, repeat the final sentence for every segment id involved so no ids are lost.\n'
+                '- Merge consecutive segments from the same speaker only when you are absolutely certain they belong together. When you do, repeat the final sentence for every segment id involved so no ids are lost.\n'
                 '- Keep the same language as the input; do not translate.\n'
                 '- Trim extra whitespace but keep meaningful pauses or ellipses.\n'
                 'Return JSON ONLY using this schema:\n{format_instructions}'
@@ -54,7 +73,8 @@ _PROMPT = ChatPromptTemplate.from_messages(
                 'Here is the JSON array of transcript segments (speaker,text,id):\n'
                 '{segments_json}\n\n'
                 'Rewrite each segment to sound natural. '
-                'If you merge consecutive segments, repeat the merged sentence for all involved ids.'
+                'If you merge consecutive segments, repeat the merged sentence for every segment id involved so no ids are lost.\n'
+                'If you identify same-speaker segments that should inherit an earlier label, list them explicitly.'
             ),
         ),
     ]
@@ -112,13 +132,9 @@ def _pop_chunk(buffer: List[Dict[str, str]]) -> List[Dict[str, str]]:
     return chunk
 
 
-async def _enhance_chunk(
-    uid: str,
-    conversation_id: str,
-    chunk: List[Dict[str, str]],
-) -> Dict[str, str]:
+async def _enhance_chunk(uid: str, conversation_id: str, chunk: List[Dict[str, str]]) -> EnhancementResult:
     if not chunk:
-        return {}
+        return EnhancementResult({}, [])
     segments_json = json.dumps(chunk, ensure_ascii=False)
     try:
         response: EnhancedSegmentsResponse = await _CHAIN.ainvoke({'segments_json': segments_json})
@@ -130,12 +146,19 @@ async def _enhance_chunk(
             exc,
         )
         raise
-    enhanced_map: Dict[str, str] = {}
+
+    enhancements: Dict[str, str] = {}
     for item in response.segments:
         cleaned = item.text.strip()
         if cleaned:
-            enhanced_map[item.id] = cleaned
-    return enhanced_map
+            enhancements[item.id] = cleaned
+
+    merges = [
+        MergeInstruction(segment_id=model.segment_id, adopt_segment_id=model.adopt_segment_id)
+        for model in response.merges
+    ]
+
+    return EnhancementResult(enhancements, merges)
 
 
 async def enhance_transcript_segments(
@@ -144,16 +167,17 @@ async def enhance_transcript_segments(
     segments: List[TranscriptSegment],
     *,
     force: bool = False,
-) -> Dict[str, str]:
+) -> EnhancementResult:
     """
-    Queue new transcript segments for enhancement. Returns a mapping of segment_id -> enhanced_text
-    for any segments that were processed during the call.
+    Queue new transcript segments for enhancement. Returns both the enhanced text map and any speaker merge suggestions.
     """
     if not segments:
-        return {}
+        return EnhancementResult({}, [])
+
     key = _buffer_key(uid, conversation_id)
     lock = _get_lock(key)
     chunks_to_process: List[List[Dict[str, str]]] = []
+
     async with lock:
         buffer = _buffers.setdefault(key, [])
         buffer.extend([_segment_payload(segment) for segment in segments if segment.id])
@@ -165,7 +189,10 @@ async def enhance_transcript_segments(
             if not force and not _should_process(buffer):
                 break
         _buffers[key] = buffer
-    results: Dict[str, str] = {}
+
+    combined_enhancements: Dict[str, str] = {}
+    combined_merges: List[MergeInstruction] = []
+
     for chunk in chunks_to_process:
         try:
             chunk_result = await _enhance_chunk(uid, conversation_id, chunk)
@@ -174,18 +201,21 @@ async def enhance_transcript_segments(
                 _buffers.setdefault(key, [])
                 _buffers[key] = chunk + _buffers[key]
             break
-        results.update(chunk_result)
-    return results
+        combined_enhancements.update(chunk_result.enhancements)
+        combined_merges.extend(chunk_result.merges)
+
+    return EnhancementResult(combined_enhancements, combined_merges)
 
 
-async def flush_transcript_enhancement(uid: str, conversation_id: str) -> Dict[str, str]:
+async def flush_transcript_enhancement(uid: str, conversation_id: str) -> EnhancementResult:
     """
     Force processing of any buffered segments for a conversation.
     """
     key = _buffer_key(uid, conversation_id)
     lock = _locks.get(key)
     if lock is None:
-        return {}
+        return EnhancementResult({}, [])
+
     chunks_to_process: List[List[Dict[str, str]]] = []
     async with lock:
         buffer = _buffers.get(key, [])
@@ -195,7 +225,10 @@ async def flush_transcript_enhancement(uid: str, conversation_id: str) -> Dict[s
                 break
             chunks_to_process.append(chunk)
         _buffers[key] = buffer
-    results: Dict[str, str] = {}
+
+    combined_enhancements: Dict[str, str] = {}
+    combined_merges: List[MergeInstruction] = []
+
     for chunk in chunks_to_process:
         try:
             chunk_result = await _enhance_chunk(uid, conversation_id, chunk)
@@ -204,8 +237,48 @@ async def flush_transcript_enhancement(uid: str, conversation_id: str) -> Dict[s
                 _buffers.setdefault(key, [])
                 _buffers[key] = chunk + _buffers[key]
             break
-        results.update(chunk_result)
-    if not _buffers.get(key):
-        _buffers.pop(key, None)
-        _locks.pop(key, None)
-    return results
+        combined_enhancements.update(chunk_result.enhancements)
+        combined_merges.extend(chunk_result.merges)
+
+    # Clean up buffers/locks when empty
+    async with lock:
+        if not _buffers.get(key):
+            _buffers.pop(key, None)
+            _locks.pop(key, None)
+
+    return EnhancementResult(combined_enhancements, combined_merges)
+
+
+def apply_speaker_merges(
+    conversation_segments: List[TranscriptSegment],
+    instructions: List[MergeInstruction],
+) -> set:
+    """
+    Apply speaker merge instructions in-place and return the indices that were updated.
+    """
+    if not instructions:
+        return set()
+
+    id_to_index = {segment.id: idx for idx, segment in enumerate(conversation_segments)}
+    changed_indices = set()
+
+    for instruction in instructions:
+        seg_idx = id_to_index.get(instruction.segment_id)
+        target_idx = id_to_index.get(instruction.adopt_segment_id)
+        if seg_idx is None or target_idx is None:
+            continue
+        if seg_idx <= target_idx:
+            continue
+
+        segment = conversation_segments[seg_idx]
+        target = conversation_segments[target_idx]
+
+        if segment.is_user or target.is_user:
+            continue
+
+        segment.speaker = target.speaker
+        segment.speaker_id = target.speaker_id
+        segment.person_id = target.person_id
+        changed_indices.add(seg_idx)
+
+    return changed_indices

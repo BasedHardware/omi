@@ -68,7 +68,6 @@ from utils.transcripts import (
     enhance_transcript_segments,
     flush_transcript_enhancement,
     apply_speaker_merges,
-    suggest_speaker_merges,
 )
 from utils.webhooks import get_audio_bytes_webhook_seconds
 
@@ -310,7 +309,7 @@ async def _listen(
     async def _create_conversation(conversation_data: dict):
         conversation = Conversation(**conversation_data)
         try:
-            pending_enhancements = await flush_transcript_enhancement(uid, conversation.id)
+            enhancement_result = await flush_transcript_enhancement(uid, conversation.id)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Failed flushing transcript enhancement buffer for uid=%s conversation=%s: %s",
@@ -318,19 +317,23 @@ async def _listen(
                 conversation.id,
                 exc,
             )
-            pending_enhancements = {}
-        if pending_enhancements:
-            updated = False
+            enhancement_result = EnhancementResult({}, [])
+        updated = False
+        if enhancement_result.enhancements:
             for segment in conversation.transcript_segments:
-                if segment.id in pending_enhancements:
-                    segment.set_enhanced_text(pending_enhancements[segment.id])
+                if segment.id in enhancement_result.enhancements:
+                    segment.set_enhanced_text(enhancement_result.enhancements[segment.id])
                     updated = True
-            if updated:
-                conversations_db.update_conversation_segments(
-                    uid,
-                    conversation.id,
-                    [segment.dict() for segment in conversation.transcript_segments],
-                )
+        if enhancement_result.merges:
+            changed_indices = apply_speaker_merges(conversation.transcript_segments, enhancement_result.merges)
+            if changed_indices:
+                updated = True
+        if updated:
+            conversations_db.update_conversation_segments(
+                uid,
+                conversation.id,
+                [segment.dict() for segment in conversation.transcript_segments],
+            )
         if conversation.status != ConversationStatus.processing:
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
             conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
@@ -902,9 +905,9 @@ async def _listen(
             current_conversation_id = conversation.id
 
             if transcript_segments:
-                enhancements = {}
+                enhancement_result = EnhancementResult({}, [])
                 try:
-                    enhancements = await enhance_transcript_segments(
+                    enhancement_result = await enhance_transcript_segments(
                         uid,
                         conversation.id,
                         conversation.transcript_segments[starts:ends],
@@ -917,59 +920,42 @@ async def _listen(
                         exc,
                     )
                 update_indices = set(range(starts, ends))
-                if enhancements:
+                segments_persisted = False
+
+                if enhancement_result.enhancements:
                     for segment in conversation.transcript_segments[starts:ends]:
-                        enhanced_value = enhancements.get(segment.id)
+                        enhanced_value = enhancement_result.enhancements.get(segment.id)
                         if enhanced_value:
                             segment.set_enhanced_text(enhanced_value)
+                            segments_persisted = True
                     for segment in transcript_segments:
-                        enhanced_value = enhancements.get(segment.id)
+                        enhanced_value = enhancement_result.enhancements.get(segment.id)
                         if enhanced_value:
                             segment.set_enhanced_text(enhanced_value)
+
+                if enhancement_result.merges:
+                    changed_indices = apply_speaker_merges(conversation.transcript_segments, enhancement_result.merges)
+                    if changed_indices:
+                        segments_persisted = True
+                        update_indices.update(changed_indices)
+                        changed_map = {
+                            conversation.transcript_segments[idx].id: conversation.transcript_segments[idx]
+                            for idx in changed_indices
+                        }
+                        for segment in transcript_segments:
+                            refreshed = changed_map.get(segment.id)
+                            if refreshed:
+                                segment.speaker = refreshed.speaker
+                                segment.speaker_id = refreshed.speaker_id
+                                segment.person_id = refreshed.person_id
+
+                if segments_persisted:
                     conversations_db.update_conversation_segments(
                         uid,
                         conversation.id,
                         [segment.dict() for segment in conversation.transcript_segments],
                     )
- 
-                try:
-                    recent_window_start = max(0, starts - 8)
-                    merge_instructions = await suggest_speaker_merges(
-                        conversation.transcript_segments[recent_window_start:ends]
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Speaker merge suggestion failed for uid=%s conversation=%s: %s",
-                        uid,
-                        conversation.id,
-                        exc,
-                    )
-                    merge_instructions = []
- 
-                if merge_instructions:
-                    changed_indices = apply_speaker_merges(conversation.transcript_segments, merge_instructions)
-                    if changed_indices:
-                        conversations_db.update_conversation_segments(
-                            uid,
-                            conversation.id,
-                            [segment.dict() for segment in conversation.transcript_segments],
-                        )
-                        update_indices.update(changed_indices)
-                        for segment in transcript_segments:
-                            index_in_conversation = next(
-                                (
-                                    idx
-                                    for idx in changed_indices
-                                    if conversation.transcript_segments[idx].id == segment.id
-                                ),
-                                None,
-                            )
-                            if index_in_conversation is not None:
-                                refreshed = conversation.transcript_segments[index_in_conversation]
-                                segment.speaker = refreshed.speaker
-                                segment.speaker_id = refreshed.speaker_id
-                                segment.person_id = refreshed.person_id
- 
+
                 updates_segments = [
                     conversation.transcript_segments[idx].dict() for idx in sorted(update_indices)
                 ]
