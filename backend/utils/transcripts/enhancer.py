@@ -62,6 +62,7 @@ _PROMPT = ChatPromptTemplate.from_messages(
                 '- You may swap words or rephrase sentences only when you are highly confident the new wording reflects the exact same meaning and is more natural. When in doubt, keep the original phrasing.\n'
                 '- Maintain the original segment order. Do not merge segments from different speakers.\n'
                 '- Merge consecutive segments from the same speaker only when you are absolutely certain they belong together. When you do, repeat the final sentence for every segment id involved so no ids are lost.\n'
+                '- Remove filler phrases or duplicate fragments only when they add zero informational value and you are certain they can be discarded without changing meaning.\n'
                 '- Keep the same language as the input; do not translate.\n'
                 '- Trim extra whitespace but keep meaningful pauses or ellipses.\n'
                 'Return JSON ONLY using this schema:\n{format_instructions}'
