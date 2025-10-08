@@ -280,13 +280,7 @@ def search_apps(
 
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
 def get_approved_apps(include_reviews: bool = False):
-    # return get_approved_available_apps(include_reviews=include_reviews)
-    from database import conversations as conversations_db, memories as memories_db, action_items as action_items_db
-
-    uid = 'gYv0uqqV5pXnFVuY2pOfvmAtr3x1'
-    conversations_db.unlock_all_conversations(uid)
-    memories_db.unlock_all_memories(uid)
-    action_items_db.unlock_all_action_items(uid)
+    return get_approved_available_apps(include_reviews=include_reviews)
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[App])
