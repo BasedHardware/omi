@@ -18,7 +18,7 @@ LABEL_STORE_PATH = "label_store.jsonl"
 OPTIMIZED_PROMPT_PATH = "optimized_prompts.json"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DUMMY_MODE = os.getenv("DUMMY_MODE", "false").lower() in ("true", "1", "yes")
-
+VALID_CATEGORIES = {'personal', 'preference', 'event', 'fact'}
 
 # Custom metric for evaluating memory quality
 def memory_quality_metric(gold, pred):
@@ -28,6 +28,7 @@ def memory_quality_metric(gold, pred):
     This metric considers:
     - Number of memories (penalizes generating too few)
     - Memory content overlap (rewards similar content)
+    - Category accuracy (rewards correct category assignment)
 
     Args:
         gold: Gold standard memories from labeled examples
@@ -36,35 +37,65 @@ def memory_quality_metric(gold, pred):
     Returns:
         float: Quality score between 0 and 1
     """
-    # Combine interesting and system memories
-    gold_memories = gold.interesting_memories + gold.system_memories
-    pred_memories = pred.interesting_memories + pred.system_memories
+
+    
+    def extract_content_and_category(memory):
+        """Helper to extract content and category from memory object"""
+        if isinstance(memory, dict):
+            return memory.get('content', ''), memory.get('category', '')
+        return memory, ''
+
+    def get_memories_with_category(memories):
+        """Process memories to handle both old and new formats"""
+        if not memories:
+            return []
+        if isinstance(memories[0], dict):
+            return [(m.get('content', ''), m.get('category', '')) for m in memories]
+        return [(m, '') for m in memories]
+
+    # Combine interesting and system memories with their categories
+    gold_memories = get_memories_with_category(gold.interesting_memories + gold.system_memories)
+    pred_memories = get_memories_with_category(pred.interesting_memories + pred.system_memories)
 
     # Check quantity match (penalize if too few memories)
     quantity_score = min(len(pred_memories) / max(len(gold_memories), 1), 1.0)
 
-    # Calculate content overlap (simple string similarity metric)
+    # Calculate content and category scores
     content_scores = []
-    for gold_mem in gold_memories:
-        # Find best matching predicted memory
-        best_score = 0
-        for pred_mem in pred_memories:
-            # Simple word overlap metric
-            gold_words = set(gold_mem.lower().split())
-            pred_words = set(pred_mem.lower().split())
-            if len(gold_words) == 0:
-                continue
+    category_scores = []
+    
+    for gold_content, gold_category in gold_memories:
+        best_content_score = 0
+        best_category_score = 0
+        
+        for pred_content, pred_category in pred_memories:
+            # Calculate content overlap
+            gold_words = set(str(gold_content).lower().split())
+            pred_words = set(str(pred_content).lower().split())
+            
+            if gold_words:
+                overlap = len(gold_words.intersection(pred_words)) / len(gold_words)
+                best_content_score = max(best_content_score, overlap)
+                
+                # Only check category if content is somewhat similar (overlap > 0.3)
+                if overlap > 0.3 and gold_category and pred_category:
+                    category_match = 1.0 if gold_category.lower() == pred_category.lower() else 0.0
+                    best_category_score = max(best_category_score, category_match)
+        
+        content_scores.append(best_content_score)
+        category_scores.append(best_category_score if gold_category else 1.0)  # If no gold category, don't penalize
 
-            overlap = len(gold_words.intersection(pred_words)) / len(gold_words)
-            best_score = max(best_score, overlap)
-
-        content_scores.append(best_score)
-
-    # Average content overlap score
+    # Calculate average scores
     content_score = np.mean(content_scores) if content_scores else 0
+    category_score = np.mean(category_scores) if category_scores else 1.0
 
-    # Combined score (weighting quantity less than quality)
-    final_score = 0.3 * quantity_score + 0.7 * content_score
+    # Combined score with weights
+    final_score = (
+        0.2 * quantity_score +  # 20% weight to quantity
+        0.6 * content_score +   # 60% weight to content match
+        0.2 * category_score    # 20% weight to category accuracy
+    )
+    
     return final_score
 
 
@@ -148,8 +179,10 @@ def optimize_instructions(base_instructions, examples, num_optimized=3):
             examples_text += f"\nExample {i+1}:\n"
             examples_text += f"Conversation: {ex['input']['context'][:300]}...\n"
             examples_text += f"User name: {ex['input']['user_name']}\n"
-            examples_text += f"Interesting memories: {', '.join(ex['output']['interesting_memories'])}\n"
-            examples_text += f"System memories: {', '.join(ex['output']['system_memories'])}\n"
+            interesting_memories = [mem["content"] for mem in ex["output"]["interesting_memories"]]
+            system_memories = [mem["content"] for mem in ex["output"]["system_memories"]]
+            examples_text += f"Interesting memories: {', '.join(interesting_memories)}\n"
+            examples_text += f"System memories: {', '.join(system_memories)}\n"
             examples_text += f"Quality score: {ex.get('score', 0)}/5\n"
             if 'feedback' in ex and ex['feedback']:
                 examples_text += f"Feedback: {ex['feedback']}\n"
@@ -245,20 +278,20 @@ def tune_prompt(min_score=MIN_QUALITY_SCORE, rounds=OPTIMIZATION_ROUNDS):
         # Extract high-quality examples (just a few)
         demonstrations = trainset[: min(3, len(trainset))]
 
-        # Create a simple prompt with optimized instructions and examples
+        # Create a simple prompt with optimized instructions and examples 
         example_prompt = f"""
 {optimized_instructions[0]}
 
-Here are some example memory generations:
+Here are some example memory generations: 
 
-{demonstrations[0].context[:300]}...
+{demonstrations[0].context[:300]} ...
 User name: {demonstrations[0].user_name}
 
 Interesting memories:
-{', '.join(demonstrations[0].interesting_memories)}
+{', '.join([mem['content'] for mem in demonstrations[0].interesting_memories])} 
 
 System memories:
-{', '.join(demonstrations[0].system_memories)}
+{', '.join([mem['content'] for mem in demonstrations[0].system_memories])}
 
 Now generate memories for the following conversation:
 """
