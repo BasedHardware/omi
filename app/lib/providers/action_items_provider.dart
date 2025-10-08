@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/action_items.dart' as api;
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/services/notifications/action_item_notification_handler.dart';
 
 class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _actionItems = [];
@@ -182,6 +183,11 @@ class ActionItemsProvider extends ChangeNotifier {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         debugPrint('Failed to update action item state on server');
+      } else {
+        // Cancel notification if the action item is marked as completed
+        if (newState == true) {
+          await ActionItemNotificationHandler.cancelNotification(item.id);
+        }
       }
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
