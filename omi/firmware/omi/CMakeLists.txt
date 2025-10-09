@@ -13,16 +13,23 @@ file(GLOB app_sources
     src/sd_card.c
     src/spi_flash.c
     src/settings.c
+    src/feedback.c
 )
-file(GLOB dk2_sources
-    src/lib/dk2/config.h
-    src/lib/dk2/codec.c
-    src/lib/dk2/transport.c
-    src/lib/dk2/button.c
+file(GLOB core_sources
+    src/lib/core/config.h
+    src/lib/core/codec.c
+    src/lib/core/transport.c
+    src/lib/core/button.c
+    src/lib/core/monitor.c
 )
-target_sources(app PRIVATE ${dk2_sources} ${app_sources})
+
+if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
+    list(APPEND core_sources src/lib/core/storage.c)
+endif()
+
+target_sources(app PRIVATE ${core_sources} ${app_sources})
 
 if(CONFIG_OMI_CODEC_OPUS)
-    add_subdirectory(src/lib/dk2/lib/opus-1.2.1/)
+    add_subdirectory(src/lib/core/lib/opus-1.2.1/)
     target_link_libraries(app PRIVATE opus_codec)
 endif()

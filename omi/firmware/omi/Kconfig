@@ -10,11 +10,6 @@ config OMI_CODEC_OPUS
 
 config OMI_ENABLE_OFFLINE_STORAGE
 	bool "Offline SD Card Storage"
-    select DISK_ACCESS
-    select FILE_SYSTEM
-    select FAT_FILESYSTEM_ELM
-    select FS_FATFS_MOUNT_MKFS
-    select FS_FATFS_EXFAT
     help
         "Enable the offline storage support. Requires a SD Card."
 	default n

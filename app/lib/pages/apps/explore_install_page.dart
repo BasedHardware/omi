@@ -395,18 +395,74 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildSearchLoadingSliver() {
-    return const SliverToBoxAdapter(
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 48),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return SliverPadding(
+      padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => _buildShimmerListItem(),
+          childCount: 5, // Show 5 shimmer items
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerListItem() {
+    return Shimmer.fromColors(
+      baseColor: AppStyles.backgroundSecondary,
+      highlightColor: AppStyles.backgroundTertiary,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppStyles.backgroundSecondary,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
           children: [
-            SizedBox(height: 8),
-            CircularProgressIndicator(color: Colors.deepPurpleAccent, strokeWidth: 2),
-            SizedBox(height: 12),
-            Text(
-              'Searching...',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+            // App icon shimmer
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundTertiary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(width: 16),
+            // App info shimmer
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundTertiary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 150,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundTertiary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Button shimmer
+            Container(
+              width: 72,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundTertiary,
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
           ],
         ),

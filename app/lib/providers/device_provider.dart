@@ -178,7 +178,25 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return device;
     }
 
-    await ServiceManager.instance().device.discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
+    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    if (pairedDeviceId.isNotEmpty) {
+      try {
+        Logger.debug('Attempting direct reconnection to paired device: $pairedDeviceId');
+        await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true);
+
+        // Check if connection succeeded
+        await Future.delayed(const Duration(seconds: 2));
+        device = await _getConnectedDevice();
+        if (device != null) {
+          Logger.debug('Direct reconnection successful');
+          return device;
+        }
+      } catch (e) {
+        Logger.debug('Direct reconnection failed: $e');
+      }
+    }
+
+    await ServiceManager.instance().device.discover(desirableDeviceId: pairedDeviceId);
 
     // Waiting for the device connected (if any)
     await Future.delayed(const Duration(seconds: 2));
@@ -428,7 +446,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         break;
       case DeviceConnectionState.disconnected:
         _connectDebouncer.cancel();
-        if (deviceId == connectedDevice?.id) {
+        // Check if this is the paired device or currently connected device
+        // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
+        if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
           _disconnectDebouncer.run(onDeviceDisconnected);
         }
         break;

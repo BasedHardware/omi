@@ -14,9 +14,11 @@
 
 #include "led.h"
 #include "mic.h"
-#include "sdcard.h"
 #include "speaker.h"
 #include "transport.h"
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+#include "sd_card.h"
+#endif
 
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -62,18 +64,8 @@ static const struct gpio_dt_spec usr_btn = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(usr_
 
 static bool was_pressed = false;
 
-static void buttons_input_cb(struct input_event *evt, void *user_data)
-{
-    ARG_UNUSED(user_data);
-    if (evt->code == INPUT_KEY_ENTER) {
-        was_pressed = (evt->value == 1);
-        LOG_INF("Button %s via input subsystem", was_pressed ? "pressed" : "released");
-    }
-}
-
-INPUT_CALLBACK_DEFINE(buttons, buttons_input_cb, NULL);
-
-// No longer using GPIO callback as we're using the input subsystem
+// Using GPIO callback due to the lower priority of the input subsystem vs. storage.c's thread that prevents the
+// callback from working properly.
 #define BUTTON_CHECK_INTERVAL 40 // 0.04 seconds, 25 Hz
 
 void check_button_level(struct k_work *work_item);
@@ -224,11 +216,12 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("single tap detected\n");
         btn_last_event = event;
         notify_tap();
+        k_msleep(1000);
 
         // // Enter the low power mode
         is_off = true;
         transport_off();
-        k_msleep(100);
+        k_msleep(300);
 
         turnoff_all();
     }
@@ -278,6 +271,41 @@ static ssize_t button_data_read_characteristic(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &final_button_state, sizeof(final_button_state));
 }
 
+static struct gpio_callback button_cb_data;
+
+static void button_gpio_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+{
+    was_pressed = (gpio_pin_get_dt(&usr_btn) == 1);
+    LOG_INF("Button %s (GPIO callback)", was_pressed ? "pressed" : "released");
+}
+
+int button_regist_callback()
+{
+    int ret;
+
+    // Configure GPIO as input with pull-up
+    ret = gpio_pin_configure_dt(&usr_btn, GPIO_INPUT);
+    if (ret < 0) {
+        LOG_ERR("Failed to configure button GPIO (%d)", ret);
+        return ret;
+    }
+
+    // Setup interrupt on both edges
+    ret = gpio_pin_interrupt_configure_dt(&usr_btn, GPIO_INT_EDGE_BOTH);
+    if (ret < 0) {
+        LOG_ERR("Failed to configure button interrupt (%d)", ret);
+        return ret;
+    }
+
+    // Register callback
+    gpio_init_callback(&button_cb_data, button_gpio_callback, BIT(usr_btn.pin));
+    gpio_add_callback(usr_btn.port, &button_cb_data);
+
+    LOG_INF("Button initialized with GPIO interrupt");
+
+    return 0;
+}
+
 int button_init()
 {
     int ret;
@@ -292,6 +320,13 @@ int button_init()
     ret = pm_device_runtime_get(buttons);
     if (ret < 0) {
         LOG_ERR("Failed to enable buttons device (%d)", ret);
+        return ret;
+    }
+
+    // Regist callback
+    ret = button_regist_callback();
+    if (ret < 0) {
+        LOG_ERR("Failed to regist buttons callback (%d)", ret);
         return ret;
     }
 
@@ -319,37 +354,39 @@ void turnoff_all()
 
     // Always turn off microphone
     mic_off();
-
-    // Turn off SD card if offline storage is enabled
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    sd_off();
-#endif
+    k_msleep(100);
 
     // Turn off speaker if enabled
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
     speaker_off();
+    k_msleep(100);
 #endif
 
     // Turn off accelerometer if enabled
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
     accel_off();
+    k_msleep(100);
 #endif
+
+    if (is_sd_on()) {
+        app_sd_off();
+    }
+    k_msleep(300);
 
     // Play haptic feedback if enabled
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     play_haptic_milli(100);
-    k_msleep(100);
+    k_msleep(300);
     haptic_off();
 #endif
 
-    // Always turn off LEDs
-    set_led_blue(false);
-    set_led_red(false);
-    set_led_green(false);
+    led_off();
+    k_msleep(100);
 
     // Put the buttons device to sleep if button is enabled
 #ifdef CONFIG_OMI_ENABLE_BUTTON
     pm_device_runtime_put(buttons);
+    k_msleep(100);
 #endif
 
     // Disable USB if enabled
@@ -374,6 +411,7 @@ void turnoff_all()
     }
 
     LOG_INF("Entering system off; press usr_btn to restart");
+    k_msleep(1000);
 
     // Power off the system using sys_poweroff
     sys_poweroff();

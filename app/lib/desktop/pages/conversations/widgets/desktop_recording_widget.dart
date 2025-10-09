@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -12,6 +13,7 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DesktopRecordingWidget extends StatefulWidget {
   final VoidCallback? onBack;
@@ -33,6 +35,32 @@ class DesktopRecordingWidget extends StatefulWidget {
 
 class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   bool _isHovered = false;
+  List<Map<String, String>> _availableAudioDevices = [];
+  String? _selectedDeviceId;
+  final GlobalKey _micKey = GlobalKey();
+  OverlayEntry? _audioDeviceOverlayEntry;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedDeviceId();
+  }
+
+  Future<void> _loadSavedDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedDeviceId = prefs.getString('selected_audio_device_id');
+    if (savedDeviceId == null || savedDeviceId.isEmpty) return;
+
+    _setSelectedDeviceId(savedDeviceId);
+  }
+
+  void _setSelectedDeviceId(String deviceId) {
+    if (mounted) {
+      setState(() {
+        _selectedDeviceId = deviceId;
+      });
+    }
+  }
 
   Future<void> _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
@@ -858,51 +886,290 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     );
   }
 
-  Widget _buildAudioSourceStatus(CaptureProvider captureProvider) {
-    final micName = captureProvider.microphoneName;
-    final micLevel = captureProvider.microphoneLevel;
-    final systemLevel = captureProvider.systemAudioLevel;
+Widget _buildAudioSourceStatus(CaptureProvider captureProvider) {
+  final micName = captureProvider.microphoneName;
+  final micLevel = captureProvider.microphoneLevel;
+  final systemLevel = captureProvider.systemAudioLevel;
 
-    if (micName == null) {
-      return const SizedBox.shrink();
+  if (micName == null) {
+    return const SizedBox.shrink();
+  }
+
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      _buildMicrophoneSection(micName, micLevel),
+      const SizedBox(width: 24),
+      Row(
+        children: [
+          const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+          const SizedBox(width: 8),
+          const Text(
+            'System',
+            style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+          ),
+          const SizedBox(width: 8),
+          _buildAudioLevelBar(systemLevel, Colors.orange.shade600),
+        ],
+      ),
+    ],
+  );
+}
+
+Widget _buildMicrophoneSection(String micName, double micLevel) {
+  return GestureDetector(
+    key: _micKey,
+    onTap: _toggleAudioDeviceDropdown,
+    child: Tooltip(
+      message: micName,
+      child: Row(
+        children: [
+          const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+          const SizedBox(width: 8),
+          const Text(
+            'Mic',
+            style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            _audioDeviceOverlayEntry != null ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+            size: 14,
+            color: ResponsiveHelper.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          _buildAudioLevelBar(micLevel, ResponsiveHelper.purplePrimary),
+        ],
+      ),
+    ),
+  );
+}
+
+void _toggleAudioDeviceDropdown() {
+  if (_audioDeviceOverlayEntry != null) {
+    _removeAudioDeviceOverlay();
+  } else {
+    if (_availableAudioDevices.isEmpty) {
+      _loadAvailableAudioDevices();
     }
+    _audioDeviceOverlayEntry = _createAudioDeviceOverlayEntry();
+    Overlay.of(context).insert(_audioDeviceOverlayEntry!);
+    setState(() {});
+  }
+}
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        // Microphone
-        Tooltip(
-          message: micName ?? 'Default Microphone',
+void _removeAudioDeviceOverlay() {
+  _audioDeviceOverlayEntry?.remove();
+  _audioDeviceOverlayEntry = null;
+  setState(() {});
+}
+
+OverlayEntry _createAudioDeviceOverlayEntry() {
+  final renderBox = _micKey.currentContext?.findRenderObject() as RenderBox?;
+  if (renderBox == null) {
+    return OverlayEntry(builder: (context) => const SizedBox.shrink());
+  }
+  
+  final size = renderBox.size;
+  final offset = renderBox.localToGlobal(Offset.zero);
+
+  return OverlayEntry(
+    builder: (context) => GestureDetector(
+      onTap: _removeAudioDeviceOverlay,
+      behavior: HitTestBehavior.translucent,
+      child: Stack(
+        children: [
+          _overlayBackground(),
+          Positioned(
+            top: offset.dy + size.height + 5,
+            left: offset.dx - 100 + (size.width / 2),
+            child: _overlayDropdown(),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _overlayBackground() => Positioned.fill(
+  child: Container(color: Colors.transparent),
+);
+
+Widget _overlayDropdown() => GestureDetector(
+  onTap: () {},
+  child: _buildFloatingAudioDeviceDropdown(),
+);
+
+Future<void> _selectAudioDevice(Map<String, String> device) async {
+  setState(() {
+    _selectedDeviceId = device['id'];
+  });
+
+  _removeAudioDeviceOverlay();
+
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  await prefs.setString('selected_audio_device_id', device['id'] ?? '');
+  
+  try {
+    final result = await const MethodChannel('screenCapturePlatform')
+        .invokeMethod('selectAudioDevice', {'deviceId': device['id']});
+    
+    if (mounted && result == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Audio input set to ${device['name']}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error switching audio device: $e'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+Widget _buildFloatingAudioDeviceDropdown() {
+  return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      color: const Color(0xFF2C2C2E),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 280, minWidth: 220),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text('Select Audio Input',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600)),
+            ),
+            Divider(height: 1, color: Colors.white.withOpacity(0.1)),
+            const SizedBox(height: 4),
+            if (_availableAudioDevices.isNotEmpty)
+              ..._availableAudioDevices.map(_buildFloatingAudioDeviceItem)
+            else
+              const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                      child: Text('Loading devices...',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: ResponsiveHelper.textSecondary)))),
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+}
+
+Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
+    final isSelected = device['id'] == _selectedDeviceId;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _selectAudioDevice(device),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
-              const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
-              const SizedBox(width: 8),
-              const Text(
-                'Mic',
-                style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? ResponsiveHelper.purplePrimary : Colors.grey[500]!,
+                    width: 2,
+                  ),
+                  color: Colors.transparent,
+                ),
+                child: isSelected
+                    ? Center(
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: ResponsiveHelper.purplePrimary,
+                          ),
+                        ),
+                      )
+                    : null,
               ),
-              const SizedBox(width: 8),
-              _buildAudioLevelBar(micLevel, ResponsiveHelper.purplePrimary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  device['name'] ?? 'Unknown Device',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isSelected ? Colors.white : Colors.white70,
+                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
-        const SizedBox(width: 24),
-        // System Audio
-        Row(
-          children: [
-            const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
-            const SizedBox(width: 8),
-            const Text(
-              'System',
-              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
-            ),
-            const SizedBox(width: 8),
-            _buildAudioLevelBar(systemLevel, Colors.orange.shade600),
-          ],
-        ),
-      ],
+      ),
     );
+  }
+
+  String? _validateSelectedDevice(List<Map<String, String>> devices, String? currentId) {
+    if (currentId == null || currentId.isEmpty) {
+      return _findCurrentDeviceId(devices);
+    }
+
+    final exists = devices.any((d) => d['id'] == currentId);
+    return exists ? currentId : _findCurrentDeviceId(devices);
+  }
+
+  Future<void> _loadAvailableAudioDevices() async {
+    final result = await const MethodChannel('screenCapturePlatform')
+        .invokeMethod('getAvailableAudioDevices');
+    
+    if (result is List && mounted) {
+      final devices = result.map((device) => {
+        'id': device['id']?.toString() ?? '',
+        'name': device['name']?.toString() ?? 'Unknown Device',
+      }).toList();
+      
+      setState(() {
+        _availableAudioDevices = devices;
+        _selectedDeviceId = _validateSelectedDevice(devices, _selectedDeviceId);
+      });
+    }
+  }
+
+  String? _findCurrentDeviceId(List<Map<String, String>> devices) {
+    if (devices.isEmpty) return null;
+    
+    final currentMicName = context.read<CaptureProvider>().microphoneName;
+    if (currentMicName != null) {
+      final matchingDevice = devices.firstWhere(
+        (device) => device['name'] == currentMicName,
+        orElse: () => devices.first,
+      );
+      return matchingDevice['id'];
+    }
+    return devices.first['id'];
   }
 
   Widget _buildCompactRecordingView(
