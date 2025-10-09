@@ -1,5 +1,8 @@
 #ifndef STORAGE_H
 #define STORAGE_H
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+
 #include <stdbool.h>
 
 /**
@@ -11,4 +14,6 @@
  */
 int storage_init();
 
-#endif
+#endif // CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+
+#endif // STORAGE_H

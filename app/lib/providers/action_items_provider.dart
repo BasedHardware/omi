@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/action_items.dart' as api;
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/services/notifications/action_item_notification_handler.dart';
 
 class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _actionItems = [];
@@ -46,6 +47,49 @@ class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> get incompleteItems => _actionItems.where((item) => item.completed == false).toList();
 
   List<ActionItemWithMetadata> get completedItems => _actionItems.where((item) => item.completed == true).toList();
+
+  // New categorization with 3-day cutoff for tabs
+  List<ActionItemWithMetadata> get todoItems {
+    final now = DateTime.now();
+    final threeDaysAgo = now.subtract(const Duration(days: 3));
+
+    return _actionItems.where((item) {
+      if (item.completed) return false;
+
+      // Check if within 3 days based on due_at or created_at
+      if (item.dueAt != null) {
+        return item.dueAt!.isAfter(threeDaysAgo) || item.dueAt!.isAtSameMomentAs(threeDaysAgo);
+      } else if (item.createdAt != null) {
+        return item.createdAt!.isAfter(threeDaysAgo) || item.createdAt!.isAtSameMomentAs(threeDaysAgo);
+      }
+
+      // If no dates, include in To Do by default
+      return true;
+    }).toList();
+  }
+
+  List<ActionItemWithMetadata> get doneItems {
+    return _actionItems.where((item) => item.completed == true).toList();
+  }
+
+  List<ActionItemWithMetadata> get snoozedItems {
+    final now = DateTime.now();
+    final threeDaysAgo = now.subtract(const Duration(days: 3));
+
+    return _actionItems.where((item) {
+      if (item.completed) return false;
+
+      // Check if past 3 days based on due_at or created_at
+      if (item.dueAt != null) {
+        return item.dueAt!.isBefore(threeDaysAgo);
+      } else if (item.createdAt != null) {
+        return item.createdAt!.isBefore(threeDaysAgo);
+      }
+
+      // If no dates, don't include in snoozed
+      return false;
+    }).toList();
+  }
 
   ActionItemsProvider() {
     _preload();
@@ -139,6 +183,11 @@ class ActionItemsProvider extends ChangeNotifier {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         debugPrint('Failed to update action item state on server');
+      } else {
+        // Cancel notification if the action item is marked as completed
+        if (newState == true) {
+          await ActionItemNotificationHandler.cancelNotification(item.id);
+        }
       }
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);

@@ -194,6 +194,10 @@ class Wal {
     return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
   }
 
+  getFileNameByTimeStarts(int timestarts) {
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timestarts}.bin";
+  }
+
   /// Get the full file path, handling both old full paths and new filename-only storage
   static Future<String?> getFilePath(String? pathOrName) async {
     if (pathOrName == null || pathOrName.isEmpty) {
@@ -333,9 +337,9 @@ class SDCardWalSync implements IWalSync {
     return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
   }
 
-  Future<File> _flushToDisk(List<List<int>> chunk, int timerStart) async {
+  Future<File> _flushToDisk(Wal wal, List<List<int>> chunk, int timerStart) async {
     final directory = await getApplicationDocumentsDirectory();
-    String filePath = '${directory.path}/audio_${timerStart}.bin';
+    String filePath = '${directory.path}/${wal.getFileNameByTimeStarts(timerStart)}';
     List<int> data = [];
     for (int i = 0; i < chunk.length; i++) {
       var frame = chunk[i];
@@ -436,7 +440,7 @@ class SDCardWalSync implements IWalSync {
         bytesLeft += chunkSize;
         timerStart += sdcardChunkSizeSecs;
         try {
-          var file = await _flushToDisk(chunk, timerStart);
+          var file = await _flushToDisk(wal, chunk, timerStart);
           await callback(file, offset);
         } catch (e) {
           debugPrint('Error in callback during chunking: $e');
@@ -459,7 +463,7 @@ class SDCardWalSync implements IWalSync {
     if (!hasError && bytesLeft < bytesData.length - 1) {
       var chunk = bytesData.sublist(bytesLeft);
       timerStart += sdcardChunkSizeSecs;
-      var file = await _flushToDisk(chunk, timerStart);
+      var file = await _flushToDisk(wal, chunk, timerStart);
       await callback(file, offset);
     }
 

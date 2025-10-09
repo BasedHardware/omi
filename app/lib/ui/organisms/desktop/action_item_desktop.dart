@@ -21,6 +21,7 @@ class DesktopActionItem extends StatefulWidget {
   final bool isSelected;
   final VoidCallback? onLongPress;
   final VoidCallback? onSelectionToggle;
+  final bool isSnoozedTab;
 
   const DesktopActionItem({
     super.key,
@@ -30,6 +31,7 @@ class DesktopActionItem extends StatefulWidget {
     this.isSelected = false,
     this.onLongPress,
     this.onSelectionToggle,
+    this.isSnoozedTab = false,
   });
 
   @override
@@ -179,7 +181,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     IconData icon;
     String dueDateText;
 
-    if (widget.actionItem.completed) {
+    // For snoozed tab, always show actual date/time instead of relative labels
+    if (widget.isSnoozedTab) {
+      chipColor = ResponsiveHelper.backgroundTertiary.withOpacity(0.3);
+      textColor = ResponsiveHelper.textTertiary;
+      icon = FontAwesomeIcons.calendar;
+      dueDateText = _formatDueDate(dueDate, showFullDate: true);
+    } else if (widget.actionItem.completed) {
       chipColor = ResponsiveHelper.backgroundTertiary.withOpacity(0.3);
       textColor = ResponsiveHelper.textTertiary;
       icon = FontAwesomeIcons.check;
@@ -250,7 +258,31 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     return date1.year == date2.year && date1.month == date2.month && date1.day == date2.day;
   }
 
-  String _formatDueDate(DateTime date) {
+  String _formatDueDate(DateTime date, {bool showFullDate = false}) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    if (showFullDate) {
+      final now = DateTime.now();
+      final hour = date.hour;
+      final minute = date.minute;
+      final hasTime = hour != 0 || minute != 0;
+
+      String dateStr = '${months[date.month - 1]} ${date.day}';
+
+      if (date.year != now.year) {
+        dateStr += ', ${date.year}';
+      }
+
+      if (hasTime && !(hour == 23 && minute == 59)) {
+        final period = hour >= 12 ? 'PM' : 'AM';
+        final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+        final displayMinute = minute.toString().padLeft(2, '0');
+        dateStr += ', $displayHour:$displayMinute $period';
+      }
+
+      return dateStr;
+    }
+
     final now = DateTime.now();
     final difference = date.difference(now).inDays;
 
@@ -264,7 +296,6 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return weekdays[date.weekday - 1];
     } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return '${months[date.month - 1]} ${date.day}';
     }
   }

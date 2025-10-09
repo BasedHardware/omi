@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -309,6 +310,17 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return await getConversationSuggestedApps(conversation.id);
     } catch (e) {
       debugPrint('Error fetching suggested apps: $e');
+      return [];
+    }
+  }
+
+  /// Returns the list of enabled apps that support conversations from the API
+  Future<List<App>> getEnabledConversationAppsFromAPI() async {
+    try {
+      final result = await retrieveAppsSearch(installedApps: true, limit: 100);
+      return result.apps.where((app) => app.worksWithMemories() && app.enabled).toList();
+    } catch (e) {
+      debugPrint('Error fetching enabled conversation apps: $e');
       return [];
     }
   }

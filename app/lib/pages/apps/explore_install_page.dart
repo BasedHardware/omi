@@ -7,8 +7,8 @@ import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/pages/apps/widgets/category_apps_page.dart';
 import 'package:omi/pages/apps/widgets/category_section.dart';
-import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -44,10 +44,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   late TextEditingController searchController;
   Debouncer debouncer = Debouncer(delay: const Duration(milliseconds: 500));
 
-  // Cache grouped apps to avoid recomputing on every rebuild
-  Map<String, List<App>>? _cachedGroupedApps;
-  List<App>? _cachedAllApps;
-
   @override
   void initState() {
     searchController = TextEditingController();
@@ -80,28 +76,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   void dispose() {
     searchController.dispose();
     super.dispose();
-  }
-
-  Map<String, List<App>> _groupAppsByCategory(List<App> apps) {
-    // Use cached result if apps haven't changed
-    if (_cachedAllApps != null && _cachedGroupedApps != null && apps.length == _cachedAllApps!.length) {
-      return _cachedGroupedApps!;
-    }
-
-    Map<String, List<App>> groupedApps = {};
-    for (var app in apps) {
-      String categoryName = app.getCategoryName();
-      if (!groupedApps.containsKey(categoryName)) {
-        groupedApps[categoryName] = [];
-      }
-      groupedApps[categoryName]!.add(app);
-    }
-
-    // Cache the result
-    _cachedAllApps = List.from(apps);
-    _cachedGroupedApps = groupedApps;
-
-    return groupedApps;
   }
 
   Widget _buildFilteredAppsSlivers() {
@@ -164,58 +138,32 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildCategorizedAppsSlivers() {
-    return Selector<AppProvider, List<App>>(
-      selector: (context, provider) => provider.apps,
-      builder: (context, apps, child) {
-        final groupedApps = _groupAppsByCategory(apps);
-
-        // Get most downloaded apps overall (sorted by installs)
-        final allApps = List<App>.from(apps);
-        allApps.sort((a, b) => b.installs.compareTo(a.installs));
-        final mostDownloadedApps = allApps.take(20).toList();
-
-        // Create list of category entries for sliver building
-        final List<MapEntry<String, List<App>>> categoryEntries = [];
-
-        // Add popular apps if not empty
-        if (mostDownloadedApps.isNotEmpty) {
-          categoryEntries.add(MapEntry('Popular Apps', mostDownloadedApps));
-        }
-
-        // Add other categories
-        final sortedEntries = groupedApps.entries.where((entry) => entry.key != 'Popular').toList();
-        sortedEntries.sort((a, b) {
-          final aKey = a.key.trim();
-          final bKey = b.key.trim();
-          if (aKey.isEmpty && bKey.isEmpty) return 0;
-          if (aKey.isEmpty) return 1;
-          if (bKey.isEmpty) return -1;
-          if (aKey.toLowerCase() == 'other' && bKey.toLowerCase() == 'other') return 0;
-          if (aKey.toLowerCase() == 'other') return 1;
-          if (bKey.toLowerCase() == 'other') return -1;
-          return aKey.compareTo(bKey);
-        });
-
-        categoryEntries.addAll(sortedEntries);
-
+    // Render v2 groups directly from provider (no client-side categorization)
+    return Selector<AppProvider, List<Map<String, dynamic>>>(
+      selector: (context, provider) => provider.groupedApps,
+      builder: (context, groups, child) {
         return SliverPadding(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
           sliver: SliverList.builder(
-            itemCount: categoryEntries.length,
+            itemCount: groups.length,
             itemBuilder: (context, index) {
-              final entry = categoryEntries[index];
-              final categoryName = entry.key;
-              final categoryApps = entry.value;
+              final group = groups[index];
+              final categoryMap = group['category'] as Map<String, dynamic>?;
+              final categoryTitle = (categoryMap != null ? (categoryMap['title'] as String? ?? '') : '').trim();
+              final categoryId = categoryMap != null ? (categoryMap['id'] as String? ?? '') : '';
+              final categoryApps = group['data'] as List<App>? ?? <App>[];
 
               return CategorySection(
-                categoryName: categoryName,
+                categoryName: categoryTitle.isEmpty ? 'Apps' : categoryTitle,
                 apps: categoryApps,
-                showViewAll: categoryName != 'Popular Apps',
+                showViewAll: categoryApps.length > 9,
                 onViewAll: () {
                   final category = context.read<AddAppProvider>().categories.firstWhere(
-                        (cat) => cat.title == categoryName,
-                        orElse: () =>
-                            Category(title: categoryName, id: categoryName.toLowerCase().replaceAll(' ', '-')),
+                        (cat) => cat.id == categoryId || cat.title == categoryTitle,
+                        orElse: () => Category(
+                          title: categoryTitle.isEmpty ? 'Apps' : categoryTitle,
+                          id: categoryId.isEmpty ? categoryTitle.toLowerCase().replaceAll(' ', '-') : categoryId,
+                        ),
                       );
                   routeToPage(
                     context,
@@ -446,6 +394,82 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     );
   }
 
+  Widget _buildSearchLoadingSliver() {
+    return SliverPadding(
+      padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => _buildShimmerListItem(),
+          childCount: 5, // Show 5 shimmer items
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerListItem() {
+    return Shimmer.fromColors(
+      baseColor: AppStyles.backgroundSecondary,
+      highlightColor: AppStyles.backgroundTertiary,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppStyles.backgroundSecondary,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            // App icon shimmer
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundTertiary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(width: 16),
+            // App info shimmer
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundTertiary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 150,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundTertiary,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Button shimmer
+            Container(
+              width: 72,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundTertiary,
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Wrap with NotificationListener to catch SelectAppNotification
@@ -456,6 +480,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             AppProvider,
             ({
               bool isLoading,
+              bool isSearching,
               Map<String, dynamic> filters,
               bool isSearchActive,
               bool isFilterActive,
@@ -463,6 +488,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             })>(
           selector: (context, provider) => (
             isLoading: provider.isLoading,
+            isSearching: provider.isSearching,
             filters: provider.filters,
             isSearchActive: provider.isSearchActive(),
             isFilterActive: provider.isFilterActive(),
@@ -701,6 +727,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                   // Main content - show shimmer when loading
                   if (state.isLoading)
                     SliverToBoxAdapter(child: _buildShimmerAppsView())
+                  else if (state.isSearching)
+                    _buildSearchLoadingSliver()
                   else if (state.isFilterActive || state.isSearchActive)
                     _buildFilteredAppsSlivers()
                   else
