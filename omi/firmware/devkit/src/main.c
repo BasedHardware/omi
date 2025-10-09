@@ -12,6 +12,7 @@
 #include "transport.h"
 #include "usb.h"
 #include "utils.h"
+#include "qspi_flash.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 #define VBUS_DETECT (1U << 20)
@@ -122,6 +123,13 @@ int main(void)
     LOG_INF("Hardware revision: %s", CONFIG_BT_DIS_HW_REV_STR);
 
     LOG_DBG("Reset reason: %d\n", reset_reason);
+
+    // Initialize QSPI flash
+    qspi_flash_init();
+    // Deep power-down command
+    qspi_flash_command(0xB9); 
+    // Uninitialize QSPI flash to save power
+    qspi_flash_uninit();
 
     LOG_PRINTK("\n");
     LOG_INF("Initializing LEDs...\n");
