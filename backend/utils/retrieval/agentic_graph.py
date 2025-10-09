@@ -2,11 +2,12 @@ import uuid
 from dataclasses import dataclass
 from typing import List, Optional, AsyncGenerator
 
-from langchain.agents import create_agent, AgentState
-from langchain_core.messages import AIMessageChunk
+from langchain.agents import create_agent
+from langchain_core.messages import AIMessageChunk, AIMessage
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.runtime import get_runtime
+from pydantic import BaseModel
 
 import database.conversations as conversations_db
 from database.redis_db import get_filter_category_items
@@ -14,9 +15,10 @@ from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
+from utils.app_integrations import get_github_docs_content
 from utils.llm.chat import (
     retrieve_context_dates_by_question,
-    select_structured_filters,
+    select_structured_filters
 )
 from utils.llm.clients import llm_mini_stream
 from utils.llms.memory import get_prompt_data
@@ -124,6 +126,22 @@ def get_conversations(question: str = ""):
     runtime = get_runtime(ContextSchema)
     return query_vectors(runtime.context.uid, runtime.context.tz, question)
 
+@tool
+def get_omi_documentation():
+    """ Retrieve Omi device and app documentation to answer all questions like:
+    - How does it work?
+    - What can you do?
+    - How can I buy it?
+    - Where do I get it?
+    - How does the chat function?
+    """
+    context: dict = get_github_docs_content(path='docs')
+    return 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
+
+class ResponseFormat(BaseModel):
+    answer: str
+    memories_found: Optional[List[str]]
+    ask_for_nps: bool = False
 
 checkpointer = MemorySaver()
 
@@ -132,8 +150,12 @@ graph_stream = create_agent(
     [
         get_memories,
         get_conversations,
+        # get_omi_documentation,  TODO: Current doc must be formatted other way
     ],
-    checkpointer=checkpointer
+    prompt="""You are a helpful assistant of wearable AI device named Omi. 
+    Add text of memories returned by get_memories to response.""",
+    checkpointer=checkpointer,
+    response_format=ResponseFormat
 )
 
 
@@ -150,18 +172,19 @@ async def execute_graph_chat_stream(
 
     async for event in graph_stream.astream(
             {
-                # "cited": cited,
+                # uid and tz: Sent via ContextSchema
+                "cited": cited,
                 "messages": Message.get_messages_as_dict(messages),
-                # "plugin_selected": app,
-                # "chat_session": chat_session,
+                # "plugin_selected": app, Not implemented yet
+                # "chat_session": chat_session, Not implemented yet
             },
             context=ContextSchema(uid=uid, tz=tz),
-            stream_mode=["messages", "custom"],
+            stream_mode=["messages", "custom", "updates"],
             config={"configurable": {"thread_id": str(uuid.uuid4())}},
             subgraphs=True,
     ):
         ns, stream_mode, payload = event
-
+        # print(stream_mode, payload)
         if stream_mode == "messages":
             chunk, metadata = payload
             metadata: dict
@@ -189,6 +212,18 @@ async def execute_graph_chat_stream(
                 # Only yield content from the main agent to avoid duplication
                 if content and len(ns) == 0:
                     yield f"data: {content}"
+            else:
+                # Pass other chunks like ToolMessage
+                pass
+
+        elif stream_mode == "updates":
+            payload: dict
+            if ('agent' in payload
+                    and isinstance(payload['agent']['messages'][0], AIMessage)
+                    and payload['agent'].get('structured_response')):
+                callback_data['answer'] = payload['agent']['structured_response'].answer
+                callback_data['memories_found'] = payload['agent']['structured_response'].memories_found
+                # callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
 
         elif stream_mode == "custom":
             # Forward custom events as is
