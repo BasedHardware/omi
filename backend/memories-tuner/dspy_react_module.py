@@ -138,22 +138,25 @@ class MemoryReActProgram(dspy.Module):
                     context=context,
                     user_name=user_name,
                     interesting_memories=[
-                        f"{user_name} visited Tokyo, Kyoto, and Osaka in Japan",
-                        f"{user_name} enjoyed the food in Tokyo",
+                        {"content": f"{user_name} visited Tokyo, Kyoto, and Osaka in Japan", "category": "event"},
+                        {"content": f"{user_name} enjoyed the food in Tokyo", "category": "preference"},
                     ],
                     system_memories=[
-                        f"{user_name} wants better photo tagging features",
-                        "User is trying to organize photos by city",
+                        {"content": f"{user_name} wants better photo tagging features", "category": "preference"},
+                        {"content": "User is trying to organize photos by city", "category": "event"},
                     ],
                 )
             else:
                 return GenerateMemories(
                     context=context,
                     user_name=user_name,
-                    interesting_memories=[f"{user_name} mentioned topic X", f"{user_name} expressed preference for Y"],
+                    interesting_memories=[
+                        {"content": f"{user_name} mentioned topic X", "category": "fact"}, 
+                        {"content": f"{user_name} expressed preference for Y", "category": "preference"}
+                    ],
                     system_memories=[
-                        "User has specific preferences about app features",
-                        "User communicates in a detailed manner",
+                        {"content": "User has specific preferences about app features", "category": "preference"},
+                        {"content": "User communicates in a detailed manner", "category": "personal"},
                     ],
                 )
 
@@ -162,8 +165,8 @@ class MemoryReActProgram(dspy.Module):
             return GenerateMemories(
                 context=context,
                 user_name=user_name,
-                interesting_memories=["ERROR: OpenAI API key not configured properly"],
-                system_memories=["ERROR: OpenAI API key not configured properly"],
+                interesting_memories=[{"content": "ERROR: OpenAI API key not configured properly", "category": "system"}],
+                system_memories=[{"content": "ERROR: OpenAI API key not configured properly", "category": "system"}],
             )
 
         try:
@@ -182,8 +185,8 @@ class MemoryReActProgram(dspy.Module):
             return GenerateMemories(
                 context=context,
                 user_name=user_name,
-                interesting_memories=[f"Error: {str(e)}"],
-                system_memories=["Error occurred during memory generation"],
+                interesting_memories=[{"content": f"Error: {str(e)}", "category": "system"}],
+                system_memories=[{"content": "Error occurred during memory generation", "category": "system"}],
             )
 
 
