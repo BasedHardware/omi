@@ -310,18 +310,20 @@ elif st.session_state["page"] == "manual data entry":
 
         submitted = st.form_submit_button("Generate Memories")
 
-        if submitted and conversation and user_name:
-            entry = generate_memories_safe(conversation, user_name)
+    if submitted and conversation and user_name:
+        entry = generate_memories_safe(conversation, user_name)
 
-            # Add to entries for labeling
-            st.session_state["entries"] = [entry]
-            st.session_state["current_index"] = 0
+        # Add to entries for labeling
+        st.session_state["entries"] = [entry]
+        st.session_state["current_index"] = 0
 
-            if not entry["error"]:
-                st.success("✅ Memories generated! Go to 'Label Memories' to rate them.")
-                st.button("Go to Label Memories", on_click=lambda: setattr(st.session_state, "page", "label memories"))
-            else:
-                st.error("❌ Error generating memories. Please check the configuration.")
+        if not entry["error"]:
+            st.success("✅ Memories generated! Go to 'Label Memories' to rate them.")
+            if st.button("Go to Label Memories"):
+                st.session_state["page"] = "label memories"
+                st.rerun()
+        else:
+            st.error("❌ Error generating memories. Please check the configuration.")
 
 # Labeling page
 elif st.session_state["page"] == "label memories":
@@ -351,6 +353,12 @@ elif st.session_state["page"] == "label memories":
             try:
                 with open(LANGFUSE_EXPORT_SAMPLE, "r") as f:
                     entries = [json.loads(line) for line in f]
+                    # Normalize demo data memories to dict format with categories
+                    for e in entries:
+                        out = e.get("output", {})
+                        out["interesting_memories"] = [format_memory(m) for m in out.get("interesting_memories", [])]
+                        out["system_memories"] = [format_memory(m) for m in out.get("system_memories", [])]
+                        e["output"] = out
                     st.session_state["entries"] = entries
                     st.session_state["current_index"] = 0
                     st.success(f"✅ Loaded {len(entries)} demo entries!")

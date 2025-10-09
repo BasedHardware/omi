@@ -1,83 +1,66 @@
 {
-  "instructions": "Generate up to 2 interesting and 2 system memories from a conversation. Each memory must be a JSON object with 'content' and 'category' keys.\n\nMemory Categories:\n1.  **personal**: Details about the user (name, age, occupation, personal stories).\n2.  **preference**: The user's likes, dislikes, or opinions.\n3.  **event**: Specific past, present, or future events, plans, or activities.\n4.  **fact**: Objective facts, trivia, or general knowledge shared.\n\n**Interesting Memories:**\n- Capture engaging, surprising, or valuable insights.\n- Highlight unique facts, anecdotes, or discussions.\n- Should be concise, catchy, and worth remembering.\n\n**System Memories:**\n- Record mundane, factual, or logistical details.\n- Useful for context but not inherently interesting.\n- Be concise and clear.",
-  "prompt": "Generate up to 2 interesting and 2 system memories from a conversation. Each memory must be a JSON object with 'content' and 'category' keys.\n\nMemory Categories:\n1.  **personal**: Details about the user (name, age, occupation, personal stories).\n2.  **preference**: The user's likes, dislikes, or opinions.\n3.  **event**: Specific past, present, or future events, plans, or activities.\n4.  **fact**: Objective facts, trivia, or general knowledge shared.\n\nHere are some example memory generations:\n\nLiam: I accidentally microwaved my fork again this morning...\nUser name: Zara\n\nInteresting memories:\n- {\"content\": \"Microwave technology originated from a WWII radar engineer accidentally melting a candy bar in his pocket.\", \"category\": \"fact\"}\n- {\"content\": \"Microwave technology is used in space missions for satellite communications.\", \"category\": \"fact\"}\n\nSystem memories:\n- {\"content\": \"Liam accidentally microwaved his fork again this morning.\", \"category\": \"event\"}\n\nNow generate memories for the following conversation:",
+  "instructions": "Generate up to 2 interesting and 2 system memories from a conversation between the user and 1 or more people.\n    \n    Memory Categories:\n    1. personal: Personal details about the user (e.g., name, age, occupation)\n    2. preference: User's likes, dislikes, and preferences\n    3. event: Specific events, plans, or activities mentioned\n    4. fact: General knowledge or factual information\n\n    Interesting memories should:\n    - Capture exciting or notable details worth remembering\n    - Be about the user, others, places, or activities\n    - Be concise, catchy, and valuable for future reference\n    - Include the most relevant category for each memory\n\n    System memories should:\n    - Be factual or mundane details\n    - Not be particularly interesting to the user\n    - Include the most relevant category for each memory\n    - Be concise and clear\n\nOptimized for better memory generation with example patterns.",
+  "prompt": "\nGenerate up to 2 interesting and 2 system memories from a conversation between the user and 1 or more people.\n    \n    Memory Categories:\n    1. personal: Personal details about the user (e.g., name, age, occupation)\n    2. preference: User's likes, dislikes, and preferences\n    3. event: Specific events, plans, or activities mentioned\n    4. fact: General knowledge or factual information\n\n    Interesting memories should:\n    - Capture exciting or notable details worth remembering\n    - Be about the user, others, places, or activities\n    - Be concise, catchy, and valuable for future reference\n    - Include the most relevant category for each memory\n\n    System memories should:\n    - Be factual or mundane details\n    - Not be particularly interesting to the user\n    - Include the most relevant category for each memory\n    - Be concise and clear\n\nOptimized for better memory generation with example patterns.\n\nHere are some example memory generations: \n\nLena: I just bought two tickets to Iceland.\nJordan: What? For when?!\nLena: We leave in 6 hours.\nJordan: You\u2019re serious?\nLena: Pack your coat, we\u2019re chasing the Northern Lights. ...\nUser name: Lena\n\nInteresting memories:\nLena enjoys spontaneous travel and recently purchased tickets to Iceland to see the Northern Lights. \n\nSystem memories:\n\n\nNow generate memories for the following conversation:\n",
   "demonstrations": [
     {
       "input": {
-        "context": "Liam: I accidentally microwaved my fork again this morning.\nZara: Again? You’re gonna end up in a Marvel origin story.\nLiam: Honestly wouldn’t mind superpowers.\nZara: You know microwave tech came from a WWII radar engineer accidentally melting a candy bar in his pocket?\nLiam: Really? That sounds like something I’d do.\nZara: It’s how Percy Spencer discovered magnetrons could cook food.\nLiam: All I discovered today was burnt oatmeal.\nZara: Baby steps. Space missions use microwave tech too—for satellite comms.\nLiam: Wow. So I’m one step away from NASA.\nZara: Or a fire hazard.",
-        "user_name": "Zara"
+        "context": "Lena: I just bought two tickets to Iceland.\nJordan: What? For when?!\nLena: We leave in 6 hours.\nJordan: You\u2019re serious?\nLena: Pack your coat, we\u2019re chasing the Northern Lights.",
+        "user_name": "Lena"
       },
       "output": {
         "interesting_memories": [
           {
-            "content": "Microwave technology originated from a WWII radar engineer accidentally melting a candy bar in his pocket, leading to the discovery of magnetrons for cooking food.",
+            "content": "Lena enjoys spontaneous travel and recently purchased tickets to Iceland to see the Northern Lights.",
+            "category": "fact"
+          }
+        ],
+        "system_memories": []
+      }
+    },
+    {
+      "input": {
+        "context": "Nina: Quantum entanglement still blows my mind.\nRaj: Einstein called it \u201cspooky action at a distance,\u201d right?\nNina: Yep. Two particles become linked, so whatever happens to one instantly affects the other\u2014even light-years apart.\nRaj: Like teleportation vibes.\nNina: Actually, scientists did quantum teleportation between China and a satellite.\nRaj: You\u2019re telling me Star Trek is becoming a documentary?",
+        "user_name": "Raj"
+      },
+      "output": {
+        "interesting_memories": [
+          {
+            "content": "Raj is interested in quantum physics, particularly quantum entanglement and teleportation.",
             "category": "fact"
           },
           {
-            "content": "Microwave technology is used in space missions for satellite communications.",
+            "content": "Raj relates complex scientific concepts to popular culture, like comparing quantum teleportation to Star Trek.",
             "category": "fact"
           }
         ],
         "system_memories": [
           {
-            "content": "Liam accidentally microwaved his fork again this morning.",
-            "category": "personal"
-          },
-          {
-            "content": "Liam ended up with burnt oatmeal as a result of his microwave mishap.",
-            "category": "personal"
+            "content": "Raj enjoys discussing scientific topics and appreciates analogies that connect these topics to popular culture.",
+            "category": "fact"
           }
         ]
       }
     },
     {
       "input": {
-        "context": "Emma: I can’t find the other sock again.\nJake: Maybe your cat took it.\nEmma: She just stares at me like she pays rent.\nJake: Cats are chaos in a fluffy wrapper.\nEmma: They’re quantum creatures.\nJake: What?\nEmma: Schrödinger’s Cat. The thought experiment?\nJake: Ohhh right—the one where the cat is both dead and alive until observed?\nEmma: Yup. Like my missing sock—both found and lost until I open the drawer.\nJake: I guess socks and physics have more in common than I thought.",
-        "user_name": "Emma"
+        "context": "Tariq: Ever heard of the tardigrade?\nElla: Isn\u2019t that the microscopic bear thing?\nTariq: Yup. They can survive in boiling water, absolute zero, radiation, even outer space.\nElla: No way. They\u2019re basically indestructible.\nTariq: Scientists dehydrated one for 30 years, rehydrated it, and it came back to life.\nElla: We should be studying them for space travel!",
+        "user_name": "Ella"
       },
       "output": {
         "interesting_memories": [
           {
-            "content": "Emma humorously compares her missing sock to Schrödinger’s Cat, suggesting it's both found and lost until she opens the drawer.",
-            "category": "personal"
-          },
-          {
-            "content": "A cat can be thought of as a 'quantum creature', similar to the Schrödinger’s Cat thought experiment.",
+            "content": "Ella is fascinated by tardigrades and their extreme survival capabilities, suggesting their potential use in space travel.",
             "category": "fact"
           }
         ],
         "system_memories": [
           {
-            "content": "Emma often misplaces her socks.",
-            "category": "personal"
-          }
-        ]
-      }
-    },
-    {
-      "input": {
-        "context": "Aria: Do we need almond milk or oat milk?\nNoah: We’ve got enough oat to open a coffee shop. Go almond.\nAria: Cool. Oh, also—have you heard black holes can \"echo\"?\nNoah: Huh?\nAria: Yeah! After two black holes merge, the resulting one “rings” like a bell.\nNoah: That’s wild. Like gravitational sound?\nAria: Pretty much. Waves ripple through spacetime itself.\nNoah: And here I am, debating between spinach or kale.\nAria: Both are superfoods. One is just less exciting than a black hole.",
-        "user_name": "Aria"
-      },
-      "output": {
-        "interesting_memories": [
-          {
-            "content": "After two black holes merge, the resulting one 'rings' like a bell, creating ripples through spacetime.",
+            "content": "Ella enjoys discussing scientific topics, particularly those involving extreme conditions and innovative applications.",
             "category": "fact"
-          }
-        ],
-        "system_memories": [
-          {
-            "content": "Aria and Noah decided to purchase almond milk instead of oat milk.",
-            "category": "event"
-          },
-          {
-            "content": "Noah prefers spinach or kale, which he considers superfoods.",
-            "category": "preference"
           }
         ]
       }
     }
   ],
-  "original_instructions": "Generate up to 2 interesting and 2 system memories from a conversation between the user and 1 or more people.\n\nMemory Categories:\n1. personal: Personal details about the user (e.g., name, age, occupation)\n2. preference: User's likes, dislikes, and preferences\n3. event: Specific events, plans, or activities mentioned\n4. fact: General knowledge or factual information\n\nInteresting memories should:\n- Capture exciting or notable details worth remembering\n- Be about the user, others, places, or activities\n- Be concise, catchy, and valuable for future reference\n- Include the most relevant category for each memory\n\nSystem memories should:\n- Be factual or mundane details\n- Not be particularly interesting to the user\n- Include the most relevant category for each memory\n- Be concise and clear"
+  "original_instructions": "Generate up to 2 interesting and 2 system memories from a conversation between the user and 1 or more people.\n    \n    Memory Categories:\n    1. personal: Personal details about the user (e.g., name, age, occupation)\n    2. preference: User's likes, dislikes, and preferences\n    3. event: Specific events, plans, or activities mentioned\n    4. fact: General knowledge or factual information\n\n    Interesting memories should:\n    - Capture exciting or notable details worth remembering\n    - Be about the user, others, places, or activities\n    - Be concise, catchy, and valuable for future reference\n    - Include the most relevant category for each memory\n\n    System memories should:\n    - Be factual or mundane details\n    - Not be particularly interesting to the user\n    - Include the most relevant category for each memory\n    - Be concise and clear"
 }

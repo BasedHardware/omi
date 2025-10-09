@@ -133,15 +133,32 @@ def load_labeled_examples(min_score=MIN_QUALITY_SCORE, file_path=LABEL_STORE_PAT
 
 def prepare_training_data(examples):
     """Convert labeled examples to DSPy training data format"""
-    return [
-        dspy.Example(
-            context=ex["input"]["context"],
-            user_name=ex["input"]["user_name"],
-            interesting_memories=ex["output"]["interesting_memories"],
-            system_memories=ex["output"]["system_memories"],
+    training_examples = []
+    for ex in examples:
+        # Normalize memory format to handle both old and new formats
+        interesting_memories = []
+        for mem in ex["output"]["interesting_memories"]:
+            if isinstance(mem, dict):
+                interesting_memories.append(mem)
+            else:
+                interesting_memories.append({"content": str(mem), "category": "fact"})
+        
+        system_memories = []
+        for mem in ex["output"]["system_memories"]:
+            if isinstance(mem, dict):
+                system_memories.append(mem)
+            else:
+                system_memories.append({"content": str(mem), "category": "fact"})
+                
+        training_examples.append(
+            dspy.Example(
+                context=ex["input"]["context"],
+                user_name=ex["input"]["user_name"],
+                interesting_memories=interesting_memories,
+                system_memories=system_memories,
+            )
         )
-        for ex in examples
-    ]
+    return training_examples
 
 
 def extract_base_prompt():
@@ -179,8 +196,20 @@ def optimize_instructions(base_instructions, examples, num_optimized=3):
             examples_text += f"\nExample {i+1}:\n"
             examples_text += f"Conversation: {ex['input']['context'][:300]}...\n"
             examples_text += f"User name: {ex['input']['user_name']}\n"
-            interesting_memories = [mem["content"] for mem in ex["output"]["interesting_memories"]]
-            system_memories = [mem["content"] for mem in ex["output"]["system_memories"]]
+            # Handle both old format (strings) and new format (dicts with content/category)
+            interesting_memories = []
+            for mem in ex["output"]["interesting_memories"]:
+                if isinstance(mem, dict):
+                    interesting_memories.append(mem.get("content", str(mem)))
+                else:
+                    interesting_memories.append(str(mem))
+            
+            system_memories = []
+            for mem in ex["output"]["system_memories"]:
+                if isinstance(mem, dict):
+                    system_memories.append(mem.get("content", str(mem)))
+                else:
+                    system_memories.append(str(mem))
             examples_text += f"Interesting memories: {', '.join(interesting_memories)}\n"
             examples_text += f"System memories: {', '.join(system_memories)}\n"
             examples_text += f"Quality score: {ex.get('score', 0)}/5\n"
@@ -288,10 +317,10 @@ Here are some example memory generations:
 User name: {demonstrations[0].user_name}
 
 Interesting memories:
-{', '.join([mem['content'] for mem in demonstrations[0].interesting_memories])} 
+{', '.join([mem.get('content', str(mem)) if isinstance(mem, dict) else str(mem) for mem in demonstrations[0].interesting_memories])} 
 
 System memories:
-{', '.join([mem['content'] for mem in demonstrations[0].system_memories])}
+{', '.join([mem.get('content', str(mem)) if isinstance(mem, dict) else str(mem) for mem in demonstrations[0].system_memories])}
 
 Now generate memories for the following conversation:
 """
