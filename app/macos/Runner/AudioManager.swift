@@ -139,7 +139,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         if let engine = audioEngine, engine.isRunning {
             engine.stop()
-            micNode?.removeTap(onBus: 0)
+            removeMicTap()
         }
         
         // Clean up resources.
@@ -248,23 +248,54 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         self.micNode = audioEngine?.inputNode
-        self.micNodeFormat = self.micNode!.outputFormat(forBus: 0)
         
-        self.micAudioConverter = AVAudioConverter(from: self.micNodeFormat!, to: outputFormat)
+        // Get the hardware input format
+        guard let micNode = self.micNode else {
+            throw AudioManagerError.audioFormatError("Could not get audio engine input node")
+        }
+        
+        let hardwareInputFormat = micNode.inputFormat(forBus: 0)
+        
+        // Validate the hardware input format
+        guard hardwareInputFormat.sampleRate > 0 && hardwareInputFormat.channelCount > 0 else {
+            throw AudioManagerError.audioFormatError("Invalid hardware input format: SR=\(hardwareInputFormat.sampleRate), CH=\(hardwareInputFormat.channelCount)")
+        }
+        
+        self.micAudioConverter = AVAudioConverter(from: hardwareInputFormat, to: outputFormat)
         guard self.micAudioConverter != nil else {
-            throw AudioManagerError.converterSetupError("Could not create main audio converter to Flutter format")
+            throw AudioManagerError.converterSetupError("Could not create audio converter from hardware input format to Flutter format")
         }
         
         self.micAudioConverter?.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
         self.micAudioConverter?.sampleRateConverterQuality = .max
         self.micAudioConverter?.dither = true
         
-        print("DEBUG: Mic native format: \(self.micNodeFormat!))")
-        print("DEBUG: Flutter output format will be SR: \(Constants.flutterOutputSampleRate), CH: \(Constants.flutterOutputChannels)")
+    }
+    
+    private func removeMicTap() {
+        guard let micNode = micNode else {
+            return
+        }
+        
+        micNode.removeTap(onBus: 0)
     }
     
     private func installMicTap() {
-        micNode!.installTap(onBus: 0, bufferSize: Constants.micTapBufferSize, format: self.micNodeFormat!) { [weak self] (buffer, time) in
+        guard let micNode = micNode else {
+            print("ERROR: Cannot install mic tap - mic node is nil")
+            return
+        }
+
+        removeMicTap()
+        
+        let hardwareInputFormat = micNode.inputFormat(forBus: 0)
+        
+        // Check if the format is valid for tap installation
+        guard hardwareInputFormat.sampleRate > 0 && hardwareInputFormat.channelCount > 0 else {
+            print("ERROR: Invalid hardware input format - cannot install tap")
+            return
+        }
+        micNode.installTap(onBus: 0, bufferSize: Constants.micTapBufferSize, format: hardwareInputFormat) { [weak self] (buffer, time) in
             guard let self = self, let finalConverter = self.micAudioConverter, let finalOutputFormat = self.outputAudioFormat else {
                 return
             }
@@ -890,6 +921,152 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         deviceListChangedListener = nil
     }
     
+    // MARK: - Audio Device Management
+    
+    func getAvailableAudioDevices() -> [[String: String]] {
+        var devices: [[String: String]] = []
+        let deviceIDs = getAudioDeviceIDs()
+        
+        for deviceID in deviceIDs {
+            // Check if device has input streams
+            if hasInputStreams(deviceID: deviceID) {
+                if let deviceName = getDeviceName(for: deviceID) {
+                    if !isAggregateOrVirtualDevice(deviceName: deviceName, deviceID: deviceID) {
+                        let friendlyName = getFriendlyDeviceName(deviceName)
+                        devices.append([
+                            "id": String(deviceID),
+                            "name": friendlyName
+                        ])
+                    }
+                }
+            }
+        }
+        
+        return devices
+    }
+    
+    private func isAggregateOrVirtualDevice(deviceName: String, deviceID: AudioDeviceID) -> Bool {
+        // Filter out aggregate devices
+        if deviceName.contains("CADefaultDeviceAggregate") ||
+           deviceName.contains("Aggregate Device") ||
+           deviceName.contains("Multi-Output Device") {
+            return true
+        }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var transportType: UInt32 = 0
+        var propertySize = UInt32(MemoryLayout<UInt32>.size)
+        
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &propertySize,
+            &transportType
+        )
+        
+        if status == noErr {
+            return transportType == kAudioDeviceTransportTypeVirtual ||
+                   transportType == kAudioDeviceTransportTypeAggregate
+        }
+        
+        return false
+    }
+    
+    private func getFriendlyDeviceName(_ deviceName: String) -> String {
+        if deviceName.contains("MacBook") && deviceName.contains("Microphone") {
+            return "MacBook Microphone"
+        } else if deviceName.contains("AirPods") {
+            return deviceName
+        } else if deviceName.contains("USB") {
+            return deviceName.replacingOccurrences(of: "USB ", with: "")
+        } else if deviceName.contains("Built-in") {
+            return "Built-in Microphone"
+        }
+        
+        return deviceName
+    }
+    
+    private func hasInputStreams(deviceID: AudioDeviceID) -> Bool {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var propertySize: UInt32 = 0
+        let status = AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nil, &propertySize)
+        
+        return status == noErr && propertySize > 0
+    }
+    
+    func selectAudioDevice(deviceID: String) -> Bool {
+        guard let deviceIDInt = AudioDeviceID(deviceID) else {
+            print("ERROR: Invalid device ID: \(deviceID)")
+            return false
+        }
+        
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var deviceIDToSet = deviceIDInt
+        let propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        
+        let status = AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            propertySize,
+            &deviceIDToSet
+        )
+        
+        if status == noErr {
+            print("DEBUG: Successfully set default input device to ID: \(deviceID)")
+            
+            self.currentInputDeviceID = deviceIDInt
+            if let deviceName = getDeviceName(for: deviceIDInt) {
+                self.currentInputDeviceName = deviceName
+                print("DEBUG: New input device name: \(deviceName)")
+            }
+            
+            // If currently recording, restart the audio engine to use the new device
+            if _isRecording {
+                print("DEBUG: Recording is active, restarting audio engine with new device")
+                Task {
+                    do {
+                        audioEngine?.stop()
+                        removeMicTap()
+                        audioEngine?.reset()
+                        try await Task.sleep(nanoseconds: 100_000_000)
+                        try audioEngine?.prepare()
+                        try configureAudioFormatsAndConverter()
+                        installMicTap()
+                        try audioEngine?.start()
+                        if isFlutterEngineActive {
+                            self.screenCaptureChannel?.invokeMethod("microphoneDeviceChanged", arguments: nil)
+                        }
+                    } catch {
+                        print("ERROR: Failed to restart audio engine with new device: \(error)")
+                    }
+                }
+            }
+            
+            return true
+        } else {
+            print("ERROR: Failed to set default input device: \(status)")
+            return false
+        }
+    }
 }
 
 // MARK: - Audio Manager Errors

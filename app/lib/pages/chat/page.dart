@@ -44,7 +44,7 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => ChatPageState();
 }
 
-class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
+class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
@@ -100,6 +100,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       if (provider.messages.isEmpty) {
         provider.refreshMessages();
       }
+      // Fetch enabled chat apps
+      provider.fetchChatApps();
       scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
@@ -802,7 +804,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     );
   }
 
-  void _showAppsMenu(BuildContext ctx, AppProvider provider) {
+  void _showAppsMenu(BuildContext ctx, AppProvider appProvider) {
     final renderBox = _appButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
@@ -831,94 +833,100 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     entry = OverlayEntry(
       builder: (context) {
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () {
-                  controller.reverse().then((_) => entry.remove());
-                },
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-            Positioned(
-              left: buttonOffset.dx + (buttonSize.width - menuWidth) / 2,
-              top: desiredTop,
-              child: AnimatedBuilder(
-                animation: curved,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: curved.value,
-                    alignment: Alignment.topCenter,
-                    child: Opacity(
-                      opacity: curved.value,
-                      child: child,
-                    ),
-                  );
-                },
-                child: Material(
-                  color: Colors.grey[900],
-                  borderRadius: BorderRadius.circular(12),
-                  elevation: 8,
-                  child: SizedBox(
-                    width: menuWidth,
-                    height: maxMenuHeight,
-                    child: PullDownMenu(
-                      items: [
-                        PullDownMenuItem(
-                          title: 'Clear Chat',
-                          iconWidget: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
-                          onTap: () {
-                            controller.reverse().then((_) {
-                              entry.remove();
-                              _handleAppSelection('clear_chat', provider);
-                            });
-                          },
+        return Consumer<MessageProvider>(
+          builder: (context, msgProvider, _) {
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () {
+                      controller.reverse().then((_) => entry.remove());
+                    },
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
+                Positioned(
+                  left: buttonOffset.dx + (buttonSize.width - menuWidth) / 2,
+                  top: desiredTop,
+                  child: AnimatedBuilder(
+                    animation: curved,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: curved.value,
+                        alignment: Alignment.topCenter,
+                        child: Opacity(
+                          opacity: curved.value,
+                          child: child,
                         ),
-                        PullDownMenuItem(
-                          title: 'Enable Apps',
-                          iconWidget: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 16),
-                          onTap: () {
-                            controller.reverse().then((_) {
-                              entry.remove();
-                              _handleAppSelection('enable', provider);
-                            });
-                          },
-                        ),
-                        PullDownMenuItem(
-                          title: 'Omi',
-                          iconWidget: _getOmiAvatar(),
-                          onTap: () {
-                            controller.reverse().then((_) {
-                              entry.remove();
-                              _handleAppSelection('no_selected', provider);
-                            });
-                          },
-                          subtitle: provider.apps.firstWhereOrNull((a) => a.id == provider.selectedChatAppId) == null
-                              ? 'Selected'
-                              : null,
-                        ),
-                        ...provider.apps.where((app) => app.worksWithChat() && app.enabled).map(
+                      );
+                    },
+                    child: Material(
+                      color: Colors.grey[900],
+                      borderRadius: BorderRadius.circular(12),
+                      elevation: 8,
+                      child: SizedBox(
+                        width: menuWidth,
+                        height: maxMenuHeight,
+                        child: PullDownMenu(
+                          items: [
+                            PullDownMenuItem(
+                              title: 'Clear Chat',
+                              iconWidget: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                              onTap: () {
+                                controller.reverse().then((_) {
+                                  entry.remove();
+                                  _handleAppSelection('clear_chat', appProvider);
+                                });
+                              },
+                            ),
+                            PullDownMenuItem(
+                              title: 'Enable Apps',
+                              iconWidget: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 16),
+                              onTap: () {
+                                controller.reverse().then((_) {
+                                  entry.remove();
+                                  _handleAppSelection('enable', appProvider);
+                                });
+                              },
+                            ),
+                            PullDownMenuItem(
+                              title: 'Omi',
+                              iconWidget: _getOmiAvatar(),
+                              onTap: () {
+                                controller.reverse().then((_) {
+                                  entry.remove();
+                                  _handleAppSelection('no_selected', appProvider);
+                                });
+                              },
+                              subtitle:
+                                  msgProvider.chatApps.firstWhereOrNull((a) => a.id == appProvider.selectedChatAppId) ==
+                                          null
+                                      ? 'Selected'
+                                      : null,
+                            ),
+                            ...msgProvider.chatApps.map(
                               (app) => PullDownMenuItem(
                                 title: app.getName(),
                                 iconWidget: _getAppAvatar(app),
                                 onTap: () {
                                   controller.reverse().then((_) {
                                     entry.remove();
-                                    _handleAppSelection(app.id, provider);
+                                    _handleAppSelection(app.id, appProvider);
                                   });
                                 },
-                                subtitle: provider.selectedChatAppId == app.id ? 'Selected' : null,
+                                subtitle: appProvider.selectedChatAppId == app.id ? 'Selected' : null,
                               ),
                             )
-                      ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -928,7 +936,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   Widget _buildAppSelection(BuildContext context, AppProvider provider) {
-    var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
 
     return GestureDetector(
       key: _appButtonKey,

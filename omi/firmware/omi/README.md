@@ -20,7 +20,7 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
 
 ## WIP
 
-- Status: 80%, running on production.
+- Status: running on production, missing some enhancement.
 
 - TODOs:
   - [x] Testing new modules in the omi device (7/9)
@@ -56,9 +56,9 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] Turn the device on/off(entering the deepsleep mode)
     - [x] Long press to chat with omi
     - [x] Test the deepsleep mode's battery draining.
-  - [ ] SD Card
-    - [ ] Store files
-    - [ ] Transfer via BLE
+  - [x] SD Card (2/3)
+    - [x] Store files
+    - [x] Transfer via BLE
     - [ ] Transfer via Wi-Fi
   - [x] Haptic
     - [x] Haptic on turning on/off

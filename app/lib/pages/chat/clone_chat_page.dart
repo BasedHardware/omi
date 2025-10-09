@@ -47,6 +47,8 @@ class CloneChatPageState extends State<CloneChatPage> {
 
         var messageProvider = Provider.of<MessageProvider>(context, listen: false);
         await messageProvider.refreshMessages();
+        // Fetch enabled chat apps
+        messageProvider.fetchChatApps();
         if (messageProvider.messages.isEmpty) {
           messageProvider.sendInitialAppMessage(selectedApp);
         }
