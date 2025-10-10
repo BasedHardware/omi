@@ -36,9 +36,16 @@ class AudioPlayerUtils extends ChangeNotifier {
     _initializeAudioPlayer();
   }
 
-  void _initializeAudioPlayer() async {
+  Future<void> _initializeAudioPlayer() async {
+    if (_audioPlayer != null) return;
+
+    if (Platform.isMacOS) return;
+
     _audioPlayer = FlutterSoundPlayer();
-    await _audioPlayer?.openPlayer();
+
+    if (_audioPlayer != null && !_audioPlayer!.isOpen()) {
+      await _audioPlayer!.openPlayer();
+    }
   }
 
   bool isPlaying(String id) => _currentPlayingId == id;
