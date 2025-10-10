@@ -379,7 +379,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             smart_format=True,
             profanity_filter=False,
             diarize=True,
-            filler_words=False,
+            filler_words=True,
             channels=channels,
             multichannel=channels > 1,
             model=model,

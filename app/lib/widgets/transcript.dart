@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -330,6 +331,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return _decodedTextCache[text]!;
   }
 
+  String _getSegmentDisplayText(TranscriptSegment segment) {
+    return _getDecodedText(segment.displayText);
+  }
+
   // Create highlighted text spans
   List<InlineSpan> _highlightSearchMatchesWithKeys(
     String text,
@@ -346,7 +351,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
     int globalMatchIndex = 0;
     for (int i = 0; i < segmentIndex; i++) {
-      final segmentText = _getDecodedText(widget.segments[i].text).toLowerCase();
+      final segmentText = _getSegmentDisplayText(widget.segments[i]).toLowerCase();
       final matches = RegExp(RegExp.escape(lowerQuery), caseSensitive: false).allMatches(segmentText);
       globalMatchIndex += matches.length;
     }
@@ -443,8 +448,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
     final suggestion = widget.suggestions[data.id];
+    final displayText = _getSegmentDisplayText(data);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
+    final bool isEnhanced = data.isEnhanced;
 
     return Container(
         key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
@@ -578,6 +585,35 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    if (isEnhanced) ...[
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          SvgPicture.asset(
+                                            Assets.images.aiMagic,
+                                            height: 14,
+                                            colorFilter: ColorFilter.mode(
+                                              isUser
+                                                  ? Colors.white.withValues(alpha: 0.9)
+                                                  : Colors.grey.shade200.withValues(alpha: 0.9),
+                                              BlendMode.srcIn,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Improved',
+                                            style: TextStyle(
+                                              color: isUser
+                                                  ? Colors.white.withValues(alpha: 0.8)
+                                                  : Colors.grey.shade200.withValues(alpha: 0.8),
+                                              fontSize: 11,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
                                     RichText(
                                       textAlign: TextAlign.left,
                                       text: TextSpan(
@@ -589,13 +625,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                         ),
                                         children: widget.searchQuery.isNotEmpty
                                             ? _highlightSearchMatchesWithKeys(
-                                                _getDecodedText(data.text),
+                                                displayText,
                                                 widget.searchQuery,
                                                 segmentIdx,
                                               )
                                             : [
                                                 TextSpan(
-                                                  text: _getDecodedText(data.text),
+                                                  text: displayText,
                                                 )
                                               ],
                                       ),
@@ -745,12 +781,40 @@ class LiteTranscriptWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Text(
-      processedText,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-      textAlign: TextAlign.right,
+    final hasEnhanced = segments.any((segment) => segment.isEnhanced);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (hasEnhanced) ...[
+          SvgPicture.asset(
+            Assets.images.aiMagic,
+            height: 14,
+            colorFilter: ColorFilter.mode(
+              Colors.grey.shade200.withValues(alpha: 0.9),
+              BlendMode.srcIn,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Improved',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey.shade300.withValues(alpha: 0.9),
+                  fontStyle: FontStyle.italic,
+                ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            processedText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+            textAlign: TextAlign.right,
+          ),
+        ),
+      ],
     );
   }
 }

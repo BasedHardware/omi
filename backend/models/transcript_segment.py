@@ -15,13 +15,15 @@ class Translation(BaseModel):
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
+    raw_text: Optional[str] = None
+    enhanced_text: Optional[str] = None
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
     start: float
     end: float
-    translations: Optional[List[Translation]] = []
+    translations: List[Translation] = Field(default_factory=list)
     speech_profile_processed: bool = True
 
     def __init__(self, **data):
@@ -29,11 +31,32 @@ class TranscriptSegment(BaseModel):
         if not self.id:
             self.id = str(uuid.uuid4())
         self.speaker_id = int(self.speaker.split('_')[1]) if self.speaker else 0
+        if self.raw_text is None:
+            self.raw_text = self.text
+        if self.enhanced_text:
+            self.enhanced_text = self.enhanced_text.strip()
 
     def get_timestamp_string(self):
         start_duration = timedelta(seconds=int(self.start))
         end_duration = timedelta(seconds=int(self.end))
         return f'{str(start_duration).split(".")[0]} - {str(end_duration).split(".")[0]}'
+
+    def display_text(self) -> str:
+        if self.enhanced_text and self.enhanced_text.strip():
+            return self.enhanced_text.strip()
+        if self.raw_text and self.raw_text.strip():
+            return self.raw_text.strip()
+        return self.text.strip()
+
+    def set_enhanced_text(self, text: Optional[str]):
+        if text is None or not text.strip():
+            self.enhanced_text = None
+            if self.raw_text:
+                self.text = self.raw_text
+            return
+        cleaned = text.strip()
+        self.enhanced_text = cleaned
+        self.text = cleaned
 
     @staticmethod
     def segments_as_string(segments, include_timestamps=False, user_name: str = None, people: List[Person] = None):
@@ -43,7 +66,7 @@ class TranscriptSegment(BaseModel):
         people_map = {person.id: person.name for person in people} if people else {}
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
-            segment_text = segment.text.strip()
+            segment_text = segment.display_text()
             timestamp_str = f'[{segment.get_timestamp_string()}] ' if include_timestamps else ''
             speaker_name = user_name
             if not segment.is_user:
@@ -115,6 +138,13 @@ class TranscriptSegment(BaseModel):
                 and a.speech_profile_processed == b.speech_profile_processed
             ):
                 a.text += f' {b.text}'
+                if a.raw_text:
+                    a.raw_text += f' {b.raw_text or b.text}'
+                if b.enhanced_text:
+                    if a.enhanced_text:
+                        a.enhanced_text += f' {b.enhanced_text}'
+                    else:
+                        a.enhanced_text = b.enhanced_text
                 a.end = b.end
                 return a, None
 
@@ -126,6 +156,13 @@ class TranscriptSegment(BaseModel):
                 and a.speech_profile_processed == b.speech_profile_processed
             ):
                 a.text += f' {b.text}'
+                if a.raw_text:
+                    a.raw_text += f' {b.raw_text or b.text}'
+                if b.enhanced_text:
+                    if a.enhanced_text:
+                        a.enhanced_text += f' {b.enhanced_text}'
+                    else:
+                        a.enhanced_text = b.enhanced_text
                 a.end = b.end
                 return a, None
 
@@ -159,9 +196,12 @@ class TranscriptSegment(BaseModel):
 
         # Speechmatics specific issue with punctuation
         for i, segment in enumerate(segments):
-            segments[i].text = (
+            cleaned_text = (
                 segments[i].text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
+            segments[i].text = cleaned_text
+            if segments[i].enhanced_text:
+                segments[i].enhanced_text = segments[i].enhanced_text.strip()
 
         return segments, (starts, ends)
 
