@@ -45,8 +45,8 @@ async def _websocket_util_trigger(
     private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
     private_cloud_sync_delay_seconds = 5
 
-    async def save_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, chunk_idx: int):
-        upload_audio_chunk(chunk_data, uid, conversation_id, chunk_idx)
+    async def save_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timestamp: float):
+        upload_audio_chunk(chunk_data, uid, conversation_id, timestamp)
 
     # task
     async def receive_tasks():
@@ -56,7 +56,7 @@ async def _websocket_util_trigger(
         audiobuffer = bytearray()
         trigger_audiobuffer = bytearray()
         private_cloud_sync_buffer = bytearray()
-        private_cloud_chunk_index = 0
+        private_cloud_chunk_start_time = None
         current_conversation_id = None
 
         try:
@@ -89,17 +89,22 @@ async def _websocket_util_trigger(
 
                     # Private cloud sync
                     if private_cloud_sync_enabled and current_conversation_id:
+                        if private_cloud_chunk_start_time is None:
+                            import time
+
+                            private_cloud_chunk_start_time = time.time()
+
                         private_cloud_sync_buffer.extend(data[4:])
                         # Save chunk every 5 seconds (sample_rate * 2 bytes per sample * 5 seconds)
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * private_cloud_sync_delay_seconds:
                             chunk_data = bytes(private_cloud_sync_buffer)
-                            chunk_idx = private_cloud_chunk_index
+                            timestamp = private_cloud_chunk_start_time
                             conv_id = current_conversation_id
                             asyncio.run_coroutine_threadsafe(
-                                save_audio_chunk(chunk_data, uid, conv_id, chunk_idx), loop
+                                save_audio_chunk(chunk_data, uid, conv_id, timestamp), loop
                             )
-                            private_cloud_chunk_index += 1
                             private_cloud_sync_buffer = bytearray()
+                            private_cloud_chunk_start_time = None
 
                     if (
                         has_audio_apps_enabled

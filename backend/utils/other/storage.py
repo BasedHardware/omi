@@ -237,7 +237,7 @@ def delete_syncing_temporal_file(file_path: str):
 # ************************************************
 
 
-def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, chunk_index: int) -> str:
+def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timestamp: float) -> str:
     """
     Upload an audio chunk to Google Cloud Storage.
 
@@ -245,26 +245,26 @@ def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, chunk_
         chunk_data: Raw audio bytes (PCM16)
         uid: User ID
         conversation_id: Conversation ID
-        chunk_index: Sequential chunk number
+        timestamp: Unix timestamp when chunk was recorded
 
     Returns:
         GCS path of the uploaded chunk
     """
     bucket = storage_client.bucket(private_cloud_sync_bucket)
-    path = f'chunks/{uid}/{conversation_id}/c{chunk_index}.bin'
+    path = f'chunks/{uid}/{conversation_id}/{timestamp}.bin'
     blob = bucket.blob(path)
     blob.upload_from_string(chunk_data, content_type='application/octet-stream')
     return path
 
 
-def merge_audio_chunks(uid: str, conversation_id: str, chunk_indices: List[int], output_file_id: str) -> str:
+def merge_audio_chunks(uid: str, conversation_id: str, timestamps: List[float], output_file_id: str) -> str:
     """
     Merge multiple audio chunks into a single file.
 
     Args:
         uid: User ID
         conversation_id: Conversation ID
-        chunk_indices: List of chunk indices to merge
+        timestamps: List of chunk timestamps to merge
         output_file_id: Output file identifier
 
     Returns:
@@ -276,8 +276,8 @@ def merge_audio_chunks(uid: str, conversation_id: str, chunk_indices: List[int],
 
     # Download and merge chunks
     merged_data = bytearray()
-    for chunk_index in chunk_indices:
-        chunk_path = f'chunks/{uid}/{conversation_id}/c{chunk_index}.bin'
+    for timestamp in timestamps:
+        chunk_path = f'chunks/{uid}/{conversation_id}/{timestamp}.bin'
         chunk_blob = bucket.blob(chunk_path)
         if chunk_blob.exists():
             chunk_data = chunk_blob.download_as_bytes()
@@ -288,11 +288,11 @@ def merge_audio_chunks(uid: str, conversation_id: str, chunk_indices: List[int],
     return output_path
 
 
-def delete_audio_chunks(uid: str, conversation_id: str, chunk_indices: List[int]) -> None:
+def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float]) -> None:
     """Delete audio chunks after they've been merged."""
     bucket = storage_client.bucket(private_cloud_sync_bucket)
-    for chunk_index in chunk_indices:
-        chunk_path = f'chunks/{uid}/{conversation_id}/c{chunk_index}.bin'
+    for timestamp in timestamps:
+        chunk_path = f'chunks/{uid}/{conversation_id}/{timestamp}.bin'
         blob = bucket.blob(chunk_path)
         if blob.exists():
             blob.delete()
@@ -303,7 +303,7 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
     List all audio chunks for a conversation.
 
     Returns:
-        List of dicts with chunk info: {'index': int, 'path': str, 'size': int, 'created': datetime}
+        List of dicts with chunk info: {'timestamp': float, 'path': str, 'size': int}
     """
     bucket = storage_client.bucket(private_cloud_sync_bucket)
     prefix = f'chunks/{uid}/{conversation_id}/'
@@ -311,18 +311,22 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
 
     chunks = []
     for blob in blobs:
-        # Extract chunk index from filename (e.g., 'c5.bin' -> 5)
+        # Extract timestamp from filename (e.g., '1234567890.123.bin' -> 1234567890.123)
         filename = blob.name.split('/')[-1]
-        if filename.startswith('c') and filename.endswith('.bin'):
+        if filename.endswith('.bin'):
             try:
-                chunk_index = int(filename[1:-4])
+                timestamp = float(filename[:-4])
                 chunks.append(
-                    {'index': chunk_index, 'path': blob.name, 'size': blob.size, 'created': blob.time_created}
+                    {
+                        'timestamp': timestamp,
+                        'path': blob.name,
+                        'size': blob.size,
+                    }
                 )
             except ValueError:
                 continue
 
-    return sorted(chunks, key=lambda x: x['index'])
+    return sorted(chunks, key=lambda x: x['timestamp'])
 
 
 def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:

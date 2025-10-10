@@ -14,7 +14,12 @@ class AudioFile(BaseModel):
     conversation_id: str = Field(description="ID of the conversation this audio belongs to")
     file_id: str = Field(description="GCS file path/identifier")
     provider: str = Field(default="gcp", description="Storage provider (e.g., 'gcp')")
-    start_at: float = Field(description="Start timestamp in seconds")
+    started_at: Optional[datetime] = Field(
+        default=None, description="When this audio file started (absolute timestamp)"
+    )
+    start_at: Optional[float] = Field(
+        default=None, description="Deprecated: Start time in seconds (for backward compatibility)"
+    )
     duration: float = Field(description="Duration in seconds")
 
 
