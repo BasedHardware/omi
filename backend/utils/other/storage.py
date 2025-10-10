@@ -19,6 +19,7 @@ else:
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
+private_cloud_sync_bucket = os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync')
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
@@ -229,6 +230,114 @@ def delete_syncing_temporal_file(file_path: str):
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.delete()
+
+
+# ************************************************
+# *********** PRIVATE CLOUD SYNC *****************
+# ************************************************
+
+
+def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, chunk_index: int) -> str:
+    """
+    Upload an audio chunk to Google Cloud Storage.
+
+    Args:
+        chunk_data: Raw audio bytes (PCM16)
+        uid: User ID
+        conversation_id: Conversation ID
+        chunk_index: Sequential chunk number
+
+    Returns:
+        GCS path of the uploaded chunk
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    path = f'chunks/{uid}/{conversation_id}/c{chunk_index}.bin'
+    blob = bucket.blob(path)
+    blob.upload_from_string(chunk_data, content_type='application/octet-stream')
+    return path
+
+
+def merge_audio_chunks(uid: str, conversation_id: str, chunk_indices: List[int], output_file_id: str) -> str:
+    """
+    Merge multiple audio chunks into a single file.
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+        chunk_indices: List of chunk indices to merge
+        output_file_id: Output file identifier
+
+    Returns:
+        GCS path of the merged file
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    output_path = f'audio/{uid}/{conversation_id}/{output_file_id}.bin'
+    output_blob = bucket.blob(output_path)
+
+    # Download and merge chunks
+    merged_data = bytearray()
+    for chunk_index in chunk_indices:
+        chunk_path = f'chunks/{uid}/{conversation_id}/c{chunk_index}.bin'
+        chunk_blob = bucket.blob(chunk_path)
+        if chunk_blob.exists():
+            chunk_data = chunk_blob.download_as_bytes()
+            merged_data.extend(chunk_data)
+
+    # Upload merged file
+    output_blob.upload_from_string(bytes(merged_data), content_type='application/octet-stream')
+    return output_path
+
+
+def delete_audio_chunks(uid: str, conversation_id: str, chunk_indices: List[int]) -> None:
+    """Delete audio chunks after they've been merged."""
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    for chunk_index in chunk_indices:
+        chunk_path = f'chunks/{uid}/{conversation_id}/c{chunk_index}.bin'
+        blob = bucket.blob(chunk_path)
+        if blob.exists():
+            blob.delete()
+
+
+def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
+    """
+    List all audio chunks for a conversation.
+
+    Returns:
+        List of dicts with chunk info: {'index': int, 'path': str, 'size': int, 'created': datetime}
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    prefix = f'chunks/{uid}/{conversation_id}/'
+    blobs = bucket.list_blobs(prefix=prefix)
+
+    chunks = []
+    for blob in blobs:
+        # Extract chunk index from filename (e.g., 'c5.bin' -> 5)
+        filename = blob.name.split('/')[-1]
+        if filename.startswith('c') and filename.endswith('.bin'):
+            try:
+                chunk_index = int(filename[1:-4])
+                chunks.append(
+                    {'index': chunk_index, 'path': blob.name, 'size': blob.size, 'created': blob.time_created}
+                )
+            except ValueError:
+                continue
+
+    return sorted(chunks, key=lambda x: x['index'])
+
+
+def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
+    """Delete all audio files (chunks and merged) for a conversation."""
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+
+    # Delete chunks
+    chunks_prefix = f'chunks/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=chunks_prefix):
+        blob.delete()
+
+    # Delete merged files
+    audio_prefix = f'audio/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=audio_prefix):
+        blob.delete()
 
 
 # **********************************

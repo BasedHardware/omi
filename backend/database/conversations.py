@@ -10,11 +10,18 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from database import users as users_db
-from models.conversation import ConversationPhoto, PostProcessingStatus, PostProcessingModel, ConversationStatus
+from models.conversation import (
+    ConversationPhoto,
+    PostProcessingStatus,
+    PostProcessingModel,
+    ConversationStatus,
+    AudioFile,
+)
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
+from utils.other.storage import list_audio_chunks, merge_audio_chunks, delete_audio_chunks
 
 conversations_collection = 'conversations'
 
@@ -210,6 +217,105 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
+
+
+def create_audio_files_from_chunks(
+    uid: str,
+    conversation_id: str,
+) -> List[AudioFile]:
+    """
+    Create audio file records by merging chunks from a conversation.
+    Chunks are merged unless there's a gap > 30 seconds between segments.
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+
+    Returns:
+        List of AudioFile objects
+    """
+    # Get all chunks for this conversation
+    chunks = list_audio_chunks(uid, conversation_id)
+    if not chunks:
+        return []
+
+    # Group chunks based on 30-second gap rule
+    # Each chunk is 5 seconds, so we check if chunk indices are continuous or have gaps
+    audio_files = []
+    current_group = []
+
+    for i, chunk in enumerate(chunks):
+        if not current_group:
+            current_group.append(chunk)
+        else:
+            # Check if there's a gap > 30 seconds (6 chunks of 5 seconds each)
+            prev_chunk = current_group[-1]
+            if chunk['index'] - prev_chunk['index'] > 6:
+                # Gap detected, finalize current group
+                audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
+                if audio_file:
+                    audio_files.append(audio_file)
+                current_group = [chunk]
+            else:
+                current_group.append(chunk)
+
+    # Finalize last group
+    if current_group:
+        audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
+        if audio_file:
+            audio_files.append(audio_file)
+
+    return audio_files
+
+
+def _finalize_audio_file_group(
+    uid: str, conversation_id: str, chunk_group: List[dict], existing_files: List[AudioFile]
+) -> Optional[AudioFile]:
+    """
+    Merge a group of chunks into a single audio file and create an AudioFile record.
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+        chunk_group: List of chunk dicts to merge
+        existing_files: List of existing audio files (to determine start_at)
+
+    Returns:
+        AudioFile object or None if merge failed
+    """
+    if not chunk_group:
+        return None
+
+    # Generate file ID
+    file_id = str(uuid.uuid4())
+
+    # Merge chunks
+    chunk_indices = [chunk['index'] for chunk in chunk_group]
+    try:
+        gcs_path = merge_audio_chunks(uid, conversation_id, chunk_indices, file_id)
+    except Exception as e:
+        print(f"Error merging audio chunks: {e}")
+        return None
+
+    # Calculate start_at and duration
+    # Each chunk is 5 seconds
+    start_at = chunk_group[0]['index'] * 5.0
+    duration = len(chunk_group) * 5.0
+
+    # Clean up chunks after successful merge
+    try:
+        delete_audio_chunks(uid, conversation_id, chunk_indices)
+    except Exception as e:
+        print(f"Error deleting audio chunks: {e}")
+
+    return AudioFile(
+        id=file_id,
+        conversation_id=conversation_id,
+        file_id=gcs_path,
+        provider='gcp',
+        start_at=start_at,
+        duration=duration,
+    )
 
 
 def update_conversation_title(uid: str, conversation_id: str, title: str):

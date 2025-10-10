@@ -9,6 +9,15 @@ from models.other import Person
 from models.transcript_segment import TranscriptSegment
 
 
+class AudioFile(BaseModel):
+    id: str = Field(description="Unique identifier for the audio file")
+    conversation_id: str = Field(description="ID of the conversation this audio belongs to")
+    file_id: str = Field(description="GCS file path/identifier")
+    provider: str = Field(default="gcp", description="Storage provider (e.g., 'gcp')")
+    start_at: float = Field(description="Start timestamp in seconds")
+    duration: float = Field(description="Duration in seconds")
+
+
 class CategoryEnum(str, Enum):
     personal = 'personal'
     education = 'education'
@@ -237,6 +246,8 @@ class Conversation(BaseModel):
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
+    audio_files: List[AudioFile] = []
+    private_cloud_sync_enabled: bool = False
 
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []

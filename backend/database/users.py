@@ -36,6 +36,19 @@ def set_user_store_recording_permission(uid: str, value: bool):
     user_ref.update({'store_recording_permission': value})
 
 
+def get_user_private_cloud_sync_enabled(uid: str) -> bool:
+    """Check if user has private cloud sync enabled."""
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict()
+    return user_data.get('private_cloud_sync_enabled', True)
+
+
+def set_user_private_cloud_sync_enabled(uid: str, value: bool):
+    """Enable or disable private cloud sync for a user."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'private_cloud_sync_enabled': value})
+
+
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
