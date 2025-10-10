@@ -36,9 +36,16 @@ class AudioPlayerUtils extends ChangeNotifier {
     _initializeAudioPlayer();
   }
 
-  void _initializeAudioPlayer() async {
+  Future<void> _initializeAudioPlayer() async {
+    if (_audioPlayer != null) return;
+
+    if (Platform.isMacOS) return;
+
     _audioPlayer = FlutterSoundPlayer();
-    await _audioPlayer?.openPlayer();
+
+    if (_audioPlayer != null && !_audioPlayer!.isOpen()) {
+      await _audioPlayer!.openPlayer();
+    }
   }
 
   bool isPlaying(String id) => _currentPlayingId == id;
@@ -74,6 +81,7 @@ class AudioPlayerUtils extends ChangeNotifier {
   }
 
   Future<void> _startPlayback(Wal wal) async {
+    if (Platform.isMacOS) return;
     _isProcessingAudio = true;
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
@@ -417,7 +425,9 @@ class AudioPlayerUtils extends ChangeNotifier {
   @override
   void dispose() {
     _positionSubscription?.cancel();
-    _audioPlayer?.closePlayer();
+    if (!Platform.isMacOS) {
+      _audioPlayer?.closePlayer();
+    }
     super.dispose();
   }
 }
