@@ -32,6 +32,7 @@ class Context:
     uid: str
     tz: str
     chat_session: Optional[ChatSession] = None
+    files: Optional[List[str]] = None
 
 
 def retrieve_topics_filters(uid: str, question: str = "") -> dict:
@@ -163,40 +164,30 @@ class ResponseFormat(BaseModel):
 #     response_format=ResponseFormat
 # )
 
-def create_graph_file(
-        uid: str,
-        messages: List[Message],
-        app: Optional[App] = None,
-        cited: Optional[bool] = False,
-        callback_data: dict = {},
-        chat_session: Optional[ChatSession] = None,
-):
-    fc_tool = FileChatTool()
-
-
-# @tool
-# def chat_file():
-#     pass
-
 @tool
-def get_files(state: Annotated[dict, InjectedState]):
-    """ Retrieve all files in current chat session. """
+def chat_file(question: str):
+    """ Process user inquires about files uploaded.
+    """
     runtime = get_runtime(Context)
-    chat_session = runtime.context.chat_session
-    messages = state['messages']
+    print(runtime.context.files)
+    fc_tool = FileChatTool(runtime.context.uid, runtime.context.chat_session.id)
+    answer = fc_tool.process_chat_with_file(question, runtime.context.files)
+    return AIMessage(content=answer)
 
-    fc_tool = FileChatTool()
-    last_message = messages[-1] if messages else None
-    if chat_session:
-        if last_message:
-            if len(last_message.files_id) > 0:
-                file_ids = last_message.files_id
-            else:
-                # if user asked about file but not attach new file, will get all file in session
-                file_ids = chat_session.file_ids
+def get_files(messages: List[Message], chat_session: Optional[ChatSession] = None):
+    last_message = messages[-1]
+    if len(last_message.files_id) > 0:
+        file_ids = last_message.files_id
+    elif chat_session:
+        file_ids = chat_session.file_ids
     else:
+        fc_tool = FileChatTool()
         file_ids = fc_tool.get_files()
     return file_ids
+
+PROMPT_BASE = """You are a helpful assistant of wearable AI device named Omi.
+{CHAT_FILES}"""
+# Add found memories if get_memories was called.
 
 def create_graph(
         uid: str,
@@ -205,15 +196,20 @@ def create_graph(
         cited: Optional[bool] = False,
         callback_data: dict = {},
         chat_session: Optional[ChatSession] = None,
+        files: Optional[List[str]] = None,
 ):
     tools = [
         get_memories,
         get_conversations,
-        get_files,
+        # get_files,
         # get_omi_documentation,  TODO: Current doc must be formatted other way
     ]
-    # if len(messages) > 0 and len(messages[-1].files_id) > 0:
-    #     tools.append(chat_file)
+
+    if files:
+        tools.append(chat_file)
+        prompt_chat_files = "Use chat_file tool if user asked about file uploaded.\n"
+    else:
+        prompt_chat_files = ""
 
     checkpointer = MemorySaver()
 
@@ -234,9 +230,7 @@ def create_graph(
         graph = create_agent(
             llm_mini_stream,
             tools,
-            prompt="""You are a helpful assistant of wearable AI device named Omi. 
-            Use get_files tool if user asked about file uploaded.
-            Add text of memories returned by get_memories to response.""",
+            prompt=PROMPT_BASE.format(CHAT_FILES=prompt_chat_files),
             checkpointer=checkpointer,
             response_format=ResponseFormat
         )
@@ -255,7 +249,9 @@ async def execute_graph_chat_stream(
     print('execute_graph_chat_stream agentic app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
 
-    graph = create_graph(uid, messages, app, cited, callback_data, chat_session)
+    files = get_files(messages, chat_session)
+
+    graph = create_graph(uid, messages, app, cited, callback_data, chat_session, files)
 
     async for event in graph.astream(
             {
@@ -264,7 +260,7 @@ async def execute_graph_chat_stream(
                 "messages": Message.get_messages_as_dict(messages),
                 # "app": app,
             },
-            context=Context(uid=uid, tz=tz, chat_session=chat_session),
+            context=Context(uid=uid, tz=tz, chat_session=chat_session, files=files),
             stream_mode=["messages", "custom", "updates"],
             config={"configurable": {"thread_id": str(uuid.uuid4())}},
             subgraphs=True,
