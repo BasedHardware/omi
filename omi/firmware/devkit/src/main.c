@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/pm/device.h>
 
 #include "button.h"
 #include "codec.h"
@@ -12,7 +13,6 @@
 #include "transport.h"
 #include "usb.h"
 #include "utils.h"
-#include "qspi_flash.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 #define VBUS_DETECT (1U << 20)
@@ -124,12 +124,16 @@ int main(void)
 
     LOG_DBG("Reset reason: %d\n", reset_reason);
 
-    // Initialize QSPI flash
-    qspi_flash_init();
-    // Deep power-down command
-    qspi_flash_command(0xB9); 
-    // Uninitialize QSPI flash to save power
-    qspi_flash_uninit();
+    // Force QSPI flash into deep sleep mode
+    const struct device *flash_dev = DEVICE_DT_GET(DT_NODELABEL(p25q16h));
+    if (device_is_ready(flash_dev)) {
+        err = pm_device_action_run(flash_dev, PM_DEVICE_ACTION_SUSPEND);
+        if (err) {
+            LOG_ERR("Failed to suspend QSPI flash: %d", err);
+        }
+    } else {
+        LOG_ERR("QSPI flash device not ready");
+    }
 
     LOG_PRINTK("\n");
     LOG_INF("Initializing LEDs...\n");

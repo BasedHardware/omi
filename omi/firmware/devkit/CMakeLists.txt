@@ -17,7 +17,6 @@ target_sources(app PRIVATE
     src/sdcard.c
     src/storage.c
     src/usb.c
-    src/qspi_flash.c
 	# src/nfc.c future release
 )
 
