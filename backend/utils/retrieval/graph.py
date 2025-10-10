@@ -371,8 +371,6 @@ def qa_handler(state: GraphState):
 def file_chat_question(state: GraphState):
     print("chat_with_file_question node")
 
-    fc_tool = FileChatTool()
-
     uid = state.get("uid", "")
     question = state.get("parsed_question", "")
 
@@ -380,24 +378,46 @@ def file_chat_question(state: GraphState):
     last_message = messages[-1] if messages else None
 
     file_ids = []
+
     chat_session = state.get("chat_session")
-    if chat_session:
-        if last_message:
-            if len(last_message.files_id) > 0:
-                file_ids = last_message.files_id
-            else:
-                # if user asked about file but not attach new file, will get all file in session
-                file_ids = chat_session.file_ids
+    if not chat_session:
+        print("ERROR: Chat session required for file chat but not found")
+        raise ValueError("Chat session required for file chat")
+
+    print(f"Creating FileChatTool for user {uid}, session {chat_session.id}")
+
+    try:
+        # Create FileChatTool with session context
+        fc_tool = FileChatTool(uid, chat_session.id)
+        print(f"FileChatTool created successfully. Thread: {fc_tool.thread_id}, Assistant: {fc_tool.assistant_id}")
+    except Exception as e:
+        print(f"ERROR: Failed to create FileChatTool: {e}")
+        raise
+
+    # Determine which files to use
+    if last_message and len(last_message.files_id) > 0:
+        file_ids = last_message.files_id
     else:
-        file_ids = fc_tool.get_files()
+        # if user asked about file but not attach new file, will get all file in session
+        file_ids = chat_session.file_ids if chat_session.file_ids else []
+
+    print(f"Processing file chat with {len(file_ids)} files")
 
     streaming = state.get("streaming")
-    if streaming:
-        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback=state.get('callback'))
-        return {'answer': answer, 'ask_for_nps': True}
+    try:
+        if streaming:
+            print("Processing with streaming")
+            answer = fc_tool.process_chat_with_file_stream(question, file_ids, callback=state.get('callback'))
+            print("Streaming completed")
+            return {'answer': answer, 'ask_for_nps': True}
 
-    answer = fc_tool.process_chat_with_file(uid, question, file_ids)
-    return {'answer': answer, 'ask_for_nps': True}
+        print("Processing without streaming")
+        answer = fc_tool.process_chat_with_file(question, file_ids)
+        print("Processing completed")
+        return {'answer': answer, 'ask_for_nps': True}
+    except Exception as e:
+        print(f"ERROR in file_chat_question: {e}")
+        raise
 
 
 workflow = StateGraph(GraphState)
