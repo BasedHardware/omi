@@ -123,18 +123,18 @@ int main(void)
     LOG_INF("Hardware revision: %s", CONFIG_BT_DIS_HW_REV_STR);
 
     LOG_DBG("Reset reason: %d\n", reset_reason);
-
+    // TODO: can't suspend QSPI flash here to save power, that's might be a bug in zephyr v2.7.0
+    // if it can enter the deepsleep, we can save about 10uA of current.
     // Force QSPI flash into deep sleep mode
-    const struct device *flash_dev = DEVICE_DT_GET(DT_NODELABEL(p25q16h));
-    if (device_is_ready(flash_dev)) {
-        err = pm_device_action_run(flash_dev, PM_DEVICE_ACTION_SUSPEND);
-        if (err) {
-            LOG_ERR("Failed to suspend QSPI flash: %d", err);
-        }
-    } else {
-        LOG_ERR("QSPI flash device not ready");
-    }
-
+    // const struct device *flash_dev = device_get_binding("spi_flash0");
+    // if (device_is_ready(flash_dev)) {
+    //     err = pm_device_action_run(flash_dev, PM_DEVICE_ACTION_SUSPEND);
+    //     if (err) {
+    //         LOG_ERR("Failed to suspend QSPI flash: %d", err);
+    //     }
+    // } else {
+    //     LOG_ERR("QSPI flash device not ready");
+    // }
     LOG_PRINTK("\n");
     LOG_INF("Initializing LEDs...\n");
 

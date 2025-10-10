@@ -49,16 +49,6 @@
     status = "disabled";
 };
 
-&p25q16h {
-	sck-frequency = <2000000>;  // 2MHz QSPI speed
-	jedec-id = [ef 40 18];      // JEDEC ID
-	size = <16777216>;          // 16MB
-
-	has-dpd;
-	t-enter-dpd = <10000>;
-	t-exit-dpd = <35000>;
-};
-
 &i2c0 {
     lsm6ds3tr_c: lsm6ds3tr-c@6a {
 		compatible = "st,lsm6dsl";
