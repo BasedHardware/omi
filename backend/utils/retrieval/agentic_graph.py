@@ -1,3 +1,4 @@
+import os
 import uuid
 from dataclasses import dataclass
 from typing import List, Optional, AsyncGenerator
@@ -20,13 +21,16 @@ from utils.llm.chat import (
     retrieve_context_dates_by_question,
     select_structured_filters
 )
-from utils.llm.clients import llm_mini_stream
+from utils.llm.clients import llm_mini_stream, llm_persona_medium_stream, llm_persona_mini_stream
 from utils.llms.memory import get_prompt_data
+from utils.other.chat_file import FileChatTool
+
 
 @dataclass
 class ContextSchema:
     uid: str
     tz: str
+    chat_session: Optional[ChatSession] = None
 
 
 def retrieve_topics_filters(uid: str, question: str = "") -> dict:
@@ -143,20 +147,99 @@ class ResponseFormat(BaseModel):
     memories_found: Optional[List[str]]
     ask_for_nps: bool = False
 
-checkpointer = MemorySaver()
+# checkpointer = MemorySaver()
 
-graph_stream = create_agent(
-    llm_mini_stream,
-    [
+# graph_stream = create_agent(
+#     llm_mini_stream,
+#     [
+#         get_memories,
+#         get_conversations,
+#         # get_omi_documentation,  TODO: Current doc must be formatted other way
+#     ],
+#     prompt="""You are a helpful assistant of wearable AI device named Omi.
+#     Add text of memories returned by get_memories to response.""",
+#     checkpointer=checkpointer,
+#     response_format=ResponseFormat
+# )
+
+def create_graph_file(
+        uid: str,
+        messages: List[Message],
+        app: Optional[App] = None,
+        cited: Optional[bool] = False,
+        callback_data: dict = {},
+        chat_session: Optional[ChatSession] = None,
+):
+    fc_tool = FileChatTool()
+
+
+# @tool
+# def chat_file():
+#     pass
+
+@tool
+def get_files():
+    """ Retrieve all files in current chat session. """
+    runtime = get_runtime(ContextSchema)
+    chat_session = runtime.context.chat_session
+    messages = runtime.messages
+
+    fc_tool = FileChatTool()
+    last_message = messages[-1] if messages else None
+    if chat_session:
+        if last_message:
+            if len(last_message.files_id) > 0:
+                file_ids = last_message.files_id
+            else:
+                # if user asked about file but not attach new file, will get all file in session
+                file_ids = chat_session.file_ids
+    else:
+        file_ids = fc_tool.get_files()
+    return file_ids
+
+def create_graph(
+        uid: str,
+        messages: List[Message],
+        app: Optional[App] = None,
+        cited: Optional[bool] = False,
+        callback_data: dict = {},
+        chat_session: Optional[ChatSession] = None,
+):
+    tools = [
         get_memories,
         get_conversations,
+        get_files,
         # get_omi_documentation,  TODO: Current doc must be formatted other way
-    ],
-    prompt="""You are a helpful assistant of wearable AI device named Omi. 
-    Add text of memories returned by get_memories to response.""",
-    checkpointer=checkpointer,
-    response_format=ResponseFormat
-)
+    ]
+    # if len(messages) > 0 and len(messages[-1].files_id) > 0:
+    #     tools.append(chat_file)
+
+    checkpointer = MemorySaver()
+
+    if app and app.is_a_persona():
+        if os.getenv('LOCAL_DEVELOPMENT'):
+            model = llm_mini_stream
+        else:
+            if app.is_influencer:
+                model = llm_persona_medium_stream
+            else:
+                model = llm_persona_mini_stream
+        graph = create_agent(
+            model,
+            tools=[],
+            prompt=app.persona_prompt
+        )
+    else:
+        graph = create_agent(
+            llm_mini_stream,
+            tools,
+            prompt="""You are a helpful assistant of wearable AI device named Omi. 
+            Add text of memories returned by get_memories to response.""",
+            checkpointer=checkpointer,
+            response_format=ResponseFormat
+        )
+
+    return graph
 
 
 async def execute_graph_chat_stream(
@@ -170,13 +253,15 @@ async def execute_graph_chat_stream(
     print('execute_graph_chat_stream agentic app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
 
-    async for event in graph_stream.astream(
+    graph = create_graph(uid, messages, app, cited, callback_data, chat_session)
+
+    async for event in graph.astream(
             {
                 # uid and tz: Sent via ContextSchema
                 "cited": cited,
                 "messages": Message.get_messages_as_dict(messages),
-                # "plugin_selected": app, Not implemented yet
-                # "chat_session": chat_session, Not implemented yet
+                "app": app,
+                "chat_session": chat_session  # Used to chat with a file
             },
             context=ContextSchema(uid=uid, tz=tz),
             stream_mode=["messages", "custom", "updates"],
@@ -184,7 +269,7 @@ async def execute_graph_chat_stream(
             subgraphs=True,
     ):
         ns, stream_mode, payload = event
-        # print(stream_mode, payload)
+        print(stream_mode, payload)
         if stream_mode == "messages":
             chunk, metadata = payload
             metadata: dict
