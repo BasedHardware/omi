@@ -72,28 +72,33 @@ MODEL_CONFIGURED = configure_openai()
 class GenerateMemories(Signature):
     """
     Generate up to 2 interesting and 2 system memories from a conversation between the user and 1 or more people.
+    
+    Memory Categories:
+    1. personal: Personal details about the user (e.g., name, age, occupation)
+    2. preference: User's likes, dislikes, and preferences
+    3. event: Specific events, plans, or activities mentioned
+    4. fact: General knowledge or factual information
 
     Interesting memories should:
-    - Capture really interesting and exciting details from the conversation. These can be like cool facts, cool things to remember, cool things to do, etc. Something that the user would not already know and would want to come back to and refer to in the future for fun or reference.
-    - These details can be about the user, the other people in the conversation, a place, something they did, something they are going to do, etc.
-    - Be worthwhile for the user to come back to and refer to in the future for fun or reference.
-    - Be super short and catchy and just mention the most exciting details/facts/figures in short.
+    - Capture exciting or notable details worth remembering
+    - Be about the user, others, places, or activities
+    - Be concise, catchy, and valuable for future reference
+    - Include the most relevant category for each memory
 
     System memories should:
-    - Be boring details about the conversation.
-    - Be details that are not interesting to the user but are mostly boring factual details about the user, the other people in the conversation, the place, etc.
-    - Be things that the user would not want to ever come back to and refer to in the future.
-
-    All memories should be concise, clear, and directly extracted from the conversation.
+    - Be factual or mundane details
+    - Not be particularly interesting to the user
+    - Include the most relevant category for each memory
+    - Be concise and clear
     """
 
     context: str = dspy.InputField(description="The conversation transcript or context from which to generate memories")
     user_name: str = dspy.InputField(description="The name of the user in the conversation")
     interesting_memories: list = dspy.OutputField(
-        description="List of up to 2 interesting personal memories about the user"
+        description="List of up to 2 interesting memories, each as a dict with 'content' and 'category'"
     )
     system_memories: list = dspy.OutputField(
-        description="List of up to 2 system-relevant memories about interaction patterns"
+        description="List of up to 2 system memories, each as a dict with 'content' and 'category'"
     )
 
 
@@ -133,22 +138,25 @@ class MemoryReActProgram(dspy.Module):
                     context=context,
                     user_name=user_name,
                     interesting_memories=[
-                        f"{user_name} visited Tokyo, Kyoto, and Osaka in Japan",
-                        f"{user_name} enjoyed the food in Tokyo",
+                        {"content": f"{user_name} visited Tokyo, Kyoto, and Osaka in Japan", "category": "event"},
+                        {"content": f"{user_name} enjoyed the food in Tokyo", "category": "preference"},
                     ],
                     system_memories=[
-                        f"{user_name} wants better photo tagging features",
-                        "User is trying to organize photos by city",
+                        {"content": f"{user_name} wants better photo tagging features", "category": "preference"},
+                        {"content": "User is trying to organize photos by city", "category": "event"},
                     ],
                 )
             else:
                 return GenerateMemories(
                     context=context,
                     user_name=user_name,
-                    interesting_memories=[f"{user_name} mentioned topic X", f"{user_name} expressed preference for Y"],
+                    interesting_memories=[
+                        {"content": f"{user_name} mentioned topic X", "category": "fact"}, 
+                        {"content": f"{user_name} expressed preference for Y", "category": "preference"}
+                    ],
                     system_memories=[
-                        "User has specific preferences about app features",
-                        "User communicates in a detailed manner",
+                        {"content": "User has specific preferences about app features", "category": "preference"},
+                        {"content": "User communicates in a detailed manner", "category": "personal"},
                     ],
                 )
 
@@ -157,8 +165,8 @@ class MemoryReActProgram(dspy.Module):
             return GenerateMemories(
                 context=context,
                 user_name=user_name,
-                interesting_memories=["ERROR: OpenAI API key not configured properly"],
-                system_memories=["ERROR: OpenAI API key not configured properly"],
+                interesting_memories=[{"content": "ERROR: OpenAI API key not configured properly", "category": "system"}],
+                system_memories=[{"content": "ERROR: OpenAI API key not configured properly", "category": "system"}],
             )
 
         try:
@@ -177,8 +185,8 @@ class MemoryReActProgram(dspy.Module):
             return GenerateMemories(
                 context=context,
                 user_name=user_name,
-                interesting_memories=[f"Error: {str(e)}"],
-                system_memories=["Error occurred during memory generation"],
+                interesting_memories=[{"content": f"Error: {str(e)}", "category": "system"}],
+                system_memories=[{"content": "Error occurred during memory generation", "category": "system"}],
             )
 
 
