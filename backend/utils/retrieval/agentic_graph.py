@@ -1,9 +1,10 @@
 import os
 import uuid
 from dataclasses import dataclass
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, Annotated
 
 from langchain.agents import create_agent
+from langchain.tools import InjectedState
 from langchain_core.messages import AIMessageChunk, AIMessage
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
@@ -27,7 +28,7 @@ from utils.other.chat_file import FileChatTool
 
 
 @dataclass
-class ContextSchema:
+class Context:
     uid: str
     tz: str
     chat_session: Optional[ChatSession] = None
@@ -112,7 +113,7 @@ def query_vectors(uid: str, question: str, tz: str = "UTC", limit: int = 100):
 def get_memories():
     """ Retrieve user memories.
     """
-    runtime = get_runtime(ContextSchema)
+    runtime = get_runtime(Context)
     user_name, user_made_memories, generated_memories = get_prompt_data(runtime.context.uid)
     return {
         "user_name": user_name,
@@ -127,7 +128,7 @@ def get_conversations(question: str = ""):
     Args:
         question (str): The question to filter memories.
      """
-    runtime = get_runtime(ContextSchema)
+    runtime = get_runtime(Context)
     return query_vectors(runtime.context.uid, runtime.context.tz, question)
 
 @tool
@@ -178,11 +179,11 @@ def create_graph_file(
 #     pass
 
 @tool
-def get_files():
+def get_files(state: Annotated[dict, InjectedState]):
     """ Retrieve all files in current chat session. """
-    runtime = get_runtime(ContextSchema)
+    runtime = get_runtime(Context)
     chat_session = runtime.context.chat_session
-    messages = runtime.messages
+    messages = state['messages']
 
     fc_tool = FileChatTool()
     last_message = messages[-1] if messages else None
@@ -234,6 +235,7 @@ def create_graph(
             llm_mini_stream,
             tools,
             prompt="""You are a helpful assistant of wearable AI device named Omi. 
+            Use get_files tool if user asked about file uploaded.
             Add text of memories returned by get_memories to response.""",
             checkpointer=checkpointer,
             response_format=ResponseFormat
@@ -257,13 +259,12 @@ async def execute_graph_chat_stream(
 
     async for event in graph.astream(
             {
-                # uid and tz: Sent via ContextSchema
+                # uid and tz: Sent via Context
                 "cited": cited,
                 "messages": Message.get_messages_as_dict(messages),
-                "app": app,
-                "chat_session": chat_session  # Used to chat with a file
+                # "app": app,
             },
-            context=ContextSchema(uid=uid, tz=tz),
+            context=Context(uid=uid, tz=tz, chat_session=chat_session),
             stream_mode=["messages", "custom", "updates"],
             config={"configurable": {"thread_id": str(uuid.uuid4())}},
             subgraphs=True,
