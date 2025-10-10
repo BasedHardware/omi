@@ -179,6 +179,8 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
+    openai_thread_id: Optional[str] = None
+    openai_assistant_id: Optional[str] = None
 
     @model_validator(mode='before')
     @classmethod
