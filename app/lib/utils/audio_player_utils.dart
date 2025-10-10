@@ -81,7 +81,6 @@ class AudioPlayerUtils extends ChangeNotifier {
   }
 
   Future<void> _startPlayback(Wal wal) async {
-    if (Platform.isMacOS) return;
     _isProcessingAudio = true;
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
@@ -425,9 +424,7 @@ class AudioPlayerUtils extends ChangeNotifier {
   @override
   void dispose() {
     _positionSubscription?.cancel();
-    if (!Platform.isMacOS) {
-      _audioPlayer?.closePlayer();
-    }
+    _audioPlayer?.closePlayer();
     super.dispose();
   }
 }
