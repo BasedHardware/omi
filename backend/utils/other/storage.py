@@ -255,15 +255,18 @@ def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timest
     bucket = storage_client.bucket(private_cloud_sync_bucket)
     protection_level = users_db.get_data_protection_level(uid)
 
+    # Format timestamp to 3 decimal places for cleaner filenames
+    formatted_timestamp = f'{timestamp:.3f}'
+
     if protection_level == 'enhanced':
         # Encrypt as length-prefixed binary
         encrypted_chunk = encryption.encrypt_audio_chunk(chunk_data, uid)
-        path = f'chunks/{uid}/{conversation_id}/{timestamp}.enc'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
         blob = bucket.blob(path)
         blob.upload_from_string(encrypted_chunk, content_type='application/octet-stream')
     else:
         # Standard - no encryption
-        path = f'chunks/{uid}/{conversation_id}/{timestamp}.bin'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
         blob = bucket.blob(path)
         blob.upload_from_string(chunk_data, content_type='application/octet-stream')
 

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -16,9 +16,6 @@ class AudioFile(BaseModel):
     provider: str = Field(default="gcp", description="Storage provider (e.g., 'gcp')")
     started_at: Optional[datetime] = Field(
         default=None, description="When this audio file started (absolute timestamp)"
-    )
-    start_at: Optional[float] = Field(
-        default=None, description="Deprecated: Start time in seconds (for backward compatibility)"
     )
     duration: float = Field(description="Duration in seconds")
 
