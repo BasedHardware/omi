@@ -121,7 +121,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       MaterialPageRoute(
                         builder: (context) => Scaffold(
                           appBar: AppBar(
-                            title: const Text('Training Data Info'),
+                            title: const Text('Training Data Program'),
                             backgroundColor: Colors.black,
                           ),
                           body: WebViewWidget(
@@ -1751,7 +1751,7 @@ class _PlansSheetState extends State<PlansSheet> {
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(
-                  title: const Text('Training Data Info'),
+                  title: const Text('Training Data Program'),
                   backgroundColor: Colors.black,
                 ),
                 body: WebViewWidget(
@@ -1840,7 +1840,7 @@ class _PlansSheetState extends State<PlansSheet> {
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(
-                  title: const Text('Training Data Info'),
+                  title: const Text('Training Data Program'),
                   backgroundColor: Colors.black,
                 ),
                 body: WebViewWidget(
