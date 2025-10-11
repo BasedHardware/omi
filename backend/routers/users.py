@@ -453,6 +453,27 @@ def set_preferred_app_for_user(
 
 
 # **************************************
+# *********** Training Data ************
+# **************************************
+
+
+@router.get('/v1/users/training-data-opt-in', tags=['v1'])
+def get_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's training data opt-in status."""
+    opt_in_data = get_user_training_data_opt_in(uid)
+    if not opt_in_data:
+        return {'opted_in': False, 'status': None}
+    return {'opted_in': True, 'status': opt_in_data.get('status')}
+
+
+@router.post('/v1/users/training-data-opt-in', tags=['v1'])
+def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Opt-in for training data program. User's request will be reviewed."""
+    set_user_training_data_opt_in(uid, 'pending_review')
+    return {'status': 'ok', 'message': 'Your request has been submitted for review. We will let you know soon.'}
+
+
+# **************************************
 # ************* Usage ******************
 # **************************************
 
