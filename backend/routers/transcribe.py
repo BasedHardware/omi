@@ -42,7 +42,7 @@ from models.message_event import (
 from models.transcript_segment import Translation
 from models.users import PlanType
 from utils.analytics import record_usage
-from utils.app_integrations import trigger_external_integrations
+from utils.app_integrations import trigger_external_integrations, trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
@@ -880,6 +880,15 @@ async def _listen(
 
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
+
+            # Trigger webhooks for photos if available
+            if photos_to_process:
+                await trigger_realtime_integrations(
+                    uid,
+                    [segment.dict() for segment in transcript_segments] if transcript_segments else [],
+                    current_conversation_id,
+                    photos_to_process
+                )
 
                 # Speaker detection
                 for segment in conversation.transcript_segments[starts:ends]:
