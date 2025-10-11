@@ -11,7 +11,7 @@ class ConnectivityService {
 
   final InternetConnection _internetConnection = InternetConnection.createInstance(
     useDefaultOptions: false,
-    checkInterval: const Duration(seconds: 10),
+    checkInterval: const Duration(seconds: 60), // Reduced from 10s to 60s to avoid spam
     customCheckOptions: [
       InternetCheckOption(
         uri: Uri.parse('https://one.one.one.one'),

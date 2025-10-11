@@ -69,15 +69,15 @@ post_install do |installer|
 
     end
   end
-#   ################  Awesome Notifications pod modification 1 ###################
-#   awesome_pod_file = File.expand_path(File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'), '.symlinks')
-#   require awesome_pod_file
-#   update_awesome_pod_build_settings(installer)
-#   ################  Awesome Notifications pod modification 1 ###################
+  ################  Awesome Notifications pod modification 1 ###################
+  awesome_pod_file = File.expand_path(File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'), '.symlinks')
+  require awesome_pod_file
+  update_awesome_pod_build_settings(installer)
+  ################  Awesome Notifications pod modification 1 ###################
 end
-#
-# ################  Awesome Notifications pod modification 2 ###################
-# awesome_pod_file = File.expand_path(File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'), '.symlinks')
-# require awesome_pod_file
-# update_awesome_main_target_settings('Runner', File.dirname(File.realpath(__FILE__)), flutter_root)
-# ################  Awesome Notifications pod modification 2 ###################
+
+################  Awesome Notifications pod modification 2 ###################
+awesome_pod_file = File.expand_path(File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'), '.symlinks')
+require awesome_pod_file
+update_awesome_main_target_settings('Runner', File.dirname(File.realpath(__FILE__)), flutter_root)
+################  Awesome Notifications pod modification 2 ###################

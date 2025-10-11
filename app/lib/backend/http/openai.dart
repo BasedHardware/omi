@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -108,4 +109,70 @@ Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) asyn
   prefs.setGptCompletionCache(promptBase64, response);
   debugPrint('executeGptPrompt response: $response');
   return response;
+}
+
+/// Generate speech from text using OpenAI TTS API with streaming
+/// Returns audio bytes in MP3 format
+Future<Uint8List?> openAiTextToSpeech(String text, {String voice = 'nova', String model = 'tts-1'}) async {
+  if (text.isEmpty) {
+    debugPrint('[OpenAI TTS] Text is empty, skipping');
+    return null;
+  }
+
+  try {
+    final startTime = DateTime.now();
+    debugPrint('[OpenAI TTS] ⏱️ START - Generating speech for ${text.length} characters with voice: $voice');
+    
+    final url = 'https://api.openai.com/v1/audio/speech';
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ${Env.openAIAPIKey}',
+    };
+    final body = jsonEncode({
+      'model': model, // 'tts-1' or 'tts-1-hd' (higher quality, slower)
+      'input': text,
+      'voice': voice, // alloy, echo, fable, onyx, nova, shimmer
+      'response_format': 'mp3', // mp3 for better compatibility, opus for lower latency
+    });
+
+    final apiCallStart = DateTime.now();
+    final client = http.Client();
+    
+    // Use send() instead of post() to get streamed response
+    final request = http.Request('POST', Uri.parse(url));
+    request.headers.addAll(headers);
+    request.body = body;
+    
+    final streamedResponse = await client.send(request).timeout(const Duration(seconds: 30));
+    
+    if (streamedResponse.statusCode != 200) {
+      final errorBody = await streamedResponse.stream.bytesToString();
+      debugPrint('[OpenAI TTS] ❌ Error ${streamedResponse.statusCode}: $errorBody');
+      return null;
+    }
+
+    // Collect audio bytes as they stream in
+    final audioBytes = <int>[];
+    var firstChunkReceived = false;
+    
+    await for (var chunk in streamedResponse.stream) {
+      if (!firstChunkReceived) {
+        final firstChunkTime = DateTime.now().difference(apiCallStart).inMilliseconds;
+        debugPrint('[OpenAI TTS] ⏱️ First audio chunk received in ${firstChunkTime}ms (TTFB)');
+        firstChunkReceived = true;
+      }
+      audioBytes.addAll(chunk);
+    }
+    
+    final apiCallDuration = DateTime.now().difference(apiCallStart).inMilliseconds;
+    final totalDuration = DateTime.now().difference(startTime).inMilliseconds;
+    
+    debugPrint('[OpenAI TTS] ⏱️ Full download took ${apiCallDuration}ms');
+    debugPrint('[OpenAI TTS] ✅ Received ${audioBytes.length} bytes in ${totalDuration}ms total');
+    
+    return Uint8List.fromList(audioBytes);
+  } catch (e) {
+    debugPrint('[OpenAI TTS] ❌ Exception: $e');
+    return null;
+  }
 }

@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/audio_response_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -334,6 +335,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
+
+    // Activate audio session for background TTS playback (iOS)
+    // This must be done while app is in foreground to enable background audio later
+    AudioResponseService().activateAudioSession();
 
     notifyListeners();
 

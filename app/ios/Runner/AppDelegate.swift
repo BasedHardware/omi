@@ -13,6 +13,7 @@ extension FlutterError: Error {}
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
+  private var audioResponseChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
 
   private var notificationTitleOnKill: String?
@@ -61,6 +62,12 @@ extension FlutterError: Error {}
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleRemindersCall(call, result: result)
     }
+    
+    // Create Audio Response method channel
+    audioResponseChannel = FlutterMethodChannel(name: "com.omi.audio_response", binaryMessenger: controller!.binaryMessenger)
+    audioResponseChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.handleAudioResponseCall(call, result: result)
+    }
 
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
@@ -94,6 +101,31 @@ extension FlutterError: Error {}
   
   private func handleAppleRemindersCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     appleRemindersService.handleMethodCall(call, result: result)
+  }
+  
+  private func handleAudioResponseCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "playAudioBytes":
+      if let args = call.arguments as? [String: Any],
+         let audioData = args["audioData"] as? FlutterStandardTypedData {
+        AudioResponseManager.shared.playAudioBytes(audioData: audioData.data) {
+          result(true)
+        }
+      } else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Audio data argument required", details: nil))
+      }
+    case "isHeadphonesConnected":
+      let isConnected = AudioResponseManager.shared.isHeadphonesConnected()
+      result(isConnected)
+    case "stopPlayback":
+      AudioResponseManager.shared.stopPlayback()
+      result(true)
+    case "activateAudioSession":
+      AudioResponseManager.shared.activateAudioSession()
+      result(true)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
   }
     
 
