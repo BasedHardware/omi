@@ -484,6 +484,18 @@ def process_conversation(
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
 
+    # Create audio files from chunks if private cloud sync was enabled
+    if not is_reprocess and conversation.private_cloud_sync_enabled:
+        try:
+            audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
+            if audio_files:
+                conversation.audio_files = audio_files
+                conversations_db.update_conversation(
+                    uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
+                )
+        except Exception as e:
+            print(f"Error creating audio files: {e}")
+
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
 

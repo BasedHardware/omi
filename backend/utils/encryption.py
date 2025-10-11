@@ -1,5 +1,6 @@
 import base64
 import os
+import struct
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -74,3 +75,65 @@ def decrypt(encrypted_data: str, uid: str) -> str:
         # to log this error.
         print(f"Decryption failed for user {uid}: {e}")
         return encrypted_data
+
+
+def encrypt_audio_chunk(data: bytes, uid: str) -> bytes:
+    """
+    Encrypt audio chunk and return length-prefixed binary format.
+    Format: [4 bytes length][12 bytes nonce][ciphertext + tag]
+
+    This format allows concatenating multiple encrypted chunks without decryption.
+    """
+    key = derive_key(uid)
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+
+    # Encrypt (includes authentication tag)
+    ciphertext = aesgcm.encrypt(nonce, data, None)
+
+    # Combine nonce + ciphertext
+    encrypted_payload = nonce + ciphertext
+
+    # Add length prefix (4 bytes, big-endian)
+    length = len(encrypted_payload)
+    return struct.pack('>I', length) + encrypted_payload
+
+
+def decrypt_audio_chunk(encrypted_data: bytes, uid: str, offset: int = 0):
+    """
+    Decrypt a single length-prefixed chunk.
+    Returns: (decrypted_data, bytes_consumed)
+    """
+    # Read length prefix
+    length = struct.unpack('>I', encrypted_data[offset : offset + 4])[0]
+    offset += 4
+
+    # Extract encrypted payload
+    encrypted_payload = encrypted_data[offset : offset + length]
+
+    # Extract nonce and ciphertext
+    nonce = encrypted_payload[:12]
+    ciphertext = encrypted_payload[12:]
+
+    # Decrypt
+    key = derive_key(uid)
+    aesgcm = AESGCM(key)
+    decrypted = aesgcm.decrypt(nonce, ciphertext, None)
+
+    return decrypted, 4 + length
+
+
+def decrypt_audio_file(encrypted_data: bytes, uid: str) -> bytes:
+    """
+    Decrypt an entire merged audio file (multiple concatenated chunks).
+    Each chunk is length-prefixed, allowing simple concatenation during merge.
+    """
+    decrypted_audio = bytearray()
+    offset = 0
+
+    while offset < len(encrypted_data):
+        chunk_data, bytes_consumed = decrypt_audio_chunk(encrypted_data, uid, offset)
+        decrypted_audio.extend(chunk_data)
+        offset += bytes_consumed
+
+    return bytes(decrypted_audio)

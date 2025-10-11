@@ -1,17 +1,18 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
+import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
@@ -331,46 +332,101 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(height: 16),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'Keep Audio Files After Processing',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(height: 6),
-                Text(
-                  SharedPreferencesUtil().unlimitedLocalStorageEnabled
-                      ? 'Create a complete personal archive of all your recordings'
-                      : 'Save storage space by only keeping failed uploads',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Complete Archive',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      SharedPreferencesUtil().unlimitedLocalStorageEnabled
+                          ? 'Create a complete personal archive of all your recordings'
+                          : 'Save phone\'s storage space by only keeping failed uploads',
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 8),
-                Text(
-                  SharedPreferencesUtil().unlimitedLocalStorageEnabled ? 'Complete Archive Mode' : 'Smart Storage Mode',
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+              ),
+              const SizedBox(width: 16),
+              CupertinoSwitch(
+                value: SharedPreferencesUtil().unlimitedLocalStorageEnabled,
+                onChanged: (value) {
+                  if (value) {
+                    _showConsentDialog(context, () {
+                      SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
+                      context.read<SyncProvider>().refreshWals();
+                    });
+                  } else {
+                    SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
+                    context.read<SyncProvider>().refreshWals();
+                  }
+                },
+                activeColor: Colors.deepPurpleAccent,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Divider(color: Colors.grey.withOpacity(0.2)),
+          const SizedBox(height: 16),
+          Consumer<UserProvider>(
+            builder: (context, userProvider, child) {
+              final isEnabled = userProvider.privateCloudSyncEnabled;
+              return InkWell(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const PrivateCloudSyncPage(),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Private Cloud Sync',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Store real-time recordings in the private cloud',
+                              style: TextStyle(
+                                color: Colors.grey.shade400,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        isEnabled ? 'On' : 'Off',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_ios, color: Colors.grey.shade400, size: 18),
+                    ],
                   ),
                 ),
-              ],
-            ),
-            value: SharedPreferencesUtil().unlimitedLocalStorageEnabled,
-            onChanged: (value) {
-              if (value) {
-                _showConsentDialog(context, () {
-                  SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-                  context.read<SyncProvider>().refreshWals();
-                });
-              } else {
-                SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-                context.read<SyncProvider>().refreshWals();
-              }
+              );
             },
-            activeColor: Colors.deepPurpleAccent,
           ),
         ],
       ),
@@ -971,61 +1027,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 child: Column(
                   children: [
                     _buildStorageControlCard(),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                        ),
-                        child: Theme(
-                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                          child: ExpansionTile(
-                            title: Text(
-                              'How Audio Storage Works',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            iconColor: Colors.white70,
-                            collapsedIconColor: Colors.white70,
-                            initiallyExpanded: false,
-                            children: [
-                              Padding(
-                                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '• Smart Storage (Default): Audio is processed instantly and only failed uploads are kept on your phone',
-                                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                                    ),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      '• Complete Archive: Keep all recordings on your phone for personal use, even after processing',
-                                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                                    ),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      'All audio stays on your device. Uninstalling the app will delete stored files.',
-                                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
                     _buildSummaryCard(syncProvider),
                     _buildStorageFilterChips(),
-                    SizedBox(
-                      height: 16,
-                    ),
+                    SizedBox(height: 16),
                   ],
                 ),
               ),

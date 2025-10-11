@@ -285,6 +285,30 @@ async def _listen(
         await websocket.close(code=1008, reason="Bad user")
         return
 
+    # Create or get conversation ID early for audio chunk storage
+    initial_conversation_id = None
+    private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
+    if existing_conversation := retrieve_in_progress_conversation(uid):
+        initial_conversation_id = existing_conversation['id']
+    else:
+        # Create a stub conversation for audio chunk storage
+        initial_conversation_id = str(uuid.uuid4())
+        stub_conversation = Conversation(
+            id=initial_conversation_id,
+            created_at=datetime.now(timezone.utc),
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+            structured=Structured(),
+            language=language,
+            transcript_segments=[],
+            photos=[],
+            status=ConversationStatus.in_progress,
+            source=ConversationSource.omi,
+            private_cloud_sync_enabled=private_cloud_sync_enabled,
+        )
+        conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
+        redis_db.set_in_progress_conversation_id(uid, initial_conversation_id)
+
     # Stream transcript
     async def _trigger_create_conversation_with_delay(delay_seconds: int, finished_at: datetime):
         try:
@@ -446,11 +470,16 @@ async def _listen(
             if photos:
                 conversations_db.store_conversation_photos(uid, conversation.id, photos)
 
+            # Update source if we now have photos
+            if photos and conversation.source != ConversationSource.openglass:
+                conversations_db.update_conversation(uid, conversation.id, {'source': ConversationSource.openglass})
+                conversation.source = ConversationSource.openglass
+
             conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             redis_db.set_in_progress_conversation_id(uid, conversation.id)
             return conversation, (starts, ends)
 
-        # new conversation
+        # Should not reach here since we create conversation at start, but handle gracefully
         if not segments and not photos:
             return None, (0, 0)
 
@@ -459,18 +488,19 @@ async def _listen(
         else:  # No segments, only photos
             started_at = finished_at
 
+        private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
         conversation = Conversation(
-            id=str(uuid.uuid4()),
-            uid=uid,
-            structured=Structured(),
-            language=language,
+            id=initial_conversation_id,
             created_at=started_at,
             started_at=started_at,
             finished_at=finished_at,
+            structured=Structured(),
+            language=language,
             transcript_segments=segments,
             photos=photos,
             status=ConversationStatus.in_progress,
             source=ConversationSource.openglass if photos else ConversationSource.omi,
+            private_cloud_sync_enabled=private_cloud_sync_enabled,
         )
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
@@ -607,6 +637,7 @@ async def _listen(
     #
     def create_pusher_task_handler():
         nonlocal websocket_active
+        nonlocal initial_conversation_id
 
         pusher_ws = None
         pusher_connect_lock = asyncio.Lock()
@@ -614,7 +645,7 @@ async def _listen(
 
         # Transcript
         segment_buffers = []
-        in_progress_conversation_id = None
+        in_progress_conversation_id = initial_conversation_id
 
         def transcript_send(segments, conversation_id):
             nonlocal segment_buffers
@@ -718,10 +749,22 @@ async def _listen(
         async def _connect():
             nonlocal pusher_ws
             nonlocal pusher_connected
+            nonlocal in_progress_conversation_id
 
             try:
                 pusher_ws = await connect_to_trigger_pusher(uid, sample_rate, retries=5)
                 pusher_connected = True
+
+                # Send conversation ID immediately after connecting
+                if pusher_ws and in_progress_conversation_id:
+                    try:
+                        # 103|conversation_id
+                        data = bytearray()
+                        data.extend(struct.pack("I", 103))
+                        data.extend(bytes(in_progress_conversation_id, "utf-8"))
+                        await pusher_ws.send(data)
+                    except Exception as e:
+                        print(f"Failed to send conversation_id to pusher: {e}", uid, session_id)
             except Exception as e:
                 print(f"Exception in connect: {e}")
 

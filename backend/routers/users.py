@@ -167,6 +167,22 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
     return {'status': 'ok'}
 
 
+# *************************************************
+# ************* PRIVATE CLOUD SYNC ****************
+# *************************************************
+
+
+@router.post('/v1/users/private-cloud-sync', tags=['v1'])
+def set_private_cloud_sync(value: bool, uid: str = Depends(auth.get_current_user_uid)):
+    set_user_private_cloud_sync_enabled(uid, value)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/private-cloud-sync', tags=['v1'])
+def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
+    return {'private_cloud_sync_enabled': get_user_private_cloud_sync_enabled(uid)}
+
+
 # ****************************************
 # ************* PEOPLE CRUD **************
 # ****************************************
