@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/services/audio_response_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:omi/utils/file.dart';
@@ -398,6 +399,7 @@ class MessageProvider extends ChangeNotifier {
 
   Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
       {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
+    // Removed debug spam
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -422,9 +424,12 @@ class MessageProvider extends ChangeNotifier {
     messages.insert(0, message);
     notifyListeners();
 
+    bool shouldPlayAudio = _isNextMessageFromVoice && Platform.isIOS;
+
     try {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
+        
         if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
@@ -448,6 +453,12 @@ class MessageProvider extends ChangeNotifier {
           message = chunk.message!;
           messages[0] = message;
           notifyListeners();
+          
+          // Play audio response through headphones if this was a voice command
+          if (shouldPlayAudio && message.text.isNotEmpty) {
+            debugPrint('Playing audio response through headphones: ${message.text.substring(0, message.text.length > 50 ? 50 : message.text.length)}...');
+            AudioResponseService().playTextToSpeech(message.text);
+          }
           continue;
         }
 
@@ -464,6 +475,7 @@ class MessageProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
+      debugPrint('[MESSAGE PROVIDER] ERROR: Exception while processing voice message: $e');
       message.text = ServerMessageChunk.failedMessage().text;
       notifyListeners();
     }
@@ -482,6 +494,9 @@ class MessageProvider extends ChangeNotifier {
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
 
+      // Capture voice flag before resetting
+      bool shouldPlayAudio = _isNextMessageFromVoice && Platform.isIOS;
+
     MixpanelManager().chatMessageSent(
       message: text,
       includesFiles: uploadedFiles.isNotEmpty,
@@ -490,8 +505,26 @@ class MessageProvider extends ChangeNotifier {
       isPersonaChat: isPersonaChat,
       isVoiceInput: _isNextMessageFromVoice,
     );
+    
+    // Create user message first (shows the voice command text)
+    var userMessage = ServerMessage(
+      DateTime.now().millisecondsSinceEpoch.toString(),
+      DateTime.now(),
+      text,
+      MessageSender.human,
+      MessageType.text,
+      currentAppId,
+      false,
+      [],
+      [],
+      [],
+    );
+    messages.insert(0, userMessage);
+    notifyListeners();
+    
     _isNextMessageFromVoice = false;
 
+    // Create AI response message (will be filled as it streams)
     var message = ServerMessage.empty(appId: currentAppId);
     messages.insert(0, message);
     notifyListeners();
@@ -535,6 +568,12 @@ class MessageProvider extends ChangeNotifier {
           message = chunk.message!;
           messages[0] = message;
           notifyListeners();
+          
+          // Play audio response through headphones if this was a voice command
+          if (shouldPlayAudio && message.text.isNotEmpty) {
+            debugPrint('Playing audio response through headphones: ${message.text.substring(0, message.text.length > 50 ? 50 : message.text.length)}...');
+            AudioResponseService().playTextToSpeech(message.text);
+          }
           continue;
         }
 
