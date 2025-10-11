@@ -140,6 +140,34 @@ Future<bool> deletePermissionAndRecordings() async {
 
 /**/
 
+Future<bool> setPrivateCloudSyncEnabled(bool value) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/private-cloud-sync?value=$value',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setPrivateCloudSyncEnabled response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> getPrivateCloudSyncEnabled() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/private-cloud-sync',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('getPrivateCloudSyncEnabled response: ${response.body}');
+  if (response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    return jsonResponse['private_cloud_sync_enabled'] as bool? ?? false;
+  }
+  return false;
+}
+
 Future<Person?> createPerson(String name) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people',
