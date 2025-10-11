@@ -92,9 +92,9 @@ jsonschema==4.23.0
 jsonschema-specifications==2023.12.1
 julius==0.2.7
 kiwisolver==1.4.5
-langchain==1.0.0a10
-langchain-community==0.3.3
-langchain-core==1.0.0a6
+langchain==1.0.0a14
+langchain-community==0.3.31
+langchain-core==1.0.0a8
 langchain-groq==0.2.0
 langchain-openai==0.2.3
 langchain-pinecone==0.2.0

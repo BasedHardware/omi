@@ -3,12 +3,14 @@ import uuid
 from dataclasses import dataclass
 from typing import List, Optional, AsyncGenerator, Annotated
 
-from langchain.agents import create_agent
+from langchain.agents import create_agent, AgentState
+from langchain.agents.middleware import AgentMiddleware
 from langchain.tools import InjectedState
-from langchain_core.messages import AIMessageChunk, AIMessage
-from langchain_core.tools import tool
+from langchain_core.messages import AIMessageChunk, AIMessage, ToolMessage
+from langchain_core.tools import tool, InjectedToolCallId
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.runtime import get_runtime
+from langgraph.types import Command
 from pydantic import BaseModel
 
 import database.conversations as conversations_db
@@ -17,6 +19,8 @@ from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
+from models.conversation import Conversation
+from models.memories import Memory
 from utils.app_integrations import get_github_docs_content
 from utils.llm.chat import (
     retrieve_context_dates_by_question,
@@ -25,6 +29,7 @@ from utils.llm.chat import (
 from utils.llm.clients import llm_mini_stream, llm_persona_medium_stream, llm_persona_mini_stream
 from utils.llms.memory import get_prompt_data
 from utils.other.chat_file import FileChatTool
+from utils.retrieval.state import BaseAgentState
 
 
 @dataclass
@@ -111,26 +116,47 @@ def query_vectors(uid: str, question: str, tz: str = "UTC", limit: int = 100):
     return conversations
 
 @tool
-def get_memories():
+def get_memories(question: str = "",
+                 state: Annotated[AgentState, InjectedState] = None,
+                 tool_call_id: Annotated[str, InjectedToolCallId] = ""
+                 ) -> Command:
     """ Retrieve user memories.
     """
+    print(f"get_memories: {question}")
     runtime = get_runtime(Context)
     user_name, user_made_memories, generated_memories = get_prompt_data(runtime.context.uid)
-    return {
-        "user_name": user_name,
-        "user_made_memories": user_made_memories,
-        "memories_found": generated_memories,
-    }
+    memories_str = (
+        f'you already know the following facts about {user_name}: \n{Memory.get_memories_as_str(generated_memories)}.'
+    )
+    if user_made_memories:
+        memories_str += (
+            f'\n\n{user_name} also shared the following about self: \n{Memory.get_memories_as_str(user_made_memories)}'
+        )
+
+    return Command(update={
+        "memories": user_made_memories + generated_memories,
+        "messages": [ToolMessage(content=memories_str, tool_call_id=tool_call_id)]})
 
 @tool
-def get_conversations(question: str = ""):
+def get_conversations(question: str = "",
+                      state: Annotated[AgentState, InjectedState] = None,
+                      tool_call_id: Annotated[str, InjectedToolCallId] = ""
+                      ) -> Command:
     """ Retrieve user conversations.
 
     Args:
         question (str): The question to filter memories.
      """
+    print(f"get_conversations: {question}")
     runtime = get_runtime(Context)
-    return query_vectors(runtime.context.uid, runtime.context.tz, question)
+    conversations = query_vectors(runtime.context.uid, runtime.context.tz, question)
+    # conversations_list = [conversation["structured"]["overview"] for conversation in conversations]
+    return Command(update={
+        "conversations": conversations,
+        "messages": [ToolMessage(content=Conversation.conversations_to_string(conversations), tool_call_id=tool_call_id)]})
+
+    # return Command(update=[ToolMessage(conversations_list, tool_call_id=tool_call_id)
+    # return Command(update={"get_conversations": conversations_list})
 
 @tool
 def get_omi_documentation():
@@ -168,25 +194,33 @@ class ResponseFormat(BaseModel):
 def chat_file(question: str):
     """ Process user inquires about files uploaded.
     """
+    print(f"chat_file: {question}")
     runtime = get_runtime(Context)
     print(runtime.context.files)
     fc_tool = FileChatTool(runtime.context.uid, runtime.context.chat_session.id)
     answer = fc_tool.process_chat_with_file(question, runtime.context.files)
     return AIMessage(content=answer)
 
-def get_files(messages: List[Message], chat_session: Optional[ChatSession] = None):
+def get_files(messages: List[Message], chat_session: ChatSession = None):
     last_message = messages[-1]
     if len(last_message.files_id) > 0:
         file_ids = last_message.files_id
     elif chat_session:
         file_ids = chat_session.file_ids
     else:
-        fc_tool = FileChatTool()
-        file_ids = fc_tool.get_files()
+        file_ids = None
+
     return file_ids
 
+class StateMiddleware(AgentMiddleware[BaseAgentState]):
+    state_schema = BaseAgentState
+
 PROMPT_BASE = """You are a helpful assistant of wearable AI device named Omi.
-{CHAT_FILES}"""
+{CHAT_FILES}
+- You MUST cite the most relevant memories or conversations that answer the question.   
+- Cite using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
+- NO SPACE between the last word and the citation.
+- Avoid citing irrelevant memories and conversations."""
 # Add found memories if get_memories was called.
 
 def create_graph(
@@ -224,15 +258,16 @@ def create_graph(
         graph = create_agent(
             model,
             tools=[],
-            prompt=app.persona_prompt
+            system_prompt=app.persona_prompt
         )
     else:
         graph = create_agent(
             llm_mini_stream,
             tools,
-            prompt=PROMPT_BASE.format(CHAT_FILES=prompt_chat_files),
+            system_prompt=PROMPT_BASE.format(CHAT_FILES=prompt_chat_files),
+            middleware=[StateMiddleware()],
             checkpointer=checkpointer,
-            response_format=ResponseFormat
+            # response_format=ResponseFormat
         )
 
     return graph
@@ -266,7 +301,7 @@ async def execute_graph_chat_stream(
             subgraphs=True,
     ):
         ns, stream_mode, payload = event
-        print(stream_mode, payload)
+        print(ns, stream_mode, payload)
         if stream_mode == "messages":
             chunk, metadata = payload
             metadata: dict
@@ -294,18 +329,45 @@ async def execute_graph_chat_stream(
                 # Only yield content from the main agent to avoid duplication
                 if content and len(ns) == 0:
                     yield f"data: {content}"
+            elif isinstance(chunk, ToolMessage):
+                chunk: ToolMessage
+                # if chunk.name in ['get_memories', 'get_conversations']:
+                #     callback_data['memories_found'] = json.loads(chunk.content)
             else:
                 # Pass other chunks like ToolMessage
                 pass
 
         elif stream_mode == "updates":
             payload: dict
-            if ('agent' in payload
-                    and isinstance(payload['agent']['messages'][0], AIMessage)
-                    and payload['agent'].get('structured_response')):
-                callback_data['answer'] = payload['agent']['structured_response'].answer
-                callback_data['memories_found'] = payload['agent']['structured_response'].memories_found
-                # callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
+            if 'tools' in payload:
+                if not callback_data.get('memories_found'):
+                    callback_data['memories_found'] = []
+                if payload['tools'].get('conversations'):
+                    callback_data['memories_found'] += payload['tools']['conversations']
+                if payload['tools'].get('memories'):
+                    callback_data['memories_found'] += payload['tools']['memories']
+
+            for k in ['model', 'agent']:
+                if k in payload:
+                    last_message: AIMessage = payload[k]['messages'][0]
+                    if last_message.response_metadata['finish_reason'] == 'stop':
+                        callback_data['answer'] = last_message.content
+                        # callback_data['answer'] = payload[k]['structured_response'].answer
+
+            # if 'tools' in payload:
+            #     tool_message: ToolMessage = payload['tools']['messages'][0]
+            #
+            # if 'agent' in payload and isinstance(payload['agent']['messages'][0], AIMessage):
+            #     ai_message: AIMessage = payload['agent']['messages'][0]
+            #     print(ai_message.response_metadata['finish_reason'], ai_message.content)
+            #     if payload['agent'].get('structured_response'):
+            #         callback_data['answer'] = payload['agent']['structured_response'].answer
+            #         callback_data['memories_found'] = payload['agent']['structured_response'].memories_found
+            #         # callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
+            #     else:
+            #         if ai_message.response_metadata['finish_reason'] == 'stop':
+            #             callback_data['answer'] = ai_message.content
+            #             # callback_data['memories_found'] = payload['agent']['structured_response'].memories_found
 
         elif stream_mode == "custom":
             # Forward custom events as is
