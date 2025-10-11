@@ -1,6 +1,7 @@
 import struct
 import asyncio
 import json
+import time
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -90,8 +91,6 @@ async def _websocket_util_trigger(
                     # Private cloud sync
                     if private_cloud_sync_enabled and current_conversation_id:
                         if private_cloud_chunk_start_time is None:
-                            import time
-
                             private_cloud_chunk_start_time = time.time()
 
                         private_cloud_sync_buffer.extend(data[4:])

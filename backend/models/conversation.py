@@ -12,7 +12,7 @@ from models.transcript_segment import TranscriptSegment
 class AudioFile(BaseModel):
     id: str = Field(description="Unique identifier for the audio file")
     conversation_id: str = Field(description="ID of the conversation this audio belongs to")
-    file_id: str = Field(description="GCS file path/identifier")
+    chunk_timestamps: List[float] = Field(description="List of chunk timestamps (for on-demand merging)")
     provider: str = Field(default="gcp", description="Storage provider (e.g., 'gcp')")
     started_at: Optional[datetime] = Field(
         default=None, description="When this audio file started (absolute timestamp)"
