@@ -366,6 +366,33 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   return null;
 }
 
+Future<Map<String, dynamic>> getTrainingDataOptIn() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/training-data-opt-in',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return {'opted_in': false, 'status': null};
+  debugPrint('getTrainingDataOptIn response: ${response.body}');
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return {'opted_in': false, 'status': null};
+}
+
+Future<bool> setTrainingDataOptIn() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/training-data-opt-in',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setTrainingDataOptIn response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<UserSubscriptionResponse?> getUserSubscription() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/me/subscription',

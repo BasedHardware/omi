@@ -132,6 +132,32 @@ async def send_silent_user_notification(user_id: str):
     print(f"Silent user notification sent to user {user_id}")
 
 
+def send_training_data_submitted_notification(user_id: str):
+    """Send a notification when user submits their training data opt-in request."""
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    # Get user name from Firebase Auth
+    try:
+        user = auth.get_user(user_id)
+        name = user.display_name
+        if not name and user.email:
+            name = user.email.split('@')[0].capitalize()
+        if not name:
+            name = "there"
+    except Exception as e:
+        print(f"Error getting user info from Firebase Auth: {e}")
+        name = "there"
+
+    title = "omi"
+    body = f"Hey {name}! Thanks for your interest in our training data program. We've received your request and our team will review it shortly. We'll notify you as soon as it's approved!"
+
+    send_notification(token, title, body)
+    print(f"Training data submitted notification sent to user {user_id}")
+
+
 async def send_bulk_notification(user_tokens: list, title: str, body: str):
     try:
         batch_size = 500

@@ -11,6 +11,8 @@ class UserProvider with ChangeNotifier {
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
   bool _privateCloudSyncEnabled = false;
+  bool _trainingDataOptedIn = false;
+  String? _trainingDataStatus;
 
   bool _isMigrating = false;
   bool _migrationFailed = false;
@@ -26,6 +28,8 @@ class UserProvider with ChangeNotifier {
   String get dataProtectionLevel => _dataProtectionLevel;
   bool get isLoading => _isLoading;
   bool get privateCloudSyncEnabled => _privateCloudSyncEnabled;
+  bool get trainingDataOptedIn => _trainingDataOptedIn;
+  String? get trainingDataStatus => _trainingDataStatus;
   bool get isMigrating => _isMigrating;
   bool get migrationFailed => _migrationFailed;
   int get migrationTotalCount => _migrationQueue.length;
@@ -80,6 +84,9 @@ class UserProvider with ChangeNotifier {
       // Load private cloud sync status
       await _loadPrivateCloudSyncStatus();
 
+      // Load training data opt-in status
+      await _loadTrainingDataOptIn();
+
       final migrationStatus = userProfile['migration_status'];
       if (migrationStatus != null && migrationStatus['status'] == 'in_progress') {
         final targetLevel = migrationStatus['target_level'];
@@ -101,6 +108,32 @@ class UserProvider with ChangeNotifier {
     } catch (e) {
       Logger.error('Failed to load private cloud sync status: $e');
       _privateCloudSyncEnabled = false;
+    }
+  }
+
+  Future<void> _loadTrainingDataOptIn() async {
+    try {
+      final data = await getTrainingDataOptIn();
+      _trainingDataOptedIn = data['opted_in'] ?? false;
+      _trainingDataStatus = data['status'];
+    } catch (e) {
+      Logger.error('Failed to load training data opt-in status: $e');
+      _trainingDataOptedIn = false;
+      _trainingDataStatus = null;
+    }
+  }
+
+  Future<void> optInForTrainingData() async {
+    try {
+      final success = await setTrainingDataOptIn();
+      if (success) {
+        _trainingDataOptedIn = true;
+        _trainingDataStatus = 'pending_review';
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      Logger.error('Failed to opt-in for training data: $e\n$stackTrace');
+      rethrow;
     }
   }
 

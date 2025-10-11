@@ -361,6 +361,26 @@ def get_user_subscription(uid: str) -> Subscription:
     return default_subscription
 
 
+def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
+    """Get user's training data opt-in status."""
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict()
+    return user_data.get('training_data_opt_in', None)
+
+
+def set_user_training_data_opt_in(uid: str, status: str):
+    """Set user's training data opt-in status. Status can be: pending_review, approved, rejected"""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
+        {
+            'training_data_opt_in': {
+                'status': status,
+                'requested_at': datetime.now(timezone.utc),
+            }
+        }
+    )
+
+
 def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
     """
     Gets the user's subscription if it is currently valid for use.
