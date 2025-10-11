@@ -300,6 +300,7 @@ def _finalize_audio_file_group(
 
     return AudioFile(
         id=file_id,
+        uid=uid,
         conversation_id=conversation_id,
         chunk_timestamps=timestamps,
         provider='gcp',
