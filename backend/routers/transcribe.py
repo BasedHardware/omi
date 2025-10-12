@@ -150,7 +150,6 @@ async def _listen(
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None
-    seconds_to_trim = None
     seconds_to_add = None
     current_conversation_id = None
 
@@ -184,9 +183,9 @@ async def _listen(
                     print(f"Error sending credit limit notification: {e}", uid, session_id)
 
                 # Lock the in-progress conversation if credit limit is reached
-                if current_conversation_id:
+                if current_conversation_id and current_conversation_id not in locked_conversation_ids:
                     conversation = conversations_db.get_conversation(uid, current_conversation_id)
-                    if conversation and conversation.get('id') and conversation['id'] not in locked_conversation_ids:
+                    if conversation and conversation['status'] == ConversationStatus.in_progress:
                         conversation_id = conversation['id']
                         print(f"Locking conversation {conversation_id} due to transcription limit.", uid, session_id)
                         conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
@@ -229,7 +228,7 @@ async def _listen(
         nonlocal websocket_active
         if not websocket_active:
             return
-        return safe_create_task(_asend_message_event(msg))
+        return asyncio.create_task(_asend_message_event(msg))
 
     # Heart beat
     started_at = time.time()
@@ -337,16 +336,15 @@ async def _listen(
     asyncio.create_task(finalize_processing_conversations())
 
     # Send last completed conversation to client
-    async def send_last_conversation():
+    def send_last_conversation():
         last_conversation = conversations_db.get_last_completed_conversation(uid)
         if last_conversation:
-            await _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
+            _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
 
-    asyncio.create_task(send_last_conversation())
+    send_last_conversation()
 
     # Create new stub conversation for next batch
     async def _create_new_in_progress_conversation():
-        nonlocal seconds_to_trim
         nonlocal seconds_to_add
         nonlocal current_conversation_id
 
@@ -367,21 +365,20 @@ async def _listen(
         conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
         current_conversation_id = new_conversation_id
-        seconds_to_trim = None
         seconds_to_add = None
 
         print(f"Created new stub conversation: {new_conversation_id}", uid, session_id)
 
     async def _process_current_conversation(conversation_id: str):
         print("_process_current_conversation", uid, session_id)
-
         conversation = conversations_db.get_conversation(uid, conversation_id)
-        if conversation and (conversation.get('transcript_segments') or conversation.get('photos')):
-            await _create_conversation(conversation)
-        else:
-            # Discard
-            conversations_db.update_conversation_status(uid, conversation_id, ConversationStatus.completed)
-            conversations_db.set_conversation_as_discarded(uid, conversation_id)
+        if conversation:
+            has_content = conversation.get('transcript_segments') or conversation.get('photos')
+            if has_content:
+                await _create_conversation(conversation)
+            else:
+                print(f'Clean up the conversation {conversation_id}, reason: no content', uid, session_id)
+                conversations_db.delete_conversation(uid, conversation_id)
 
         await _create_new_in_progress_conversation()
 
@@ -845,20 +842,17 @@ async def _listen(
             # Check if conversation should be processed
             finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
             seconds_since_last_update = (datetime.now(timezone.utc) - finished_at).total_seconds()
-            has_content = conversation.get('transcript_segments') or conversation.get('photos')
-            should_process = has_content and seconds_since_last_update >= conversation_creation_timeout
-            if not should_process:
-                return
-
-            print(
-                f"Conversation {current_conversation_id} timeout reached ({seconds_since_last_update:.1f}s). Processing...",
-                uid,
-                session_id,
-            )
-            await _process_current_conversation(current_conversation_id)
+            should_process = seconds_since_last_update >= conversation_creation_timeout
+            if should_process:
+                print(
+                    f"Conversation {current_conversation_id} timeout reached ({seconds_since_last_update:.1f}s). Processing...",
+                    uid,
+                    session_id,
+                )
+                await _process_current_conversation(current_conversation_id)
 
     async def stream_transcript_process():
-        nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
+        nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket
         nonlocal current_conversation_id, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
@@ -878,18 +872,10 @@ async def _listen(
             transcript_segments = []
             if segments_to_process:
                 last_transcript_time = time.time()
-                if seconds_to_trim is None:
-                    seconds_to_trim = segments_to_process[0]["start"]
-
                 if seconds_to_add:
                     for i, segment in enumerate(segments_to_process):
                         segment["start"] += seconds_to_add
                         segment["end"] += seconds_to_add
-                        segments_to_process[i] = segment
-                elif seconds_to_trim:
-                    for i, segment in enumerate(segments_to_process):
-                        segment["start"] -= seconds_to_trim
-                        segment["end"] -= seconds_to_trim
                         segments_to_process[i] = segment
 
                 newly_processed_segments = [
