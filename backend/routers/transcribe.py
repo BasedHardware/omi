@@ -150,6 +150,7 @@ async def _listen(
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None
+    seconds_to_trim = None
     seconds_to_add = None
     current_conversation_id = None
 
@@ -232,8 +233,6 @@ async def _listen(
 
     # Heart beat
     started_at = time.time()
-    timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
-    has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
     inactivity_timeout_seconds = 30
     last_audio_received_time = None
 
@@ -252,13 +251,6 @@ async def _listen(
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text("ping")
                 else:
-                    break
-
-                # timeout
-                if has_timeout and time.time() - started_at >= timeout_seconds:
-                    print(f"Session timeout is hit by soft timeout {timeout_seconds}", uid, session_id)
-                    websocket_close_code = 1001
-                    websocket_active = False
                     break
 
                 # Inactivity timeout
@@ -345,6 +337,7 @@ async def _listen(
 
     # Create new stub conversation for next batch
     async def _create_new_in_progress_conversation():
+        nonlocal seconds_to_trim
         nonlocal seconds_to_add
         nonlocal current_conversation_id
 
@@ -365,6 +358,7 @@ async def _listen(
         conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
         current_conversation_id = new_conversation_id
+        seconds_to_trim = None
         seconds_to_add = None
 
         print(f"Created new stub conversation: {new_conversation_id}", uid, session_id)
@@ -412,9 +406,13 @@ async def _listen(
             # Continue with the existing conversation
             current_conversation_id = existing_conversation['id']
             started_at = datetime.fromisoformat(existing_conversation['started_at'].isoformat())
-            seconds_to_add = (datetime.now(timezone.utc) - started_at).total_seconds()
+            seconds_to_add = (
+                (datetime.now(timezone.utc) - started_at).total_seconds()
+                if existing_conversation['transcript_segments']
+                else None
+            )
             print(
-                f"Resuming conversation {current_conversation_id} with {seconds_to_add:.1f}s offset. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s",
+                f"Resuming conversation {current_conversation_id} with {(seconds_to_add if seconds_to_add else 0):.1f}s offset. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s",
                 uid,
                 session_id,
             )
@@ -452,6 +450,12 @@ async def _listen(
         starts, ends = (0, 0)
 
         if segments:
+            # If conversation has no segments yet but we're adding some, update started_at
+            if not conversation.transcript_segments:
+                started_at = finished_at - timedelta(seconds=max(0, segments[-1].end))
+                conversations_db.update_conversation(uid, conversation.id, {'started_at': started_at})
+                conversation.started_at = started_at
+
             conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
@@ -842,8 +846,7 @@ async def _listen(
             # Check if conversation should be processed
             finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
             seconds_since_last_update = (datetime.now(timezone.utc) - finished_at).total_seconds()
-            should_process = seconds_since_last_update >= conversation_creation_timeout
-            if should_process:
+            if seconds_since_last_update >= conversation_creation_timeout:
                 print(
                     f"Conversation {current_conversation_id} timeout reached ({seconds_since_last_update:.1f}s). Processing...",
                     uid,
@@ -852,7 +855,7 @@ async def _listen(
                 await _process_current_conversation(current_conversation_id)
 
     async def stream_transcript_process():
-        nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket
+        nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
         nonlocal current_conversation_id, translation_enabled, speech_profile_processed, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
@@ -872,10 +875,18 @@ async def _listen(
             transcript_segments = []
             if segments_to_process:
                 last_transcript_time = time.time()
+                if seconds_to_trim is None:
+                    seconds_to_trim = segments_to_process[0]["start"]
+
                 if seconds_to_add:
                     for i, segment in enumerate(segments_to_process):
                         segment["start"] += seconds_to_add
                         segment["end"] += seconds_to_add
+                        segments_to_process[i] = segment
+                elif seconds_to_trim:
+                    for i, segment in enumerate(segments_to_process):
+                        segment["start"] -= seconds_to_trim
+                        segment["end"] -= seconds_to_trim
                         segments_to_process[i] = segment
 
                 newly_processed_segments = [
