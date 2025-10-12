@@ -82,10 +82,16 @@ def send_message(
         type='text',
         app_id=compat_app_id,
     )
-    if data.file_ids is not None and chat_session:
-        new_file_ids = chat_session.retrieve_new_file(data.file_ids)
-        chat_session.add_file_ids(data.file_ids)
-        chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+    
+    # Handle file attachments
+    if data.file_ids is not None and len(data.file_ids) > 0:
+        if chat_session:
+            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
+            chat_session.add_file_ids(data.file_ids)
+            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+        else:
+            # No chat session, use all file_ids
+            new_file_ids = data.file_ids
 
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
@@ -105,6 +111,14 @@ def send_message(
     app_id_from_app = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    
+    # Add the current message to the messages list so the AI can see any attached files
+    messages.append(message)
+    
+    print(f"send_message: current message has {len(message.files)} files, {len(message.files_id)} file_ids")
+    if message.files:
+        for f in message.files:
+            print(f"  - File: {f.name}, openai_file_id: {f.openai_file_id}, is_image: {f.is_image()}")
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])

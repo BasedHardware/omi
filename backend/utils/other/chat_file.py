@@ -1,6 +1,7 @@
 import asyncio
 import mimetypes
 import re
+import uuid
 from pathlib import Path
 from typing import List, Optional
 
@@ -68,27 +69,41 @@ class FileChatTool:
 
     @staticmethod
     def upload(file_path) -> dict:
+        import shutil
         result = {}
         file = File(file_path)
         file.get_mime_type()
 
         if file.is_image():
             file.generate_thumbnail()
-            file.purpose = "vision"
+            # For images: save locally for vision API, don't upload to OpenAI Files
+            # Create local storage directory if it doesn't exist
+            local_storage_dir = Path("_chat_files")
+            local_storage_dir.mkdir(exist_ok=True)
+            
+            # Generate unique filename
+            unique_filename = f"{uuid.uuid4()}_{Path(file_path).name}"
+            local_file_path = local_storage_dir / unique_filename
+            
+            # Copy file to local storage
+            shutil.copy2(file_path, local_file_path)
+            
+            result["file_name"] = Path(file_path).name
+            result["file_id"] = str(local_file_path)  # Store local path as file_id
+            result["mime_type"] = file.mime_type
+            result["thumbnail"] = file.thumbnail_path
+            result["thumbnail_name"] = file.thumbnail_name
+        else:
+            # For non-images: upload to OpenAI Files API as before
+            with open(file_path, 'rb') as f:
+                response = openai.files.create(file=f, purpose=file.purpose)
+                if response:
+                    file.file_id = response.id
+                    file.file_name = response.filename
 
-        with open(file_path, 'rb') as f:
-            # upload file to OpenAI
-            response = openai.files.create(file=f, purpose=file.purpose)
-            if response:
-                file.file_id = response.id
-                file.file_name = response.filename
-
-                result["file_name"] = response.filename
-                result["file_id"] = response.id
-                result["mime_type"] = file.mime_type
-                if file.is_image():
-                    result["thumbnail"] = file.thumbnail_path
-                    result["thumbnail_name"] = file.thumbnail_name
+                    result["file_name"] = response.filename
+                    result["file_id"] = response.id
+                    result["mime_type"] = file.mime_type
         return result
 
     def process_chat_with_file(self, question, file_ids: List[str]):
