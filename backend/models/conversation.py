@@ -100,11 +100,12 @@ class ActionItem(BaseModel):
 
     @staticmethod
     def actions_to_string(action_items: List['ActionItem']) -> str:
-        if not action_items:
-            return 'None'
-        return '\n'.join(
-            [f"- {item.description} ({'completed' if item.completed else 'pending'})" for item in action_items]
-        )
+        result = []
+        for item in action_items:
+            if isinstance(item, dict):
+                item = ActionItem(**item)
+            result.append(f"- {item.description} ({'completed' if item.completed else 'pending'})")
+        return '\n'.join(result)
 
 
 class Event(BaseModel):
@@ -264,6 +265,60 @@ class Conversation(BaseModel):
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
         self.processing_memory_id = self.processing_conversation_id
+    #
+    # def model_dump_for_llm(self) -> str:
+    #     d = self.model_dump(include={'category', 'title', 'overview'})
+    #     return d
+
+    @staticmethod
+    def conversations_for_llm(
+        conversations: List['Conversation'],
+        use_transcript: bool = False,
+        include_timestamps: bool = False,
+        people: List[Person] = None,
+    ) -> List[dict]:
+        result = []
+        people_map = {p.id: p for p in people} if people else {}
+        for i, conversation in enumerate(conversations):
+            if isinstance(conversation, dict):
+                conversation = Conversation(**conversation)
+            item = {
+                'index': i + 1,
+                'category': str(conversation.structured.category.value),
+                'title': str(conversation.structured.title),
+                'overview': str(conversation.structured.overview),
+                'created_at': conversation.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC",
+            }
+
+            # attendees
+            if people_map:
+                conv_person_ids = set(conversation.get_person_ids())
+                if conv_person_ids:
+                    attendees_names = [people_map[pid].name for pid in conv_person_ids if pid in people_map]
+                    if attendees_names:
+                        item['attendees'] = attendees_names
+
+            if conversation.structured.action_items:
+                item['actions'] = [item.description for item in conversation.structured.action_items]
+
+            if conversation.structured.events:
+                item['events'] = [{'title': event.title, 'start': event.start,
+                                   'duration_minutes': event.duration} for event in conversation.structured.events]
+
+            if conversation.apps_results and len(conversation.apps_results) > 0:
+                item['summarization'] = conversation.apps_results[0].content
+
+            if use_transcript:
+                item['transcript'] = conversation.get_transcript(include_timestamps=include_timestamps, people=people)
+                # photos
+                photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
+                if photo_descriptions != 'None':
+                    item['photos'] = photo_descriptions
+            # "type": "text"
+            # "text": "Your message here"
+            result.append(item)
+
+        return result
 
     @staticmethod
     def conversations_to_string(

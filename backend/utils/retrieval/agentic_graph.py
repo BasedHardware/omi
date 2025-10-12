@@ -13,13 +13,14 @@ from langgraph.runtime import get_runtime
 from langgraph.types import Command
 from pydantic import BaseModel
 
+import database.action_items as action_items_db
 import database.conversations as conversations_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
-from models.conversation import Conversation
+from models.conversation import Conversation, ActionItem
 from models.memories import Memory
 from utils.app_integrations import get_github_docs_content
 from utils.llm.chat import (
@@ -150,13 +151,35 @@ def get_conversations(question: str = "",
     print(f"get_conversations: {question}")
     runtime = get_runtime(Context)
     conversations = query_vectors(runtime.context.uid, runtime.context.tz, question)
-    # conversations_list = [conversation["structured"]["overview"] for conversation in conversations]
     return Command(update={
         "conversations": conversations,
         "messages": [ToolMessage(content=Conversation.conversations_to_string(conversations), tool_call_id=tool_call_id)]})
 
-    # return Command(update=[ToolMessage(conversations_list, tool_call_id=tool_call_id)
-    # return Command(update={"get_conversations": conversations_list})
+@tool
+def get_actions(question: str = "",
+                      state: Annotated[AgentState, InjectedState] = None,
+                      tool_call_id: Annotated[str, InjectedToolCallId] = ""
+                      ) -> Command:
+    """ Retrieve user actions.
+
+    Args:
+        question (str): The question to filter user actions.
+     """
+    print(f"get_actions: {question}")
+    runtime = get_runtime(Context)
+
+    action_items = action_items_db.get_action_items(
+        uid=runtime.context.uid,
+        # conversation_id=conversation_id,
+        # completed=completed,
+        # start_date=start_date,
+        # end_date=end_date,
+        # limit=limit,
+        # offset=offset,
+    )
+
+    return Command(update={
+        "messages": [ToolMessage(content=ActionItem.actions_to_string(action_items), tool_call_id=tool_call_id)]})
 
 @tool
 def get_omi_documentation():
@@ -235,6 +258,7 @@ def create_graph(
     tools = [
         get_memories,
         get_conversations,
+        get_actions,
         # get_files,
         # get_omi_documentation,  TODO: Current doc must be formatted other way
     ]
@@ -257,7 +281,7 @@ def create_graph(
                 model = llm_persona_mini_stream
         graph = create_agent(
             model,
-            tools=[],
+            tools=tools,
             system_prompt=app.persona_prompt
         )
     else:
