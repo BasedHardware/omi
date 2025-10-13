@@ -731,17 +731,6 @@ async def _listen(
             try:
                 pusher_ws = await connect_to_trigger_pusher(uid, sample_rate, retries=5)
                 pusher_connected = True
-
-                # Send conversation ID immediately after connecting
-                if pusher_ws and in_progress_conversation_id:
-                    try:
-                        # 103|conversation_id
-                        data = bytearray()
-                        data.extend(struct.pack("I", 103))
-                        data.extend(bytes(in_progress_conversation_id, "utf-8"))
-                        await pusher_ws.send(data)
-                    except Exception as e:
-                        print(f"Failed to send conversation_id to pusher: {e}", uid, session_id)
             except Exception as e:
                 print(f"Exception in connect: {e}")
 
