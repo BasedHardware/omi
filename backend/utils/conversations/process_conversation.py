@@ -1,10 +1,9 @@
 import os
-import datetime
 import random
 import re
 import threading
 import uuid
-from datetime import timezone
+from datetime import datetime, timezone, timedelta
 from typing import Union, Tuple, List, Optional
 
 from fastapi import HTTPException
@@ -73,7 +72,7 @@ def _get_structured(
         # Fetch existing action items from past 2 days for deduplication
         existing_action_items = None
         try:
-            two_days_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=2)
+            two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
             existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
         except Exception as e:
             print(f"Error fetching existing action items for deduplication: {e}")
