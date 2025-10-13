@@ -40,7 +40,6 @@ class _PlansSheetState extends State<PlansSheet> {
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
   bool _isCancelling = false;
   bool _isUpgrading = false;
-  bool _isOptingInForTraining = false;
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -56,10 +55,12 @@ class _PlansSheetState extends State<PlansSheet> {
 
     if (acknowledged != true) return;
 
-    setState(() => _isOptingInForTraining = true);
     try {
       final userProvider = context.read<UserProvider>();
       await userProvider.optInForTrainingData();
+
+      // Track the opt-in submission
+      MixpanelManager().trainingDataOptInSubmitted();
 
       if (mounted) {
         AppSnackbar.showSnackbar(
@@ -68,10 +69,6 @@ class _PlansSheetState extends State<PlansSheet> {
       }
     } catch (e) {
       AppSnackbar.showSnackbarError('An error occurred. Please try again.');
-    } finally {
-      if (mounted) {
-        setState(() => _isOptingInForTraining = false);
-      }
     }
   }
 
@@ -83,7 +80,7 @@ class _PlansSheetState extends State<PlansSheet> {
           backgroundColor: const Color(0xFF1F1F25),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text(
-            'Training Data Program',
+            'Omi Training',
             style: TextStyle(
               color: Colors.white,
               fontSize: 18,
@@ -189,6 +186,7 @@ class _PlansSheetState extends State<PlansSheet> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -948,17 +946,26 @@ class _PlansSheetState extends State<PlansSheet> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Training Data Opt-in Option
-                      Consumer<UserProvider>(
-                        builder: (context, userProvider, child) {
+                      // Training Data Opt-in Option - only show after plans are loaded
+                      Consumer2<UsageProvider, UserProvider>(
+                        builder: (context, usageProvider, userProvider, child) {
+                          final shouldShowTrainingOption =
+                              !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
+
+                          if (!shouldShowTrainingOption) {
+                            return const SizedBox.shrink();
+                          }
+
                           final optedIn = userProvider.trainingDataOptedIn;
                           final status = userProvider.trainingDataStatus;
+                          final isLoading = userProvider.isLoading;
 
                           return Container(
-                            margin: const EdgeInsets.only(bottom: 18),
+                            margin: const EdgeInsets.only(top: 24, bottom: 18),
                             child: _buildTrainingDataOption(
                               optedIn: optedIn,
                               status: status,
+                              isLoading: isLoading,
                             ),
                           );
                         },
@@ -1285,6 +1292,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           },
                         ),
                       ],
+
                       const SizedBox(height: 24),
 
                       // Continue button - only show for non-annual unlimited users
@@ -1742,6 +1750,7 @@ class _PlansSheetState extends State<PlansSheet> {
   Widget _buildTrainingDataOption({
     required bool optedIn,
     required String? status,
+    required bool isLoading,
   }) {
     // Approved status - show as active
     if (optedIn && status == 'approved') {
@@ -1751,7 +1760,7 @@ class _PlansSheetState extends State<PlansSheet> {
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(
-                  title: const Text('Training Data Program'),
+                  title: const Text('Omi Training'),
                   backgroundColor: Colors.black,
                 ),
                 body: WebViewWidget(
@@ -1840,7 +1849,7 @@ class _PlansSheetState extends State<PlansSheet> {
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(
-                  title: const Text('Training Data Program'),
+                  title: const Text('Omi Training'),
                   backgroundColor: Colors.black,
                 ),
                 body: WebViewWidget(
@@ -1901,7 +1910,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
     // Default state - not opted in yet
     return GestureDetector(
-      onTap: _isOptingInForTraining ? null : _handleTrainingDataOptIn,
+      onTap: isLoading ? null : _handleTrainingDataOptIn,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         decoration: BoxDecoration(
@@ -1938,7 +1947,7 @@ class _PlansSheetState extends State<PlansSheet> {
                 ],
               ),
             ),
-            if (_isOptingInForTraining)
+            if (isLoading)
               const SizedBox(
                 width: 20,
                 height: 20,

@@ -473,6 +473,10 @@ def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
     """Opt-in for training data program. User's request will be reviewed."""
     set_user_training_data_opt_in(uid, 'pending_review')
 
+    # Check if private cloud sync is enabled, if not, enable it
+    if not get_user_private_cloud_sync_enabled(uid):
+        set_user_private_cloud_sync_enabled(uid, True)
+
     # Send notification to user
     send_training_data_submitted_notification(uid)
 
