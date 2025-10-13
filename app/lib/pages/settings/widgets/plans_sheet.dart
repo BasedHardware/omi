@@ -6,11 +6,13 @@ import 'package:omi/gen/assets.gen.dart';
 
 import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../payment_webview_page.dart';
 
@@ -42,6 +44,174 @@ class _PlansSheetState extends State<PlansSheet> {
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
     await provider.loadAvailablePlans();
+  }
+
+  Future<void> _handleTrainingDataOptIn() async {
+    // Show dialog with explanation and acknowledgement
+    final acknowledged = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _buildTrainingDataDialog(ctx),
+    );
+
+    if (acknowledged != true) return;
+
+    try {
+      final userProvider = context.read<UserProvider>();
+      await userProvider.optInForTrainingData();
+
+      // Track the opt-in submission
+      MixpanelManager().trainingDataOptInSubmitted();
+
+      if (mounted) {
+        AppSnackbar.showSnackbar(
+          'Thank you! Your request is under review. We will notify you once approved.',
+        );
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('An error occurred. Please try again.');
+    }
+  }
+
+  Widget _buildTrainingDataDialog(BuildContext ctx) {
+    bool isChecked = false;
+    return StatefulBuilder(
+      builder: (context, setDialogState) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1F1F25),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Omi Training',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Get Omi Unlimited for free by contributing your data to train AI models.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '• Your data helps improve AI models\n'
+                  '• Only non-sensitive data is shared\n'
+                  '• Fully transparent process',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => Scaffold(
+                          appBar: AppBar(
+                            title: const Text('Training Data Program'),
+                            backgroundColor: Colors.black,
+                          ),
+                          body: WebViewWidget(
+                            controller: WebViewController()
+                              ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                              ..loadRequest(Uri.parse('https://omi.me/training')),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'Learn more at omi.me/training',
+                    style: TextStyle(
+                      color: Colors.white,
+                      decoration: TextDecoration.underline,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () {
+                    setDialogState(() {
+                      isChecked = !isChecked;
+                    });
+                  },
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Checkbox(
+                          value: isChecked,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isChecked = value ?? false;
+                            });
+                          },
+                          fillColor: MaterialStateProperty.resolveWith((states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return Colors.white;
+                            }
+                            return Colors.transparent;
+                          }),
+                          checkColor: Colors.black,
+                          side: const BorderSide(color: Colors.white, width: 1.5),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'I understand and agree to contribute my data for AI training',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey.shade400),
+              ),
+            ),
+            TextButton(
+              onPressed: isChecked ? () => Navigator.of(ctx).pop(true) : null,
+              child: Text(
+                'Submit Request',
+                style: TextStyle(
+                  color: isChecked ? Colors.white : Colors.grey.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _handleCancelSubscription() async {
@@ -754,7 +924,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           }
                         }),
                       ],
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
                       // Features list
                       Column(
                         children: [
@@ -774,7 +944,32 @@ class _PlansSheetState extends State<PlansSheet> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 48),
+                      const SizedBox(height: 32),
+
+                      // Training Data Opt-in Option - only show after plans are loaded
+                      Consumer2<UsageProvider, UserProvider>(
+                        builder: (context, usageProvider, userProvider, child) {
+                          final shouldShowTrainingOption =
+                              !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
+
+                          if (!shouldShowTrainingOption) {
+                            return const SizedBox.shrink();
+                          }
+
+                          final optedIn = userProvider.trainingDataOptedIn;
+                          final status = userProvider.trainingDataStatus;
+                          final isLoading = userProvider.isLoading;
+
+                          return Container(
+                            margin: const EdgeInsets.only(top: 24, bottom: 18),
+                            child: _buildTrainingDataOption(
+                              optedIn: optedIn,
+                              status: status,
+                              isLoading: isLoading,
+                            ),
+                          );
+                        },
+                      ),
 
                       // Check if user is on annual plan
                       if (isUnlimited && !isCancelled) ...[
@@ -1097,6 +1292,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           },
                         ),
                       ],
+
                       const SizedBox(height: 24),
 
                       // Continue button - only show for non-annual unlimited users
@@ -1548,6 +1744,227 @@ class _PlansSheetState extends State<PlansSheet> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTrainingDataOption({
+    required bool optedIn,
+    required String? status,
+    required bool isLoading,
+  }) {
+    // Approved status - show as active
+    if (optedIn && status == 'approved') {
+      return GestureDetector(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => Scaffold(
+                appBar: AppBar(
+                  title: const Text('Omi Training'),
+                  backgroundColor: Colors.black,
+                ),
+                body: WebViewWidget(
+                  controller: WebViewController()
+                    ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                    ..loadRequest(Uri.parse('https://omi.me/training')),
+                ),
+              ),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Get Free Unlimited Access',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Training data program',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Active',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Pending status - show with link to learn more
+    if (optedIn && status == 'pending_review') {
+      return GestureDetector(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => Scaffold(
+                appBar: AppBar(
+                  title: const Text('Omi Training'),
+                  backgroundColor: Colors.black,
+                ),
+                body: WebViewWidget(
+                  controller: WebViewController()
+                    ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                    ..loadRequest(Uri.parse('https://omi.me/training')),
+                ),
+              ),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Get Free Unlimited Access',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your request is under review',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white,
+                size: 16,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Default state - not opted in yet
+    return GestureDetector(
+      onTap: isLoading ? null : _handleTrainingDataOptIn,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Get Free Unlimited Access',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Share data for training',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isLoading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            else
+              const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white,
+                size: 16,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
