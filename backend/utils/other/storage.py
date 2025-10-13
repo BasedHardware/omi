@@ -277,9 +277,11 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
     """Delete audio chunks after they've been merged."""
     bucket = storage_client.bucket(private_cloud_sync_bucket)
     for timestamp in timestamps:
+        # Format timestamp to match upload format (3 decimal places)
+        formatted_timestamp = f'{timestamp:.3f}'
         # Try both encrypted and unencrypted paths
         for extension in ['.enc', '.bin']:
-            chunk_path = f'chunks/{uid}/{conversation_id}/{timestamp}{extension}'
+            chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{extension}'
             blob = bucket.blob(chunk_path)
             if blob.exists():
                 blob.delete()
@@ -350,9 +352,11 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
     merged_data = bytearray()
 
     for timestamp in timestamps:
+        # Format timestamp to match upload format (3 decimal places)
+        formatted_timestamp = f'{timestamp:.3f}'
         # Try encrypted path first
-        chunk_path_enc = f'chunks/{uid}/{conversation_id}/{timestamp}.enc'
-        chunk_path_bin = f'chunks/{uid}/{conversation_id}/{timestamp}.bin'
+        chunk_path_enc = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
+        chunk_path_bin = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
 
         chunk_blob_enc = bucket.blob(chunk_path_enc)
         chunk_blob_bin = bucket.blob(chunk_path_bin)
@@ -367,7 +371,7 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
             chunk_data = chunk_blob_bin.download_as_bytes()
             is_encrypted = False
         else:
-            print(f"Warning: Chunk not found for timestamp {timestamp}")
+            print(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
             continue
 
         # Normalize to PCM (decrypt if needed)

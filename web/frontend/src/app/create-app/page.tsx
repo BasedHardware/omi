@@ -559,7 +559,7 @@ export default function CreateAppPage() {
         {/* Help Section */}
         <div className="mt-4">
           <div
-            onClick={() => window.open('https://omi.me/apps/introduction', '_blank')}
+            onClick={() => window.open('https://docs.omi.me/doc/developer/apps/Introduction', '_blank')}
             className="group cursor-pointer"
           >
             <div className="rounded-[0.5rem] border border-blue-500/20 bg-gradient-to-r from-blue-600/10 to-purple-600/10 p-6 transition-all hover:border-blue-500/40 hover:from-blue-600/20 hover:to-purple-600/20">
