@@ -1,6 +1,7 @@
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional, AsyncGenerator, Annotated
 
 from langchain.agents import create_agent, AgentState
@@ -135,8 +136,8 @@ def get_memories(question: str = "",
         )
 
     return Command(update={
-        "memories": user_made_memories + generated_memories,
-        "messages": [ToolMessage(content=memories_str, tool_call_id=tool_call_id)]})
+        # 'memories': user_made_memories + generated_memories, # TODO: Refs to memories aren't supported yet
+        'messages': [ToolMessage(content=memories_str, tool_call_id=tool_call_id)]})
 
 @tool
 def get_conversations(question: str = "",
@@ -150,10 +151,10 @@ def get_conversations(question: str = "",
      """
     print(f"get_conversations: {question}")
     runtime = get_runtime(Context)
-    conversations = query_vectors(runtime.context.uid, runtime.context.tz, question)
+    conversations = query_vectors(runtime.context.uid, question, runtime.context.tz)
     return Command(update={
-        "conversations": conversations,
-        "messages": [ToolMessage(content=Conversation.conversations_to_string(conversations), tool_call_id=tool_call_id)]})
+        'conversations': conversations,
+        'messages': [ToolMessage(content=Conversation.conversations_to_string(conversations), tool_call_id=tool_call_id)]})
 
 @tool
 def get_actions(question: str = "",
@@ -179,7 +180,7 @@ def get_actions(question: str = "",
     )
 
     return Command(update={
-        "messages": [ToolMessage(content=ActionItem.actions_to_string(action_items), tool_call_id=tool_call_id)]})
+        'messages': [ToolMessage(content=ActionItem.actions_to_string(action_items), tool_call_id=tool_call_id)]})
 
 @tool
 def get_omi_documentation():
@@ -238,12 +239,39 @@ def get_files(messages: List[Message], chat_session: ChatSession = None):
 class StateMiddleware(AgentMiddleware[BaseAgentState]):
     state_schema = BaseAgentState
 
-PROMPT_BASE = """You are a helpful assistant of wearable AI device named Omi.
+PROMPT_BASE = """
+<assistant_role>
+You are a helpful assistant of wearable AI device named Omi.
+</assistant_role>
+
+<tools>
+- You can call tools to gather context when needed:
+  - get_memories: fetch personalized user facts and knowledge.
+  - get_conversations: fetch prior conversations relevant to the question.
+  - get_actions: fetch the user's action items when it helps answer.
+</tools>
 {CHAT_FILES}
-- You MUST cite the most relevant memories or conversations that answer the question.   
-- Cite using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
-- NO SPACE between the last word and the citation.
-- Avoid citing irrelevant memories and conversations."""
+
+<instructions>
+- You MUST answer the question directly, concisely, and with high quality.
+- Refine the user's question using the last previous messages, but DO NOT use prior AI assistant messages as references/facts.
+- Prefer the user's memories and conversations when relevant; if they are empty or insufficient, still answer with existing general knowledge.
+- NEVER write phrases like "based on the available memories".
+- Time context: {TIME_CONTEXT}
+{PERSONA_PROMPT}
+{CITATIONS_PROMPT}
+</instructions>
+{PERSONA_INSTRUCTIONS}
+{CITATIONS_INSTRUCTIONS}
+
+<reports_instructions>
+- If the user requests a report or summary of a period, structure the answer with:
+  - Goals and Achievements
+  - Mood Tracker
+  - Gratitude Log
+  - Lessons Learned
+</reports_instructions>
+"""
 # Add found memories if get_memories was called.
 
 def create_graph(
@@ -254,6 +282,7 @@ def create_graph(
         callback_data: dict = {},
         chat_session: Optional[ChatSession] = None,
         files: Optional[List[str]] = None,
+        tz: Optional[str] = "UTC",
 ):
     tools = [
         get_memories,
@@ -271,28 +300,61 @@ def create_graph(
 
     checkpointer = MemorySaver()
 
+    # Dynamic prompt sections
+    citations_block = """
+<citation_instructions>
+- You MUST cite the most relevant memories or conversations that support your answer.
+- Cite using [index] at the end of sentences, e.g., "You discussed optimizing firmware yesterday[1][2]".
+- NO SPACE between the last word and the citation.
+- Avoid citing irrelevant items.
+</citation_instructions>
+""" if cited else ""
+
+    time_context = f"Question's timezone: {tz}. Current date time in UTC: {datetime.now().strftime('%Y-%m-%d %H:%M, %a')}"
+
+    model = llm_mini_stream
+
     if app and app.is_a_persona():
-        if os.getenv('LOCAL_DEVELOPMENT'):
-            model = llm_mini_stream
-        else:
+        if not os.getenv('LOCAL_DEVELOPMENT'):
             if app.is_influencer:
                 model = llm_persona_medium_stream
             else:
                 model = llm_persona_mini_stream
-        graph = create_agent(
-            model,
-            tools=tools,
-            system_prompt=app.persona_prompt
-        )
+        system_prompt = PROMPT_BASE.format(
+            CHAT_FILES=prompt_chat_files,
+            CITATIONS_PROMPT="""
+- You MUST cite the most relevant memories and conversations if you used them in your answer. Expand it with <citation_instructions>.
+""" if citations_block else '',
+            CITATIONS_INSTRUCTIONS=citations_block,
+            TIME_CONTEXT=time_context,
+            PERSONA_PROMPT="""
+- Regard the <plugin_instructions>
+""",
+            PERSONA_INSTRUCTIONS=f"""
+<plugin_instructions>
+{app.persona_prompt}
+</plugin_instructions>
+""")
     else:
-        graph = create_agent(
-            llm_mini_stream,
-            tools,
-            system_prompt=PROMPT_BASE.format(CHAT_FILES=prompt_chat_files),
-            middleware=[StateMiddleware()],
-            checkpointer=checkpointer,
-            # response_format=ResponseFormat
+        system_prompt = PROMPT_BASE.format(
+            CHAT_FILES=prompt_chat_files,
+            CITATIONS_PROMPT="""
+- Regard the <citations>
+""" if citations_block else '',
+            CITATIONS_INSTRUCTIONS=citations_block,
+            TIME_CONTEXT=time_context,
+            PERSONA_PROMPT='',
+            PERSONA_INSTRUCTIONS=''
         )
+
+    graph = create_agent(
+        model,
+        tools,
+        system_prompt=system_prompt,
+        middleware=[StateMiddleware()],
+        checkpointer=checkpointer,
+        # response_format=ResponseFormat
+    )
 
     return graph
 
@@ -310,7 +372,7 @@ async def execute_graph_chat_stream(
 
     files = get_files(messages, chat_session)
 
-    graph = create_graph(uid, messages, app, cited, callback_data, chat_session, files)
+    graph = create_graph(uid, messages, app, cited, callback_data, chat_session, files, tz)
 
     async for event in graph.astream(
             {
@@ -325,7 +387,7 @@ async def execute_graph_chat_stream(
             subgraphs=True,
     ):
         ns, stream_mode, payload = event
-        print(ns, stream_mode, payload)
+        # print(ns, stream_mode, payload)
         if stream_mode == "messages":
             chunk, metadata = payload
             metadata: dict
@@ -377,21 +439,6 @@ async def execute_graph_chat_stream(
                     if last_message.response_metadata['finish_reason'] == 'stop':
                         callback_data['answer'] = last_message.content
                         # callback_data['answer'] = payload[k]['structured_response'].answer
-
-            # if 'tools' in payload:
-            #     tool_message: ToolMessage = payload['tools']['messages'][0]
-            #
-            # if 'agent' in payload and isinstance(payload['agent']['messages'][0], AIMessage):
-            #     ai_message: AIMessage = payload['agent']['messages'][0]
-            #     print(ai_message.response_metadata['finish_reason'], ai_message.content)
-            #     if payload['agent'].get('structured_response'):
-            #         callback_data['answer'] = payload['agent']['structured_response'].answer
-            #         callback_data['memories_found'] = payload['agent']['structured_response'].memories_found
-            #         # callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
-            #     else:
-            #         if ai_message.response_metadata['finish_reason'] == 'stop':
-            #             callback_data['answer'] = ai_message.content
-            #             # callback_data['memories_found'] = payload['agent']['structured_response'].memories_found
 
         elif stream_mode == "custom":
             # Forward custom events as is
