@@ -151,7 +151,6 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                 break
 
             frame_length = struct.unpack('<I', length_bytes)[0]
-            # print(f"Reading frame {frame_count}: length {frame_length}")
             opus_data = f.read(frame_length)
             if len(opus_data) < frame_length:
                 print(f"Unexpected end of file at frame {frame_count}.")
@@ -269,7 +268,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
         else:
             segments.append(segment)
 
-    print(path, segments)
+    print(path, len(segments))
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
@@ -327,10 +326,6 @@ def process_segment(path: str, uid: str, response: dict):
             duration = segment['end'] - segment['start']
             segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
             segment['end'] = segment['start'] + duration
-
-        print('reordered segments:')
-        for segment in segments:
-            print(round(segment['start'], 2), round(segment['end'], 2), segment['text'])
 
         # remove timestamp field
         for segment in segments:
