@@ -657,6 +657,14 @@ async def _listen(
             if auto_reconnect and pusher_connected is False:
                 await connect()
 
+        async def photo_consume():
+            nonlocal websocket_active
+            nonlocal photo_buffers
+            while websocket_active:
+                await asyncio.sleep(1)
+                if len(photo_buffers) > 0:
+                    await _photo_flush(auto_reconnect=True)
+
         async def _transcript_flush(auto_reconnect: bool = True):
             nonlocal segment_buffers
             nonlocal in_progress_conversation_id
@@ -772,6 +780,7 @@ async def _listen(
             transcript_send,
             transcript_consume,
             photo_send,
+            photo_consume,
             audio_bytes_send if audio_bytes_enabled else None,
             audio_bytes_consume if audio_bytes_enabled else None,
         )
@@ -779,6 +788,7 @@ async def _listen(
     transcript_send = None
     transcript_consume = None
     photo_send = None
+    photo_consume = None
     audio_bytes_send = None
     audio_bytes_consume = None
     pusher_close = None
@@ -1117,6 +1127,7 @@ async def _listen(
                 transcript_send,
                 transcript_consume,
                 photo_send,
+                photo_consume,
                 audio_bytes_send,
                 audio_bytes_consume,
             ) = create_pusher_task_handler()
@@ -1125,6 +1136,8 @@ async def _listen(
             pusher_tasks.append(asyncio.create_task(pusher_connect()))
             if transcript_consume is not None:
                 pusher_tasks.append(asyncio.create_task(transcript_consume()))
+            if photo_consume is not None:
+                pusher_tasks.append(asyncio.create_task(photo_consume()))
             if audio_bytes_consume is not None:
                 pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
