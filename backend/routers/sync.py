@@ -1,31 +1,138 @@
+import io
 import os
 import re
 import struct
 import threading
 import time
+import wave
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from opuslib import Decoder
 from pydub import AudioSegment
 
+from database import conversations as conversations_db
+from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
 from models.conversation import CreateConversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth
-from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
+from utils.other.storage import (
+    get_syncing_file_temporal_signed_url,
+    delete_syncing_temporal_file,
+    download_audio_chunks_and_merge,
+)
+from utils import encryption
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
+
+
+# **********************************************
+# ******** AUDIO FORMAT CONVERSION *************
+# **********************************************
+
+
+def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> bytes:
+    """Convert PCM16 data to WAV format."""
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(2)  # 16-bit audio
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_data)
+    return wav_buffer.getvalue()
+
+
+# **********************************************
+# ********** AUDIO DOWNLOAD ENDPOINT ***********
+# **********************************************
+
+
+@router.get("/v1/sync/audio/{conversation_id}/{audio_file_id}", tags=['v1'])
+def download_audio_file_endpoint(
+    conversation_id: str,
+    audio_file_id: str,
+    format: str = Query(default="wav", regex="^(wav|pcm)$"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Download audio file from private cloud sync in the specified format.
+    Merges chunks on-demand.
+
+    Args:
+        conversation_id: ID of the conversation
+        audio_file_id: ID of the audio file within the conversation
+        format: Output format - 'wav' or 'pcm' (raw) (default: wav)
+        uid: User ID (from authentication)
+
+    Returns:
+        StreamingResponse with the audio file in the requested format
+    """
+    # Verify user owns the conversation
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Find the audio file in the conversation
+    audio_files = conversation.get('audio_files', [])
+    audio_file = None
+    for af in audio_files:
+        if af.get('id') == audio_file_id:
+            audio_file = af
+            break
+
+    if not audio_file:
+        raise HTTPException(status_code=404, detail="Audio file not found in conversation")
+
+    # Get PCM data by merging chunks on-demand
+    try:
+        if not audio_file.get('chunk_timestamps'):
+            raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
+
+        pcm_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Audio chunks not found in storage")
+    except Exception as e:
+        print(f"Error downloading audio file: {e}")
+        raise HTTPException(status_code=500, detail="Failed to download audio file")
+
+    # Convert to requested format
+    if format == "wav":
+        audio_data = pcm_to_wav(pcm_data)
+        content_type = "audio/wav"
+        extension = "wav"
+    else:  # pcm (raw)
+        audio_data = pcm_data
+        content_type = "application/octet-stream"
+        extension = "pcm"
+
+    # Create descriptive filename
+    filename = f"conversation_{conversation_id}_audio_{audio_file_id}.{extension}"
+
+    # Return streaming response
+    return StreamingResponse(
+        io.BytesIO(audio_data),
+        media_type=content_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+# **********************************************
+# ************ SYNC LOCAL FILES ****************
+# **********************************************
+
 
 import shutil
 import wave
 
 
 def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
+    """Decode an Opus file with length-prefixed frames to WAV format."""
     if not os.path.exists(opus_file_path):
         print(f"File not found: {opus_file_path}")
         return False
@@ -44,7 +151,6 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                 break
 
             frame_length = struct.unpack('<I', length_bytes)[0]
-            # print(f"Reading frame {frame_count}: length {frame_length}")
             opus_data = f.read(frame_length)
             if len(opus_data) < frame_length:
                 print(f"Unexpected end of file at frame {frame_count}.")
@@ -162,7 +268,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
         else:
             segments.append(segment)
 
-    print(path, segments)
+    print(path, len(segments))
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
@@ -220,10 +326,6 @@ def process_segment(path: str, uid: str, response: dict):
             duration = segment['end'] - segment['start']
             segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
             segment['end'] = segment['start'] + duration
-
-        print('reordered segments:')
-        for segment in segments:
-            print(round(segment['start'], 2), round(segment['end'], 2), segment['text'])
 
         # remove timestamp field
         for segment in segments:

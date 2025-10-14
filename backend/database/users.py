@@ -36,6 +36,19 @@ def set_user_store_recording_permission(uid: str, value: bool):
     user_ref.update({'store_recording_permission': value})
 
 
+def get_user_private_cloud_sync_enabled(uid: str) -> bool:
+    """Check if user has private cloud sync enabled."""
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict()
+    return user_data.get('private_cloud_sync_enabled', True)
+
+
+def set_user_private_cloud_sync_enabled(uid: str, value: bool):
+    """Enable or disable private cloud sync for a user."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'private_cloud_sync_enabled': value})
+
+
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
@@ -346,6 +359,26 @@ def get_user_subscription(uid: str) -> Subscription:
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
     return default_subscription
+
+
+def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
+    """Get user's training data opt-in status."""
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict()
+    return user_data.get('training_data_opt_in', None)
+
+
+def set_user_training_data_opt_in(uid: str, status: str):
+    """Set user's training data opt-in status. Status can be: pending_review, approved, rejected"""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
+        {
+            'training_data_opt_in': {
+                'status': status,
+                'requested_at': datetime.now(timezone.utc),
+            }
+        }
+    )
 
 
 def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
