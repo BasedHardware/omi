@@ -63,6 +63,14 @@ async def _websocket_util_trigger(
                     asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
                     continue
 
+                # Photos
+                if header_type == 104:
+                    res = json.loads(bytes(data[4:]).decode("utf-8"))
+                    photos = res.get('photos')
+                    memory_id = res.get('memory_id')
+                    asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, [], memory_id, photos), loop)
+                    continue
+
                 # Audio bytes
                 if header_type == 101:
                     audiobuffer.extend(data[4:])
