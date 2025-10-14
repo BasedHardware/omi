@@ -323,7 +323,7 @@ def create_graph(
         system_prompt = PROMPT_BASE.format(
             CHAT_FILES=prompt_chat_files,
             CITATIONS_PROMPT="""
-- You MUST cite the most relevant memories and conversations if you used them in your answer. Expand it with <citation_instructions>.
+- You must always cite the most relevant memories and conversations if you used them in your answer. Expand it with <citation_instructions>.
 """ if citations_block else '',
             CITATIONS_INSTRUCTIONS=citations_block,
             TIME_CONTEXT=time_context,
