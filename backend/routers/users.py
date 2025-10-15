@@ -17,6 +17,7 @@ from database import (
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
+    get_cached_user_geolocation,
     set_user_webhook_db,
     get_user_webhook_db,
     disable_user_webhook_db,
@@ -88,7 +89,28 @@ def delete_account(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.patch('/v1/users/geolocation', tags=['v1'])
 def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
-    cache_user_geolocation(uid, geolocation.dict())
+    last_location_data = get_cached_user_geolocation(uid)
+    if last_location_data:
+        try:
+            last_location = Geolocation(**last_location_data)
+
+            last_lat = round(last_location.latitude, 4)
+            last_lon = round(last_location.longitude, 4)
+            new_lat = round(geolocation.latitude, 4)
+            new_lon = round(geolocation.longitude, 4)
+
+            # Only update if location has changed up to 4 decimal places
+            if last_lat == new_lat and last_lon == new_lon:
+                return {'status': 'ok', 'message': 'Location not changed significantly.'}
+
+            cache_user_geolocation(uid, geolocation.dict())
+        except Exception as e:
+            print(f"Error processing geolocation update, caching new location anyway. Error: {e}")
+            cache_user_geolocation(uid, geolocation.dict())
+    else:
+        # No previous location, so cache the new one
+        cache_user_geolocation(uid, geolocation.dict())
+
     return {'status': 'ok'}
 
 
