@@ -1,14 +1,14 @@
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, AsyncGenerator, Annotated
 
 from langchain.agents import create_agent, AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain.tools import InjectedState
 from langchain_core.messages import AIMessageChunk, AIMessage, ToolMessage
-from langchain_core.tools import tool, InjectedToolCallId
+from langchain_core.tools import tool, InjectedToolCallId, ToolException
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.runtime import get_runtime
 from langgraph.types import Command
@@ -16,14 +16,18 @@ from pydantic import BaseModel
 
 import database.action_items as action_items_db
 import database.conversations as conversations_db
+import database.memories as memory_db
+import utils.apps as apps_utils
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
+import models.integrations as integration_models
 from models.conversation import Conversation, ActionItem
 from models.memories import Memory
 from utils.app_integrations import get_github_docs_content
+from utils.conversations.search import search_conversations
 from utils.llm.chat import (
     retrieve_context_dates_by_question,
     select_structured_filters
@@ -38,6 +42,7 @@ from utils.retrieval.state import BaseAgentState
 class Context:
     uid: str
     tz: str
+    app: Optional[App] = None
     chat_session: Optional[ChatSession] = None
     files: Optional[List[str]] = None
 
@@ -118,43 +123,119 @@ def query_vectors(uid: str, question: str, tz: str = "UTC", limit: int = 100):
     return conversations
 
 @tool
-def get_memories(question: str = "",
+def get_memories(
+        # question: str = "",  Not implemented yet
+        limit: int = 100,
+        offset: int = 0,
+
                  state: Annotated[AgentState, InjectedState] = None,
                  tool_call_id: Annotated[str, InjectedToolCallId] = ""
                  ) -> Command:
     """ Retrieve user memories.
     """
-    print(f"get_memories: {question}")
+    print(f"get_memories")
     runtime = get_runtime(Context)
-    user_name, user_made_memories, generated_memories = get_prompt_data(runtime.context.uid)
-    memories_str = (
-        f'you already know the following facts about {user_name}: \n{Memory.get_memories_as_str(generated_memories)}.'
-    )
-    if user_made_memories:
-        memories_str += (
-            f'\n\n{user_name} also shared the following about self: \n{Memory.get_memories_as_str(user_made_memories)}'
-        )
+
+    memories = memory_db.get_memories(runtime.context.uid, limit=limit, offset=offset)
+    for memory in memories:
+        if memory.get('is_locked', False):
+            content = memory.get('content', '')
+            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+        memory['created_at'] = memory['created_at'].isoformat()
+        memory['updated_at'] = memory['updated_at'].isoformat()
+
+    memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
+
+    # user_name, user_made_memories, generated_memories = get_prompt_data(runtime.context.uid)
+    # memories_str = (
+    #     f'you already know the following facts about {user_name}: \n{Memory.get_memories_as_str(generated_memories)}.'
+    # )
+    # if user_made_memories:
+    #     memories_str += (
+    #         f'\n\n{user_name} also shared the following about self: \n{Memory.get_memories_as_str(user_made_memories)}'
+    #     )
+    #
+    content = Memory.get_memories_as_str(memory_items)
 
     return Command(update={
         # 'memories': user_made_memories + generated_memories, # TODO: Refs to memories aren't supported yet
-        'messages': [ToolMessage(content=memories_str, tool_call_id=tool_call_id)]})
+        'messages': [ToolMessage(content=content, tool_call_id=tool_call_id)]})
 
 @tool
-def get_conversations(question: str = "",
-                      state: Annotated[AgentState, InjectedState] = None,
-                      tool_call_id: Annotated[str, InjectedToolCallId] = ""
-                      ) -> Command:
+def get_conversations(
+        question: str = "",
+        page: int = 1,
+        per_page: int = 10,
+        include_discarded: bool = True,
+        start_date: str = None,
+        end_date: str = None,
+        state: Annotated[AgentState, InjectedState] = None,
+        tool_call_id: Annotated[str, InjectedToolCallId] = ""
+) -> Command:
     """ Retrieve user conversations.
 
     Args:
         question (str): The question to filter memories.
+        page (int): The page number of the conversations to retrieve.
+        per_page (int): The number of conversations per page.
+        include_discarded (bool): Whether to include discarded conversations.
+        start_date (str): The start date and time in the ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) or YYYY-MM-DD.
+        end_date (str): The end date and time in the ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) or YYYY-MM-DD.
      """
+    # Convert ISO datetime strings to Unix timestamps if provided
+    start_timestamp = None
+    end_timestamp = None
+    if isinstance(start_date, str) and start_date:
+        try:
+            start_date_str = start_date
+            if len(start_date_str) == 10:  # YYYY-MM-DD
+                dt = datetime.strptime(start_date_str, '%Y-%m-%d')
+                start_dt = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+            else:
+                start_dt = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+            start_timestamp = int(start_dt.timestamp())
+        except ValueError:
+            raise ToolException("Error: Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SSZ) or YYYY-MM-DD")
+
+    if isinstance(end_date, str) and end_date:
+        try:
+            end_date_str = end_date
+            if len(end_date_str) == 10:  # YYYY-MM-DD
+                dt = datetime.strptime(end_date_str, '%Y-%m-%d')
+                end_dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+            else:
+                end_dt = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+            end_timestamp = int(end_dt.timestamp())
+
+        except ValueError:
+            raise ToolException("Error: Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SSZ) or YYYY-MM-DD")
+
     print(f"get_conversations: {question}")
     runtime = get_runtime(Context)
-    conversations = query_vectors(runtime.context.uid, question, runtime.context.tz)
+
+    search_results = search_conversations(
+        query=question,
+        page=page,
+        per_page=per_page,
+        uid=runtime.context.uid,
+        include_discarded=include_discarded,
+        start_date=start_timestamp,
+        end_date=end_timestamp,
+    )
+
+    # Extract conversation IDs from search results
+    conversation_ids = [conv.get('id') for conv in search_results['items']]
+
+    # Get full conversation data using the IDs
+    full_conversations = []
+    if conversation_ids:
+        full_conversations = conversations_db.get_conversations_by_id(runtime.context.uid, conversation_ids)
+
+    # The old way
+    # conversations = query_vectors(runtime.context.uid, question, runtime.context.tz)
     return Command(update={
-        'conversations': conversations,
-        'messages': [ToolMessage(content=Conversation.conversations_to_string(conversations), tool_call_id=tool_call_id)]})
+        'conversations': full_conversations,
+        'messages': [ToolMessage(content=Conversation.conversations_to_string(full_conversations), tool_call_id=tool_call_id)]})
 
 @tool
 def get_actions(question: str = "",
@@ -245,10 +326,7 @@ You are a helpful assistant of wearable AI device named Omi.
 </assistant_role>
 
 <tools>
-- You can call tools to gather context when needed:
-  - get_memories: fetch personalized user facts and knowledge.
-  - get_conversations: fetch prior conversations relevant to the question.
-  - get_actions: fetch the user's action items when it helps answer.
+- You can call available tools to gather context when needed
 </tools>
 {CHAT_FILES}
 
@@ -285,12 +363,17 @@ def create_graph(
         tz: Optional[str] = "UTC",
 ):
     tools = [
-        get_memories,
-        get_conversations,
-        get_actions,
-        # get_files,
         # get_omi_documentation,  TODO: Current doc must be formatted other way
     ]
+
+    if app is None or apps_utils.app_can_read_memories(app.model_dump(include={'external_integration'})):
+        tools.append(get_memories)
+
+    if app is None or apps_utils.app_can_read_conversations(app.model_dump(include={'external_integration'})):
+        tools.append(get_conversations)
+
+    # if app is None:
+    #     tools.append(get_actions)
 
     if files:
         tools.append(chat_file)
@@ -381,7 +464,7 @@ async def execute_graph_chat_stream(
                 "messages": Message.get_messages_as_dict(messages),
                 # "app": app,
             },
-            context=Context(uid=uid, tz=tz, chat_session=chat_session, files=files),
+            context=Context(uid=uid, tz=tz, app=app, chat_session=chat_session, files=files),
             stream_mode=["messages", "custom", "updates"],
             config={"configurable": {"thread_id": str(uuid.uuid4())}},
             subgraphs=True,
