@@ -44,6 +44,27 @@ Future<String> getAuthHeader() async {
   return 'Bearer ${SharedPreferencesUtil().authToken}';
 }
 
+/// Builds common headers for API and WebSocket requests
+/// Centralizes header logic for easy maintenance and consistency
+/// Automatically adds Authorization header if required
+Future<Map<String, String>> buildHeaders({
+  required bool requireAuthCheck,
+  Map<String, String> fromHeaders = const {},
+}) async {
+  final headers = <String, String>{
+    'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
+    'X-App-Platform': PlatformManager.instance.platform,
+    'X-App-Version': PlatformManager.instance.appVersion,
+    ...fromHeaders,
+  };
+
+  if (requireAuthCheck) {
+    headers['Authorization'] = await getAuthHeader();
+  }
+
+  return headers;
+}
+
 bool _isRequiredAuthCheck(String url) {
   if (url.contains(Env.apiBaseUrl!)) {
     return true;
@@ -57,17 +78,11 @@ Future<http.StreamedResponse> makeRawApiCall({
   Map<String, String> headers = const {},
 }) async {
   var request = http.Request(method, Uri.parse(url));
-  final mutableHeaders = Map<String, String>.from(headers);
-  mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
-  mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
-  mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
-
-  final bool requireAuthCheck = _isRequiredAuthCheck(url);
-  if (requireAuthCheck) {
-    mutableHeaders['Authorization'] = await getAuthHeader();
-    // headers['Authorization'] = ''; // set admin key + uid here for testing
-  }
-  request.headers.addAll(mutableHeaders);
+  final builtHeaders = await buildHeaders(
+    requireAuthCheck: _isRequiredAuthCheck(url),
+    fromHeaders: headers,
+  );
+  request.headers.addAll(builtHeaders);
   return ApiClient._client.send(request);
 }
 
@@ -78,23 +93,22 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
-    headers['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
-    headers['X-App-Platform'] = PlatformManager.instance.platform;
-    headers['X-App-Version'] = PlatformManager.instance.appVersion;
-
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    if (requireAuthCheck) {
-      headers['Authorization'] = await getAuthHeader();
-      // headers['Authorization'] = ''; // set admin key + uid here for testing
-    }
+    final builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+    );
 
-    http.Response? response = await _performRequest(url, headers, body, method);
+    http.Response? response = await _performRequest(url, builtHeaders, body, method);
     if (requireAuthCheck && response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
       SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer ${SharedPreferencesUtil().authToken}';
-        response = await _performRequest(url, headers, body, method);
+        final refreshedHeaders = await buildHeaders(
+          requireAuthCheck: requireAuthCheck,
+          fromHeaders: headers,
+        );
+        response = await _performRequest(url, refreshedHeaders, body, method);
         Logger.log('Token refreshed and request retried');
         if (response.statusCode == 401) {
           // Force user to sign in again
@@ -172,17 +186,11 @@ Future<http.Response> makeMultipartApiCall({
   try {
     var request = http.MultipartRequest(method, Uri.parse(url));
 
-    final mutableHeaders = Map<String, String>.from(headers);
-    mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
-    mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
-    mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
-
-    final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    if (requireAuthCheck) {
-      mutableHeaders['Authorization'] = await getAuthHeader();
-    }
-
-    request.headers.addAll(mutableHeaders);
+    final builtHeaders = await buildHeaders(
+      requireAuthCheck: _isRequiredAuthCheck(url),
+      fromHeaders: headers,
+    );
+    request.headers.addAll(builtHeaders);
     request.fields.addAll(fields);
 
     for (var file in files) {
@@ -215,17 +223,11 @@ Stream<String> makeStreamingApiCall({
   try {
     var request = http.Request(method, Uri.parse(url));
 
-    final mutableHeaders = Map<String, String>.from(headers);
-    mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
-    mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
-    mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
-
-    final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    if (requireAuthCheck) {
-      mutableHeaders['Authorization'] = await getAuthHeader();
-    }
-
-    request.headers.addAll(mutableHeaders);
+    final builtHeaders = await buildHeaders(
+      requireAuthCheck: _isRequiredAuthCheck(url),
+      fromHeaders: headers,
+    );
+    request.headers.addAll(builtHeaders);
 
     if (body.isNotEmpty) {
       request.headers['Content-Type'] = 'application/json';
@@ -279,17 +281,11 @@ Stream<String> makeMultipartStreamingApiCall({
   try {
     var request = http.MultipartRequest('POST', Uri.parse(url));
 
-    final mutableHeaders = Map<String, String>.from(headers);
-    mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
-    mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
-    mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
-
-    final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    if (requireAuthCheck) {
-      mutableHeaders['Authorization'] = await getAuthHeader();
-    }
-
-    request.headers.addAll(mutableHeaders);
+    final builtHeaders = await buildHeaders(
+      requireAuthCheck: _isRequiredAuthCheck(url),
+      fromHeaders: headers,
+    );
+    request.headers.addAll(builtHeaders);
 
     for (var file in files) {
       request.files.add(await http.MultipartFile.fromPath(fileFieldName, file.path, filename: basename(file.path)));
