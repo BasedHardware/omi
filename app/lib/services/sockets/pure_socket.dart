@@ -83,11 +83,16 @@ class PureSocket implements IPureSocket {
     }
 
     debugPrint("request wss ${url}");
+    final headers = {
+      'Authorization': await getAuthHeader(),
+      'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
+      'X-App-Platform': PlatformManager.instance.platform,
+      'X-App-Version': PlatformManager.instance.appVersion,
+    };
+
     _channel = IOWebSocketChannel.connect(
       url,
-      headers: {
-        'Authorization': await getAuthHeader(),
-      },
+      headers: headers,
       pingInterval: const Duration(seconds: 20),
       connectTimeout: const Duration(seconds: 15),
     );

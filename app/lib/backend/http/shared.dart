@@ -57,12 +57,17 @@ Future<http.StreamedResponse> makeRawApiCall({
   Map<String, String> headers = const {},
 }) async {
   var request = http.Request(method, Uri.parse(url));
+  final mutableHeaders = Map<String, String>.from(headers);
+  mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
+  mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
+  mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
+
   final bool requireAuthCheck = _isRequiredAuthCheck(url);
   if (requireAuthCheck) {
-    headers['Authorization'] = await getAuthHeader();
+    mutableHeaders['Authorization'] = await getAuthHeader();
     // headers['Authorization'] = ''; // set admin key + uid here for testing
   }
-  request.headers.addAll(headers);
+  request.headers.addAll(mutableHeaders);
   return ApiClient._client.send(request);
 }
 
@@ -73,6 +78,10 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
+    headers['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
+    headers['X-App-Platform'] = PlatformManager.instance.platform;
+    headers['X-App-Version'] = PlatformManager.instance.appVersion;
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     if (requireAuthCheck) {
       headers['Authorization'] = await getAuthHeader();
@@ -163,13 +172,17 @@ Future<http.Response> makeMultipartApiCall({
   try {
     var request = http.MultipartRequest(method, Uri.parse(url));
 
+    final mutableHeaders = Map<String, String>.from(headers);
+    mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
+    mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
+    mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     if (requireAuthCheck) {
-      headers = Map.from(headers);
-      headers['Authorization'] = await getAuthHeader();
+      mutableHeaders['Authorization'] = await getAuthHeader();
     }
 
-    request.headers.addAll(headers);
+    request.headers.addAll(mutableHeaders);
     request.fields.addAll(fields);
 
     for (var file in files) {
@@ -202,13 +215,17 @@ Stream<String> makeStreamingApiCall({
   try {
     var request = http.Request(method, Uri.parse(url));
 
+    final mutableHeaders = Map<String, String>.from(headers);
+    mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
+    mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
+    mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     if (requireAuthCheck) {
-      headers = Map.from(headers);
-      headers['Authorization'] = await getAuthHeader();
+      mutableHeaders['Authorization'] = await getAuthHeader();
     }
 
-    request.headers.addAll(headers);
+    request.headers.addAll(mutableHeaders);
 
     if (body.isNotEmpty) {
       request.headers['Content-Type'] = 'application/json';
@@ -262,13 +279,17 @@ Stream<String> makeMultipartStreamingApiCall({
   try {
     var request = http.MultipartRequest('POST', Uri.parse(url));
 
+    final mutableHeaders = Map<String, String>.from(headers);
+    mutableHeaders['X-Request-Start-Time'] = (DateTime.now().millisecondsSinceEpoch / 1000).toString();
+    mutableHeaders['X-App-Platform'] = PlatformManager.instance.platform;
+    mutableHeaders['X-App-Version'] = PlatformManager.instance.appVersion;
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     if (requireAuthCheck) {
-      headers = Map.from(headers);
-      headers['Authorization'] = await getAuthHeader();
+      mutableHeaders['Authorization'] = await getAuthHeader();
     }
 
-    request.headers.addAll(headers);
+    request.headers.addAll(mutableHeaders);
 
     for (var file in files) {
       request.files.add(await http.MultipartFile.fromPath(fileFieldName, file.path, filename: basename(file.path)));
