@@ -152,4 +152,5 @@ async def websocket_endpoint_trigger(
     uid: str,
     sample_rate: int = 8000,
 ):
+    print("1");
     await _websocket_util_trigger(websocket, uid, sample_rate)
