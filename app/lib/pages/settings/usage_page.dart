@@ -8,15 +8,10 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/backend/http/api/payment.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
-import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -260,13 +255,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
+      _loadAvailablePlans();
       if (widget.showUpgradeDialog) {
         _showPlansSheet();
       }
     });
-
-    // Load available plans
-    _loadAvailablePlans();
   }
 
   @override
@@ -629,15 +622,16 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
-            return PlansSheet(waveController: _waveController, notesController: _notesController, arrowController: _arrowController, arrowAnimation: _arrowAnimation);
+            return PlansSheet(
+                waveController: _waveController,
+                notesController: _notesController,
+                arrowController: _arrowController,
+                arrowAnimation: _arrowAnimation);
           },
         );
       },
     );
   }
-
-
-
 
   Widget _buildEmptyState() {
     return Center(

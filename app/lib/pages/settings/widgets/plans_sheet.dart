@@ -40,6 +40,7 @@ class _PlansSheetState extends State<PlansSheet> {
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
   bool _isCancelling = false;
   bool _isUpgrading = false;
+  bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -949,8 +950,10 @@ class _PlansSheetState extends State<PlansSheet> {
                       // Training Data Opt-in Option - only show after plans are loaded
                       Consumer2<UsageProvider, UserProvider>(
                         builder: (context, usageProvider, userProvider, child) {
-                          final shouldShowTrainingOption =
-                              !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
+                          final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                              !usageProvider.isLoadingPlans &&
+                              usageProvider.availablePlans != null;
+                          debugPrint("xzy ${shouldShowTrainingOption}");
 
                           if (!shouldShowTrainingOption) {
                             return const SizedBox.shrink();
