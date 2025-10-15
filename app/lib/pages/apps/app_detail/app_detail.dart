@@ -15,6 +15,7 @@ import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -308,14 +309,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           messageProvider.sendInitialAppMessage(selectedApp);
                         }
 
-                        // Navigate directly to chat page
+                        // Navigate to chat tab
                         if (mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ChatPage(isPivotBottom: false),
-                            ),
-                          );
+                          Navigator.pop(context);
+                          context.read<HomeProvider>().setIndex(2);
                         }
                       } finally {
                         if (mounted) {

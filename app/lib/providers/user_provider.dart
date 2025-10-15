@@ -1,6 +1,7 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/privacy.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -9,6 +10,9 @@ class UserProvider with ChangeNotifier {
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
+  bool _privateCloudSyncEnabled = false;
+  bool _trainingDataOptedIn = false;
+  String? _trainingDataStatus;
 
   bool _isMigrating = false;
   bool _migrationFailed = false;
@@ -23,6 +27,9 @@ class UserProvider with ChangeNotifier {
 
   String get dataProtectionLevel => _dataProtectionLevel;
   bool get isLoading => _isLoading;
+  bool get privateCloudSyncEnabled => _privateCloudSyncEnabled;
+  bool get trainingDataOptedIn => _trainingDataOptedIn;
+  String? get trainingDataStatus => _trainingDataStatus;
   bool get isMigrating => _isMigrating;
   bool get migrationFailed => _migrationFailed;
   int get migrationTotalCount => _migrationQueue.length;
@@ -74,6 +81,12 @@ class UserProvider with ChangeNotifier {
       final userProfile = await PrivacyApi.getUserProfile();
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
 
+      // Load private cloud sync status
+      await _loadPrivateCloudSyncStatus();
+
+      // Load training data opt-in status
+      await _loadTrainingDataOptIn();
+
       final migrationStatus = userProfile['migration_status'];
       if (migrationStatus != null && migrationStatus['status'] == 'in_progress') {
         final targetLevel = migrationStatus['target_level'];
@@ -86,6 +99,54 @@ class UserProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadPrivateCloudSyncStatus() async {
+    try {
+      _privateCloudSyncEnabled = await getPrivateCloudSyncEnabled();
+    } catch (e) {
+      Logger.error('Failed to load private cloud sync status: $e');
+      _privateCloudSyncEnabled = false;
+    }
+  }
+
+  Future<void> _loadTrainingDataOptIn() async {
+    try {
+      final data = await getTrainingDataOptIn();
+      _trainingDataOptedIn = data['opted_in'] ?? false;
+      _trainingDataStatus = data['status'];
+    } catch (e) {
+      Logger.error('Failed to load training data opt-in status: $e');
+      _trainingDataOptedIn = false;
+      _trainingDataStatus = null;
+    }
+  }
+
+  Future<void> optInForTrainingData() async {
+    try {
+      final success = await setTrainingDataOptIn();
+      if (success) {
+        _trainingDataOptedIn = true;
+        _trainingDataStatus = 'pending_review';
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      Logger.error('Failed to opt-in for training data: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
+  Future<void> setPrivateCloudSync(bool value) async {
+    try {
+      final success = await setPrivateCloudSyncEnabled(value);
+      if (success) {
+        _privateCloudSyncEnabled = value;
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      Logger.error('Failed to set private cloud sync: $e\n$stackTrace');
+      rethrow;
     }
   }
 

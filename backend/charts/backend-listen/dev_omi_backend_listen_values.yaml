@@ -233,6 +233,8 @@ env:
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
+  - name: BUCKET_PRIVATE_CLOUD_SYNC
+    value: "omi-dev-private-cloud-sync"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

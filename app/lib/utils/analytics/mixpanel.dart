@@ -739,4 +739,14 @@ class MixpanelManager {
       'from_tab': fromTab,
     });
   }
+
+  void trainingDataOptInSubmitted() {
+    track('Training Data Opt-In Submitted');
+    setUserProperty('Training Data Opted In', true);
+  }
+
+  void trainingDataOptInApproved() {
+    track('Training Data Opt-In Approved');
+    setUserProperty('Training Data Status', 'approved');
+  }
 }

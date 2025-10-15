@@ -90,7 +90,7 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
     return ServerConversation.fromJson(jsonDecode(response.body));
   } else if (response.statusCode == 402) {
     debugPrint('Unlimited Plan Required for conversation: $conversationId');
-    throw Exception('Unlimited Plan Required');
+    return null;
   }
   return null;
 }

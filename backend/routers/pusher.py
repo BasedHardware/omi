@@ -1,11 +1,13 @@
 import struct
 import asyncio
 import json
+import time
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
+from database import users as users_db
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import trigger_realtime_integrations, trigger_realtime_audio_bytes
 from utils.webhooks import (
@@ -13,6 +15,7 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
+from utils.other.storage import upload_audio_chunk
 
 router = APIRouter()
 
@@ -40,6 +43,11 @@ async def _websocket_util_trigger(
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
     audio_bytes_trigger_delay_seconds = 5
     has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
+    private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
+    private_cloud_sync_delay_seconds = 5
+
+    async def save_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timestamp: float):
+        upload_audio_chunk(chunk_data, uid, conversation_id, timestamp)
 
     # task
     async def receive_tasks():
@@ -48,17 +56,29 @@ async def _websocket_util_trigger(
 
         audiobuffer = bytearray()
         trigger_audiobuffer = bytearray()
+        private_cloud_sync_buffer = bytearray()
+        private_cloud_chunk_start_time = None
+        current_conversation_id = None
 
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
                 header_type = struct.unpack('<I', data[:4])[0]
 
+                # Conversation ID
+                if header_type == 103:
+                    current_conversation_id = bytes(data[4:]).decode("utf-8")
+                    print(f"Pusher received conversation_id: {current_conversation_id}", uid)
+                    continue
+
                 # Transcript
                 if header_type == 102:
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
                     memory_id = res.get('memory_id')
+                    # Update conversation_id from transcript if provided
+                    if memory_id:
+                        current_conversation_id = memory_id
                     asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, memory_id), loop)
                     asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
                     continue
@@ -67,6 +87,24 @@ async def _websocket_util_trigger(
                 if header_type == 101:
                     audiobuffer.extend(data[4:])
                     trigger_audiobuffer.extend(data[4:])
+
+                    # Private cloud sync
+                    if private_cloud_sync_enabled and current_conversation_id:
+                        if private_cloud_chunk_start_time is None:
+                            private_cloud_chunk_start_time = time.time()
+
+                        private_cloud_sync_buffer.extend(data[4:])
+                        # Save chunk every 5 seconds (sample_rate * 2 bytes per sample * 5 seconds)
+                        if len(private_cloud_sync_buffer) >= sample_rate * 2 * private_cloud_sync_delay_seconds:
+                            chunk_data = bytes(private_cloud_sync_buffer)
+                            timestamp = private_cloud_chunk_start_time
+                            conv_id = current_conversation_id
+                            asyncio.run_coroutine_threadsafe(
+                                save_audio_chunk(chunk_data, uid, conv_id, timestamp), loop
+                            )
+                            private_cloud_sync_buffer = bytearray()
+                            private_cloud_chunk_start_time = None
+
                     if (
                         has_audio_apps_enabled
                         and len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2
