@@ -43,19 +43,50 @@ class ActionFieldsWidget extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Action selector
-                            ListTile(
-                              title: Text(actionType.title),
-                              subtitle: Text('Allow this app to ${actionType.title.toLowerCase()}'),
-                              trailing: Switch(
-                                value: isSelected,
-                                onChanged: (value) {
-                                  if (value) {
-                                    provider.addSpecificAction(actionType.id);
-                                  } else {
-                                    provider.removeActionByType(actionType.id);
-                                  }
-                                },
+                            SizedBox(
+                              height: 90,
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            actionType.title,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Allow this app to ${actionType.title.toLowerCase()}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade400,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: isSelected,
+                                      onChanged: (value) {
+                                        if (value) {
+                                          provider.addSpecificAction(actionType.id);
+                                        } else {
+                                          provider.removeActionByType(actionType.id);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
 
