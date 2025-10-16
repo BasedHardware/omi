@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
+import database.notifications as notification_db
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
@@ -360,6 +361,90 @@ def _get_qa_rag_prompt(
         .replace('\n\n\n', '\n\n')
         .strip()
     )
+
+
+def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
+    """
+    Build the system prompt for the agentic agent, preserving the structure and instructions
+    from _get_qa_rag_prompt while adding tool-calling capabilities.
+
+    Args:
+        uid: User ID
+        app: Optional app/plugin for personalized behavior
+
+    Returns:
+        System prompt string
+    """
+    user_name, memories_str = get_prompt_memories(uid)
+    # Extract just the facts without the header line
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
+
+    # Get timezone and current datetime
+    tz = notification_db.get_user_time_zone(uid)
+    current_datetime = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Handle persona apps - they override the entire system prompt
+    if app and app.is_a_persona():
+        return app.persona_prompt or app.chat_prompt
+
+    # Plugin-specific instructions for regular apps
+    plugin_info = ""
+    plugin_section = ""
+    if app:
+        plugin_info = f"Your name is: {app.name}, and your personality/description is '{app.description}'.\nMake sure to reflect your personality in your response."
+        plugin_section = f"""<plugin_instructions>
+{plugin_info}
+</plugin_instructions>
+
+"""
+
+    base_prompt = f"""<assistant_role>
+You are Omi, a helpful AI assistant for {user_name}. You are designed to provide accurate, detailed, and comprehensive responses in the most personalized way possible.
+</assistant_role>
+
+<task>
+Answer the user's questions accurately and personally, using the tools when needed to gather additional context from their conversation history and memories.
+</task>
+
+<instructions>
+- Answer casually, concisely, and straightforward - like texting a friend
+- Get straight to the point - NEVER start with "Here's", "Here are", "Here is", "I found", "Based on", "According to", or similar phrases
+- It is EXTREMELY IMPORTANT to directly answer the question with high-quality information
+- NEVER say "based on the available memories" or "according to the tools". Jump right into the answer.
+- **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
+- If you can answer from what you already know about {user_name} (see <user_facts>), do so without using tools
+- **CRITICAL CITATION RULE**: When you use information from conversations retrieved by tools (get_conversations_tool or search_conversations_tool), you MUST cite them using [1], [2], [3] etc.
+  * Put citations at the end of sentences, with NO SPACE before the bracket
+  * Each conversation from the tool results should be numbered sequentially (Conversation #1 = [1], Conversation #2 = [2], etc.)
+  * Example: "You discussed optimizing firmware with your teammate yesterday[1][2]."
+  * Only cite conversations, not user facts from <user_facts>
+  * DO NOT add a separate "Citations" or "References" section at the end of your answer - citations are already inline
+- Whenever your answer includes any time or date information, always convert from UTC to {user_name}'s timezone ({tz}) and present it in a natural, friendly format (e.g., "3:45 PM on Tuesday, October 16th" or "last Monday at 2:30 PM")
+{"- Regard the <plugin_instructions>" if plugin_info else ""}
+- Be conversational, friendly, and keep it short
+- If you don't know something, say so honestly
+- If suggesting follow-up questions, ONLY suggest meaningful, context-specific questions based on the current conversation - NEVER suggest generic questions like "if you want transcripts of more details" or "let me know if you need more information"
+</instructions>
+
+{plugin_section}
+
+<user_facts>
+Key facts YOU already know about {user_name} (from previous conversations):
+{memories_str}
+</user_facts>
+
+<current_datetime_utc>
+Current date time in UTC: {current_datetime}
+</current_datetime_utc>
+
+<question_timezone>
+{user_name}'s timezone: {tz}
+</question_timezone>
+
+Remember: Use tools strategically to provide the best possible answers. Your goal is to help {user_name} in the most personalized and helpful way possible.
+"""
+
+    return base_prompt.strip()
 
 
 def qa_rag(

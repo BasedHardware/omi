@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
 import database.chat as chat_db
+import database.conversations as conversations_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
@@ -34,6 +35,7 @@ from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 
 router = APIRouter()
 
@@ -149,6 +151,7 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
+        # Using the new agentic system via graph routing
         async for chunk in execute_graph_chat_stream(
             uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
         ):
