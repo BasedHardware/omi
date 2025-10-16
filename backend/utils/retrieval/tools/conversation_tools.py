@@ -38,18 +38,20 @@ def get_conversations_tool(
     - User wants to review what they discussed
 
     Time filtering guidance:
+    - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
     - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
-    - For relative time queries at hour/minute level ("2 hours ago", "30 minutes ago"):
-      * Calculate the exact datetime by subtracting from current time
+    - For relative time queries at hour/minute level ("2 hours ago", "30 minutes ago", "5 minutes ago"):
+      * Calculate the exact datetime by subtracting from current time (from system prompt)
       * Use ISO format without timezone (YYYY-MM-DDTHH:MM:SS) - will be interpreted in user's timezone
-      * Example: If user asks "2 hours ago" and current time is 14:00, use start_date="2025-10-16T12:00:00"
+      * Example: If current time is 2024-01-15 14:00:00 UTC and user asks "2 hours ago", calculate 14:00 - 2 hours = 12:00, then convert to user's timezone and use start_date="2024-01-15T12:00:00"
+      * Example: If current time is 2024-01-15 14:30:00 UTC and user asks "5 minutes ago", calculate 14:30 - 5 minutes = 14:25, then convert to user's timezone and use start_date="2024-01-15T14:25:00"
     - For time-of-day queries ("this morning", "this afternoon", "tonight"):
-      * "this morning": start_date="2025-10-16T06:00:00", end_date="2025-10-16T12:00:00"
-      * "this afternoon": start_date="2025-10-16T12:00:00", end_date="2025-10-16T18:00:00"
-      * "tonight": start_date="2025-10-16T18:00:00", end_date="2025-10-16T23:59:59"
+      * Use the current date from <current_datetime_utc> to build the date string
+      * "this morning": start_date="YYYY-MM-DDT06:00:00", end_date="YYYY-MM-DDT12:00:00"
+      * "this afternoon": start_date="YYYY-MM-DDT12:00:00", end_date="YYYY-MM-DDT18:00:00"
+      * "tonight": start_date="YYYY-MM-DDT18:00:00", end_date="YYYY-MM-DDT23:59:59"
     - Combine start_date and end_date to create precise time windows
     - All dates without explicit timezone are assumed to be in the user's local timezone
-    - Current date/time reference: 2025-10-16 (use this as basis for all relative time calculations)
 
     Transcript retrieval guidance:
     - By default (max_transcript_segments=0), no transcript segments are included
@@ -273,12 +275,12 @@ def search_conversations_tool(
     - User wants conversations with specific people or about specific subjects
 
     Time filtering guidance:
+    - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
     - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
-    - For relative time queries ("2 hours ago", "this morning"), calculate exact datetime in user's timezone and use ISO format
-    - Use ISO datetime format (YYYY-MM-DDTHH:MM:SSZ) for hour/minute-level queries
+    - For relative time queries ("2 hours ago", "5 minutes ago", "this morning"), calculate exact datetime in user's timezone and use ISO format
+    - Use ISO datetime format (YYYY-MM-DDTHH:MM:SS) for hour/minute-level queries (no Z suffix)
     - Combine start_date and end_date to create time windows for precise time ranges
     - All dates without timezone info are assumed to be in the user's local timezone
-    - Current date/time for calculations: 2025-10-16 (use this as reference for relative times)
 
     Transcript retrieval guidance:
     - By default (max_transcript_segments=0), no transcript segments are included

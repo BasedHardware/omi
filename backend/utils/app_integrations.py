@@ -24,7 +24,7 @@ import database.conversations as conversations_db
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
 
 
-def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
+def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
     """
     Recursively retrieves content from GitHub docs folder and subfolders using GitHub API.
     Returns a dict mapping file paths to their raw content.

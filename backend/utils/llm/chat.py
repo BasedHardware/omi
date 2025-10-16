@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 import database.users as users_db
 import database.notifications as notification_db
 from database.redis_db import add_filter_category_item
+from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
@@ -90,28 +91,40 @@ class IsAnOmiQuestion(BaseModel):
 
 def retrieve_is_an_omi_question(question: str) -> bool:
     prompt = f'''
-    Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+    Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing) 
+    OR if they are asking about their personal data/memories stored in the app.
 
-    Examples of User Questions:
+    CRITICAL DISTINCTION:
+    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does Omi work?", "What features does Omi have?")
+    - Questions ABOUT USER'S PERSONAL DATA = False (e.g., "What did I say?", "How many conversations do I have?")
 
-    - "How does it work?"
-    - "What can you do?"
-    - "How can I buy it?"
-    - "Where do I get it?"
-    - "How does the chat function?"
+    Examples of Omi/Friend App Questions (return True):
+    - "How does Omi work?"
+    - "What can Omi do?"
+    - "How can I buy the device?"
+    - "Where do I get Friend?"
+    - "What features does the app have?"
+    - "How do I set up Omi?"
+    - "Does Omi support multiple languages?"
+    - "What is the battery life?"
+    - "How do I connect my device?"
 
-    Instructions:
+    Examples of Personal Data Questions (return False):
+    - "How many conversations did I have last month?"
+    - "What did I talk about yesterday?"
+    - "Show me my memories from last week"
+    - "Who did I meet with today?"
+    - "What topics have I discussed?"
+    - "Summarize my conversations"
+    - "What did I say about work?"
+    - "When did I last talk to John?"
 
-    1. Review the question carefully.
-    2. Determine if the user is asking about:
-     - The operational aspects of the app.
-     - How to utilize the app effectively.
-     - Any specific features or purchasing options.
-
-    Output: Clearly state if the user is asking a question related to the app's functionality or usage. If yes, specify the nature of the inquiry.
+    KEY RULE: If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
 
     User's Question:
     {question}
+    
+    Is this asking about the Omi/Friend app product itself?
     '''.replace(
         '    ', ''
     ).strip()
@@ -375,9 +388,7 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
     Returns:
         System prompt string
     """
-    user_name, memories_str = get_prompt_memories(uid)
-    # Extract just the facts without the header line
-    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
+    user_name = get_user_name(uid)
 
     # Get timezone and current datetime
     tz = notification_db.get_user_time_zone(uid)
@@ -412,12 +423,12 @@ Answer the user's questions accurately and personally, using the tools when need
 - It is EXTREMELY IMPORTANT to directly answer the question with high-quality information
 - NEVER say "based on the available memories" or "according to the tools". Jump right into the answer.
 - **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
-- If you can answer from what you already know about {user_name} (see <user_facts>), do so without using tools
+- **ALWAYS use get_memories_tool to learn about {user_name}** before answering questions about their preferences, habits, goals, relationships, or personal details. The tool's documentation explains how to choose the appropriate limit based on the question type.
 - **CRITICAL CITATION RULE**: When you use information from conversations retrieved by tools (get_conversations_tool or search_conversations_tool), you MUST cite them using [1], [2], [3] etc.
   * Put citations at the end of sentences, with NO SPACE before the bracket
   * Each conversation from the tool results should be numbered sequentially (Conversation #1 = [1], Conversation #2 = [2], etc.)
   * Example: "You discussed optimizing firmware with your teammate yesterday[1][2]."
-  * Only cite conversations, not user facts from <user_facts>
+  * DO NOT cite memories from get_memories_tool - only cite conversations
   * DO NOT add a separate "Citations" or "References" section at the end of your answer - citations are already inline
 - Whenever your answer includes any time or date information, always convert from UTC to {user_name}'s timezone ({tz}) and present it in a natural, friendly format (e.g., "3:45 PM on Tuesday, October 16th" or "last Monday at 2:30 PM")
 {"- Regard the <plugin_instructions>" if plugin_info else ""}
@@ -428,11 +439,6 @@ Answer the user's questions accurately and personally, using the tools when need
 
 {plugin_section}
 
-<user_facts>
-Key facts YOU already know about {user_name} (from previous conversations):
-{memories_str}
-</user_facts>
-
 <current_datetime_utc>
 Current date time in UTC: {current_datetime}
 </current_datetime_utc>
@@ -441,7 +447,7 @@ Current date time in UTC: {current_datetime}
 {user_name}'s timezone: {tz}
 </question_timezone>
 
-Remember: Use tools strategically to provide the best possible answers. Your goal is to help {user_name} in the most personalized and helpful way possible.
+Remember: Use tools strategically to provide the best possible answers. Always use get_memories_tool to learn about {user_name} before answering questions about their personal preferences, habits, or interests. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
     return base_prompt.strip()
