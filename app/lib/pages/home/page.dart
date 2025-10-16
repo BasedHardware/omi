@@ -659,61 +659,54 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      title: Stack(
-        children: [
-          Row(
+      title: Consumer<HomeProvider>(
+        builder: (context, homeProvider, child) {
+          return Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const BatteryInfoWidget(),
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1F1F25),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(
-                        FontAwesomeIcons.gear,
-                        size: 16,
-                        color: Colors.white70,
-                      ),
-                      onPressed: () {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().pageOpened('Settings');
-                        String language = SharedPreferencesUtil().userPrimaryLanguage;
-                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                        SettingsDrawer.show(context);
-                        if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        }
-                      },
-                    ),
+              if (homeProvider.selectedIndex == 2) // Chat page index
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 0),
+                  child: AppSelectionDropdown(isFloating: false),
+                )
+              else
+                const SizedBox.shrink(),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F25),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(
+                    FontAwesomeIcons.gear,
+                    size: 16,
+                    color: Colors.white70,
                   ),
-                ],
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    MixpanelManager().pageOpened('Settings');
+                    String language = SharedPreferencesUtil().userPrimaryLanguage;
+                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    SettingsDrawer.show(context);
+                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (context.mounted) {
+                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                      }
+                    }
+                  },
+                ),
               ),
             ],
-          ),
-          Consumer<HomeProvider>(
-            builder: (context, homeProvider, child) {
-              if (homeProvider.selectedIndex == 2) { // Chat page index
-                return const Center(
-                  child: AppSelectionDropdown(isFloating: false),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-        ],
+          );
+        },
       ),
       elevation: 0,
       centerTitle: true,
