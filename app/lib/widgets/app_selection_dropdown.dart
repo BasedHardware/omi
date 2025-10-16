@@ -285,19 +285,6 @@ class _AppSelectionDropdownState extends State<AppSelectionDropdown> with Ticker
           mainAxisSize: MainAxisSize.min,
           children: [
             selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
-            const SizedBox(width: 10),
-            Container(
-              constraints: const BoxConstraints(maxWidth: 100),
-              child: Text(
-                selectedApp != null ? selectedApp.getName() : "Omi",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
             const SizedBox(width: 8),
             const Icon(
               Icons.keyboard_arrow_down,
