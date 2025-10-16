@@ -703,15 +703,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               ),
             ],
           ),
-          Consumer<HomeProvider>(
-            builder: (context, homeProvider, child) {
-              if (homeProvider.selectedIndex == 2) { // Chat page index
-                return const Center(
-                  child: AppSelectionDropdown(isFloating: false),
-                );
-              }
-              return const SizedBox.shrink();
-            },
+          Center(
+            child: Consumer<HomeProvider>(
+              builder: (context, homeProvider, child) {
+                if (homeProvider.selectedIndex == 2) { // Chat page index
+                  return Transform.translate(
+                    offset: const Offset(0, -1),
+                    child: const AppSelectionDropdown(isFloating: false),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
           ),
         ],
       ),
