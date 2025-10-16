@@ -20,9 +20,8 @@ llm_medium_experiment = ChatOpenAI(model='gpt-4.1')
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 
 # Specialized models for agentic workflows
-# Using gpt-4o for tool calling as it has excellent function calling capabilities
-llm_agent = ChatOpenAI(model='gpt-4o', temperature=0.7)
-llm_agent_stream = ChatOpenAI(model='gpt-4o', streaming=True, temperature=0.7)
+llm_agent = ChatOpenAI(model='gpt-4.1')
+llm_agent_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
     model="google/gemini-flash-1.5-8b",
