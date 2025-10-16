@@ -2,7 +2,13 @@ from typing import Optional, List
 
 from models.app import App
 from models.chat import Message, MessageSender
-from langchain.schema import SystemMessage, HumanMessage, AIMessage
+
+try:
+    from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+except ImportError:
+    # Fallback for langchain<1.0.0
+    from langchain.schema import SystemMessage, HumanMessage, AIMessage
+
 from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium, llm_mini, llm_medium_experiment
 
 

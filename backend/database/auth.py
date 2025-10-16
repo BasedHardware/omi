@@ -1,3 +1,5 @@
+import os
+
 from firebase_admin import auth
 
 from database.redis_db import cache_user_name, get_cached_user_name
@@ -10,6 +12,16 @@ def get_user_from_uid(uid: str):
         print(e)
         user = None
     if not user:
+        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+            return {
+                'uid': uid,
+                'email': 'email',
+                'email_verified': True,
+                'phone_number': '',
+                'display_name': 'Debug',
+                'photo_url': None,
+                'disabled': False,
+            }
         return None
 
     return {
