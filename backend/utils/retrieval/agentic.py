@@ -301,21 +301,20 @@ async def _run_agent_stream(
                 tool_name = event.get("name", "unknown")
                 print(f"🔧 Tool started: {tool_name}")
 
-                # Show user-friendly messages
-                friendly_names = {
-                    "get_conversations_tool": "Checking your conversation history",
-                    "search_conversations_tool": "Searching for relevant conversations",
-                    "get_memories_tool": "Looking through your saved memories",
-                    "get_user_facts_tool": "Reviewing what I know about you",
-                }
-                message = friendly_names.get(tool_name, f"Using {tool_name}")
-                await callback.put_thought(message)
+                # # Show user-friendly messages
+                # friendly_names = {
+                #     "get_conversations_tool": "Checking your conversation",
+                #     "search_conversations_tool": "Searching for relevant conversations",
+                #     "get_memories_tool": "Looking through your memories",
+                # }
+                # message = friendly_names.get(tool_name, f"Using {tool_name}")
+                # await callback.put_thought(message)
 
             elif kind == "on_tool_end":
                 tool_name = event.get("name", "unknown")
                 output = event.get("data", {}).get("output", "")
                 print(f"✅ Tool ended: {tool_name}")
-                print(f"   Output preview: {str(output)[:200]}...")
+                # print(f"   Output preview: {str(output)[:200]}...")
 
             elif kind == "on_tool_error":
                 tool_name = event.get("name", "unknown")

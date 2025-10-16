@@ -37,6 +37,13 @@ def get_conversations_tool(
     - You need conversation transcripts to answer questions
     - User wants to review what they discussed
 
+    **IMPORTANT for summarization queries:**
+    When user asks for weekly, monthly, or yearly summaries/overviews:
+    - Set limit=5000 to retrieve ALL conversations in that period
+    - Set max_transcript_segments=0 to exclude transcripts (reduce context size)
+    - This prevents missing conversations and avoids context overflow from transcripts
+    Examples: "summarize my week", "what did I do this month", "recap my year"
+
     Time filtering guidance:
     - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
     - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
@@ -151,7 +158,7 @@ def get_conversations_tool(
             return f"Error: Invalid end_date format: {end_date}"
 
     # Limit to reasonable max
-    limit = min(limit, 100)
+    limit = min(limit, 5000)
 
     # Parse statuses if provided
     status_list = []
@@ -274,6 +281,13 @@ def search_conversations_tool(
     - You need to find conversations containing certain information
     - User wants conversations with specific people or about specific subjects
 
+    **IMPORTANT for summarization queries:**
+    When user asks for weekly, monthly, or yearly summaries about a specific topic:
+    - Set per_page=100 (maximum) to retrieve more results per query
+    - Set max_transcript_segments=0 to exclude transcripts (reduce context size)
+    - Use multiple pages if needed to cover the full time period
+    Examples: "summarize work discussions this month", "recap health topics this year"
+
     Time filtering guidance:
     - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
     - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
@@ -301,7 +315,7 @@ def search_conversations_tool(
 
     Args:
         query: Natural language search query (required)
-        per_page: Results per page (default: 10, max: 50)
+        per_page: Results per page (default: 10, max: 100)
         page: Page number starting at 1 (default: 1)
         include_discarded: Include deleted conversations (default: False)
         start_date: Filter conversations after this date (YYYY-MM-DD for days, YYYY-MM-DDTHH:MM:SSZ for hours/minutes)
@@ -371,7 +385,7 @@ def search_conversations_tool(
             return f"Error: Invalid end_date format: {end_date}"
 
     # Limit to reasonable max and convert to 0-based page index
-    per_page = min(per_page, 50)
+    per_page = min(per_page, 5000)
     page_index = max(0, page - 1)  # Convert 1-based to 0-based
 
     # Search conversations
