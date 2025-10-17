@@ -95,6 +95,9 @@ def get_action_items_tool(
         return "Error: User ID not found in configuration"
     print(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
 
+    # Get safety guard from config if available
+    safety_guard = config['configurable'].get('safety_guard')
+
     # Cap at 500 per call
     if limit > 500:
         print(f"⚠️ get_action_items_tool - limit capped from {limit} to 500")

@@ -110,6 +110,9 @@ def get_conversations_tool(
         return "Error: User ID not found in configuration"
     print(f"✅ get_conversations_tool - uid: {uid}")
 
+    # Get safety guard from config if available
+    safety_guard = config['configurable'].get('safety_guard')
+
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
@@ -334,6 +337,9 @@ def search_conversations_tool(
         print(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     print(f"✅ search_conversations_tool - uid: {uid}, query: {query}, per_page: {per_page}, page: {page}")
+
+    # Get safety guard from config if available
+    safety_guard = config['configurable'].get('safety_guard')
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:

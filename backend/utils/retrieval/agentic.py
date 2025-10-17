@@ -27,12 +27,11 @@ from utils.retrieval.tools import (
     get_conversations_tool,
     search_conversations_tool,
     get_memories_tool,
-)
-from utils.retrieval.tools.action_item_tools import (
     get_action_items_tool,
     create_action_item_tool,
     update_action_item_tool,
 )
+from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
@@ -211,11 +210,16 @@ async def execute_agentic_chat_stream(
     # Run agent with streaming
     # Add a list to collect conversations from tools for citation
     conversations_collected = []
+
+    # Initialize safety guard
+    safety_guard = AgentSafetyGuard(max_tool_calls=10, max_context_tokens=500000)
+
     config = {
         "configurable": {
             "user_id": uid,
             "thread_id": str(uuid.uuid4()),
             "conversations_collected": conversations_collected,
+            "safety_guard": safety_guard,
         }
     }
 
@@ -291,6 +295,8 @@ async def _run_agent_stream(
         full_response: List to accumulate response tokens
         callback_data: Dict to store metadata
     """
+    safety_guard = config['configurable'].get('safety_guard')
+
     try:
         async for event in agent.astream_events(
             {"messages": messages},
@@ -307,25 +313,47 @@ async def _run_agent_stream(
                     full_response.append(token)
                     await callback.put_data(token)
 
-            # Track tool usage and show status
+            # Track tool usage and validate with safety guard
             elif kind == "on_tool_start":
                 tool_name = event.get("name", "unknown")
+                tool_input = event.get("data", {}).get("input", {})
                 print(f"🔧 Tool started: {tool_name}")
 
-                # # Show user-friendly messages
-                # friendly_names = {
-                #     "get_conversations_tool": "Checking your conversation",
-                #     "search_conversations_tool": "Searching for relevant conversations",
-                #     "get_memories_tool": "Looking through your memories",
-                # }
-                # message = friendly_names.get(tool_name, f"Using {tool_name}")
-                # await callback.put_thought(message)
+                # Validate tool call with safety guard
+                if safety_guard:
+                    try:
+                        safety_guard.validate_tool_call(tool_name, tool_input)
+
+                        # Check if we should warn user about approaching limits
+                        warning = safety_guard.should_warn_user()
+                        if warning:
+                            await callback.put_thought(warning)
+                    except SafetyGuardError as e:
+                        # Send friendly error message to user (no technical jargon)
+                        error_msg = f"\n\n{str(e)}"
+                        await callback.put_data(error_msg)
+                        print(f"🛡️ Safety Guard blocked tool call: {e}")
+                        # Signal completion and stop processing
+                        await callback.end()
+                        return
 
             elif kind == "on_tool_end":
                 tool_name = event.get("name", "unknown")
                 output = event.get("data", {}).get("output", "")
                 print(f"✅ Tool ended: {tool_name}")
-                # print(f"   Output preview: {str(output)[:200]}...")
+
+                # Check context size with safety guard
+                if safety_guard and output:
+                    try:
+                        safety_guard.check_context_size(str(output))
+                    except SafetyGuardError as e:
+                        # Send friendly error message to user (no technical jargon)
+                        error_msg = f"\n\n{str(e)}"
+                        await callback.put_data(error_msg)
+                        print(f"🛡️ Safety Guard blocked due to context size: {e}")
+                        # Signal completion and stop processing
+                        await callback.end()
+                        return
 
             elif kind == "on_tool_error":
                 tool_name = event.get("name", "unknown")
@@ -337,9 +365,20 @@ async def _run_agent_stream(
                 error = event.get("data", {}).get("error", "")
                 print(f"❌ Chain error: {error}")
 
+        # Log final stats
+        if safety_guard:
+            stats = safety_guard.get_stats()
+            print(f"🛡️ Safety Guard final stats: {stats}")
+
         # Signal completion
         await callback.end()
 
+    except SafetyGuardError as e:
+        # Send friendly error message to user (no technical jargon)
+        error_msg = f"\n\n{str(e)}"
+        await callback.put_data(error_msg)
+        print(f"🛡️ Safety Guard stopped execution: {e}")
+        await callback.end()
     except Exception as e:
         print(f"❌ Error in _run_agent_stream: {e}")
         import traceback

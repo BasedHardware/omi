@@ -94,6 +94,9 @@ def get_memories_tool(
         return "Error: User ID not found in configuration"
     print(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
+    # Get safety guard from config if available
+    safety_guard = config['configurable'].get('safety_guard')
+
     # Cap at 5000 per call to prevent overloading context
     if limit > 5000:
         print(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
