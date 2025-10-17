@@ -346,6 +346,31 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
         print(f'Failed to send action item deletion message: {e}')
 
 
+def send_action_item_created_notification(user_id: str, action_item_description: str):
+    """
+    Sends a notification when a new action item is created via the agentic chat.
+    This provides confirmation that the task was successfully added.
+    """
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    # Truncate description if too long
+    max_length = 60
+    display_description = (
+        action_item_description[:max_length] + '...'
+        if len(action_item_description) > max_length
+        else action_item_description
+    )
+
+    title = "Task Added"
+    body = display_description
+
+    send_notification(token, title, body)
+    print(f"Action item created notification sent to user {user_id}")
+
+
 def send_action_item_completed_notification(user_id: str, action_item_description: str):
     """
     Sends a notification when a user completes an action item via the agentic chat.
@@ -364,8 +389,8 @@ def send_action_item_completed_notification(user_id: str, action_item_descriptio
         else action_item_description
     )
 
-    title = "✅ Task Completed!"
-    body = f"Great job! You've completed: {display_description}"
+    title = "Task Complete! 🎉"
+    body = display_description
 
     send_notification(token, title, body)
     print(f"Action item completed notification sent to user {user_id}")

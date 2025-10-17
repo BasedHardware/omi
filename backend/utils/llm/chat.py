@@ -622,9 +622,16 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     If the <user_last_messages> contain a complete question, maintain the original version as accurately as possible. \
     Avoid adding unnecessary words.
 
+    **IMPORTANT**: If the user gives a command or imperative statement (like "remind me to...", "add task to...", "create action item..."), \
+    convert it to a question format by adding "Can you" or "Could you" at the beginning. \
+    Examples:
+    - "remind me to buy milk tomorrow" -> "Can you remind me to buy milk tomorrow"
+    - "add task to finish report" -> "Can you add task to finish report"
+    - "create action item for meeting" -> "Can you create action item for meeting"
+
     You MUST keep the original <date_in_term>
 
-    Output a WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    Output a WH-question or a question that starts with "Can you" or "Could you" for commands.
 
     Example 1:
     <user_last_messages>

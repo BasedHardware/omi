@@ -30,6 +30,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.action_item_tools import (
     get_action_items_tool,
+    create_action_item_tool,
     update_action_item_tool,
 )
 from utils.llm.clients import llm_agent, llm_agent_stream
@@ -120,6 +121,7 @@ def execute_agentic_chat(
         search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
+        create_action_item_tool,
         update_action_item_tool,
     ]
 
@@ -189,6 +191,7 @@ async def execute_agentic_chat_stream(
         search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
+        create_action_item_tool,
         update_action_item_tool,
     ]
 
