@@ -8,7 +8,9 @@ from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
+import database.notifications as notification_db
 from database.redis_db import add_filter_category_item
+from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
@@ -89,28 +91,40 @@ class IsAnOmiQuestion(BaseModel):
 
 def retrieve_is_an_omi_question(question: str) -> bool:
     prompt = f'''
-    Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+    Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing) 
+    OR if they are asking about their personal data/memories stored in the app.
 
-    Examples of User Questions:
+    CRITICAL DISTINCTION:
+    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does Omi work?", "What features does Omi have?")
+    - Questions ABOUT USER'S PERSONAL DATA = False (e.g., "What did I say?", "How many conversations do I have?")
 
-    - "How does it work?"
-    - "What can you do?"
-    - "How can I buy it?"
-    - "Where do I get it?"
-    - "How does the chat function?"
+    Examples of Omi/Friend App Questions (return True):
+    - "How does Omi work?"
+    - "What can Omi do?"
+    - "How can I buy the device?"
+    - "Where do I get Friend?"
+    - "What features does the app have?"
+    - "How do I set up Omi?"
+    - "Does Omi support multiple languages?"
+    - "What is the battery life?"
+    - "How do I connect my device?"
 
-    Instructions:
+    Examples of Personal Data Questions (return False):
+    - "How many conversations did I have last month?"
+    - "What did I talk about yesterday?"
+    - "Show me my memories from last week"
+    - "Who did I meet with today?"
+    - "What topics have I discussed?"
+    - "Summarize my conversations"
+    - "What did I say about work?"
+    - "When did I last talk to John?"
 
-    1. Review the question carefully.
-    2. Determine if the user is asking about:
-     - The operational aspects of the app.
-     - How to utilize the app effectively.
-     - Any specific features or purchasing options.
-
-    Output: Clearly state if the user is asking a question related to the app's functionality or usage. If yes, specify the nature of the inquiry.
+    KEY RULE: If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
 
     User's Question:
     {question}
+    
+    Is this asking about the Omi/Friend app product itself?
     '''.replace(
         '    ', ''
     ).strip()
@@ -362,6 +376,82 @@ def _get_qa_rag_prompt(
     )
 
 
+def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
+    """
+    Build the system prompt for the agentic agent, preserving the structure and instructions
+    from _get_qa_rag_prompt while adding tool-calling capabilities.
+
+    Args:
+        uid: User ID
+        app: Optional app/plugin for personalized behavior
+
+    Returns:
+        System prompt string
+    """
+    user_name = get_user_name(uid)
+
+    # Get timezone and current datetime
+    tz = notification_db.get_user_time_zone(uid)
+    current_datetime = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Handle persona apps - they override the entire system prompt
+    if app and app.is_a_persona():
+        return app.persona_prompt or app.chat_prompt
+
+    # Plugin-specific instructions for regular apps
+    plugin_info = ""
+    plugin_section = ""
+    if app:
+        plugin_info = f"Your name is: {app.name}, and your personality/description is '{app.description}'.\nMake sure to reflect your personality in your response."
+        plugin_section = f"""<plugin_instructions>
+{plugin_info}
+</plugin_instructions>
+
+"""
+
+    base_prompt = f"""<assistant_role>
+You are Omi, a helpful AI assistant for {user_name}. You are designed to provide accurate, detailed, and comprehensive responses in the most personalized way possible.
+</assistant_role>
+
+<task>
+Answer the user's questions accurately and personally, using the tools when needed to gather additional context from their conversation history and memories.
+</task>
+
+<instructions>
+- Answer casually, concisely, and straightforward - like texting a friend
+- Get straight to the point - NEVER start with "Here's", "Here are", "Here is", "I found", "Based on", "According to", or similar phrases
+- It is EXTREMELY IMPORTANT to directly answer the question with high-quality information
+- NEVER say "based on the available memories" or "according to the tools". Jump right into the answer.
+- **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
+- **ALWAYS use get_memories_tool to learn about {user_name}** before answering questions about their preferences, habits, goals, relationships, or personal details. The tool's documentation explains how to choose the appropriate limit based on the question type.
+- **CRITICAL CITATION RULE**: When you use information from conversations retrieved by tools (get_conversations_tool or search_conversations_tool), you MUST cite them using [1], [2], [3] etc.
+  * Put citations at the end of sentences, with NO SPACE before the bracket
+  * Each conversation from the tool results should be numbered sequentially (Conversation #1 = [1], Conversation #2 = [2], etc.)
+  * Example: "You discussed optimizing firmware with your teammate yesterday[1][2]."
+  * DO NOT cite memories from get_memories_tool - only cite conversations
+  * DO NOT add a separate "Citations" or "References" section at the end of your answer - citations are already inline
+- Whenever your answer includes any time or date information, always convert from UTC to {user_name}'s timezone ({tz}) and present it in a natural, friendly format (e.g., "3:45 PM on Tuesday, October 16th" or "last Monday at 2:30 PM")
+- If you don't know something, say so honestly
+- If suggesting follow-up questions, ONLY suggest meaningful, context-specific questions based on the current conversation - NEVER suggest generic questions like "if you want transcripts of more details" or "let me know if you need more information"
+{"- Regard the <plugin_instructions>" if plugin_info else ""}
+</instructions>
+
+{plugin_section}
+
+<current_datetime_utc>
+Current date time in UTC: {current_datetime}
+</current_datetime_utc>
+
+<question_timezone>
+{user_name}'s timezone: {tz}
+</question_timezone>
+
+Remember: Use tools strategically to provide the best possible answers. Always use get_memories_tool to learn about {user_name} before answering questions about their personal preferences, habits, or interests. Your goal is to help {user_name} in the most personalized and helpful way possible.
+"""
+
+    return base_prompt.strip()
+
+
 def qa_rag(
     uid: str,
     question: str,
@@ -532,9 +622,16 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     If the <user_last_messages> contain a complete question, maintain the original version as accurately as possible. \
     Avoid adding unnecessary words.
 
+    **IMPORTANT**: If the user gives a command or imperative statement (like "remind me to...", "add task to...", "create action item..."), \
+    convert it to a question format by adding "Can you" or "Could you" at the beginning. \
+    Examples:
+    - "remind me to buy milk tomorrow" -> "Can you remind me to buy milk tomorrow"
+    - "add task to finish report" -> "Can you add task to finish report"
+    - "create action item for meeting" -> "Can you create action item for meeting"
+
     You MUST keep the original <date_in_term>
 
-    Output a WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    Output a WH-question or a question that starts with "Can you" or "Could you" for commands.
 
     Example 1:
     <user_last_messages>

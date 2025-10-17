@@ -114,9 +114,27 @@ class ActionItem(BaseModel):
     def actions_to_string(action_items: List['ActionItem']) -> str:
         if not action_items:
             return 'None'
-        return '\n'.join(
-            [f"- {item.description} ({'completed' if item.completed else 'pending'})" for item in action_items]
-        )
+
+        result = []
+        for item in action_items:
+            status = 'completed' if item.completed else 'pending'
+            line = f"- {item.description} ({status})"
+
+            # Add timestamp information
+            timestamps = []
+            if item.created_at:
+                timestamps.append(f"Created: {item.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            if item.due_at:
+                timestamps.append(f"Due: {item.due_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            if item.completed_at:
+                timestamps.append(f"Completed: {item.completed_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
+            if timestamps:
+                line += f" [{', '.join(timestamps)}]"
+
+            result.append(line)
+
+        return '\n'.join(result)
 
 
 class Event(BaseModel):

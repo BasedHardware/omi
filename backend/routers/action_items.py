@@ -92,8 +92,10 @@ def get_action_items(
     offset: int = Query(0, ge=0, description="Number of action items to skip"),
     completed: Optional[bool] = Query(None, description="Filter by completion status"),
     conversation_id: Optional[str] = Query(None, description="Filter by conversation ID"),
-    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
-    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
+    start_date: Optional[datetime] = Query(None, description="Filter by creation start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by creation end date (inclusive)"),
+    due_start_date: Optional[datetime] = Query(None, description="Filter by due start date (inclusive)"),
+    due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get action items for the current user."""
@@ -103,6 +105,8 @@ def get_action_items(
         completed=completed,
         start_date=start_date,
         end_date=end_date,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
         limit=limit,
         offset=offset,
     )
@@ -122,6 +126,8 @@ def get_action_items(
             completed=completed,
             start_date=start_date,
             end_date=end_date,
+            due_start_date=due_start_date,
+            due_end_date=due_end_date,
             limit=1,
             offset=offset + limit,
         )

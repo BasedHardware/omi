@@ -158,6 +158,8 @@ def get_action_items(
     completed: Optional[bool] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    due_start_date: Optional[datetime] = None,
+    due_end_date: Optional[datetime] = None,
     limit: Optional[int] = None,
     offset: int = 0,
 ) -> List[dict]:
@@ -168,13 +170,19 @@ def get_action_items(
         uid: User ID
         conversation_id: Filter by conversation ID (None for standalone items)
         completed: Filter by completion status
-        start_date: Filter by start date (inclusive)
-        end_date: Filter by end date (inclusive)
+        start_date: Filter by created_at start date (inclusive) - applied at database level
+        end_date: Filter by created_at end date (inclusive) - applied at database level
+        due_start_date: Filter by due_at start date (inclusive) - applied at database level
+        due_end_date: Filter by due_at end date (inclusive) - applied at database level
         limit: Maximum number of items to return
         offset: Number of items to skip
 
     Returns:
         List of action items
+
+    Note:
+        If both created_at and due_at filters are provided, only due_at filters will be applied
+        (due to Firestore limitation requiring inequality filters on same field as orderBy).
     """
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(action_items_collection)
@@ -188,8 +196,24 @@ def get_action_items(
     if completed is not None:
         query = query.where(filter=FieldFilter('completed', '==', completed))
 
-    # Order by created date
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+    # Determine which date field to use for database-level filtering and ordering
+    # Priority: due_at filters if present, otherwise created_at filters
+    # This is necessary because Firestore requires inequality filters to be on the same field as orderBy
+    due_at_filtering = due_start_date is not None or due_end_date is not None
+    if due_at_filtering:
+        if due_start_date is not None:
+            query = query.where(filter=FieldFilter('due_at', '>=', due_start_date))
+        if due_end_date is not None:
+            query = query.where(filter=FieldFilter('due_at', '<=', due_end_date))
+
+        query = query.order_by('due_at', direction=firestore.Query.DESCENDING)
+    else:
+        if start_date is not None:
+            query = query.where(filter=FieldFilter('created_at', '>=', start_date))
+        if end_date is not None:
+            query = query.where(filter=FieldFilter('created_at', '<=', end_date))
+
+        query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     # Apply pagination
     if offset > 0:
@@ -205,37 +229,9 @@ def get_action_items(
         data = doc.to_dict()
         data['id'] = doc.id
         action_item = _prepare_action_item_for_read(data)
-
-        # Apply date range filter in memory if needed
-        if start_date is not None or end_date is not None:
-            created_at = action_item.get('created_at')
-            due_at = action_item.get('due_at')
-
-            # Check if either created_at or due_at falls within the date range
-            date_in_range = False
-
-            if created_at is not None:
-                if start_date is not None and created_at < start_date:
-                    pass  # created_at is before start_date
-                elif end_date is not None and created_at > end_date:
-                    pass  # created_at is after end_date
-                else:
-                    date_in_range = True
-
-            if not date_in_range and due_at is not None:
-                if start_date is not None and due_at < start_date:
-                    pass  # due_at is before start_date
-                elif end_date is not None and due_at > end_date:
-                    pass  # due_at is after end_date
-                else:
-                    date_in_range = True
-
-            # If we have date filters but no dates fall in range, skip this item
-            if not date_in_range:
-                continue
-
         action_items.append(action_item)
 
+    # Sort results by due_at first (items without due_at come last), then by created_at
     action_items.sort(
         key=lambda x: (
             x.get('due_at') is None,

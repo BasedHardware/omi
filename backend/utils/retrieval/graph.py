@@ -40,6 +40,7 @@ from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
+from utils.retrieval.agentic import execute_agentic_chat_stream
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -128,7 +129,7 @@ def determine_conversation_type(
     state: GraphState,
 ) -> Literal[
     "no_context_conversation",
-    "context_dependent_conversation",
+    "agentic_context_dependent_conversation",
     "omi_question",
     "file_chat_question",
     "persona_question",
@@ -167,7 +168,7 @@ def determine_conversation_type(
 
     requires = requires_context(question)
     if requires:
-        return "context_dependent_conversation"
+        return "agentic_context_dependent_conversation"
     return "no_context_conversation"
 
 
@@ -236,6 +237,51 @@ def context_dependent_conversation_v1(state: GraphState):
 
 def context_dependent_conversation(state: GraphState):
     return state
+
+
+def agentic_context_dependent_conversation(state: GraphState):
+    """Handle context-dependent conversations using the agentic system"""
+    print("agentic_context_dependent_conversation node")
+
+    uid = state.get("uid")
+    messages = state.get("messages", [])
+    app = state.get("plugin_selected")
+
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        callback_data = {}
+
+        async def run_agentic_stream():
+            async for chunk in execute_agentic_chat_stream(
+                uid,
+                messages,
+                app,
+                callback_data=callback_data,
+                chat_session=state.get("chat_session"),
+            ):
+                if chunk:
+                    # Forward streaming chunks through callback
+                    if chunk.startswith("data: "):
+                        state.get('callback').put_data_nowait(chunk.replace("data: ", ""))
+                    elif chunk.startswith("think: "):
+                        state.get('callback').put_thought_nowait(chunk.replace("think: ", ""))
+
+        # Run the async streaming
+        asyncio.run(run_agentic_stream())
+
+        # Signal completion to the callback
+        state.get('callback').end_nowait()
+
+        # Extract results from callback_data
+        answer = callback_data.get('answer', '')
+        memories_found = callback_data.get('memories_found', [])
+        ask_for_nps = callback_data.get('ask_for_nps', False)
+
+        return {"answer": answer, "memories_found": memories_found, "ask_for_nps": ask_for_nps}
+
+    # no streaming - not yet implemented
+    return {"answer": "Streaming required for agentic mode", "ask_for_nps": False}
 
 
 # !! include a question extractor? node?
@@ -425,6 +471,7 @@ workflow.add_conditional_edges("determine_conversation", determine_conversation_
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
 workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+workflow.add_node("agentic_context_dependent_conversation", agentic_context_dependent_conversation)
 workflow.add_node("file_chat_question", file_chat_question)
 workflow.add_node("persona_question", persona_question)
 
@@ -432,6 +479,7 @@ workflow.add_edge("no_context_conversation", END)
 workflow.add_edge("omi_question", END)
 workflow.add_edge("persona_question", END)
 workflow.add_edge("file_chat_question", END)
+workflow.add_edge("agentic_context_dependent_conversation", END)
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
