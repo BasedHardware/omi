@@ -91,6 +91,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
+// Filter out BLE-related errors
+bool _shouldIgnoreError(Object? error, StackTrace? stackTrace) {
+  if (error == null) return false;
+  final errorString = error.toString().toLowerCase();
+
+  return errorString.contains('flutterblueplusexception') ||
+      errorString.contains('device is disconnected') ||
+      errorString.contains('deviceconnectionstate.disconnected') ||
+      errorString.contains('transport connection failed');
+}
+
 Future _init() async {
   // Env
   if (PlatformService.isWindows) {
@@ -150,11 +161,15 @@ Future _init() async {
     );
   }
   FlutterError.onError = (FlutterErrorDetails details) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    if (!_shouldIgnoreError(details.exception, details.stack)) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    }
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    if (!_shouldIgnoreError(error, stack)) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    }
     return true;
   };
 
