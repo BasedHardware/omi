@@ -195,20 +195,24 @@ def get_conversations_tool(
         return msg
 
     try:
-        # Get all person IDs from all conversations
-        all_person_ids = []
-        for conv_data in conversations_data:
-            segments = conv_data.get('transcript_segments', [])
-            all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
-
-        print(f"🔍 get_conversations_tool - Found {len(all_person_ids)} person IDs")
-
-        # Fetch people data
+        # Only load people if transcripts will be included (people are used for speaker names in transcripts)
         people = []
-        if all_person_ids:
-            people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-            people = [Person(**p) for p in people_data]
-            print(f"🔍 get_conversations_tool - Loaded {len(people)} people")
+        if include_transcript:
+            # Get all person IDs from all conversations
+            all_person_ids = set()
+            for conv_data in conversations_data:
+                segments = conv_data.get('transcript_segments', [])
+                all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
+
+            print(f"🔍 get_conversations_tool - Found {len(all_person_ids)} unique person IDs")
+
+            # Fetch people data
+            if all_person_ids:
+                people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
+                people = [Person(**p) for p in people_data]
+                print(f"🔍 get_conversations_tool - Loaded {len(people)} people")
+        else:
+            print(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
         conversations = []
@@ -425,20 +429,24 @@ def search_conversations_tool(
 
         print(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
 
-        # Get all person IDs
-        all_person_ids = []
-        for conv_data in conversations_data:
-            segments = conv_data.get('transcript_segments', [])
-            all_person_ids.extend([s.get('person_id') for s in segments if s.get('person_id')])
-
-        print(f"🔍 search_conversations_tool - Found {len(all_person_ids)} person IDs")
-
-        # Fetch people data
+        # Only load people if transcripts will be included (people are used for speaker names in transcripts)
         people = []
-        if all_person_ids:
-            people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-            people = [Person(**p) for p in people_data]
-            print(f"🔍 search_conversations_tool - Loaded {len(people)} people")
+        if include_transcript:
+            # Get all person IDs
+            all_person_ids = set()
+            for conv_data in conversations_data:
+                segments = conv_data.get('transcript_segments', [])
+                all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
+
+            print(f"🔍 search_conversations_tool - Found {len(all_person_ids)} unique person IDs")
+
+            # Fetch people data
+            if all_person_ids:
+                people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
+                people = [Person(**p) for p in people_data]
+                print(f"🔍 search_conversations_tool - Loaded {len(people)} people")
+        else:
+            print(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
         conversations = []
