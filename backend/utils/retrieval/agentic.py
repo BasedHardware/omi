@@ -28,6 +28,10 @@ from utils.retrieval.tools import (
     search_conversations_tool,
     get_memories_tool,
 )
+from utils.retrieval.tools.action_item_tools import (
+    get_action_items_tool,
+    update_action_item_tool,
+)
 from utils.llm.clients import llm_agent, llm_agent_stream
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
@@ -115,6 +119,8 @@ def execute_agentic_chat(
         get_conversations_tool,
         search_conversations_tool,
         get_memories_tool,
+        get_action_items_tool,
+        update_action_item_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
@@ -182,6 +188,8 @@ async def execute_agentic_chat_stream(
         get_conversations_tool,
         search_conversations_tool,
         get_memories_tool,
+        get_action_items_tool,
+        update_action_item_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
