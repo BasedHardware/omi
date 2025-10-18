@@ -1,0 +1,21 @@
+[package]
+name = "omi_rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "lib.rs"
+crate-type = ["staticlib"]
+
+[features]
+default = []
+std = []
+
+[dependencies]
+spin = { version = "0.9", default-features = false, features = ["mutex", "spin_mutex"] }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
