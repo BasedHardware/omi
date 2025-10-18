@@ -135,37 +135,34 @@ class _AppsListState extends State<_AppsList> {
   // Track app installation state
   static final Map<String, bool> _installingApps = {};
 
-  List<App>? _suggestedApps;
-  List<App>? _enabledApps;
-
   @override
   void initState() {
     super.initState();
     _fetchApps();
+    // Listen to provider changes to rebuild when apps are fetched
+    widget.provider.addListener(_onProviderUpdate);
+  }
+
+  @override
+  void dispose() {
+    widget.provider.removeListener(_onProviderUpdate);
+    super.dispose();
+  }
+
+  void _onProviderUpdate() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _fetchApps() async {
-    // Fetch both suggested apps and enabled conversation apps in parallel
     try {
-      final results = await Future.wait([
-        widget.provider.getSuggestedAppsFromAPI(),
-        widget.provider.getEnabledConversationAppsFromAPI(),
+      await Future.wait([
+        widget.provider.fetchAndCacheSuggestedApps(),
+        widget.provider.fetchAndCacheEnabledConversationApps(),
       ]);
-
-      if (mounted) {
-        setState(() {
-          _suggestedApps = results[0];
-          _enabledApps = results[1];
-        });
-      }
     } catch (e) {
       debugPrint('Error fetching apps: $e');
-      if (mounted) {
-        setState(() {
-          _suggestedApps = [];
-          _enabledApps = [];
-        });
-      }
     }
   }
 
@@ -260,25 +257,21 @@ class _AppsListState extends State<_AppsList> {
 
   @override
   Widget build(BuildContext context) {
-    // Show shimmer loading while fetching apps
-    final isLoading = _suggestedApps == null || _enabledApps == null;
+    final enabledApps = widget.provider.cachedEnabledConversationApps;
+    final suggestedApps = widget.provider.cachedSuggestedApps;
+
+    final isLoading = enabledApps.isEmpty && suggestedApps.isEmpty;
 
     if (isLoading) {
       return _buildShimmerLoading();
     }
 
-    // Use API-fetched apps instead of provider.appsList
-    final enabledApps = _enabledApps ?? [];
-
     // Get last used app ID and find it in the enabled apps
     final lastUsedAppId = widget.provider.getLastUsedSummarizationAppId();
     final lastUsedApp = lastUsedAppId != null ? enabledApps.firstWhereOrNull((app) => app.id == lastUsedAppId) : null;
 
-    // Use API-fetched suggested apps if available
-    final suggestedApps = _suggestedApps ?? [];
     final suggestedAppIds = suggestedApps.map((app) => app.id).toList();
 
-    // Filter out suggested apps and last used app from other apps
     final otherApps = enabledApps
         .where((app) => !suggestedAppIds.contains(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
         .toList();

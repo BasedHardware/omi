@@ -31,7 +31,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   App? selectedAppForReprocessing;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Cache enabled conversation apps and suggested apps
+  final List<App> _cachedEnabledConversationApps = [];
+  final List<App> _cachedSuggestedApps = [];
+
   List<App> get appsList => appProvider?.apps ?? [];
+
+  /// Returns cached enabled conversation apps
+  List<App> get cachedEnabledConversationApps => _cachedEnabledConversationApps;
+
+  /// Returns cached suggested apps for current conversation
+  List<App> get cachedSuggestedApps => _cachedSuggestedApps;
 
   Structured get structured {
     return conversation.structured;
@@ -197,6 +208,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
+    fetchAndCacheEnabledConversationApps();
+
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
@@ -323,6 +336,43 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       debugPrint('Error fetching enabled conversation apps: $e');
       return [];
     }
+  }
+
+  /// Fetches and caches enabled conversation apps
+  Future<void> fetchAndCacheEnabledConversationApps() async {
+    try {
+      final apps = await getEnabledConversationAppsFromAPI();
+      _cachedEnabledConversationApps.clear();
+      _cachedEnabledConversationApps.addAll(apps);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching and caching enabled conversation apps: $e');
+    }
+  }
+
+  /// Fetches and caches suggested apps for the current conversation
+  Future<void> fetchAndCacheSuggestedApps() async {
+    try {
+      final apps = await getSuggestedAppsFromAPI();
+      _cachedSuggestedApps.clear();
+      _cachedSuggestedApps.addAll(apps);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching and caching suggested apps: $e');
+    }
+  }
+
+  /// Finds an app by ID from cached apps
+  App? findAppById(String? appId) {
+    if (appId == null) return null;
+
+    final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull((app) => app.id == appId);
+    if (enabledApp != null) return enabledApp;
+
+    final suggestedApp = _cachedSuggestedApps.firstWhereOrNull((app) => app.id == appId);
+    if (suggestedApp != null) return suggestedApp;
+
+    return null;
   }
 
   /// Checks if an app is in the suggested apps list
