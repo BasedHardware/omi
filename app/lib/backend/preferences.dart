@@ -252,9 +252,11 @@ class SharedPreferencesUtil {
 
   disableApp(String value) {
     final List<App> apps = appsList;
-    final app = apps.firstWhere((element) => element.id == value);
-    app.enabled = false;
-    appsList = apps;
+    App? app = apps.firstWhereOrNull((element) => element.id == value);
+    if (app != null) {
+      app.enabled = false;
+      appsList = apps;
+    }
   }
 
   String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
