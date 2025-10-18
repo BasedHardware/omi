@@ -208,6 +208,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
+    loadPreferredSummarizationApp();
+
     fetchAndCacheEnabledConversationApps();
 
     if (!conversation.discarded) {
@@ -423,9 +425,19 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  String? _preferredSummarizationAppId;
+
+  String? get preferredSummarizationAppId => _preferredSummarizationAppId;
+
   void setPreferredSummarizationApp(String appId) {
+    _preferredSummarizationAppId = appId;
     setPreferredSummarizationAppServer(appId);
+    SharedPreferencesUtil().preferredSummarizationAppId = appId;
     notifyListeners();
+  }
+
+  void loadPreferredSummarizationApp() {
+    _preferredSummarizationAppId = SharedPreferencesUtil().preferredSummarizationAppId;
   }
 
   void trackLastUsedSummarizationApp(String appId) {
