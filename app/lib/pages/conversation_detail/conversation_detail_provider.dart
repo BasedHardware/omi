@@ -375,6 +375,38 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     return null;
   }
 
+  /// Enables an app and updates the cached enabled apps list
+  /// Returns true if successful, false otherwise
+  Future<bool> enableApp(App app) async {
+    try {
+      // Make the server call to enable the app
+      final success = await enableAppServer(app.id);
+
+      if (success) {
+        // Update SharedPreferences
+        SharedPreferencesUtil().enableApp(app.id);
+
+        // Update the app's enabled state
+        app.enabled = true;
+
+        // Add to cached enabled apps if not already there
+        final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
+        if (existingIndex == -1) {
+          _cachedEnabledConversationApps.add(app);
+        } else {
+          _cachedEnabledConversationApps[existingIndex] = app;
+        }
+
+        notifyListeners();
+      }
+
+      return success;
+    } catch (e) {
+      debugPrint('Error enabling app ${app.id}: $e');
+      return false;
+    }
+  }
+
   /// Checks if an app is in the suggested apps list
   bool isAppSuggested(String appId) {
     return getSuggestedApps().contains(appId);

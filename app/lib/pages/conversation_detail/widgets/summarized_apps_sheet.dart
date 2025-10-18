@@ -405,38 +405,12 @@ class _AppsListState extends State<_AppsList> {
     });
 
     try {
-      final appProvider = context.read<AppProvider>();
       final conversationProvider = context.read<ConversationDetailProvider>();
       final conversationId = conversationProvider.conversation.id;
 
-      // Find the app index in the apps list for toggleApp
-      final appIndex = appProvider.apps.indexWhere((a) => a.id == app.id);
+      final success = await conversationProvider.enableApp(app);
 
-      // Install/enable the app
-      await appProvider.toggleApp(app.id, true, appIndex >= 0 ? appIndex : null);
-
-      // Check if installation was successful
-      final installedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id && a.enabled);
-
-      if (installedApp != null) {
-        // Track analytics
-        MixpanelManager().summarizedAppSelected(
-          conversationId: conversationId,
-          selectedAppId: app.id,
-          previousAppId: conversationProvider.getSummarizedApp()?.appId,
-        );
-
-        // Track the last used app
-        conversationProvider.trackLastUsedSummarizationApp(app.id);
-
-        // Close the bottom sheet
-        if (mounted) Navigator.pop(context);
-
-        // Set the app for reprocessing and reprocess the conversation
-        conversationProvider.setSelectedAppForReprocessing(installedApp);
-        await conversationProvider.reprocessConversation(appId: app.id);
-      } else {
-        // Installation failed
+      if (!success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -446,7 +420,25 @@ class _AppsListState extends State<_AppsList> {
             ),
           );
         }
+        return;
       }
+
+      // Track analytics
+      MixpanelManager().summarizedAppSelected(
+        conversationId: conversationId,
+        selectedAppId: app.id,
+        previousAppId: conversationProvider.getSummarizedApp()?.appId,
+      );
+
+      // Track the last used app
+      conversationProvider.trackLastUsedSummarizationApp(app.id);
+
+      // Close the bottom sheet
+      if (mounted) Navigator.pop(context);
+
+      // Set the app for reprocessing and reprocess the conversation
+      conversationProvider.setSelectedAppForReprocessing(app);
+      await conversationProvider.reprocessConversation(appId: app.id);
     } catch (e) {
       // Handle installation error
       if (mounted) {
