@@ -86,6 +86,12 @@ class SharedPreferencesUtil {
 
   bool get locationEnabled => getBool('locationEnabled') ?? false;
 
+  //---------------------- Audio Response Settings ----------------------------//
+
+  set playAudioResponseInHeadphones(bool value) => saveBool('playAudioResponseInHeadphones', value);
+
+  bool get playAudioResponseInHeadphones => getBool('playAudioResponseInHeadphones') ?? false; // Default disabled (experimental feature)
+
   //---------------------- Developer Settings ---------------------------------//
 
   String get webhookOnConversationCreated => getString('webhookOnConversationCreated') ?? '';

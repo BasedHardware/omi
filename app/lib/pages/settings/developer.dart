@@ -604,6 +604,27 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     value: provider.autoCreateSpeakersEnabled,
                     onChanged: provider.onAutoCreateSpeakersChanged,
                   ),
+                  if (Platform.isIOS) ...[
+                    const SizedBox(height: 16.0),
+                    CheckboxListTile(
+                      contentPadding: const EdgeInsets.all(0),
+                      title: const Text(
+                        'Voice responses in headphones',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      subtitle: const Text(
+                        'Play AI voice responses through connected headphones when you ask questions via Omi device button (iOS only).',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                      value: SharedPreferencesUtil().playAudioResponseInHeadphones,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          SharedPreferencesUtil().playAudioResponseInHeadphones = value ?? false;
+                        });
+                        MixpanelManager().track('Audio Response in Headphones Toggled', properties: {'enabled': value});
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 16.0),
                   const SizedBox(height: 36),
                   const Text(

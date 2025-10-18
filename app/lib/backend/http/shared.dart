@@ -41,7 +41,10 @@ Future<String> getAuthHeader() async {
       throw Exception('No auth token found');
     }
   }
-  return 'Bearer ${SharedPreferencesUtil().authToken}';
+  final token = SharedPreferencesUtil().authToken;
+  // Removed spammy auth logs - only uncomment for debugging
+  // debugPrint('[AUTH] Token length: ${token.length}, signed in: ${AuthService.instance.isSignedIn()}');
+  return 'Bearer $token';
 }
 
 /// Builds common headers for API and WebSocket requests
@@ -279,6 +282,7 @@ Stream<String> makeMultipartStreamingApiCall({
   String fileFieldName = 'files',
 }) async* {
   try {
+    // Only log errors and important events, not every step
     var request = http.MultipartRequest('POST', Uri.parse(url));
 
     final builtHeaders = await buildHeaders(
