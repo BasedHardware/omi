@@ -16,6 +16,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -38,7 +39,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 
 import 'widgets/battery_info_widget.dart';
-import 'package:omi/widgets/app_selection_dropdown.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -89,7 +89,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
-  final GlobalKey<State<ChatPage>> _chatPageKey = GlobalKey<State<ChatPage>>();
+  final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
 
@@ -113,6 +113,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         break;
       case 2:
+        final memoriesState = _memoriesPageKey.currentState;
+        if (memoriesState != null) {
+          (memoriesState as dynamic).scrollToTop();
+        }
+        break;
+      case 3:
         final appsState = _appsPageKey.currentState;
         if (appsState != null) {
           appsState.scrollToTop();
@@ -148,7 +154,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {
-    // No additional screens needed
+    '/facts': const MemoriesPage(),
   };
   bool? previousConnection;
 
@@ -171,7 +177,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _pages = [
       ConversationsPage(key: _conversationsPageKey),
       ActionItemsPage(key: _actionItemsPageKey),
-      ChatPage(key: _chatPageKey),
+      MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
@@ -194,11 +200,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       switch (pageAlias) {
+        case "memories":
+          homePageIdx = 2;
+          break;
         case "apps":
           homePageIdx = 3;
-          break;
-        case "chat":
-          homePageIdx = 2;
           break;
       }
     }
@@ -260,6 +266,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
             }
           }
+          // Navigate to chat page directly since it's no longer in the tab bar
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatPage(isPivotBottom: false),
+                ),
+              );
+            }
+          });
           break;
         case "settings":
           // Use context from the current widget instead of navigator key for bottom sheet
@@ -277,6 +294,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "facts":
+          MyApp.navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => const MemoriesPage(),
+            ),
+          );
           break;
         default:
       }
@@ -414,7 +436,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         builder: (context, home, deviceProvider, child) {
                           if (home.isChatFieldFocused ||
                               home.isConvoSearchFieldFocused ||
-                              home.isAppsSearchFieldFocused) {
+                              home.isAppsSearchFieldFocused ||
+                              home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
                             // Check if OMI device is connected
@@ -456,7 +479,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
                                                     Icon(
-                                                      home.selectedIndex == 0 ? FontAwesomeIcons.solidHouse : FontAwesomeIcons.house,
+                                                      FontAwesomeIcons.house,
                                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
@@ -497,14 +520,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             ),
                                           ),
                                         ),
-                                        // Center space for record button - only when no OMI device is connected and not on chat page
-                                        if (!isOmiDeviceConnected && home.selectedIndex != 2) const SizedBox(width: 80),
-                                        // Chat tab
+                                        // Center space for record button - only when no OMI device is connected
+                                        if (!isOmiDeviceConnected) const SizedBox(width: 80),
+                                        // Memories tab
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Chat');
+                                              MixpanelManager().bottomNavigationTabClicked('Memories');
+                                              primaryFocus?.unfocus();
                                               if (home.selectedIndex == 2) {
                                                 _scrollToTop(2);
                                                 return;
@@ -519,7 +543,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
                                                     Icon(
-                                                      FontAwesomeIcons.solidComment,
+                                                      FontAwesomeIcons.brain,
                                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
@@ -553,7 +577,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                       FontAwesomeIcons.puzzlePiece,
                                                       color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                                       size: 24,
-                                                      weight: home.selectedIndex == 3 ? 900 : 400,
                                                     ),
                                                   ],
                                                 ),
@@ -565,8 +588,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     ),
                                   ),
                                 ),
-                                // Central Record Button - Only show when no OMI device is connected and not on chat page
-                                if (!isOmiDeviceConnected && home.selectedIndex != 2)
+                                // Central Record Button - Only show when no OMI device is connected
+                                if (!isOmiDeviceConnected)
                                   Positioned(
                                     left: MediaQuery.of(context).size.width / 2 - 40,
                                     bottom: 40, // Position it to protrude above the taller navbar (90px height)
@@ -659,59 +682,117 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      title: Stack(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          const BatteryInfoWidget(),
+          const SizedBox.shrink(),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const BatteryInfoWidget(),
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1F1F25),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(
-                        FontAwesomeIcons.gear,
-                        size: 16,
-                        color: Colors.white70,
-                      ),
-                      onPressed: () {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().pageOpened('Settings');
-                        String language = SharedPreferencesUtil().userPrimaryLanguage;
-                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                        SettingsDrawer.show(context);
-                        if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        }
-                      },
-                    ),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F25),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(
+                    FontAwesomeIcons.gear,
+                    size: 16,
+                    color: Colors.white70,
                   ),
-                ],
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    MixpanelManager().pageOpened('Settings');
+                    String language = SharedPreferencesUtil().userPrimaryLanguage;
+                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    SettingsDrawer.show(context);
+                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (context.mounted) {
+                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                      }
+                    }
+                  },
+                ),
+              ),
+              // Chat Button - Only show on home page (index 0)
+              Consumer<HomeProvider>(
+                builder: (context, provider, child) {
+                  if (provider.selectedIndex == 0) {
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        MixpanelManager().bottomNavigationTabClicked('Chat');
+                        // Navigate to chat page
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChatPage(isPivotBottom: false),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        height: 36,
+                        margin: const EdgeInsets.only(left: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                              Colors.purpleAccent.withValues(alpha: 0.2),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                              Colors.purpleAccent.withValues(alpha: 0.2),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.all(0.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(17.5),
+                            border: Border.all(
+                              color: Colors.pink.withValues(alpha: 0.3),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                FontAwesomeIcons.solidComment,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Ask',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  } else {
+                    return const SizedBox.shrink();
+                  }
+                },
               ),
             ],
-          ),
-          Consumer<HomeProvider>(
-            builder: (context, homeProvider, child) {
-              if (homeProvider.selectedIndex == 2) { // Chat page index
-                return const Center(
-                  child: AppSelectionDropdown(isFloating: false),
-                );
-              }
-              return const SizedBox.shrink();
-            },
           ),
         ],
       ),

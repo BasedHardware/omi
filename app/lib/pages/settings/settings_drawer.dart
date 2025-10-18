@@ -11,11 +11,9 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/pages/memories/page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -263,20 +261,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 onTap: () {
                   Navigator.pop(context);
                   routeToPage(context, const ProfilePage());
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Memories',
-                icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  MixpanelManager().bottomNavigationTabClicked('Memories');
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const MemoriesPage(),
-                    ),
-                  );
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
