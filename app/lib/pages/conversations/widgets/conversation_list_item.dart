@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -14,6 +13,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +46,93 @@ class _ConversationListItemState extends State<ConversationListItem> {
     super.dispose();
   }
 
+  Widget _buildSimplifiedConversationItem() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        children: [
+          // Emoji with purple background
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                widget.conversation.structured.getEmoji(),
+                style: const TextStyle(fontSize: 20),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+
+          // Title and timestamp/duration
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Text(
+                  widget.conversation.structured.title.decodeString,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+
+                // Timestamp and duration
+                Row(
+                  children: [
+                    Text(
+                      dateTimeFormat(
+                        'h:mm a',
+                        widget.conversation.startedAt ?? widget.conversation.createdAt,
+                      ),
+                      style: const TextStyle(
+                        color: Color(0xFF6A6B71),
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (_getConversationDuration().isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF35343B),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _getConversationDuration(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getConversationDuration() {
+    int durationSeconds = widget.conversation.getDurationInSeconds();
+    if (durationSeconds <= 0) return '';
+
+    return secondsToCompactDuration(durationSeconds);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Is new conversation
@@ -64,7 +151,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       });
     }
 
-    Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
@@ -141,199 +227,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   var conversationIdx = widget.conversationIdx;
                   provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
                 },
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _getConversationHeader(),
-                      const SizedBox(height: 16),
-                      _buildConversationBody(context),
-                    ],
-                  ),
-                ),
+                child: _buildSimplifiedConversationItem(),
               ),
             ),
           ),
         ),
       );
     });
-  }
-
-  Widget _buildConversationBody(BuildContext context) {
-    if (widget.conversation.discarded) {
-      return Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.conversation.photos.isNotEmpty) ...[
-                Row(children: [
-                  Icon(
-                    Icons.photo_library,
-                    color: Colors.grey.shade400,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    "${widget.conversation.photos.length} photos",
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-                  )
-                ]),
-                const SizedBox(height: 4),
-              ],
-              Text(
-                widget.conversation.getTranscript(maxCount: 100),
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-              ),
-            ],
-          ),
-          if (widget.conversation.isLocked) _buildLockedOverlay(),
-        ],
-      );
-    }
-
-    final structured = widget.conversation.structured;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          structured.title.decodeString,
-          style: Theme.of(context).textTheme.titleLarge,
-          maxLines: 1,
-        ),
-        const SizedBox(height: 8),
-        Stack(
-          children: [
-            Text(
-              structured.overview.decodeString,
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (widget.conversation.isLocked) _buildLockedOverlay(),
-          ],
-        ),
-        const SizedBox(height: 8),
-      ],
-    );
-  }
-
-  Widget _buildLockedOverlay() {
-    return Positioned.fill(
-      child: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
-          child: Container(
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.01),
-              borderRadius: const BorderRadius.all(Radius.circular(8)),
-            ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 🧠 Emoji + Tag
-          Flexible(
-            fit: FlexFit.tight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
-                if (widget.conversation.structured.category.isNotEmpty)
-                  Flexible(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: widget.conversation.getTagColor(),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        widget.conversation.getTag(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium!
-                            .copyWith(color: widget.conversation.getTagTextColor()),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // 🕒 Timestamp + Duration or New
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: isNew
-                ? const ConversationNewStatusIndicator(text: "New 🚀")
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        dateTimeFormat(
-                          'MMM d, h:mm a',
-                          widget.conversation.startedAt ?? widget.conversation.createdAt,
-                        ),
-                        style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
-                        maxLines: 1,
-                      ),
-                      if (_getConversationDuration().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF35343B),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _getConversationDuration(),
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                              maxLines: 1,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getConversationDuration() {
-    int durationSeconds = widget.conversation.getDurationInSeconds();
-    if (durationSeconds <= 0) return '';
-
-    return secondsToCompactDuration(durationSeconds);
   }
 }
 
