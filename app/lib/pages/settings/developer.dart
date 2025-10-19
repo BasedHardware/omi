@@ -566,6 +566,124 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Webhook-Only Mode',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Bypass Omi servers entirely and send audio directly to your webhook.',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Enable Webhook-Only Mode'),
+                    subtitle: const Text(
+                      'Audio will be sent directly to your webhook URL. Requires "Realtime Audio Bytes" webhook to be configured above.',
+                    ),
+                    value: SharedPreferencesUtil().webhookOnlyModeEnabled,
+                    onChanged: (v) {
+                      setState(() {
+                        SharedPreferencesUtil().webhookOnlyModeEnabled = v;
+                        if (v) {
+                          if (SharedPreferencesUtil().webhookAudioBytes.isEmpty) {
+                            AppSnackbar.showSnackbarError(
+                              'Please configure the Realtime Audio Bytes webhook URL above first.',
+                            );
+                          }
+                          if (SharedPreferencesUtil().uid.isEmpty) {
+                            final anonymousUid = 'webhook-anonymous-${DateTime.now().millisecondsSinceEpoch}';
+                            SharedPreferencesUtil().uid = anonymousUid;
+                            SharedPreferencesUtil().onboardingCompleted = true;
+                            AppSnackbar.showSnackbar('Webhook-only mode enabled. Restart the app to use without authentication.');
+                          }
+                        } else {
+                          AppSnackbar.showSnackbar('Webhook-only mode disabled. Restart the app to return to normal mode.');
+                        }
+                      });
+                    },
+                  ),
+                  if (SharedPreferencesUtil().webhookOnlyModeEnabled) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(top: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade900.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade700),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.orange.shade400, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Data will NOT be sent to Omi servers. Transcription and AI features will not work.',
+                              style: TextStyle(color: Colors.orange.shade200, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Battery Optimization',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Control how aggressively to optimize for battery life.',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade700),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: DropdownButton<int>(
+                      value: SharedPreferencesUtil().batteryOptimizationLevel,
+                      isExpanded: true,
+                      underline: Container(),
+                      dropdownColor: Colors.grey.shade900,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text('No Optimization (More frequent updates)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 1,
+                          child: Text('Balanced (Standard)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 2,
+                          child: Text('Aggressive (Recommended for continuous use)'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => SharedPreferencesUtil().batteryOptimizationLevel = value);
+                          AppSnackbar.showSnackbar('Battery optimization updated. Restart recording for changes to take effect.');
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    SharedPreferencesUtil().batteryOptimizationLevel == 2
+                        ? 'Keep-alive: 30s, Frame coalescing: 3x (Est. 40% battery savings)'
+                        : SharedPreferencesUtil().batteryOptimizationLevel == 1
+                            ? 'Keep-alive: 15s, Frame coalescing: 1x (Standard)'
+                            : 'Keep-alive: 10s, Frame coalescing: 1x (No optimization)',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontStyle: FontStyle.italic),
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 32),
                   const Text(
                     'Experimental',

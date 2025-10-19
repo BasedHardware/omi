@@ -193,6 +193,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
+    // Exit immediately if webhook-only mode
+    if (SharedPreferencesUtil().webhookOnlyModeEnabled) {
+      debugPrint('⚠️ OnboardingWrapper: Webhook-only mode detected - redirecting to home');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+          );
+        }
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     List<Widget> pages = [
       AuthComponent(
         onSignIn: () {

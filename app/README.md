@@ -32,6 +32,24 @@ Before getting started, make sure your device is connected and unlocked. If you'
    flutter run --flavor dev
    ```
 
+### Quick Development with Just (Android)
+
+For fast Android development iteration, use the `justfile` commands:
+
+1. Install `just` (one time):
+   ```bash
+   cargo install just
+   ```
+
+2. Common commands:
+   ```bash
+   just deploy      # Build debug APK + install to phone
+   just logs        # View app logs
+   just test        # Run tests
+   just --list      # See all available commands
+   ```
+
+See [JUSTFILE_GUIDE.md](JUSTFILE_GUIDE.md) for more commands and details.
 
 ### Building and Deploying to iPhone
 

@@ -1,26 +1,28 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/mutex.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/webhook_only_socket_service.dart';
 
 abstract class ISocketService {
   void start();
 
   void stop();
 
-  Future<TranscriptSegmentSocketService?> conversation(
+  Future<ITranscriptSegmentSocketService?> conversation(
       {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false});
 
-  Future<TranscriptSegmentSocketService?> speechProfile(
+  Future<ITranscriptSegmentSocketService?> speechProfile(
       {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false});
 }
 
 abstract interface class ISocketServiceSubsciption {}
 
 class SocketServicePool extends ISocketService {
-  TranscriptSegmentSocketService? _socket;
+  dynamic _socket;
 
   @override
   void start() {}
@@ -33,7 +35,7 @@ class SocketServicePool extends ISocketService {
   // Warn: Should use a better solution to prevent race conditions
   final Mutex _mutex = Mutex();
 
-  Future<TranscriptSegmentSocketService?> socket({
+  Future<ITranscriptSegmentSocketService?> socket({
     required BleAudioCodec codec,
     required int sampleRate,
     required String language,
@@ -53,6 +55,20 @@ class SocketServicePool extends ISocketService {
       // new socket
       await _socket?.stop();
 
+      // Check if webhook-only mode is enabled
+      final prefs = SharedPreferencesUtil();
+      if (prefs.webhookOnlyModeEnabled) {
+        if (prefs.webhookAudioBytes.isEmpty) {
+          debugPrint('Webhook-only mode enabled but no URL configured. Cannot connect.');
+          return null;
+        }
+        debugPrint('Using webhook-only mode (bypassing Omi servers)');
+        _socket = WebhookOnlySocketService.create(sampleRate, codec, language);
+        await _socket?.start();
+        return _socket;
+      }
+
+      // Standard Omi server mode
       _socket = ConversationTranscriptSegmentSocketService.create(sampleRate, codec, language);
       await _socket?.start();
       if (_socket?.state != SocketServiceState.connected) {
@@ -68,14 +84,14 @@ class SocketServicePool extends ISocketService {
   }
 
   @override
-  Future<TranscriptSegmentSocketService?> conversation(
+  Future<ITranscriptSegmentSocketService?> conversation(
       {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false}) async {
     debugPrint("socket conversation > $codec $sampleRate $force");
     return await socket(codec: codec, sampleRate: sampleRate, language: language, force: force);
   }
 
   @override
-  Future<TranscriptSegmentSocketService?> speechProfile(
+  Future<ITranscriptSegmentSocketService?> speechProfile(
       {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false}) async {
     debugPrint("socket speech profile > $codec $sampleRate $force");
     return await socket(codec: codec, sampleRate: sampleRate, language: language, force: force);

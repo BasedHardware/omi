@@ -62,6 +62,8 @@ class _AppShellState extends State<AppShell> {
     initDeepLinks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final isWebhookOnlyMode = SharedPreferencesUtil().webhookOnlyModeEnabled;
+
       if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
@@ -79,12 +81,17 @@ class _AppShellState extends State<AppShell> {
         context.read<UsageProvider>().fetchSubscription();
 
         NotificationService.instance.saveNotificationToken();
+      } else if (isWebhookOnlyMode) {
+        debugPrint('Webhook-only mode: Skipping server-dependent initializations');
       } else {
         if (!PlatformManager.instance.isAnalyticsSupported) {
           await PlatformManager.instance.intercom.loginUnidentifiedUser();
         }
       }
-      PlatformManager.instance.intercom.setUserAttributes();
+
+      if (!isWebhookOnlyMode) {
+        PlatformManager.instance.intercom.setUserAttributes();
+      }
     });
     super.initState();
   }
