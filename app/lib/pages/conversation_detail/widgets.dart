@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -17,8 +16,6 @@ import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -29,7 +26,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 
 import 'maps_util.dart';
-import 'share.dart';
 
 // Highlight search matches with current result highlighting
 List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int currentResultIndex = -1}) {
@@ -634,7 +630,7 @@ class GetAppsWidgets extends StatelessWidget {
                     ),
                     AppResultDetailWidget(
                       appResponse: summarizedApp,
-                      app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
+                      app: provider.findAppById(summarizedApp.appId),
                       conversation: provider.conversation,
                       searchQuery: searchQuery,
                       currentResultIndex: currentResultIndex,

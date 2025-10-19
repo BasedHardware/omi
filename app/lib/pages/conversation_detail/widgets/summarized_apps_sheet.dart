@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -135,37 +136,34 @@ class _AppsListState extends State<_AppsList> {
   // Track app installation state
   static final Map<String, bool> _installingApps = {};
 
-  List<App>? _suggestedApps;
-  List<App>? _enabledApps;
-
   @override
   void initState() {
     super.initState();
     _fetchApps();
+    // Listen to provider changes to rebuild when apps are fetched
+    widget.provider.addListener(_onProviderUpdate);
+  }
+
+  @override
+  void dispose() {
+    widget.provider.removeListener(_onProviderUpdate);
+    super.dispose();
+  }
+
+  void _onProviderUpdate() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _fetchApps() async {
-    // Fetch both suggested apps and enabled conversation apps in parallel
     try {
-      final results = await Future.wait([
-        widget.provider.getSuggestedAppsFromAPI(),
-        widget.provider.getEnabledConversationAppsFromAPI(),
+      await Future.wait([
+        widget.provider.fetchAndCacheSuggestedApps(),
+        widget.provider.fetchAndCacheEnabledConversationApps(),
       ]);
-
-      if (mounted) {
-        setState(() {
-          _suggestedApps = results[0];
-          _enabledApps = results[1];
-        });
-      }
     } catch (e) {
       debugPrint('Error fetching apps: $e');
-      if (mounted) {
-        setState(() {
-          _suggestedApps = [];
-          _enabledApps = [];
-        });
-      }
     }
   }
 
@@ -260,25 +258,24 @@ class _AppsListState extends State<_AppsList> {
 
   @override
   Widget build(BuildContext context) {
-    // Show shimmer loading while fetching apps
-    final isLoading = _suggestedApps == null || _enabledApps == null;
+    final enabledApps = widget.provider.cachedEnabledConversationApps;
+    final suggestedApps = widget.provider.cachedSuggestedApps;
+
+    final isLoading = enabledApps.isEmpty && suggestedApps.isEmpty;
 
     if (isLoading) {
       return _buildShimmerLoading();
     }
 
-    // Use API-fetched apps instead of provider.appsList
-    final enabledApps = _enabledApps ?? [];
+    // Get preferred (default) app ID
+    final preferredAppId = widget.provider.preferredSummarizationAppId;
 
     // Get last used app ID and find it in the enabled apps
     final lastUsedAppId = widget.provider.getLastUsedSummarizationAppId();
     final lastUsedApp = lastUsedAppId != null ? enabledApps.firstWhereOrNull((app) => app.id == lastUsedAppId) : null;
 
-    // Use API-fetched suggested apps if available
-    final suggestedApps = _suggestedApps ?? [];
     final suggestedAppIds = suggestedApps.map((app) => app.id).toList();
 
-    // Filter out suggested apps and last used app from other apps
     final otherApps = enabledApps
         .where((app) => !suggestedAppIds.contains(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
         .toList();
@@ -316,6 +313,7 @@ class _AppsListState extends State<_AppsList> {
               isSelected: app.id == widget.currentAppId,
               onTap: () => isAvailable ? _handleAppTap(context, app) : _handleUnavailableAppTap(context, app),
               isSuggested: true,
+              isDefault: app.id == preferredAppId && preferredAppId?.isNotEmpty == true,
               isInstalling: isInstalling,
               provider: widget.provider,
             );
@@ -342,6 +340,7 @@ class _AppsListState extends State<_AppsList> {
               isSelected: lastUsedApp.id == widget.currentAppId,
               onTap: () => _handleAppTap(context, lastUsedApp),
               isLastUsed: true,
+              isDefault: lastUsedApp.id == preferredAppId && preferredAppId?.isNotEmpty == true,
               provider: widget.provider,
             ),
           // Then show other apps
@@ -349,6 +348,7 @@ class _AppsListState extends State<_AppsList> {
                 app: app,
                 isSelected: app.id == widget.currentAppId,
                 onTap: () => _handleAppTap(context, app),
+                isDefault: app.id == preferredAppId && preferredAppId?.isNotEmpty == true,
                 provider: widget.provider,
               )),
         ],
@@ -412,38 +412,12 @@ class _AppsListState extends State<_AppsList> {
     });
 
     try {
-      final appProvider = context.read<AppProvider>();
       final conversationProvider = context.read<ConversationDetailProvider>();
       final conversationId = conversationProvider.conversation.id;
 
-      // Find the app index in the apps list for toggleApp
-      final appIndex = appProvider.apps.indexWhere((a) => a.id == app.id);
+      final success = await conversationProvider.enableApp(app);
 
-      // Install/enable the app
-      await appProvider.toggleApp(app.id, true, appIndex >= 0 ? appIndex : null);
-
-      // Check if installation was successful
-      final installedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id && a.enabled);
-
-      if (installedApp != null) {
-        // Track analytics
-        MixpanelManager().summarizedAppSelected(
-          conversationId: conversationId,
-          selectedAppId: app.id,
-          previousAppId: conversationProvider.getSummarizedApp()?.appId,
-        );
-
-        // Track the last used app
-        conversationProvider.trackLastUsedSummarizationApp(app.id);
-
-        // Close the bottom sheet
-        if (mounted) Navigator.pop(context);
-
-        // Set the app for reprocessing and reprocess the conversation
-        conversationProvider.setSelectedAppForReprocessing(installedApp);
-        await conversationProvider.reprocessConversation(appId: app.id);
-      } else {
-        // Installation failed
+      if (!success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -453,7 +427,25 @@ class _AppsListState extends State<_AppsList> {
             ),
           );
         }
+        return;
       }
+
+      // Track analytics
+      MixpanelManager().summarizedAppSelected(
+        conversationId: conversationId,
+        selectedAppId: app.id,
+        previousAppId: conversationProvider.getSummarizedApp()?.appId,
+      );
+
+      // Track the last used app
+      conversationProvider.trackLastUsedSummarizationApp(app.id);
+
+      // Close the bottom sheet
+      if (mounted) Navigator.pop(context);
+
+      // Set the app for reprocessing and reprocess the conversation
+      conversationProvider.setSelectedAppForReprocessing(app);
+      await conversationProvider.reprocessConversation(appId: app.id);
     } catch (e) {
       // Handle installation error
       if (mounted) {
@@ -476,7 +468,7 @@ class _AppsListState extends State<_AppsList> {
   }
 }
 
-class _AppListItem extends StatelessWidget {
+class _AppListItem extends StatefulWidget {
   final App? app;
   final bool isSelected;
   final VoidCallback onTap;
@@ -484,6 +476,7 @@ class _AppListItem extends StatelessWidget {
   final String? subtitle;
   final bool isSuggested;
   final bool isLastUsed;
+  final bool isDefault;
   final bool isInstalling;
   final ConversationDetailProvider? provider;
 
@@ -495,12 +488,119 @@ class _AppListItem extends StatelessWidget {
     this.subtitle,
     this.isSuggested = false,
     this.isLastUsed = false,
+    this.isDefault = false,
     this.isInstalling = false,
     this.provider,
   });
 
   @override
+  State<_AppListItem> createState() => _AppListItemState();
+}
+
+class _AppListItemState extends State<_AppListItem> {
+  @override
   Widget build(BuildContext context) {
+    // Don't allow dismissible for Auto option (null app)
+    if (widget.app == null) {
+      return _buildListTile();
+    }
+
+    return Dismissible(
+      key: Key('dismissible_${widget.app!.id}'),
+      direction: DismissDirection.horizontal,
+      confirmDismiss: (direction) async {
+        // Show confirmation dialog
+        final confirmed = await _showSetDefaultConfirmation(context);
+
+        if (confirmed == true) {
+          // Set as preferred app
+          if (widget.provider != null && widget.app != null) {
+            widget.provider!.setPreferredSummarizationApp(widget.app!.id);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${widget.app!.name.decodeString} set as default summarization app'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        }
+
+        // Always return false to prevent dismissal - we just want the swipe action, not removal
+        return false;
+      },
+      background: _buildSwipeBackground(isLeft: true),
+      secondaryBackground: _buildSwipeBackground(isLeft: false),
+      child: _buildListTile(),
+    );
+  }
+
+  Future<bool?> _showSetDefaultConfirmation(BuildContext context) {
+    return showCupertinoDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoAlertDialog(
+          title: const Text('Set Default App'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              'Set ${widget.app!.name.decodeString} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.',
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Set Default'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSwipeBackground({required bool isLeft}) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+          end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+          colors: [
+            Colors.deepPurple.withValues(alpha: 0.7),
+            Colors.transparent,
+          ],
+        ),
+      ),
+      alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.star_rounded,
+            color: Colors.amber.shade300,
+            size: 20,
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Default',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListTile() {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       leading: _buildLeadingIcon(),
@@ -508,15 +608,43 @@ class _AppListItem extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              app != null ? app!.name.decodeString : 'Auto',
+              widget.app != null ? widget.app!.name.decodeString : 'Auto',
               style: TextStyle(
                 color: Colors.white,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.w500,
                 fontSize: 16,
               ),
             ),
           ),
-          if (isLastUsed)
+          if (widget.isDefault)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade300,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade400),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.star,
+                    size: 12,
+                    color: Colors.grey.shade900,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Default',
+                    style: TextStyle(
+                      color: Colors.grey.shade900,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (widget.isLastUsed && !widget.isDefault)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -535,35 +663,35 @@ class _AppListItem extends StatelessWidget {
             ),
         ],
       ),
-      subtitle: app != null
+      subtitle: widget.app != null
           ? Text(
-              app!.description.decodeString,
+              widget.app!.description.decodeString,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             )
-          : subtitle != null
+          : widget.subtitle != null
               ? Text(
-                  subtitle!,
+                  widget.subtitle!,
                   style: const TextStyle(color: Colors.grey, fontSize: 12),
                 )
               : null,
       trailing: _buildTrailingWidget(),
-      selected: isSelected,
-      onTap: onTap,
+      selected: widget.isSelected,
+      onTap: widget.onTap,
     );
   }
 
   Widget _buildTrailingWidget() {
     // Check if this app is currently being processed
-    final isProcessing = provider != null &&
-        provider!.loadingReprocessConversation &&
-        ((app != null && provider!.selectedAppForReprocessing?.id == app!.id) ||
-            (app == null && provider!.selectedAppForReprocessing == null));
+    final isProcessing = widget.provider != null &&
+        widget.provider!.loadingReprocessConversation &&
+        ((widget.app != null && widget.provider!.selectedAppForReprocessing?.id == widget.app!.id) ||
+            (widget.app == null && widget.provider!.selectedAppForReprocessing == null));
 
-    if (isSelected) {
+    if (widget.isSelected) {
       return const Icon(Icons.check, color: Colors.green, size: 20);
-    } else if (isInstalling) {
+    } else if (widget.isInstalling) {
       return const SizedBox(
         width: 20,
         height: 20,
@@ -582,14 +710,14 @@ class _AppListItem extends StatelessWidget {
         ),
       );
     } else {
-      return trailingIcon ?? const SizedBox.shrink();
+      return widget.trailingIcon ?? const SizedBox.shrink();
     }
   }
 
   Widget _buildLeadingIcon() {
-    if (app != null) {
+    if (widget.app != null) {
       return CachedNetworkImage(
-        imageUrl: app!.getImageUrl(),
+        imageUrl: widget.app!.getImageUrl(),
         imageBuilder: (context, imageProvider) {
           return CircleAvatar(
             backgroundColor: Colors.white,
