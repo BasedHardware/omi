@@ -44,22 +44,6 @@ def get_conversations_tool(
     - This prevents missing conversations and avoids context overflow from transcripts
     Examples: "summarize my week", "what did I do this month", "recap my year"
 
-    Time filtering guidance:
-    - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
-    - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
-    - For relative time queries at hour/minute level ("2 hours ago", "30 minutes ago", "5 minutes ago"):
-      * Calculate the exact datetime by subtracting from current time (from system prompt)
-      * Use ISO format without timezone (YYYY-MM-DDTHH:MM:SS) - will be interpreted in user's timezone
-      * Example: If current time is 2024-01-15 14:00:00 UTC and user asks "2 hours ago", calculate 14:00 - 2 hours = 12:00, then convert to user's timezone and use start_date="2024-01-15T12:00:00"
-      * Example: If current time is 2024-01-15 14:30:00 UTC and user asks "5 minutes ago", calculate 14:30 - 5 minutes = 14:25, then convert to user's timezone and use start_date="2024-01-15T14:25:00"
-    - For time-of-day queries ("this morning", "this afternoon", "tonight"):
-      * Use the current date from <current_datetime_utc> to build the date string
-      * "this morning": start_date="YYYY-MM-DDT06:00:00", end_date="YYYY-MM-DDT12:00:00"
-      * "this afternoon": start_date="YYYY-MM-DDT12:00:00", end_date="YYYY-MM-DDT18:00:00"
-      * "tonight": start_date="YYYY-MM-DDT18:00:00", end_date="YYYY-MM-DDT23:59:59"
-    - Combine start_date and end_date to create precise time windows
-    - All dates without explicit timezone are assumed to be in the user's local timezone
-
     Transcript retrieval guidance:
     - By default (max_transcript_segments=0), no transcript segments are included
     - Only increase max_transcript_segments when user explicitly needs transcript content
@@ -78,8 +62,8 @@ def get_conversations_tool(
     - Only use max_transcript_segments=-1 as last resort when complete transcript is explicitly required
 
     Args:
-        start_date: Filter conversations after this date (YYYY-MM-DD for days, YYYY-MM-DDTHH:MM:SSZ for hours/minutes)
-        end_date: Filter conversations before this date (YYYY-MM-DD for days, YYYY-MM-DDTHH:MM:SSZ for hours/minutes)
+        start_date: Filter conversations after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T15:00:00-08:00")
+        end_date: Filter conversations before this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T23:59:59-08:00")
         limit: Number of conversations to retrieve (default: 20, max: 100)
         offset: Pagination offset (default: 0)
         include_discarded: Include deleted conversations (default: False)
@@ -118,47 +102,29 @@ def get_conversations_tool(
         max_transcript_segments = min(max_transcript_segments, 1000)
         print(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
-    # Get user timezone from config, default to UTC
-    user_timezone_str = config['configurable'].get('timezone', 'UTC')
-    try:
-        user_tz = ZoneInfo(user_timezone_str)
-    except Exception:
-        user_tz = ZoneInfo('UTC')
-    print(f"🌍 get_conversations_tool - user timezone: {user_timezone_str}")
-
-    # Parse dates if provided
+    # Parse dates if provided (always in UTC)
     start_dt = None
     end_dt = None
 
     if start_date:
         try:
-            if len(start_date) == 10:  # YYYY-MM-DD - treat as user's local date
-                # Parse as naive datetime and localize to user's timezone
-                naive_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                start_dt = naive_dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=user_tz)
-                print(f"📅 Parsed start_date '{start_date}' as {start_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if start_dt.tzinfo is None:
-                    start_dt = start_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid start_date format: {start_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            if start_dt.tzinfo is None:
+                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
+            print(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
     if end_date:
         try:
-            if len(end_date) == 10:  # YYYY-MM-DD - treat as user's local date
-                # Parse as naive datetime and localize to user's timezone (end of day)
-                naive_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                end_dt = naive_dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=user_tz)
-                print(f"📅 Parsed end_date '{end_date}' as {end_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if end_dt.tzinfo is None:
-                    end_dt = end_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid end_date format: {end_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            if end_dt.tzinfo is None:
+                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
+            print(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
     # Limit to reasonable max
     limit = min(limit, 5000)
@@ -295,14 +261,6 @@ def search_conversations_tool(
     - Use multiple pages if needed to cover the full time period
     Examples: "summarize work discussions this month", "recap health topics this year"
 
-    Time filtering guidance:
-    - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
-    - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
-    - For relative time queries ("2 hours ago", "5 minutes ago", "this morning"), calculate exact datetime in user's timezone and use ISO format
-    - Use ISO datetime format (YYYY-MM-DDTHH:MM:SS) for hour/minute-level queries (no Z suffix)
-    - Combine start_date and end_date to create time windows for precise time ranges
-    - All dates without timezone info are assumed to be in the user's local timezone
-
     Transcript retrieval guidance:
     - By default (max_transcript_segments=0), no transcript segments are included
     - Only increase max_transcript_segments when user explicitly needs transcript content
@@ -325,8 +283,8 @@ def search_conversations_tool(
         per_page: Results per page (default: 10, max: 100)
         page: Page number starting at 1 (default: 1)
         include_discarded: Include deleted conversations (default: False)
-        start_date: Filter conversations after this date (YYYY-MM-DD for days, YYYY-MM-DDTHH:MM:SSZ for hours/minutes)
-        end_date: Filter conversations before this date (YYYY-MM-DD for days, YYYY-MM-DDTHH:MM:SSZ for hours/minutes)
+        start_date: Filter conversations after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T15:00:00-08:00")
+        end_date: Filter conversations before this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T23:59:59-08:00")
         max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, avoid -1 except when critical, max: 1000)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
@@ -350,49 +308,31 @@ def search_conversations_tool(
         max_transcript_segments = min(max_transcript_segments, 1000)
         print(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
-    # Get user timezone from config, default to UTC
-    user_timezone_str = config['configurable'].get('timezone', 'UTC')
-    try:
-        user_tz = ZoneInfo(user_timezone_str)
-    except Exception:
-        user_tz = ZoneInfo('UTC')
-    print(f"🌍 search_conversations_tool - user timezone: {user_timezone_str}")
-
-    # Parse dates to timestamps if provided
+    # Parse dates to timestamps if provided (always in UTC)
     start_timestamp = None
     end_timestamp = None
 
     if start_date:
         try:
-            if len(start_date) == 10:  # YYYY-MM-DD - treat as user's local date
-                # Parse as naive datetime and localize to user's timezone
-                naive_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                dt = naive_dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=user_tz)
-                print(f"📅 Parsed start_date '{start_date}' as {dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=user_tz)
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            if dt.tzinfo is None:
+                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
+            print(f"📅 Parsed start_date '{start_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             start_timestamp = int(dt.timestamp())
-        except ValueError:
-            return f"Error: Invalid start_date format: {start_date}"
+        except ValueError as e:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
     if end_date:
         try:
-            if len(end_date) == 10:  # YYYY-MM-DD - treat as user's local date
-                # Parse as naive datetime and localize to user's timezone (end of day)
-                naive_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                dt = naive_dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=user_tz)
-                print(f"📅 Parsed end_date '{end_date}' as {dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=user_tz)
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            if dt.tzinfo is None:
+                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
+            print(f"📅 Parsed end_date '{end_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             end_timestamp = int(dt.timestamp())
-        except ValueError:
-            return f"Error: Invalid end_date format: {end_date}"
+        except ValueError as e:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
     # Limit to reasonable max and convert to 0-based page index
     per_page = min(per_page, 5000)
