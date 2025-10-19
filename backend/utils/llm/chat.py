@@ -393,7 +393,6 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
 
     # Get timezone and current datetime in user's timezone
     tz = notification_db.get_user_time_zone(uid)
-    print(tz)
     try:
         user_tz = ZoneInfo(tz)
         current_datetime_user = datetime.now(user_tz)
