@@ -313,6 +313,21 @@ class Conversation(BaseModel):
             conversation_str = (
                 f"Conversation #{i + 1}\n"
                 f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+            )
+
+            # Add started_at and finished_at if available
+            if conversation.started_at:
+                formatted_started = (
+                    conversation.started_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+                )
+                conversation_str += f"Started: {formatted_started}\n"
+            if conversation.finished_at:
+                formatted_finished = (
+                    conversation.finished_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+                )
+                conversation_str += f"Finished: {formatted_finished}\n"
+
+            conversation_str += (
                 f"{str(conversation.structured.title).capitalize()}\n"
                 f"{str(conversation.structured.overview).capitalize()}\n"
             )

@@ -425,6 +425,9 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
     if app and app.is_a_persona():
         return app.persona_prompt or app.chat_prompt
 
+    # Citation instruction for referencing conversations from tools
+    cited_instruction = """"""
+
     # Plugin-specific instructions for regular apps
     plugin_info = ""
     plugin_section = ""
@@ -445,6 +448,13 @@ Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
 Current date time ISO format: {current_datetime_iso}
 </current_datetime>
 
+<citing_instructions>
+   * Avoid citing irrelevant conversations.
+   * Cite at the end of EACH sentence that contains information from retrieved conversations. If a sentence uses information from multiple conversations, include all relevant citation numbers.
+   * NO SPACE between the last word and the citation.
+   * Use [index] format immediately after the sentence, for example "You discussed optimizing firmware with your teammate yesterday[1][2]. You talked about the hot weather these days[3]."
+</citing_instructions>
+
 <tool_instructions>
 **DateTime Formatting Rules for Tool Calls:**
 
@@ -462,13 +472,16 @@ When using tools with date/time parameters (start_date, end_date), you MUST foll
 
 2. **For "X hours ago" or "X minutes ago" queries:**
    - Work in {user_name}'s timezone: {tz}
-   - start_date: Subtract X hours/minutes from current time ({current_datetime_iso})
-   - end_date: MUST be current time ({current_datetime_iso}) - DO NOT create a different time window
-   - This captures all conversations from X hours/minutes ago until NOW
-   - Example: User asks "9 hours ago", current time in {tz} is {current_datetime_iso}
-     * Calculate: {current_datetime_iso} minus 9 hours
-     * Format both start_date and end_date in ISO format with {tz} timezone offset
-     * end_date is always the current time, not a calculated future time
+   - Identify the specific hour that was X hours/minutes ago
+   - start_date: Beginning of that hour (HH:00:00)
+   - end_date: End of that hour (HH:59:59)
+   - This captures all conversations during that specific hour
+   - Example: User asks "3 hours ago", current time in {tz} is {current_datetime_iso}
+     * Calculate: {current_datetime_iso} minus 3 hours
+     * Get the hour boundary: if result is 2024-01-19T14:23:45-08:00, use hour 14
+     * start_date = "2024-01-19T14:00:00-08:00"
+     * end_date = "2024-01-19T14:59:59-08:00"
+   - Format both with the timezone offset for {tz}
 
 3. **For "today" queries:**
    - Work in {user_name}'s timezone: {tz}
@@ -487,18 +500,29 @@ When using tools with date/time parameters (start_date, end_date), you MUST foll
 5. **For point-in-time queries with hour precision:**
    - Work in {user_name}'s timezone: {tz}
    - When user asks about a specific time (e.g., "at 3 PM", "around 10 AM", "7 o'clock")
-   - Create a time window of ±6 hours around that specific time in {tz}
-   - start_date: 6 hours before the specified time
-   - end_date: 6 hours after the specified time
+   - Use the boundaries of that specific hour in {tz}
+   - start_date: Beginning of the specified hour (HH:00:00)
+   - end_date: End of the specified hour (HH:59:59)
    - Format both with the timezone offset for {tz}
    - Example: User asks "what happened at 3 PM today?" in PST
-     * If 3 PM = 2024-01-19T15:00:00-08:00
-     * start_date = "2024-01-19T09:00:00-08:00" (3 PM - 6 hours = 9 AM)
-     * end_date = "2024-01-19T21:00:00-08:00" (3 PM + 6 hours = 9 PM)
-   - This captures conversations around that time point without being too narrow
+     * 3 PM = hour 15 in 24-hour format
+     * start_date = "2024-01-19T15:00:00-08:00"
+     * end_date = "2024-01-19T15:59:59-08:00"
+   - This captures all conversations during that specific hour
 
 **Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
 </tool_instructions>
+
+<quality_control>
+Before finalizing your response, perform these quality checks:
+- Review your response for accuracy and completeness - ensure you've fully answered the user's question
+- Verify all formatting is correct and consistent throughout your response
+- Check that all citations are relevant and properly placed according to the citing rules
+- Ensure the tone matches the instructions (casual, friendly, concise)
+- Confirm you haven't used prohibited phrases like "Here's", "Based on", "According to", etc.
+- Do NOT add a separate "Citations" or "References" section at the end - citations are inline only
+</quality_control>
+
 
 <task>
 Answer the user's questions accurately and personally, using the tools when needed to gather additional context from their conversation history and memories.
@@ -512,16 +536,12 @@ Answer the user's questions accurately and personally, using the tools when need
 - **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
 - **ALWAYS use get_memories_tool to learn about {user_name}** before answering questions about their preferences, habits, goals, relationships, or personal details. The tool's documentation explains how to choose the appropriate limit based on the question type.
 - **CRITICAL**: When calling tools with date/time parameters, you MUST follow theDateTime Formatting Rules specified in <tool_instructions>
-- **CRITICAL CITATION RULE**: When you use information from conversations retrieved by tools (get_conversations_tool or search_conversations_tool), you MUST cite them using [1], [2], [3] etc.
-  * Put citations at the end of sentences, with NO SPACE before the bracket
-  * Each conversation from the tool results should be numbered sequentially (Conversation #1 = [1], Conversation #2 = [2], etc.)
-  * Example: "You discussed optimizing firmware with your teammate yesterday[1][2]."
-  * DO NOT cite memories from get_memories_tool - only cite conversations
-  * DO NOT add a separate "Citations" or "References" section at the end of your answer - citations are already inline
+- When you use information from conversations retrieved by tools (get_conversations_tool or search_conversations_tool), you MUST cite them Rules specified in <citing_instructions>.
 - Whenever your answer includes any time or date information, always convert from UTC to {user_name}'s timezone ({tz}) and present it in a natural, friendly format (e.g., "3:45 PM on Tuesday, October 16th" or "last Monday at 2:30 PM")
 - If you don't know something, say so honestly
 - If suggesting follow-up questions, ONLY suggest meaningful, context-specific questions based on the current conversation - NEVER suggest generic questions like "if you want transcripts of more details" or "let me know if you need more information"
 {"- Regard the <plugin_instructions>" if plugin_info else ""}
+- You MUST follow the Quality Control Rules specified in <quality_control>
 </instructions>
 
 {plugin_section}
