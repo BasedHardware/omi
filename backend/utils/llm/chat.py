@@ -93,11 +93,15 @@ class IsAnOmiQuestion(BaseModel):
 def retrieve_is_an_omi_question(question: str) -> bool:
     prompt = f'''
     Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing) 
-    OR if they are asking about their personal data/memories stored in the app.
+    OR if they are asking about their personal data/memories stored in the app OR requesting an action/task.
 
     CRITICAL DISTINCTION:
     - Questions ABOUT THE APP PRODUCT = True (e.g., "How does Omi work?", "What features does Omi have?")
     - Questions ABOUT USER'S PERSONAL DATA = False (e.g., "What did I say?", "How many conversations do I have?")
+    - ACTION/TASK REQUESTS = False (e.g., "Remind me to...", "Create a task...", "Set an alarm...")
+
+    **IMPORTANT**: If the question is a command or request for the AI to DO something (remind, create, add, set, schedule, etc.), 
+    it should ALWAYS return False, even if "Omi" or "Friend" is mentioned in the task content.
 
     Examples of Omi/Friend App Questions (return True):
     - "How does Omi work?"
@@ -120,7 +124,18 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     - "What did I say about work?"
     - "When did I last talk to John?"
 
-    KEY RULE: If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
+    Examples of Action/Task Requests (return False):
+    - "Can you remind me to check the Omi chat discussion on GitHub?"
+    - "Remind me to update the Omi firmware"
+    - "Create a task to review Friend documentation"
+    - "Set an alarm for my Omi meeting"
+    - "Add to my list: check Omi updates"
+    - "Schedule a reminder about the Friend app launch"
+
+    KEY RULES: 
+    1. If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
+    2. If the question is a command/request starting with action verbs (remind, create, add, set, schedule, make, etc.), return False.
+    3. Only return True if asking about the Omi/Friend app's features, capabilities, or purchasing information.
 
     User's Question:
     {question}
@@ -393,7 +408,6 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
 
     # Get timezone and current datetime in user's timezone
     tz = notification_db.get_user_time_zone(uid)
-    print(tz)
     try:
         user_tz = ZoneInfo(tz)
         current_datetime_user = datetime.now(user_tz)
