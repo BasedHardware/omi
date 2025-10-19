@@ -51,18 +51,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Row(
         children: [
-          // Emoji with purple background
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.deepPurpleAccent.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
+          // Emoji
+          SizedBox(
+            width: 28,
+            height: 28,
             child: Center(
               child: Text(
                 widget.conversation.structured.getEmoji(),
-                style: const TextStyle(fontSize: 22),
+                style: const TextStyle(fontSize: 24),
               ),
             ),
           ),
@@ -75,7 +71,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
               children: [
                 // Title
                 Text(
-                  widget.conversation.structured.title.decodeString,
+                  widget.conversation.discarded
+                      ? 'Discarded Conversation'
+                      : widget.conversation.structured.title.decodeString,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
