@@ -23,7 +23,7 @@ import routers.chat as chat_routers
 
 
 async def test_stream():
-    uid = "eLC***"
+    uid = "GPW9***"
     response = chat_routers.send_message(
         # data=chat_models.SendMessageRequest(
         #    text="Did i discuss anything abt yacht party recently? If yes do you think that partnership makes sense for us",
@@ -51,10 +51,16 @@ async def test_stream():
         # ),
         # uid=uid,
         # data=chat_models.SendMessageRequest(
-        #     text="summarise my week",
+        #     text="summarise my month",
         #     file_ids=[],  # ['x']
         # ),
         # uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #     text="what did i discuss in the last 3 hours ago",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
+        #
         ### MEMORIES TOOLS
         #
         # data=chat_models.SendMessageRequest(
@@ -92,11 +98,22 @@ async def test_stream():
         #
         # OMI docs
         #
-        data=chat_models.SendMessageRequest(
-            text="how to flash the omi consumer cv1 firmware ?",
-            file_ids=[],  # ['x']
-        ),
-        uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #    text="how to flash the omi consumer cv1 firmware ?",
+        #    file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
+        ## testing
+        # data=chat_models.SendMessageRequest(
+        #     text="what did i discuss 3 hours ago",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #     text="what did i discuss in the last 3 hours ago",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
     )
 
     # Read the stream
