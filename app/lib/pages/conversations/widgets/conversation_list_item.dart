@@ -48,7 +48,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   Widget _buildSimplifiedConversationItem() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Row(
         children: [
           // Emoji with purple background
@@ -56,13 +56,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+              color: Colors.deepPurpleAccent.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
               child: Text(
                 widget.conversation.structured.getEmoji(),
-                style: const TextStyle(fontSize: 20),
+                style: const TextStyle(fontSize: 22),
               ),
             ),
           ),
@@ -84,7 +84,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
 
                 // Timestamp and duration
                 Row(
@@ -95,8 +95,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         widget.conversation.startedAt ?? widget.conversation.createdAt,
                       ),
                       style: const TextStyle(
-                        color: Color(0xFF6A6B71),
-                        fontSize: 14,
+                        color: Color(0xFF95959C),
+                        fontSize: 15,
                       ),
                     ),
                     if (_getConversationDuration().isNotEmpty) ...[
@@ -110,7 +110,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         child: Text(
                           _getConversationDuration(),
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: Colors.white70,
                             fontSize: 11,
                           ),
                         ),
@@ -182,7 +182,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           child: Container(
             width: double.maxFinite,
             decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
+              color: const Color(0xDD1F1F25),
               borderRadius: BorderRadius.circular(16.0),
             ),
             child: ClipRRect(

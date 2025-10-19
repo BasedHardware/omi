@@ -16,26 +16,16 @@ class DateListItem extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, isFirst ? 0 : 20, 16, 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            isToday
-                ? 'Today'
-                : isYesterday
-                    ? 'Yesterday'
-                    : dateTimeFormat('MMM dd', date),
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Container(
-              height: 1,
-              color: const Color(0xFF35343B),
-            ),
-          )
-        ],
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          isToday
+              ? 'Today'
+              : isYesterday
+                  ? 'Yesterday'
+                  : dateTimeFormat('EEE MMM dd', date),
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
       ),
     );
   }
