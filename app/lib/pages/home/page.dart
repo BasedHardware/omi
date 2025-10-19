@@ -310,10 +310,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         builder: (ctx, connectivityProvider, child) {
           bool isConnected = connectivityProvider.isConnected;
           previousConnection ??= true;
-          if (previousConnection != isConnected && connectivityProvider.isInitialized) {
+
+          if (previousConnection != isConnected &&
+              connectivityProvider.isInitialized &&
+              connectivityProvider.previousConnection != isConnected) {
             previousConnection = isConnected;
             if (!isConnected) {
-              Future.delayed(const Duration(seconds: 2), () {
+              Future.delayed(const Duration(seconds: 5), () {
                 if (mounted && !connectivityProvider.isConnected) {
                   ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
