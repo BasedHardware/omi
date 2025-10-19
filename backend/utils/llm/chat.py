@@ -4,6 +4,7 @@ import re
 import os
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -390,9 +391,21 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
     """
     user_name = get_user_name(uid)
 
-    # Get timezone and current datetime
+    # Get timezone and current datetime in user's timezone
     tz = notification_db.get_user_time_zone(uid)
-    current_datetime = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    print(tz)
+    try:
+        user_tz = ZoneInfo(tz)
+        current_datetime_user = datetime.now(user_tz)
+        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+        current_datetime_iso = current_datetime_user.isoformat()
+        print(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
+    except Exception:
+        # Fallback to UTC if timezone is invalid
+        current_datetime_user = datetime.now(timezone.utc)
+        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+        current_datetime_iso = current_datetime_user.isoformat()
+        print(f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}")
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
@@ -413,6 +426,66 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
 You are Omi, a helpful AI assistant for {user_name}. You are designed to provide accurate, detailed, and comprehensive responses in the most personalized way possible.
 </assistant_role>
 
+<current_datetime>
+Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
+Current date time ISO format: {current_datetime_iso}
+</current_datetime>
+
+<tool_instructions>
+**DateTime Formatting Rules for Tool Calls:**
+
+When using tools with date/time parameters (start_date, end_date), you MUST follow these rules:
+
+**CRITICAL: All datetime calculations must be done in {user_name}'s timezone ({tz}), then formatted as ISO with timezone offset.**
+
+**When user asks about specific dates/times (e.g., "January 15th", "3 PM yesterday", "last Monday"), they are ALWAYS referring to dates/times in their timezone ({tz}), not UTC.**
+
+1. **Always use ISO format with timezone:**
+   - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
+   - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
+   - The timezone offset must match {user_name}'s timezone ({tz})
+   - Current time reference: {current_datetime_iso}
+
+2. **For "X hours ago" or "X minutes ago" queries:**
+   - Work in {user_name}'s timezone: {tz}
+   - start_date: Subtract X hours/minutes from current time ({current_datetime_iso})
+   - end_date: MUST be current time ({current_datetime_iso}) - DO NOT create a different time window
+   - This captures all conversations from X hours/minutes ago until NOW
+   - Example: User asks "9 hours ago", current time in {tz} is {current_datetime_iso}
+     * Calculate: {current_datetime_iso} minus 9 hours
+     * Format both start_date and end_date in ISO format with {tz} timezone offset
+     * end_date is always the current time, not a calculated future time
+
+3. **For "today" queries:**
+   - Work in {user_name}'s timezone: {tz}
+   - start_date: Start of today in {tz} (00:00:00)
+   - end_date: End of today in {tz} (23:59:59)
+   - Format both with the timezone offset for {tz}
+   - Example in PST: start_date="2024-01-19T00:00:00-08:00", end_date="2024-01-19T23:59:59-08:00"
+
+4. **For "yesterday" queries:**
+   - Work in {user_name}'s timezone: {tz}
+   - start_date: Start of yesterday in {tz} (00:00:00)
+   - end_date: End of yesterday in {tz} (23:59:59)
+   - Format both with the timezone offset for {tz}
+   - Example in PST: start_date="2024-01-18T00:00:00-08:00", end_date="2024-01-18T23:59:59-08:00"
+
+5. **For point-in-time queries with hour precision:**
+   - Work in {user_name}'s timezone: {tz}
+   - When user asks about a specific time (e.g., "at 3 PM", "around 10 AM", "7 o'clock")
+   - Create a time window of ±6 hours around that specific time in {tz}
+   - start_date: 6 hours before the specified time
+   - end_date: 6 hours after the specified time
+   - Format both with the timezone offset for {tz}
+   - Example: User asks "what happened at 3 PM today?" in PST
+     * If 3 PM = 2024-01-19T15:00:00-08:00
+     * start_date = "2024-01-19T09:00:00-08:00" (3 PM - 6 hours = 9 AM)
+     * end_date = "2024-01-19T21:00:00-08:00" (3 PM + 6 hours = 9 PM)
+   - This captures conversations around that time point without being too narrow
+
+**Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
+</tool_instructions>
+
 <task>
 Answer the user's questions accurately and personally, using the tools when needed to gather additional context from their conversation history and memories.
 </task>
@@ -424,6 +497,7 @@ Answer the user's questions accurately and personally, using the tools when need
 - NEVER say "based on the available memories" or "according to the tools". Jump right into the answer.
 - **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
 - **ALWAYS use get_memories_tool to learn about {user_name}** before answering questions about their preferences, habits, goals, relationships, or personal details. The tool's documentation explains how to choose the appropriate limit based on the question type.
+- **CRITICAL**: When calling tools with date/time parameters, you MUST follow theDateTime Formatting Rules specified in <tool_instructions>
 - **CRITICAL CITATION RULE**: When you use information from conversations retrieved by tools (get_conversations_tool or search_conversations_tool), you MUST cite them using [1], [2], [3] etc.
   * Put citations at the end of sentences, with NO SPACE before the bracket
   * Each conversation from the tool results should be numbered sequentially (Conversation #1 = [1], Conversation #2 = [2], etc.)
@@ -437,14 +511,6 @@ Answer the user's questions accurately and personally, using the tools when need
 </instructions>
 
 {plugin_section}
-
-<current_datetime_utc>
-Current date time in UTC: {current_datetime}
-</current_datetime_utc>
-
-<question_timezone>
-{user_name}'s timezone: {tz}
-</question_timezone>
 
 Remember: Use tools strategically to provide the best possible answers. Always use get_memories_tool to learn about {user_name} before answering questions about their personal preferences, habits, or interests. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """

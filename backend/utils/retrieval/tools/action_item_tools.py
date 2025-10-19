@@ -4,7 +4,6 @@ Tools for accessing and managing user action items.
 
 from datetime import datetime, timedelta
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -37,37 +36,33 @@ def get_action_items_tool(
     and may be linked to a conversation.
 
     Use this tool when:
-    - User asks "what are my tasks?" or "show me my to-dos"
+    - User asks "what are my tasks?" or "show me my to-dos" or "what should i focus on"
     - User wants to see pending or completed action items
     - User asks about tasks from a specific conversation
     - User asks about tasks due in a certain time period
     - User wants to know what they need to do
     - **ALWAYS use this tool when the user asks about their tasks or action items**
 
-    Time filtering guidance:
-    - **CRITICAL**: When user asks about action items from relative times ("2 minutes ago", "last hour", "this morning"), you MUST calculate and provide start_date/end_date parameters
-    - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
-    - **DO NOT leave start_date/end_date empty when the user specifies a time period** - always calculate the actual datetime values
-    - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
-    - For relative time queries at hour/minute level ("2 minutes ago", "30 minutes ago", "2 hours ago"):
-      * YOU MUST calculate the exact datetime by subtracting from current time in <current_datetime_utc>
-      * Use ISO format without timezone (YYYY-MM-DDTHH:MM:SS) - will be interpreted in user's timezone
-      * Example: If current time is 2024-01-15 14:00:00 UTC and user asks "2 hours ago", you MUST use start_date="2024-01-15T12:00:00"
-    - For time-of-day queries ("this morning", "this afternoon", "tonight"):
-      * Use the current date from <current_datetime_utc> to build the date string
-      * "this morning": start_date="YYYY-MM-DDT06:00:00", end_date="YYYY-MM-DDT12:00:00"
-      * "this afternoon": start_date="YYYY-MM-DDT12:00:00", end_date="YYYY-MM-DDT18:00:00"
-      * "tonight": start_date="YYYY-MM-DDT18:00:00", end_date="YYYY-MM-DDT23:59:59"
-    - All dates without explicit timezone are assumed to be in the user's local timezone
-
     Filtering guidance:
-    - Use completed=False to get only pending tasks
+    - **CRITICAL**: By default, ALWAYS use due_start_date/due_end_date (DUE dates) for time-based queries
+    - **ONLY use start_date/end_date (CREATION dates) when the user explicitly asks about when tasks were created**
+
+    Date parameter priority:
+    1. **PRIMARY (use by default)**: due_start_date/due_end_date for filtering by when tasks are DUE
+       - "tasks for today" → use due_start_date/due_end_date for today
+       - "tasks this week" → use due_start_date/due_end_date for this week
+       - "what do I need to do tomorrow" → use due_start_date/due_end_date for tomorrow
+       - "upcoming tasks" → use due_start_date/due_end_date
+
+    2. **SECONDARY (only when explicitly requested)**: start_date/end_date for filtering by CREATION date
+       - "tasks I created today" → use start_date/end_date for today
+       - "tasks I added yesterday" → use start_date/end_date for yesterday
+       - "tasks created this week" → use start_date/end_date for this week
+
+    Other filters:
+    - Use completed=False to get only pending tasks (default for most queries)
     - Use completed=True to get only completed tasks
     - Use conversation_id to get tasks from a specific conversation
-    - Use start_date/end_date to filter by CREATION date (when the task was created)
-    - Use due_start_date/due_end_date to filter by DUE date (when the task is due)
-    - **IMPORTANT**: When user asks "tasks due this week" or "tasks due today", use due_start_date/due_end_date
-    - **IMPORTANT**: When user asks "tasks created today" or "tasks I added yesterday", use start_date/end_date
     - Default limit is 50, which is suitable for most queries
     - Use higher limit (up to 500) for comprehensive task reviews
 
@@ -76,10 +71,10 @@ def get_action_items_tool(
         offset: Pagination offset for retrieving additional items (default: 0)
         completed: Filter by completion status (None=all, True=completed, False=pending)
         conversation_id: Filter by conversation ID that generated the action item
-        start_date: Filter by creation date - items created after this date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
-        end_date: Filter by creation date - items created before this date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
-        due_start_date: Filter by due date - items due after this date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
-        due_end_date: Filter by due date - items due before this date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        start_date: Filter by creation date - items created after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T15:00:00-08:00")
+        end_date: Filter by creation date - items created before this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T23:59:59-08:00")
+        due_start_date: Filter by due date - items due after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T15:00:00-08:00")
+        due_end_date: Filter by due date - items due before this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T23:59:59-08:00")
 
     Returns:
         Formatted list of action items with their details.
@@ -103,45 +98,29 @@ def get_action_items_tool(
         print(f"⚠️ get_action_items_tool - limit capped from {limit} to 500")
         limit = 500
 
-    # Get user timezone from config, default to UTC
-    user_timezone_str = config['configurable'].get('timezone', 'UTC')
-    try:
-        user_tz = ZoneInfo(user_timezone_str)
-    except Exception:
-        user_tz = ZoneInfo('UTC')
-    print(f"🌍 get_action_items_tool - user timezone: {user_timezone_str}")
-
-    # Parse created_at dates if provided
+    # Parse created_at dates if provided (must be ISO format with timezone)
     start_dt = None
     end_dt = None
 
     if start_date:
         try:
-            if len(start_date) == 10:  # YYYY-MM-DD
-                naive_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                start_dt = naive_dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=user_tz)
-                print(f"📅 Parsed start_date (created_at) '{start_date}' as {start_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if start_dt.tzinfo is None:
-                    start_dt = start_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid start_date format: {start_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            if start_dt.tzinfo is None:
+                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
+            print(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
     if end_date:
         try:
-            if len(end_date) == 10:  # YYYY-MM-DD
-                naive_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                end_dt = naive_dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=user_tz)
-                print(f"📅 Parsed end_date (created_at) '{end_date}' as {end_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if end_dt.tzinfo is None:
-                    end_dt = end_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid end_date format: {end_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            if end_dt.tzinfo is None:
+                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
+            print(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
     # Parse due_at dates if provided
     due_start_dt = None
@@ -149,31 +128,23 @@ def get_action_items_tool(
 
     if due_start_date:
         try:
-            if len(due_start_date) == 10:  # YYYY-MM-DD
-                naive_dt = datetime.strptime(due_start_date, '%Y-%m-%d')
-                due_start_dt = naive_dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=user_tz)
-                print(f"📅 Parsed due_start_date '{due_start_date}' as {due_start_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                due_start_dt = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
-                if due_start_dt.tzinfo is None:
-                    due_start_dt = due_start_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid due_start_date format: {due_start_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            due_start_dt = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
+            if due_start_dt.tzinfo is None:
+                return f"Error: due_start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {due_start_date}"
+            print(f"📅 Parsed due_start_date '{due_start_date}' as {due_start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date} - {str(e)}"
 
     if due_end_date:
         try:
-            if len(due_end_date) == 10:  # YYYY-MM-DD
-                naive_dt = datetime.strptime(due_end_date, '%Y-%m-%d')
-                due_end_dt = naive_dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=user_tz)
-                print(f"📅 Parsed due_end_date '{due_end_date}' as {due_end_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                due_end_dt = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
-                if due_end_dt.tzinfo is None:
-                    due_end_dt = due_end_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid due_end_date format: {due_end_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            due_end_dt = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
+            if due_end_dt.tzinfo is None:
+                return f"Error: due_end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {due_end_date}"
+            print(f"📅 Parsed due_end_date '{due_end_date}' as {due_end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date} - {str(e)}"
 
     # Get action items
     action_items = []
@@ -278,14 +249,13 @@ def create_action_item_tool(
     - "I need to finish the report by Friday" -> create_action_item_tool(description="Finish the report", due_at="2024-01-19T23:59:59")
 
     Due date formatting:
-    - Use ISO format: YYYY-MM-DDTHH:MM:SS
-    - Will be interpreted in user's timezone
-    - Example: "2024-01-20T14:30:00" for January 20, 2024 at 2:30 PM
-    - If user doesn't specify time, use end of day (23:59:59)
+    - Use ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM
+    - Example: "2024-01-20T14:30:00-08:00" for January 20, 2024 at 2:30 PM in PST
+    - If user doesn't specify time, use end of day (23:59:59) in user's timezone
 
     Args:
         description: The task description (required)
-        due_at: Optional due date in ISO format YYYY-MM-DDTHH:MM:SS
+        due_at: Optional due date in ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-20T14:30:00-08:00")
         conversation_id: Optional ID of the conversation this task came from
 
     Returns:
@@ -311,26 +281,19 @@ def create_action_item_tool(
         'conversation_id': conversation_id,
     }
 
-    # Get user timezone
-    user_timezone_str = config['configurable'].get('timezone', 'UTC')
-    try:
-        user_tz = ZoneInfo(user_timezone_str)
-    except Exception:
-        user_tz = ZoneInfo('UTC')
-
     # Parse or set due date
     if due_at is not None:
-        # Parse provided due date
+        # Parse provided due date (must be ISO format with timezone)
         try:
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
-                due_dt = due_dt.replace(tzinfo=user_tz)
+                return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
             action_item_data['due_at'] = due_dt
-        except ValueError:
-            return f"Error: Invalid due_at format: {due_at}. Use YYYY-MM-DDTHH:MM:SS"
+        except ValueError as e:
+            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
     else:
-        # Set default due date to 24 hours from now
-        now = datetime.now(user_tz)
+        # Set default due date to 24 hours from now in UTC
+        now = datetime.now(datetime.now().astimezone().tzinfo)
         default_due = now + timedelta(hours=24)
         action_item_data['due_at'] = default_due
         print(f"📅 No due date provided, setting default to 24h from now: {default_due}")
@@ -417,15 +380,14 @@ def update_action_item_tool(
     - "Change the due date of my meeting task" -> First call get_action_items_tool, find the task, then use its ID
 
     Due date formatting:
-    - Use ISO format: YYYY-MM-DDTHH:MM:SS
-    - Will be interpreted in user's timezone
-    - Example: "2024-01-20T14:30:00" for January 20, 2024 at 2:30 PM
+    - Use ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM
+    - Example: "2024-01-20T14:30:00-08:00" for January 20, 2024 at 2:30 PM in PST
 
     Args:
         action_item_id: The ID of the action item to update (get this from get_action_items_tool)
         completed: Set completion status (True=completed, False=pending, None=no change)
         description: New description for the action item (None=no change)
-        due_at: New due date in ISO format YYYY-MM-DDTHH:MM:SS (None=no change)
+        due_at: New due date in ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-20T14:30:00-08:00") (None=no change)
 
     Returns:
         Confirmation message about the update.
@@ -463,21 +425,15 @@ def update_action_item_tool(
 
     if due_at is not None:
         try:
-            # Parse due date
-            user_timezone_str = config['configurable'].get('timezone', 'UTC')
-            try:
-                user_tz = ZoneInfo(user_timezone_str)
-            except Exception:
-                user_tz = ZoneInfo('UTC')
-
+            # Parse due date (must be ISO format with timezone)
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
-                due_dt = due_dt.replace(tzinfo=user_tz)
+                return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
 
             update_data['due_at'] = due_dt
-            changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S')}")
-        except ValueError:
-            return f"Error: Invalid due_at format: {due_at}. Use YYYY-MM-DDTHH:MM:SS"
+            changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
 
     if not update_data:
         return "No changes specified. Please provide at least one field to update (completed, description, or due_at)."

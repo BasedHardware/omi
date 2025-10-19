@@ -4,7 +4,6 @@ Tools for accessing user memories and facts.
 
 from datetime import datetime
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -35,25 +34,6 @@ def get_memories_tool(
     - You want to understand the user better to give more personalized advice
     - **ALWAYS use this tool to learn about the user before answering personal questions**
 
-    Time filtering guidance:
-    - **CRITICAL**: When user asks about memories from relative times ("2 minutes ago", "last hour", "this morning"), you MUST calculate and provide start_date/end_date parameters
-    - **IMPORTANT**: Use the current datetime from <current_datetime_utc> in the system prompt to calculate all relative times
-    - **DO NOT leave start_date/end_date empty when the user specifies a time period** - always calculate the actual datetime values
-    - For exact date queries ("October 16th", "yesterday"), use YYYY-MM-DD format - dates are interpreted in user's timezone
-    - For relative time queries at hour/minute level ("2 minutes ago", "30 minutes ago", "2 hours ago", "5 minutes ago"):
-      * YOU MUST calculate the exact datetime by subtracting from current time in <current_datetime_utc>
-      * Use ISO format without timezone (YYYY-MM-DDTHH:MM:SS) - will be interpreted in user's timezone
-      * Example: If current time is 2024-01-15 14:00:00 UTC and user asks "2 hours ago", you MUST use start_date="2024-01-15T12:00:00"
-      * Example: If current time is 2024-01-15 14:30:00 UTC and user asks "5 minutes ago", you MUST use start_date="2024-01-15T14:25:00"
-      * Example: If current time is 2024-01-15 10:35:00 UTC and user asks "2 minutes ago", you MUST use start_date="2024-01-15T10:33:00"
-    - For time-of-day queries ("this morning", "this afternoon", "tonight"):
-      * Use the current date from <current_datetime_utc> to build the date string
-      * "this morning": start_date="YYYY-MM-DDT06:00:00", end_date="YYYY-MM-DDT12:00:00"
-      * "this afternoon": start_date="YYYY-MM-DDT12:00:00", end_date="YYYY-MM-DDT18:00:00"
-      * "tonight": start_date="YYYY-MM-DDT18:00:00", end_date="YYYY-MM-DDT23:59:59"
-    - Combine start_date and end_date to create precise time windows
-    - All dates without explicit timezone are assumed to be in the user's local timezone
-
     Memory retrieval guidance - choosing the right limit:
     - **CRITICAL**: For ANY question asking about basic personal information (name, age, location, background, etc.) or multiple personal facts together, you MUST use limit=5000 to get ALL memories
     - **For GENERAL COMPREHENSIVE questions, you MUST use limit=5000** to get ALL memories
@@ -79,8 +59,8 @@ def get_memories_tool(
     Args:
         limit: Number of memories to retrieve (default: 50, recommended: 50-200, max per call: 5000)
         offset: Pagination offset for retrieving additional memories beyond the limit (default: 0)
-        start_date: Filter memories after this date (YYYY-MM-DD for days, YYYY-MM-DDTHH:MM:SS for hours/minutes)
-        end_date: Filter memories before this date (YYYY-MM-DD for days, YYYY-MM-DDTHH:MM:SS for hours/minutes)
+        start_date: Filter memories after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T15:00:00-08:00")
+        end_date: Filter memories before this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-19T23:59:59-08:00")
 
     Returns:
         Formatted list of facts about the user with categories, dates, and emoji representations.
@@ -102,47 +82,29 @@ def get_memories_tool(
         print(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
         limit = 5000
 
-    # Get user timezone from config, default to UTC
-    user_timezone_str = config['configurable'].get('timezone', 'UTC')
-    try:
-        user_tz = ZoneInfo(user_timezone_str)
-    except Exception:
-        user_tz = ZoneInfo('UTC')
-    print(f"🌍 get_memories_tool - user timezone: {user_timezone_str}")
-
-    # Parse dates if provided
+    # Parse dates if provided (must be ISO format with timezone)
     start_dt = None
     end_dt = None
 
     if start_date:
         try:
-            if len(start_date) == 10:  # YYYY-MM-DD - treat as user's local date
-                # Parse as naive datetime and localize to user's timezone
-                naive_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                start_dt = naive_dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=user_tz)
-                print(f"📅 Parsed start_date '{start_date}' as {start_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if start_dt.tzinfo is None:
-                    start_dt = start_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid start_date format: {start_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            if start_dt.tzinfo is None:
+                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
+            print(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
     if end_date:
         try:
-            if len(end_date) == 10:  # YYYY-MM-DD - treat as user's local date
-                # Parse as naive datetime and localize to user's timezone (end of day)
-                naive_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                end_dt = naive_dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=user_tz)
-                print(f"📅 Parsed end_date '{end_date}' as {end_dt} in {user_timezone_str}")
-            else:
-                # Parse ISO format - if no timezone, assume user's timezone
-                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if end_dt.tzinfo is None:
-                    end_dt = end_dt.replace(tzinfo=user_tz)
-        except ValueError:
-            return f"Error: Invalid end_date format: {end_date}"
+            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            if end_dt.tzinfo is None:
+                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
+            print(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        except ValueError as e:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
     # Get memories
     memories = []

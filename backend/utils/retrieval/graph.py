@@ -229,12 +229,6 @@ def persona_question(state: GraphState):
     return {'answer': "Oops", 'ask_for_nps': True}
 
 
-def context_dependent_conversation_v1(state: GraphState):
-    question = extract_question_from_conversation(state.get("messages", []))
-    print("context_dependent_conversation parsed question:", question)
-    return {"parsed_question": question}
-
-
 def context_dependent_conversation(state: GraphState):
     return state
 
@@ -470,7 +464,7 @@ workflow.add_conditional_edges("determine_conversation", determine_conversation_
 
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
-workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+# workflow.add_node("context_dependent_conversation", context_dependent_conversation)
 workflow.add_node("agentic_context_dependent_conversation", agentic_context_dependent_conversation)
 workflow.add_node("file_chat_question", file_chat_question)
 workflow.add_node("persona_question", persona_question)
@@ -480,22 +474,22 @@ workflow.add_edge("omi_question", END)
 workflow.add_edge("persona_question", END)
 workflow.add_edge("file_chat_question", END)
 workflow.add_edge("agentic_context_dependent_conversation", END)
-workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
-workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
-
-workflow.add_node("retrieve_topics_filters", retrieve_topics_filters)
-workflow.add_node("retrieve_date_filters", retrieve_date_filters)
-
-workflow.add_edge("retrieve_topics_filters", "query_vectors")
-workflow.add_edge("retrieve_date_filters", "query_vectors")
-
-workflow.add_node("query_vectors", query_vectors)
-
-workflow.add_edge("query_vectors", "qa_handler")
-
-workflow.add_node("qa_handler", qa_handler)
-
-workflow.add_edge("qa_handler", END)
+# workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
+# workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
+#
+# workflow.add_node("retrieve_topics_filters", retrieve_topics_filters)
+# workflow.add_node("retrieve_date_filters", retrieve_date_filters)
+#
+# workflow.add_edge("retrieve_topics_filters", "query_vectors")
+# workflow.add_edge("retrieve_date_filters", "query_vectors")
+#
+# workflow.add_node("query_vectors", query_vectors)
+#
+# workflow.add_edge("query_vectors", "qa_handler")
+#
+# workflow.add_node("qa_handler", qa_handler)
+#
+# workflow.add_edge("qa_handler", END)
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
