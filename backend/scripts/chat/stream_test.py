@@ -23,7 +23,7 @@ import routers.chat as chat_routers
 
 
 async def test_stream():
-    uid = "GPW9***"
+    uid = "eLC***"
     response = chat_routers.send_message(
         # data=chat_models.SendMessageRequest(
         #    text="Did i discuss anything abt yacht party recently? If yes do you think that partnership makes sense for us",
@@ -50,11 +50,11 @@ async def test_stream():
         #     file_ids=[],  # ['x']
         # ),
         # uid=uid,
-        data=chat_models.SendMessageRequest(
-            text="summarise my week",
-            file_ids=[],  # ['x']
-        ),
-        uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #     text="summarise my week",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
         ### MEMORIES TOOLS
         #
         # data=chat_models.SendMessageRequest(
@@ -84,6 +84,19 @@ async def test_stream():
         #    file_ids=[],  # ['x']
         # ),
         # uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #   text="remind me to check the omi chat discussion on github",
+        #   file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
+        #
+        # OMI docs
+        #
+        data=chat_models.SendMessageRequest(
+            text="how to flash the omi consumer cv1 firmware ?",
+            file_ids=[],  # ['x']
+        ),
+        uid=uid,
     )
 
     # Read the stream
