@@ -23,7 +23,7 @@ import routers.chat as chat_routers
 
 
 async def test_stream():
-    uid = "GPW9***"
+    # uid = "eLCx***"
     response = chat_routers.send_message(
         # data=chat_models.SendMessageRequest(
         #    text="Did i discuss anything abt yacht party recently? If yes do you think that partnership makes sense for us",
@@ -61,6 +61,26 @@ async def test_stream():
         # ),
         # uid=uid,
         #
+        # data=chat_models.SendMessageRequest(
+        #     text="I talked to a guy today who has experience hosting events, what does their startup do",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #     text="where did i have dinner last night",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #     text="what did i talk about firmware recently",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
+        # data=chat_models.SendMessageRequest(
+        #     text="i have talked to my team about rolling out the subscription plan. can you check my discussions and suggest what the better plan is ?",
+        #     file_ids=[],  # ['x']
+        # ),
+        # uid=uid,
         ### MEMORIES TOOLS
         #
         # data=chat_models.SendMessageRequest(
@@ -103,7 +123,6 @@ async def test_stream():
         #    file_ids=[],  # ['x']
         # ),
         # uid=uid,
-        ## testing
         # data=chat_models.SendMessageRequest(
         #     text="what did i discuss 3 hours ago",
         #     file_ids=[],  # ['x']
