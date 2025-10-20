@@ -25,7 +25,7 @@ from models.chat import Message, ChatSession
 from models.conversation import Conversation
 from utils.retrieval.tools import (
     get_conversations_tool,
-    search_conversations_tool,
+    vector_search_conversations_tool,
     get_memories_tool,
     get_action_items_tool,
     create_action_item_tool,
@@ -117,7 +117,7 @@ def execute_agentic_chat(
     # Get all tools
     tools = [
         get_conversations_tool,
-        search_conversations_tool,
+        vector_search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
         create_action_item_tool,
@@ -187,7 +187,7 @@ async def execute_agentic_chat_stream(
     # Get all tools
     tools = [
         get_conversations_tool,
-        search_conversations_tool,
+        vector_search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
         create_action_item_tool,

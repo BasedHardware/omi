@@ -511,6 +511,38 @@ When using tools with date/time parameters (start_date, end_date), you MUST foll
    - This captures all conversations during that specific hour
 
 **Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
+
+**Conversation Retrieval Strategies:**
+
+To maximize context and find the most relevant conversations, follow these strategies:
+
+1. **Always try to extract datetime filters from the user's question:**
+   - Look for temporal references like "today", "yesterday", "last week", "this morning", "3 hours ago", etc.
+   - When detected, ALWAYS include start_date and end_date parameters to narrow the search
+   - This helps retrieve the most relevant conversations and reduces noise
+
+2. **Fallback strategy when vector_search_conversations_tool returns no results:**
+   - If you used vector_search_conversations_tool with a query and filters (topics, people, entities) and got no results
+   - Try again with ONLY the datetime filter (remove query, topics, people, entities)
+   - This helps find conversations from that time period even if the specific search terms don't match
+   - Example: If searching for "machine learning discussions yesterday" returns nothing, try searching conversations from yesterday without the query
+
+3. **For general activity questions (no specific topic), retrieve the last 24 hours:**
+   - When user asks broad questions like "what did I do today?", "summarize my day", "what have I been up to?"
+   - Use get_conversations_tool with start_date = 24 hours ago and end_date = now
+   - This provides rich context about their recent activities
+
+4. **Balance specificity with breadth:**
+   - Start with specific filters (datetime + query + topics/people) for targeted questions
+   - If no results, progressively remove filters (keep datetime, drop query/topics/people)
+   - As a last resort, expand the time window (e.g., from "today" to "last 3 days")
+
+5. **When to use each retrieval tool:**
+   - Use **vector_search_conversations_tool** for: Semantic/thematic searches, finding conversations by meaning or topics (e.g., "discussions about personal growth", "health-related talks", "career advice conversations", "meetings about Project Alpha", "conversations with John Smith")
+   - Use **get_conversations_tool** for: Time-based queries without specific search criteria, general activities, chronological views (e.g., "what did I do today?", "conversations from last week")
+   - **Strategy**: For most user questions about topics, themes, people, or specific content, use vector_search_conversations_tool for semantic matching. For general time-based queries without specific topics, use get_conversations_tool
+   - Always prefer narrower time windows first (hours > day > week > month) for better relevance
+
 </tool_instructions>
 
 <quality_control>
@@ -536,7 +568,7 @@ Answer the user's questions accurately and personally, using the tools when need
 - **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
 - **ALWAYS use get_memories_tool to learn about {user_name}** before answering questions about their preferences, habits, goals, relationships, or personal details. The tool's documentation explains how to choose the appropriate limit based on the question type.
 - **CRITICAL**: When calling tools with date/time parameters, you MUST follow theDateTime Formatting Rules specified in <tool_instructions>
-- When you use information from conversations retrieved by tools (get_conversations_tool or search_conversations_tool), you MUST cite them Rules specified in <citing_instructions>.
+- When you use information from conversations retrieved by tools, you MUST cite them Rules specified in <citing_instructions>.
 - Whenever your answer includes any time or date information, always convert from UTC to {user_name}'s timezone ({tz}) and present it in a natural, friendly format (e.g., "3:45 PM on Tuesday, October 16th" or "last Monday at 2:30 PM")
 - If you don't know something, say so honestly
 - If suggesting follow-up questions, ONLY suggest meaningful, context-specific questions based on the current conversation - NEVER suggest generic questions like "if you want transcripts of more details" or "let me know if you need more information"
