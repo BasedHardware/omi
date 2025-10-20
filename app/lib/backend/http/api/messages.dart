@@ -114,6 +114,7 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
 
 Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async* {
   var messageId = "1000"; // Default new message
+  // Removed debug spam - only log errors
 
   await for (var line in makeMultipartStreamingApiCall(
     url: '${Env.apiBaseUrl}v2/voice-messages',
@@ -123,6 +124,7 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
     if (messageChunk != null) {
       yield messageChunk;
     } else {
+      debugPrint('[API] ERROR: Failed to parse message chunk');
       yield ServerMessageChunk.failedMessage();
       return;
     }

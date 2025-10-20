@@ -261,37 +261,78 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+    debugPrint('[VOICE COMMAND] Processing voice command, data.length=${data.length}');
     if (data.isEmpty) {
       debugPrint("voice frames is empty");
       return;
     }
 
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    // Wait longer for WebSocket transcription to complete
+    debugPrint('[VOICE COMMAND] Waiting 2 seconds for transcription to complete...');
+    debugPrint('[VOICE COMMAND] Current segments.length: ${segments.length}');
+    await Future.delayed(const Duration(milliseconds: 2000));
+    debugPrint('[VOICE COMMAND] After delay, segments.length: ${segments.length}');
+
+    // Get the transcribed text from the last segment only
+    String transcribedText = '';
+    if (segments.isNotEmpty) {
+      debugPrint('[VOICE COMMAND] Have ${segments.length} total segments');
+      
+      // Take only the last segment (most recent voice command)
+      final lastSegment = segments.last;
+      debugPrint('[VOICE COMMAND] Last segment at ${lastSegment.start}s: "${lastSegment.text}"');
+      
+      transcribedText = lastSegment.text.trim();
+      debugPrint('[VOICE COMMAND] Using transcribed text: "$transcribedText"');
+    } else {
+      debugPrint('[VOICE COMMAND] segments list is empty!');
+    }
+
+    if (transcribedText.isEmpty) {
+      debugPrint('[VOICE COMMAND] No transcription available, falling back to audio upload');
+      // Fallback: send audio if no transcription (shouldn't happen normally)
+      BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+      if (messageProvider != null) {
+        messageProvider?.setNextMessageOriginIsVoice(true);
+        await messageProvider?.sendVoiceMessageStreamToServer(
+          data,
+          onFirstChunkRecived: () {
+            _playSpeakerHaptic(deviceId, 2);
+          },
+          codec: codec,
+        );
+      }
+      return;
+    }
+
+    // Send the transcribed text as a chat message to get AI response
     if (messageProvider != null) {
-      await messageProvider?.sendVoiceMessageStreamToServer(
-        data,
-        onFirstChunkRecived: () {
-          _playSpeakerHaptic(deviceId, 2);
-        },
-        codec: codec,
-      );
+      debugPrint('[VOICE COMMAND] Sending transcribed text to chat for AI response');
+      messageProvider?.setNextMessageOriginIsVoice(true);
+      _playSpeakerHaptic(deviceId, 2);
+      await messageProvider?.sendMessageStreamToServer(transcribedText);
+      debugPrint('[VOICE COMMAND] Chat message sent successfully');
+    } else {
+      debugPrint('[VOICE COMMAND] ERROR: messageProvider is null!');
     }
   }
 
   // Just incase the ble connection get loss
   void _watchVoiceCommands(String deviceId, DateTime session) {
     Timer.periodic(const Duration(seconds: 3), (t) async {
-      debugPrint("voice command watch");
+      debugPrint("voice command watch (session active)");
       if (session != _voiceCommandSession) {
+        debugPrint("voice command watch cancelled - session changed");
         t.cancel();
         return;
       }
       var value = await _getBleButtonState(deviceId);
       var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      debugPrint("watch device button $buttonState");
+      debugPrint("watch device button $buttonState (${_commandBytes.length} audio chunks captured)");
 
       // Force process
       if (buttonState == 5 && session == _voiceCommandSession) {
+        debugPrint('[VOICE COMMAND] Watch timer detected button release, processing command');
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
         _commandBytes = [];
@@ -307,10 +348,11 @@ class CaptureProvider extends ChangeNotifier
       final snapshot = List<int>.from(value);
       if (snapshot.isEmpty || snapshot.length < 4) return;
       var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      debugPrint("device button $buttonState");
+      debugPrint("device button $buttonState (session: ${_voiceCommandSession != null ? 'active' : 'null'})");
 
       // start long press
       if (buttonState == 3 && _voiceCommandSession == null) {
+        debugPrint('[VOICE COMMAND] Starting voice command session (button press detected)');
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
         _watchVoiceCommands(deviceId, _voiceCommandSession!);
@@ -319,10 +361,13 @@ class CaptureProvider extends ChangeNotifier
 
       // release
       if (buttonState == 5 && _voiceCommandSession != null) {
+        debugPrint('[VOICE COMMAND] Button released, processing command (${_commandBytes.length} audio chunks)');
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
         _commandBytes = [];
         _processVoiceCommandBytes(deviceId, data);
+      } else if (buttonState == 5 && _voiceCommandSession == null) {
+        debugPrint('[VOICE COMMAND] Button 5 detected but session is null - voice command already processed by watch timer?');
       }
     });
   }
