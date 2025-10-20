@@ -20,7 +20,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 <h3>
 
-[Homepage](https://omi.me/) | [Documentation](https://docs.omi.me/) | [Buy omi Developer Kit](https://www.omi.me/products/omi-dev-kit-2) | [Buy Omi Glass Dev Kit](https://www.omi.me/glass)
+[Site](https://omi.me/) | [Download](https://omi.me/download) | [Docs](https://docs.omi.me/) | [Buy omi Dev Kit](https://www.omi.me/products/omi-dev-kit-2) | [Buy Omi Glass Dev Kit](https://www.omi.me/glass)
 
 </h3>
 
