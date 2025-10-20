@@ -130,7 +130,7 @@ def determine_conversation_type(
 ) -> Literal[
     "no_context_conversation",
     "agentic_context_dependent_conversation",
-    "omi_question",
+    # "omi_question",
     "file_chat_question",
     "persona_question",
 ]:
@@ -162,9 +162,9 @@ def determine_conversation_type(
     if is_file_question:
         return "file_chat_question"
 
-    is_omi_question = retrieve_is_an_omi_question(question)
-    if is_omi_question:
-        return "omi_question"
+    # is_omi_question = retrieve_is_an_omi_question(question)
+    # if is_omi_question:
+    #     return "omi_question"
 
     requires = requires_context(question)
     if requires:
@@ -463,14 +463,14 @@ workflow.add_node("determine_conversation", determine_conversation)
 workflow.add_conditional_edges("determine_conversation", determine_conversation_type)
 
 workflow.add_node("no_context_conversation", no_context_conversation)
-workflow.add_node("omi_question", omi_question)
+# workflow.add_node("omi_question", omi_question)
 # workflow.add_node("context_dependent_conversation", context_dependent_conversation)
 workflow.add_node("agentic_context_dependent_conversation", agentic_context_dependent_conversation)
 workflow.add_node("file_chat_question", file_chat_question)
 workflow.add_node("persona_question", persona_question)
 
 workflow.add_edge("no_context_conversation", END)
-workflow.add_edge("omi_question", END)
+# workflow.add_edge("omi_question", END)
 workflow.add_edge("persona_question", END)
 workflow.add_edge("file_chat_question", END)
 workflow.add_edge("agentic_context_dependent_conversation", END)
