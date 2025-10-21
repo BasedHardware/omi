@@ -54,6 +54,6 @@ The audio data is sent as notifications on the audio characteristic. The format 
 For instance, 160 samples with a codec 0 (16-bit, 16kHz PCM) results in a packet size of 320 bytes. On current iOS devices, this results in 2 value notifications:
 
 * packet number n, index 0, 251 bytes
-* packet number n + 1, index 1, 75 bytes
+* packet number n, index 1, 75 bytes
 
 The data is sent in little-endian format.
