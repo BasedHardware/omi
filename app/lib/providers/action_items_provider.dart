@@ -425,6 +425,28 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectAllItemsFromTab(int tabIndex) {
+    _selectedItems.clear();
+    List<ActionItemWithMetadata> itemsToSelect = [];
+
+    switch (tabIndex) {
+      case 0:
+        itemsToSelect = todoItems;
+        break;
+      case 1:
+        itemsToSelect = doneItems;
+        break;
+      case 2:
+        itemsToSelect = snoozedItems;
+        break;
+    }
+
+    for (final item in itemsToSelect) {
+      _selectedItems.add(item.id);
+    }
+    notifyListeners();
+  }
+
   void clearSelection() {
     _selectedItems.clear();
     notifyListeners();

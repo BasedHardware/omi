@@ -136,7 +136,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: provider.isSelectionMode ? _buildSelectionAppBar(provider) : null,
+          appBar: provider.isSelectionMode ? _buildSelectionAppBar(provider, currentTabItems) : null,
           body: RefreshIndicator(
             onRefresh: () async {
               HapticFeedback.mediumImpact();
@@ -528,7 +528,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  PreferredSizeWidget _buildSelectionAppBar(ActionItemsProvider provider) {
+  PreferredSizeWidget _buildSelectionAppBar(ActionItemsProvider provider, List<ActionItemWithMetadata> currentTabItems) {
     return AppBar(
       backgroundColor: Colors.black.withValues(alpha: 0.05),
       elevation: 0,
@@ -547,11 +547,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
       ),
       actions: [
-        if (provider.selectedCount < provider.actionItems.length)
+        if (provider.selectedCount < currentTabItems.length)
           IconButton(
             icon: const FaIcon(FontAwesomeIcons.squareCheck, size: 18),
             tooltip: 'Select all',
-            onPressed: () => provider.selectAllItems(),
+            onPressed: () => provider.selectAllItemsFromTab(_selectedTabIndex),
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
         if (provider.hasSelection)
