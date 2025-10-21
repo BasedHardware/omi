@@ -574,7 +574,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: AnimatedLoadingButton(
-                              text: 'Uninstall App',
+                              text: context.watch<AppProvider>().isAppOwner && app.private
+                                  ? 'Delete App'
+                                  : 'Uninstall App',
                               width: MediaQuery.of(context).size.width * 0.9,
                               onPressed: () => _toggleApp(app.id, false),
                               color: Colors.red,
@@ -1129,6 +1131,34 @@ class _AppDetailPageState extends State<AppDetailPage> {
         });
       }
     } else {
+      // If the app is private and owned by the user, show delete confirmation dialog
+      if (app.private && context.read<AppProvider>().isAppOwner) {
+        setState(() => appLoading = false);
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.pop(context),
+              () async {
+                Navigator.pop(context);
+                setState(() => appLoading = true);
+                await context.read<AppProvider>().deleteApp(appId);
+                if (mounted) {
+                  context.read<AppProvider>().filterApps();
+                  Navigator.pop(context); // Go back after deletion
+                }
+                setState(() => appLoading = false);
+              },
+              'Delete ${app.isNotPersona() ? 'App' : 'Persona'}?',
+              'Are you sure you want to delete this ${app.isNotPersona() ? 'App' : 'Persona'}? This action cannot be undone.',
+              okButtonText: 'Confirm',
+            ),
+          );
+        }
+        return;
+      }
+      // Uninstall app
       prefs.disableApp(appId);
       var res = await disableAppServer(appId);
       print(res);
