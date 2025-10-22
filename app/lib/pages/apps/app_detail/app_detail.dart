@@ -31,6 +31,7 @@ import 'dart:async';
 import '../../../backend/schema/app.dart';
 import '../../../backend/http/api/payment.dart';
 import '../widgets/show_app_options_sheet.dart';
+import '../widgets/author_apps_page.dart';
 import 'widgets/info_card_widget.dart';
 
 import 'package:timeago/timeago.dart' as timeago;
@@ -451,9 +452,35 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        app.author.decodeString,
-                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      GestureDetector(
+                        onTap: () {
+                          final appProvider = context.read<AppProvider>();
+                          final Map<String, App> uniqueApps = {};
+
+                          for (final app in appProvider.apps) {
+                            if (app.author == this.app.author) {
+                              uniqueApps[app.id] = app;
+                            }
+                          }
+
+                          final authorApps = uniqueApps.values.toList();
+
+                          routeToPage(
+                            context,
+                            AuthorAppsPage(
+                              authorName: app.author.decodeString,
+                              apps: authorApps,
+                            ),
+                          );
+                        },
+                        child: Text(
+                          app.author.decodeString,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                     ],
                   ),
