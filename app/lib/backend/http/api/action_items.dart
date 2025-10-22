@@ -22,10 +22,10 @@ Future<ActionItemsResponse> getActionItems({
     url += '&conversation_id=$conversationId';
   }
   if (startDate != null) {
-    url += '&start_date=${startDate.toIso8601String()}';
+    url += '&start_date=${startDate.toUtc().toIso8601String()}';
   }
   if (endDate != null) {
-    url += '&end_date=${endDate.toIso8601String()}';
+    url += '&end_date=${endDate.toUtc().toIso8601String()}';
   }
 
   var response = await makeApiCall(
@@ -77,7 +77,7 @@ Future<ActionItemWithMetadata?> createActionItem({
   };
 
   if (dueAt != null) {
-    requestBody['due_at'] = dueAt.toIso8601String();
+    requestBody['due_at'] = dueAt.toUtc().toIso8601String();
   }
   if (conversationId != null) {
     requestBody['conversation_id'] = conversationId;
@@ -116,7 +116,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
     requestBody['completed'] = completed;
   }
   if (dueAt != null) {
-    requestBody['due_at'] = dueAt.toIso8601String();
+    requestBody['due_at'] = dueAt.toUtc().toIso8601String();
   }
 
   var response = await makeApiCall(
