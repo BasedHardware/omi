@@ -42,7 +42,7 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
         category: widget.category.id,
         offset: 0,
         limit: 50,
-        includeReviews: false,
+        includeReviews: true,
       );
 
       if (mounted) {
