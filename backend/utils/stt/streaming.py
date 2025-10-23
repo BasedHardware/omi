@@ -4,6 +4,7 @@ import random
 import time
 from typing import List
 from enum import Enum
+from io import BytesIO
 
 import websockets
 import json
