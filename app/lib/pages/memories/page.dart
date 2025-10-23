@@ -213,10 +213,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   void _filterByCategory(MemoryCategory? category) {
+    if (!mounted) return;
+
     setState(() {
       _selectedCategory = category;
     });
-    context.read<MemoriesProvider>().setCategoryFilter(category);
+
+    final provider = context.read<MemoriesProvider>();
+    provider.setCategoryFilter(category);
   }
 
   // ignore: unused_element
