@@ -221,11 +221,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       _selectedCategory = category;
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final provider = context.read<MemoriesProvider>();
-      provider.setCategoryFilter(category);
-    });
+    final provider = context.read<MemoriesProvider>();
+    provider.setCategoryFilter(category);
   }
 
   // ignore: unused_element
