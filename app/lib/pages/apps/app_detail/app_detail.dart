@@ -54,6 +54,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Map<String, dynamic>? _subscriptionData;
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
+  Timer? _setupCheckTimer;
   late App app;
 
   checkSetupCompleted() {
@@ -61,8 +62,48 @@ class _AppDetailPageState extends State<AppDetailPage> {
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
         setState(() => setupCompleted = value);
+
+        if (value && !app.enabled) {
+          _tryAutoInstallAfterSetup();
+        }
       }
     });
+  }
+
+  Future<void> _tryAutoInstallAfterSetup() async {
+    if (!mounted) return;
+    
+    setState(() => appLoading = true);
+    var prefs = SharedPreferencesUtil();
+    var enabled = await enableAppServer(app.id);
+    
+    if (!mounted) return;
+    
+    if (enabled) {
+      prefs.enableApp(app.id);
+      MixpanelManager().appEnabled(app.id);
+      context.read<AppProvider>().filterApps();
+      
+      setState(() {
+        app.enabled = true;
+        appLoading = false;
+      });
+
+      if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AppHomeWebPage(app: app),
+              ),
+            );
+          }
+        });
+      }
+    } else {
+      setState(() => appLoading = false);
+    }
   }
 
   void setIsLoading(bool value) {
@@ -178,7 +219,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
           });
         }
       }
-      checkSetupCompleted();
+      if (!app.enabled) {
+        checkSetupCompleted();
+      }
     }
 
     super.initState();
@@ -187,6 +230,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void dispose() {
     _paymentCheckTimer?.cancel();
+    _setupCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -1088,13 +1132,71 @@ class _AppDetailPageState extends State<AppDetailPage> {
     );
   }
 
+  Future<void> _navigateToSetup() async {
+    bool isIntegration = app.worksExternally();
+    bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
+    bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
+
+    if (hasAuthSteps && app.externalIntegration!.authSteps.isNotEmpty) {
+      final firstStep = app.externalIntegration!.authSteps.first;
+      await launchUrl(Uri.parse("${firstStep.url}?uid=${SharedPreferencesUtil().uid}"));
+    } else if (hasSetupInstructions) {
+      if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
+        await routeToPage(
+          context,
+          MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
+        );
+      } else {
+        if (app.externalIntegration!.isInstructionsUrl == true) {
+          await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
+        } else {
+          var m = app.externalIntegration!.setupInstructionsFilePath;
+          routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
+        }
+      }
+    }
+    _startSetupCompletionCheck();
+  }
+
+  void _startSetupCompletionCheck() {
+    // Cancel any existing timer
+    _setupCheckTimer?.cancel();
+
+    _setupCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      checkSetupCompleted();
+
+      // Stop checking after 5 minutes
+      if (timer.tick > 100) {
+        timer.cancel();
+      }
+
+      // Stop checking if app becomes enabled
+      if (app.enabled) {
+        timer.cancel();
+      }
+    });
+  }
+
   Future<void> _toggleApp(String appId, bool isEnabled) async {
     var prefs = SharedPreferencesUtil();
     setState(() => appLoading = true);
+    
     if (isEnabled) {
       var enabled = await enableAppServer(appId);
+      
+      if (!mounted) return;
+      
       if (!enabled) {
-        if (mounted) {
+        if (app.worksExternally()) {
+          setState(() => appLoading = false);
+          await _navigateToSetup();
+          return;
+        } else {
           showDialog(
             context: context,
             builder: (c) => getDialog(
@@ -1102,18 +1204,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
               () => Navigator.pop(context),
               () => Navigator.pop(context),
               'Error activating the app',
-              'If this is an integration app, make sure the setup is completed.',
+              'There was an issue activating this app. Please try again.',
               singleButton: true,
             ),
           );
+          setState(() => appLoading = false);
+          return;
         }
-
-        setState(() => appLoading = false);
-        return;
       }
 
       prefs.enableApp(appId);
       MixpanelManager().appEnabled(appId);
+      context.read<AppProvider>().filterApps();
+      
+      setState(() {
+        app.enabled = true;
+        appLoading = false;
+      });
 
       // Automatically open app home page after installation if available
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
@@ -1133,12 +1240,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
       var res = await disableAppServer(appId);
       print(res);
       MixpanelManager().appDisabled(appId);
-    }
-    if (mounted) {
+      
+      if (!mounted) return;
+      
       context.read<AppProvider>().filterApps();
+      setState(() {
+        app.enabled = false;
+        appLoading = false;
+      });
     }
-    setState(() => app.enabled = isEnabled);
-    setState(() => appLoading = false);
   }
 }
 
