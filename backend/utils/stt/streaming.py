@@ -5,6 +5,7 @@ import time
 from typing import List
 from enum import Enum
 from io import BytesIO
+import wave
 
 import websockets
 import json
@@ -774,6 +775,7 @@ async def process_audio_elevenlabs(
     buffer_duration = 3.0  # Process in 3-second chunks
     last_process_time = time.time()
     segment_counter = 0
+    min_bytes_required = int(sample_rate * 2 * 0.5)  # ~0.5 seconds of 16-bit mono audio
     
     # Create a WebSocket-like interface for compatibility
     class ElevenLabsSocket:
@@ -797,7 +799,7 @@ async def process_audio_elevenlabs(
             
             # Get buffer content
             audio_data = audio_buffer.getvalue()
-            if len(audio_data) == 0:
+            if len(audio_data) == 0 or len(audio_data) < min_bytes_required:
                 return
                 
             # Reset buffer
@@ -805,10 +807,18 @@ async def process_audio_elevenlabs(
             audio_buffer.truncate(0)
             
             try:
+                # Wrap raw PCM into a WAV container so ElevenLabs receives playable audio
+                wav_stream = BytesIO()
+                with wave.open(wav_stream, 'wb') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)  # 16-bit PCM
+                    wav_file.setframerate(sample_rate)
+                    wav_file.writeframes(audio_data)
+                wav_stream.seek(0)
+
                 # Process with ElevenLabs Scribe
-                audio_stream = BytesIO(audio_data)
                 transcription = elevenlabs.speech_to_text.convert(
-                    file=audio_stream,
+                    file=wav_stream,
                     model_id=model,
                     tag_audio_events=True,
                     language_code=language,
