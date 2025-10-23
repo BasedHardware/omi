@@ -776,6 +776,7 @@ async def process_audio_elevenlabs(
     last_process_time = time.time()
     segment_counter = 0
     min_bytes_required = int(sample_rate * 2 * 0.5)  # ~0.5 seconds of 16-bit mono audio
+    audio_event_requests_remaining = 2  # limit audio event tagging to avoid spam
     
     # Create a WebSocket-like interface for compatibility
     class ElevenLabsSocket:
@@ -783,7 +784,7 @@ async def process_audio_elevenlabs(
             self.closed = False
             
         async def send(self, data):
-            nonlocal audio_buffer, last_process_time, segment_counter
+            nonlocal audio_buffer, last_process_time, segment_counter, audio_event_requests_remaining
             
             # Add data to buffer
             audio_buffer.write(data)
@@ -794,12 +795,12 @@ async def process_audio_elevenlabs(
                 await self._process_buffer()
                 last_process_time = current_time
                 
-        async def _process_buffer(self):
-            nonlocal segment_counter
+        async def _process_buffer(self, allow_partial: bool = False):
+            nonlocal segment_counter, audio_event_requests_remaining
             
             # Get buffer content
             audio_data = audio_buffer.getvalue()
-            if len(audio_data) == 0 or len(audio_data) < min_bytes_required:
+            if len(audio_data) == 0 or (len(audio_data) < min_bytes_required and not allow_partial):
                 return
                 
             # Reset buffer
@@ -820,10 +821,12 @@ async def process_audio_elevenlabs(
                 transcription = elevenlabs.speech_to_text.convert(
                     file=wav_stream,
                     model_id=model,
-                    tag_audio_events=True,
+                    tag_audio_events=audio_event_requests_remaining > 0,
                     language_code=language,
                     diarize=True,
                 )
+                if audio_event_requests_remaining > 0:
+                    audio_event_requests_remaining -= 1
 
                 # Parse the transcription result
                 if hasattr(transcription, 'words') and transcription.words:
@@ -877,8 +880,8 @@ async def process_audio_elevenlabs(
                 print(f"Error processing audio with ElevenLabs: {e}")
                 
         async def close(self):
-            # Process any remaining audio in the buffer
-            await self._process_buffer()
+            # Process any remaining audio in the buffer (even if smaller than usual)
+            await self._process_buffer(allow_partial=True)
             self.closed = True
             
         async def keepalive_ping(self):
