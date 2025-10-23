@@ -808,13 +808,12 @@ async def process_audio_elevenlabs(
                 # Process with ElevenLabs Scribe
                 audio_stream = BytesIO(audio_data)
                 from elevenlabs import stt
-                transcription = stt.convert(
-                    file=audio_stream,
-                    model_id=model,
-                    tag_audio_events=True,
-                    language_code=language,
-                    diarize=True,
+                transcription = elevenlabs.transcribe(
+                audio=audio_stream,
+                model=model,
+                language_code=language,
                 )
+
                 
                 # Parse the transcription result
                 if hasattr(transcription, 'words') and transcription.words:
