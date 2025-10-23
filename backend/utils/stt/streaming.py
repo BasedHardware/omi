@@ -807,9 +807,7 @@ async def process_audio_elevenlabs(
             try:
                 # Process with ElevenLabs Scribe
                 audio_stream = BytesIO(audio_data)
-                from elevenlabs import SpeechToText
-                scribe = SpeechToText(api_key=api_key)
-                transcription = scribe.convert(
+                transcription = elevenlabs.stt(
                     file=audio_stream,
                     model_id=model,
                     tag_audio_events=True,
