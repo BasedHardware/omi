@@ -1,10 +1,16 @@
 import Foundation
 import WatchConnectivity
 import AVFoundation
+import os.log
 
+/// Enhanced Audio Recorder ViewModel for watchOS 26
+/// Implements modern async/await patterns and improved error handling
 @MainActor
 class WatchAudioRecorderViewModel: NSObject, ObservableObject {
     @Published var isRecording: Bool = false
+    @Published var recordingDuration: TimeInterval = 0
+    @Published var audioLevel: Float = 0.0
+    @Published var errorMessage: String?
 
     var session: WCSession
     private var audioEngine: AVAudioEngine?
@@ -16,11 +22,18 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
     private var audioConverter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?
     private var detectedSampleRate: Double = 0.0
-    
+
     // Audio buffering for multi-second chunks
     private var chunkBuffer: Data = Data()
     private var bufferStartTime: Date?
     private let bufferDuration: TimeInterval = 1.5 // 1.5 second chunks
+
+    // Recording duration tracking
+    private var recordingStartTime: Date?
+    private var durationTimer: Timer?
+
+    // Logging
+    private let logger = Logger(subsystem: "com.omi.watchapp", category: "AudioRecorder")
     
     init(session: WCSession = .default) {
         self.session = session
@@ -34,7 +47,21 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
 
     func startRecording() {
         guard !isRecording else {
+            logger.warning("Recording already in progress")
             return
+        }
+
+        logger.info("Starting recording session")
+        errorMessage = nil
+        recordingDuration = 0
+        recordingStartTime = Date()
+
+        // Start duration timer
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self, let startTime = self.recordingStartTime else { return }
+            Task { @MainActor in
+                self.recordingDuration = Date().timeIntervalSince(startTime)
+            }
         }
 
         // Check microphone permissions and setup audio session
@@ -46,20 +73,29 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             if success {
                 self.setupAudioStreaming()
                 self.isRecording = true
-                self.session.sendMessage(["method": "startRecording"], replyHandler: nil)
+                self.sendMessageWithFallback(["method": "startRecording"])
+                self.logger.info("Recording started successfully")
             } else {
-                self.session.sendMessage(["method": "recordingError", "error": "Microphone permission denied"], replyHandler: nil)
+                self.errorMessage = "Microphone permission denied"
+                self.sendMessageWithFallback(["method": "recordingError", "error": "Microphone permission denied"])
+                self.logger.error("Failed to start recording: Permission denied")
+                self.stopDurationTimer()
             }
         }
     }
 
     func stopRecording() {
         guard isRecording else {
+            logger.warning("No active recording to stop")
             return
         }
 
+        logger.info("Stopping recording session")
         isRecording = false
         isStreaming = false
+
+        // Stop duration timer
+        stopDurationTimer()
 
         // Stop audio streaming
         inputNode?.removeTap(onBus: 0)
@@ -74,12 +110,38 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
 
         // Send any remaining buffered data and final chunk
         sendFinalAudioChunk()
-        
+
         // Reset buffer state
         chunkBuffer = Data()
         bufferStartTime = nil
+        recordingStartTime = nil
+        recordingDuration = 0
+        audioLevel = 0.0
 
-        session.sendMessage(["method": "stopRecording"], replyHandler: nil)
+        sendMessageWithFallback(["method": "stopRecording"])
+        logger.info("Recording stopped successfully")
+    }
+
+    private func stopDurationTimer() {
+        durationTimer?.invalidate()
+        durationTimer = nil
+    }
+
+    /// Enhanced message sending with automatic fallback for watchOS 26
+    private func sendMessageWithFallback(_ message: [String: Any], completion: (() -> Void)? = nil) {
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: { _ in
+                completion?()
+            }) { error in
+                self.logger.warning("Message send failed, using transferUserInfo: \(error.localizedDescription)")
+                self.session.transferUserInfo(message)
+                completion?()
+            }
+        } else {
+            logger.info("Session not reachable, using transferUserInfo")
+            session.transferUserInfo(message)
+            completion?()
+        }
     }
 
     private func bufferAndSendAudioData(_ audioData: Data) {
@@ -107,7 +169,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
     
     private func sendBufferedAudioChunk() {
         guard !chunkBuffer.isEmpty else { return }
-        
+
         let messageData: [String: Any] = [
             "method": "sendAudioChunk",
             "audioChunk": chunkBuffer,
@@ -115,25 +177,17 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             "isLast": false,
             "sampleRate": 16000.0
         ]
-        
-        if session.isReachable {
-            session.sendMessage(messageData, replyHandler: nil) { error in
-                // Fallback to transferUserInfo for background reliability
-                self.session.transferUserInfo(messageData)
-            }
-        } else {
-            // Use transferUserInfo when not reachable (background/screen off)
-            session.transferUserInfo(messageData)
-        }
-        
+
+        logger.debug("Sending audio chunk \(self.chunkIndex) with \(self.chunkBuffer.count) bytes")
+        sendMessageWithFallback(messageData)
         chunkIndex += 1
     }
-    
+
     private func sendFinalAudioChunk() {
         if !chunkBuffer.isEmpty {
             sendBufferedAudioChunk()
         }
-        
+
         let finalMessageData: [String: Any] = [
             "method": "sendAudioChunk",
             "audioChunk": Data(),
@@ -141,15 +195,9 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             "isLast": true,
             "sampleRate": 16000.0
         ]
-        
-        if session.isReachable {
-            session.sendMessage(finalMessageData, replyHandler: nil) { error in
-                self.session.transferUserInfo(finalMessageData)
-            }
-        } else {
-            session.transferUserInfo(finalMessageData)
-        }
-        
+
+        logger.info("Sending final audio chunk")
+        sendMessageWithFallback(finalMessageData)
     }
 
     private func checkMicrophonePermissionAndSetup(completion: @escaping (Bool) -> Void) {
@@ -280,7 +328,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         // Validate buffer
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else {
-            print("Buffer has zero frames")
+            logger.warning("Buffer has zero frames")
             return
         }
 
@@ -289,7 +337,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         if let converter = audioConverter, let targetFormat = targetFormat {
             let outputFrameCapacity = AVAudioFrameCount(ceil(Double(frameLength) * 16000.0 / detectedSampleRate))
             guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCapacity) else {
-                print("Failed to create output buffer for resampling")
+                logger.error("Failed to create output buffer for resampling")
                 return
             }
 
@@ -302,7 +350,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
 
             if let error = error {
-                print("Audio conversion error: \(error)")
+                logger.error("Audio conversion error: \(error.localizedDescription)")
                 return
             }
 
@@ -316,19 +364,31 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
 
         var pcmData = [Int16]()
         var hasNonZeroData = false
+        var maxLevel: Float = 0.0
 
         if let channelData = channelData {
             let processedFrameLength = Int(processedBuffer.frameLength)
             for i in 0..<processedFrameLength {
                 let sample = channelData[i]
+                let absSample = abs(sample)
 
-                if abs(sample) > 0.01 { hasNonZeroData = true }
+                // Track audio level for visualization
+                if absSample > maxLevel {
+                    maxLevel = absSample
+                }
+
+                if absSample > 0.01 { hasNonZeroData = true }
 
                 let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
                 pcmData.append(pcmSample)
             }
+
+            // Update audio level on main thread for UI
+            Task { @MainActor in
+                self.audioLevel = maxLevel
+            }
         } else {
-            print("No channel data available")
+            logger.warning("No channel data available")
             return
         }
 
