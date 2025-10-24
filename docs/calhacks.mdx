@@ -1,0 +1,234 @@
+---
+title: "CalHacks: Omi Developer Kit — Quickstart Guide"
+description: "Build something audacious on top of the Omi developer kit at CalHacks"
+---
+
+## Welcome
+
+Build something audacious on top of the Omi developer kit at CalHacks. This guide walks you through getting hardware, choosing a project, scoping features, and submitting your app so you can demo it during the hackathon.
+
+## Documentation quick links
+
+- Main docs: [docs.omi.me](http://docs.omi.me)
+- How to create an Omi app: [Step‑by‑step guide](https://docs.omi.me/doc/developer/apps/Introduction)
+
+The docs also cover integration‑based apps, submission flow inside the OMI App Store, and OAuth setup and best practices. Start with the main docs, then follow the app creation guide, and use the integrations and OAuth sections when you connect external APIs.
+
+## Download the Omi app
+
+- iOS: [Download on the App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
+- Android: [Get it on Google Play](https://play.google.com/store/apps/details?id=com.friend.ios)
+- macOS: [Download on the Mac App Store](https://apps.apple.com/us/app/omi-ai-smart-meeting-notes/id6502156163)
+
+Install the app on your demo devices now so you can submit and test your build quickly.
+
+---
+
+## 🧰 Pick up the Omi developer kit
+
+1. Go to the Hardware Booth and ask for the "Omi developer kit."
+2. If kits are available, get one for yourself and your teammates. (You don't have to return it.)
+
+<Info>
+If kits run out, you can still prototype with our SDKs and submit a software-only app.
+</Info>
+
+---
+
+## 🧱 Build your app on Omi
+
+You can build any idea, but we highly recommend the options below because they're impactful and fun to demo. Voice-first UX is essential.
+
+## Suggested project ideas
+
+### A) Ride‑hailing by voice (Uber/Lyft)
+
+Core flow:
+
+- "Get me a ride to [destination]."
+- Confirm price, ETA, and service level (UberX, Lyft, etc.).
+- Confirm and place the request.
+
+Implementation tips:
+
+- Use Omi for speech in/out and intent parsing.
+- Use official ride APIs or deep links to prefill rides if direct APIs are restricted.
+- Handle edge cases: surge pricing, no drivers, location permissions.
+
+Demo moment:
+
+- Speak destination, hear quote, confirm, then show the ride screen with ETA.
+
+### B) Food delivery by voice (DoorDash/Grubhub/Uber Eats)
+
+Core flow:
+
+- "Order a pepperoni pizza from the closest highly rated place."
+- Confirm restaurant, items, price, and delivery address.
+- Submit order or generate a cart link for user confirmation.
+
+Implementation tips:
+
+- Use menu search endpoints or fallback to web parsing with user confirmation.
+- Support quick re-orders: "Order my usual."
+- Offer dietary filters and substitution prompts.
+
+Demo moment:
+
+- Voice-only cart build with a spoken summary and on-device confirmation.
+
+### C) Rizz Meter for Dates (conversation coaching)
+
+Goal:
+
+- Help people have warmer, more respectful dates by giving post‑conversation insights and optional gentle live nudges.
+
+What "rizz" means here (for dating):
+
+- A blend of warmth, attentiveness, reciprocity, and chemistry signals. It is not a judgment of attractiveness or value.
+
+Dating‑relevant signals to start with
+
+- Reciprocity and turn‑taking: balanced talk time, low interruption rate, timely back‑channels.
+- Attentiveness: question rate, follow‑ups referencing prior details, memory of preferences.
+- Warmth: sentiment trajectory, positive acknowledgments, appreciation phrases.
+- Comfort and pacing: speaking rate stability, pause tolerance, laughter or lightness markers.
+- Boundary respect: honoring topics the other person avoids, not pushing after a "no."
+
+How to compute a score
+
+1) Normalize signals per speaker and conversation length.
+
+2) Map to sub‑scores: Warmth, Attentiveness, Reciprocity, Comfort.
+
+3) Aggregate into a 0–100 Date Rizz score + a short, human summary and 2–3 tips.
+
+Product behaviors
+
+- Post‑date mode: Show sub‑scores, a highlights reel of strong moments, and suggested prompts for next time.
+- Optional live hints: Very subtle, privacy‑safe cue like "Ask a follow‑up" only when confidence is high.
+
+Example output
+
+- "Date Rizz 78. Strong: great follow‑ups and balanced turns. Try: slightly longer pauses after jokes, and acknowledge their last story before switching topics."
+
+Implementation notes
+
+- Use Omi streaming transcripts and timestamps; compute features locally when possible.
+- Add a lightweight "topics" memory to generate personalized follow‑ups.
+- Smooth live nudges with a rolling window to avoid jittery cues.
+
+Consent, privacy, and safety (critical for dates)
+
+- Get explicit opt‑in from both people before recording. If either declines, disable.
+- Do not store raw audio; keep ephemeral features or summaries only.
+- Avoid sensitive inference (appearance, identity, medical). Provide a one‑tap delete‑all.
+- Frame results as coaching suggestions, not truth. Never pressure outcomes.
+
+Demo moment
+
+- Run a 60‑second mock "first date" chat. Show a post‑date panel with one highlight, one small improvement, and two suggested follow‑up questions for next time.
+
+### D) "Lie detector" using third‑party signals (e.g., Hume, etc.)
+
+Implementation tips:
+
+- Combine conversation transcript with a third‑party prosody/affect signal.
+- Output should be a confidence‑light, explanation‑heavy "anomalies" view, not a verdict.
+- Provide a transparent disclaimer and opt‑out controls.
+
+Demo moment:
+
+- Walk through a consent screen, run a staged conversation, then show an "anomaly timeline."
+
+### E) IQ detector
+
+Implementation tips:
+
+- Focus on task performance analytics (puzzle prompts, memory span) rather than labeling people.
+- Show question types, difficulty curves, and confidence intervals. No absolute "IQ" claims.
+
+Demo moment:
+
+- Interactive challenge with a real‑time skills profile visualization.
+
+### Build anything else bold and challenging
+
+If you have another idea of similar ambition, go for it. Make it voice‑first, fast, and demo‑able within 2–3 minutes.
+
+---
+
+## ✅ Minimum viable demo checklist
+
+- Voice in and out working reliably at the venue.
+- One core task completed end‑to‑end.
+- A 60–120 second demo script with a wow moment.
+
+---
+
+## 🛠️ Technical setup
+
+- Device setup: pair/connect, test mic and speaker latency.
+- Integrations: connect required third‑party APIs or use deep links as a backup.
+- State and storage: keep session state and a lightweight local cache for your demo.
+- Logging: console plus a simple on‑device log view to debug on‑floor issues.
+
+---
+
+## 📤 Submit and use your app at CalHacks
+
+1. Open the Omi mobile app and go to the App Store.
+2. Submit your app from within the Omi app. Include team name, short description, and a demo note.
+3. After submission, your app should appear in your account for immediate use so you can demo it during CalHacks.
+4. We will review apps after the event to determine Omi Awards.
+
+<Info>
+This is not an official hackathon "track." You can still compete in other tracks and use your Omi app as part of those projects.
+</Info>
+
+---
+
+## 🏆 Judging and rewards
+
+**Rewards**
+
+- Build a listed Omi app (or an equivalent app of comparable quality and ambition) and you will receive:
+    - 1x Consumer Omi device ($89)
+    - 1x Pair of Omi Glasses ($299)
+    - A chance to hang out with the Omi AI team in SF
+
+**Eligibility**
+
+- Your app should implement one of the suggested ideas above or an equivalent‑level idea.
+- Submit your app via the OMI mobile App Store before the end of CalHacks.
+- This is not an exclusive track. You can still compete in other tracks.
+
+**Review process**
+
+- Your app will be usable right after submission for demoing.
+- We'll review after the event and confirm rewards and any OMI Awards.
+
+**Fulfillment**
+
+- We'll share further reward details after the hackathon with the winners.
+
+---
+
+## 🎬 Demo script template
+
+- Opening: one sentence on problem and what Omi enables.
+- Live demo: run the core flow in under 60 seconds.
+- Edge case: show a graceful failure or safety check.
+- Close: what you'd ship post‑hackathon.
+
+---
+
+## 🧯 Troubleshooting quick tips
+
+- Audio not detected: check mic permissions and venue noise; reduce wake sensitivity or use push‑to‑talk.
+- API failures: add retries and read back a friendly error with next best action.
+- Latency spikes: prefetch and cache prompts, compress payloads, avoid unnecessary round‑trips.
+- Device power: keep the device plugged in during long demos.
+
+**Good luck and have fun building! 🚀**
+
