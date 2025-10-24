@@ -200,12 +200,12 @@ class SectionAppItemCard extends StatelessWidget {
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         app.name,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 17),
                       ),
@@ -218,6 +218,28 @@ class SectionAppItemCard extends StatelessWidget {
                           style: const TextStyle(color: Colors.grey, fontSize: 13),
                         ),
                       ),
+                      if (app.ratingAvg != null && app.ratingAvg! > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2.0),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                app.getRatingAvg()!,
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.star,
+                                color: Colors.grey,
+                                size: 12,
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
