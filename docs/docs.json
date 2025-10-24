@@ -16,10 +16,7 @@
           "doc/get_started/introduction",
            "getstartedwithomi",
           "doc/get_started/Flash_device",
-          {
-            "page": "calhacks",
-            "label": "🏆 CalHacks"
-          }
+          "calhacks"
         ]
       },
       {
