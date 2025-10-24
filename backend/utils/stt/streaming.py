@@ -4,10 +4,14 @@ import random
 import time
 from typing import List
 from enum import Enum
+from io import BytesIO
+import wave
 
 import websockets
+import json
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
+from elevenlabs.client import ElevenLabs
 
 from utils.stt.soniox_util import *
 
@@ -15,13 +19,16 @@ headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-T
 
 
 class STTService(str, Enum):
+    elevenlabs = "elevenlabs"
     deepgram = "deepgram"
     soniox = "soniox"
     speechmatics = "speechmatics"
 
     @staticmethod
     def get_model_name(value):
-        if value == STTService.deepgram:
+        if value == STTService.elevenlabs:
+            return 'elevenlabs_scribe'
+        elif value == STTService.deepgram:
             return 'deepgram_streaming'
         elif value == STTService.soniox:
             return 'soniox_streaming'
@@ -176,15 +183,69 @@ deepgram_nova3_multi_languages = [
     "nl-BE",
 ]
 
-# Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
-stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
+# Languages supported by ElevenLabs Scribe
+elevenlabs_supported_languages = [
+    'eng',  # English
+    'spa',  # Spanish
+    'fra',  # French
+    'deu',  # German
+    'ita',  # Italian
+    'por',  # Portuguese
+    'pol',  # Polish
+    'nld',  # Dutch
+    'hun',  # Hungarian
+    'ron',  # Romanian
+    'ces',  # Czech
+    'fin',  # Finnish
+    'ukr',  # Ukrainian
+    'ell',  # Greek
+    'rus',  # Russian
+    'tur',  # Turkish
+    'ara',  # Arabic
+    'hin',  # Hindi
+    'chi',  # Chinese
+    'jpn',  # Japanese
+    'kor',  # Korean
+]
+
+# Supported values: el-scribe,soniox-stt-rt,dg-nova-3,dg-nova-2
+stt_service_models = os.getenv('STT_SERVICE_MODELS', 'el-scribe').split(',')
 
 
 def get_stt_service_for_language(language: str):
     # Picking STT service and STT language by following the order
     for m in stt_service_models:
+        # ElevenLabs Scribe
+        if m == 'el-scribe':
+            # Map common language codes to ElevenLabs language codes
+            lang_mapping = {
+                'en': 'eng',
+                'es': 'spa',
+                'fr': 'fra',
+                'de': 'deu',
+                'it': 'ita',
+                'pt': 'por',
+                'pl': 'pol',
+                'nl': 'nld',
+                'hu': 'hun',
+                'ro': 'ron',
+                'cs': 'ces',
+                'fi': 'fin',
+                'uk': 'ukr',
+                'el': 'ell',
+                'ru': 'rus',
+                'tr': 'tur',
+                'ar': 'ara',
+                'hi': 'hin',
+                'zh': 'chi',
+                'ja': 'jpn',
+                'ko': 'kor',
+            }
+            el_lang = lang_mapping.get(language, 'eng')  # Default to English
+            if el_lang in elevenlabs_supported_languages:
+                return STTService.elevenlabs, el_lang, 'scribe_v1'
         # Soniox
-        if m == 'soniox-stt-rt':
+        elif m == 'soniox-stt-rt':
             if language in soniox_multi_languages:
                 return STTService.soniox, 'multi', 'stt-rt-preview'
         # DeepGram Nova-3
@@ -198,7 +259,9 @@ def get_stt_service_for_language(language: str):
             if language in deepgram_supported_languages:
                 return STTService.deepgram, language, 'nova-2-general'
 
-    # Fallback to DeepGram Nova-2 en
+    # Fallback to ElevenLabs Scribe English if available, otherwise DeepGram Nova-2 en
+    if 'el-scribe' in stt_service_models:
+        return STTService.elevenlabs, 'eng', 'scribe_v1'
     return STTService.deepgram, 'en', 'nova-2-general'
 
 
@@ -684,3 +747,145 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
     except Exception as e:
         print(f"Exception in process_audio_speechmatics: {e}")
         raise
+
+
+async def process_audio_elevenlabs(
+    stream_transcript,
+    sample_rate: int,
+    language: str,
+    preseconds: int = 0,
+    model: str = "scribe_v1"
+):
+    """
+    Process audio using ElevenLabs Scribe STT service.
+    Note: ElevenLabs Scribe currently supports batch processing, not streaming.
+    This implementation buffers audio and processes it in chunks for near real-time transcription.
+    """
+    api_key = os.getenv('ELEVENLABS_API_KEY')
+    if not api_key:
+        raise ValueError("ELEVENLABS_API_KEY is not set. Please set the ELEVENLABS_API_KEY environment variable.")
+    
+    print(f'process_audio_elevenlabs: language={language}, sample_rate={sample_rate}, preseconds={preseconds}')
+    
+    # Initialize ElevenLabs client
+    elevenlabs = ElevenLabs(api_key=api_key)
+    
+    # Buffer to collect audio data
+    audio_buffer = BytesIO()
+    buffer_duration = 3.0  # Process in 3-second chunks
+    last_process_time = time.time()
+    segment_counter = 0
+    min_bytes_required = int(sample_rate * 2 * 0.5)  # ~0.5 seconds of 16-bit mono audio
+    audio_event_requests_remaining = 2  # limit audio event tagging to avoid spam
+    
+    # Create a WebSocket-like interface for compatibility
+    class ElevenLabsSocket:
+        def __init__(self):
+            self.closed = False
+            
+        async def send(self, data):
+            nonlocal audio_buffer, last_process_time, segment_counter, audio_event_requests_remaining
+            
+            # Add data to buffer
+            audio_buffer.write(data)
+            current_time = time.time()
+            
+            # Check if we should process the buffer
+            if current_time - last_process_time >= buffer_duration:
+                await self._process_buffer()
+                last_process_time = current_time
+                
+        async def _process_buffer(self, allow_partial: bool = False):
+            nonlocal segment_counter, audio_event_requests_remaining
+            
+            # Get buffer content
+            audio_data = audio_buffer.getvalue()
+            if len(audio_data) == 0 or (len(audio_data) < min_bytes_required and not allow_partial):
+                return
+                
+            # Reset buffer
+            audio_buffer.seek(0)
+            audio_buffer.truncate(0)
+            
+            try:
+                # Wrap raw PCM into a WAV container so ElevenLabs receives playable audio
+                wav_stream = BytesIO()
+                with wave.open(wav_stream, 'wb') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)  # 16-bit PCM
+                    wav_file.setframerate(sample_rate)
+                    wav_file.writeframes(audio_data)
+                wav_stream.seek(0)
+
+                # Process with ElevenLabs Scribe
+                transcription = elevenlabs.speech_to_text.convert(
+                    file=wav_stream,
+                    model_id=model,
+                    tag_audio_events=audio_event_requests_remaining > 0,
+                    language_code=language,
+                    diarize=True,
+                )
+                if audio_event_requests_remaining > 0:
+                    audio_event_requests_remaining -= 1
+
+                # Parse the transcription result
+                if hasattr(transcription, 'words') and transcription.words:
+                    segments = []
+                    current_segment = None
+                    
+                    for word in transcription.words:
+                        # Skip words that are before the preseconds threshold
+                        if word.start < preseconds:
+                            continue
+                            
+                        speaker_id = word.speaker if hasattr(word, 'speaker') else 0
+                        is_user = True if speaker_id == 0 and preseconds > 0 else False
+                        
+                        # Create or update segment
+                        if not current_segment:
+                            current_segment = {
+                                'speaker': f"SPEAKER_{speaker_id}",
+                                'start': word.start - preseconds,
+                                'end': word.end - preseconds,
+                                'text': word.text,
+                                'is_user': is_user,
+                                'person_id': None,
+                            }
+                        else:
+                            # Check if speaker changed
+                            if current_segment['speaker'] == f"SPEAKER_{speaker_id}":
+                                current_segment['text'] += f" {word.text}"
+                                current_segment['end'] = word.end - preseconds
+                            else:
+                                # Send previous segment and start new one
+                                segments.append(current_segment)
+                                current_segment = {
+                                    'speaker': f"SPEAKER_{speaker_id}",
+                                    'start': word.start - preseconds,
+                                    'end': word.end - preseconds,
+                                    'text': word.text,
+                                    'is_user': is_user,
+                                    'person_id': None,
+                                }
+                    
+                    # Send the last segment if it exists
+                    if current_segment:
+                        segments.append(current_segment)
+                    
+                    # Stream the segments
+                    if segments:
+                        stream_transcript(segments)
+                        
+            except Exception as e:
+                print(f"Error processing audio with ElevenLabs: {e}")
+                
+        async def close(self):
+            # Process any remaining audio in the buffer (even if smaller than usual)
+            await self._process_buffer(allow_partial=True)
+            self.closed = True
+            
+        async def keepalive_ping(self):
+            # No-op for compatibility
+            pass
+    
+    return ElevenLabsSocket()
