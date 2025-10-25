@@ -42,7 +42,7 @@ from models.message_event import (
 from models.transcript_segment import Translation
 from models.users import PlanType
 from utils.analytics import record_usage
-from utils.app_integrations import trigger_external_integrations
+from utils.app_integrations import trigger_external_integrations, trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
@@ -607,6 +607,49 @@ async def _listen(
             nonlocal segment_buffers
             segment_buffers.extend(segments)
 
+        # Photos
+        photo_buffers = []
+
+        def photo_send(photos, conversation_id):
+            nonlocal photo_buffers
+            nonlocal in_progress_conversation_id
+            in_progress_conversation_id = conversation_id
+            photo_buffers.extend([p.dict() for p in photos])
+
+        async def _photo_flush(auto_reconnect: bool = True):
+            nonlocal photo_buffers
+            nonlocal in_progress_conversation_id
+            nonlocal pusher_ws
+            nonlocal pusher_connected
+            if pusher_connected and pusher_ws and len(photo_buffers) > 0:
+                try:
+                    # 104|data
+                    data = bytearray()
+                    data.extend(struct.pack("I", 104))
+                    data.extend(
+                        bytes(
+                            json.dumps({"photos": photo_buffers, "memory_id": in_progress_conversation_id}),
+                            "utf-8",
+                        )
+                    )
+                    photo_buffers = []  # reset
+                    await pusher_ws.send(data)
+                except ConnectionClosed as e:
+                    print(f"Pusher photos Connection closed: {e}", uid, session_id)
+                    pusher_connected = False
+                except Exception as e:
+                    print(f"Pusher photos failed: {e}", uid, session_id)
+            if auto_reconnect and pusher_connected is False:
+                await connect()
+
+        async def photo_consume():
+            nonlocal websocket_active
+            nonlocal photo_buffers
+            while websocket_active:
+                await asyncio.sleep(1)
+                if len(photo_buffers) > 0:
+                    await _photo_flush(auto_reconnect=True)
+
         async def _transcript_flush(auto_reconnect: bool = True):
             nonlocal segment_buffers
             nonlocal pusher_ws
@@ -705,6 +748,7 @@ async def _listen(
         async def _flush():
             await _audio_bytes_flush(auto_reconnect=False)
             await _transcript_flush(auto_reconnect=False)
+            await _photo_flush(auto_reconnect=False)
 
         async def connect():
             nonlocal pusher_connected
@@ -744,12 +788,16 @@ async def _listen(
             close,
             transcript_send,
             transcript_consume,
+            photo_send,
+            photo_consume,
             audio_bytes_send if audio_bytes_enabled else None,
             audio_bytes_consume if audio_bytes_enabled else None,
         )
 
     transcript_send = None
     transcript_consume = None
+    photo_send = None
+    photo_consume = None
     audio_bytes_send = None
     audio_bytes_consume = None
     pusher_close = None
@@ -920,6 +968,11 @@ async def _listen(
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
 
+            if photos_to_process:
+                if photo_send is not None and user_has_credits:
+                    photo_send(photos_to_process, current_conversation_id)
+
+            if transcript_segments:
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
@@ -1115,6 +1168,8 @@ async def _listen(
                 pusher_close,
                 transcript_send,
                 transcript_consume,
+                photo_send,
+                photo_consume,
                 audio_bytes_send,
                 audio_bytes_consume,
             ) = create_pusher_task_handler()
@@ -1123,6 +1178,8 @@ async def _listen(
             pusher_tasks.append(asyncio.create_task(pusher_connect()))
             if transcript_consume is not None:
                 pusher_tasks.append(asyncio.create_task(transcript_consume()))
+            if photo_consume is not None:
+                pusher_tasks.append(asyncio.create_task(photo_consume()))
             if audio_bytes_consume is not None:
                 pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
