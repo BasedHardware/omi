@@ -47,6 +47,12 @@ class DeviceUtils {
   static String getDeviceImagePathByModel(String? deviceModel) {
     if (deviceModel == null) return Assets.images.omiWithoutRope.path;
 
+    // Check for PLAUD/XOR103 devices
+    if (deviceModel.toUpperCase().contains('PLAUD') || 
+        deviceModel.toUpperCase().contains('XOR103')) {
+      return Assets.images.xor103Device.path;
+    }
+
     if (deviceModel.contains('Glass') || deviceModel.toLowerCase().contains('openglass')) {
       return Assets.images.omiGlass.path;
     }

@@ -143,7 +143,11 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
   }
   DeviceType? deviceType;
   await device.discoverServices();
-  if (device.servicesList.where((s) => s.uuid == Guid(omiServiceUuid)).isNotEmpty) {
+  
+  // Check for XOR103 first
+  if (device.servicesList.where((s) => s.uuid == Guid(xor103ServiceUuid)).isNotEmpty) {
+    deviceType = DeviceType.xor103;
+  } else if (device.servicesList.where((s) => s.uuid == Guid(omiServiceUuid)).isNotEmpty) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
         .where((s) => s.uuid == Guid.fromString(omiServiceUuid))
@@ -164,6 +168,7 @@ enum DeviceType {
   openglass,
   frame,
   appleWatch,
+  xor103,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -282,7 +287,9 @@ class BtDevice {
       }
     }
 
-    if (type == DeviceType.omi) {
+    if (type == DeviceType.xor103) {
+      return await _getDeviceInfoFromXor103(conn);
+    } else if (type == DeviceType.omi) {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
       return await _getDeviceInfoFromOmi(conn);
@@ -385,6 +392,28 @@ class BtDevice {
     );
   }
 
+  Future _getDeviceInfoFromXor103(DeviceConnection conn) async {
+    var modelNumber = 'XOR103';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = 'XOR103 Device';
+    var manufacturerName = 'XOR';
+
+    try {
+      // XOR103 uses opus fs320 codec by default
+      // Add any device-specific info retrieval here
+    } catch (e) {
+      Logger.error('Error getting XOR103 device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.xor103,
+    );
+  }
+
   // from BluetoothDevice
   Future fromBluetoothDevice(BluetoothDevice device) async {
     var rssi = await device.readRssi();
@@ -399,7 +428,16 @@ class BtDevice {
   // from ScanResult
   static fromScanResult(ScanResult result) {
     DeviceType? deviceType;
-    if (result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid))) {
+    
+    // Check for XOR103/PLAUD by service UUID
+    if (result.advertisementData.serviceUuids.contains(Guid(xor103ServiceUuid))) {
+      deviceType = DeviceType.xor103;
+    }
+    // Also check by device name for PLAUD devices
+    else if (result.device.platformName.toUpperCase().startsWith('PLAUD')) {
+      deviceType = DeviceType.xor103;
+    }
+    else if (result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid))) {
       deviceType = DeviceType.omi;
     } else if (result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
       deviceType = DeviceType.frame;

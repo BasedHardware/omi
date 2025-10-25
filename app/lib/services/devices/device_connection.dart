@@ -8,6 +8,7 @@ import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/devices/xor103_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
@@ -44,6 +45,8 @@ class DeviceConnectionFactory {
       case DeviceType.omi:
       case DeviceType.openglass:
         return OmiDeviceConnection(device, transport);
+      case DeviceType.xor103:
+        return Xor103DeviceConnection(device, transport);
       case DeviceType.frame:
         if (locator.kind == TransportKind.bluetooth) {
           final deviceId = locator.bluetoothId;

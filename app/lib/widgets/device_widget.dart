@@ -126,6 +126,13 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
   }
 
   String _getImagePath() {
+    // Check for PLAUD/XOR103 devices
+    if (widget.deviceName != null && 
+        (widget.deviceName!.toUpperCase().contains('PLAUD') || 
+         widget.deviceName!.toUpperCase().contains('XOR103'))) {
+      return Assets.images.xor103Device.path;
+    }
+
     // Show device image for both connected and paired devices
     if (widget.deviceName != null && widget.deviceName!.contains('Glass')) {
       return Assets.images.omiGlass.path;

@@ -38,6 +38,10 @@ class _FoundDevicesState extends State<FoundDevices> {
   }
 
   String _getDeviceImagePath(String deviceName) {
+    if (deviceName.toUpperCase().contains('PLAUD') || 
+        deviceName.toUpperCase().contains('XOR103')) {
+      return Assets.images.xor103Device.path;
+    }
     if (deviceName.contains('Glass')) {
       return Assets.images.omiGlass.path;
     }
