@@ -77,6 +77,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
   }
 
   Widget _buildDeviceImage() {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
     final double imageHeight = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
     final double imageWidth = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
 
@@ -89,8 +90,8 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
             Assets.images.omiWithoutRopeTurnedOff.path,
             height: imageHeight,
             width: imageWidth,
-            cacheHeight: imageHeight.round(),
-            cacheWidth: imageWidth.round(),
+            cacheHeight: (imageHeight * pixelRatio).round(),
+            cacheWidth: (imageWidth * pixelRatio).round(),
           ),
           // Blue light overlay when connected TODO: improve this or just use the image itself
           AnimatedOpacity(
@@ -120,17 +121,15 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
       _getImagePath(),
       height: imageHeight,
       width: imageWidth,
-      cacheHeight: imageHeight.round(),
-      cacheWidth: imageWidth.round(),
+      cacheHeight: (imageHeight * pixelRatio).round(),
+      cacheWidth: (imageWidth * pixelRatio).round(),
     );
   }
 
   String _getImagePath() {
-    // Check for PLAUD/XOR103 devices
-    if (widget.deviceName != null && 
-        (widget.deviceName!.toUpperCase().contains('PLAUD') || 
-         widget.deviceName!.toUpperCase().contains('XOR103'))) {
-      return Assets.images.xor103Device.path;
+    // Check for PLAUD
+    if (widget.deviceName != null && widget.deviceName!.toUpperCase().contains('PLAUD')) {
+      return Assets.images.plaudNotePin.path;
     }
 
     // Show device image for both connected and paired devices

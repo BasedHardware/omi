@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/preferences.dart';
@@ -6,6 +7,7 @@ import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/xor_connection.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 
@@ -143,18 +145,18 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
   }
   DeviceType? deviceType;
   await device.discoverServices();
-  
-  // Check for XOR103 first
-  if (device.servicesList.where((s) => s.uuid == Guid(xor103ServiceUuid)).isNotEmpty) {
-    deviceType = DeviceType.xor103;
-  } else if (device.servicesList.where((s) => s.uuid == Guid(omiServiceUuid)).isNotEmpty) {
+
+  // Check for device types using helper methods
+  if (BtDevice.isXorDeviceFromDevice(device)) {
+    deviceType = DeviceType.xor;
+  } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
         .where((s) => s.uuid == Guid.fromString(omiServiceUuid))
         .expand((s) => s.characteristics)
         .any((c) => c.uuid.toString().toLowerCase() == imageDataStreamCharacteristicUuid.toLowerCase());
     deviceType = hasImageStream ? DeviceType.openglass : DeviceType.omi;
-  } else if (device.servicesList.where((s) => s.uuid == Guid(frameServiceUuid)).isNotEmpty) {
+  } else if (BtDevice.isFrameDeviceFromDevice(device)) {
     deviceType = DeviceType.frame;
   }
   if (deviceType != null) {
@@ -168,7 +170,7 @@ enum DeviceType {
   openglass,
   frame,
   appleWatch,
-  xor103,
+  xor,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -287,8 +289,8 @@ class BtDevice {
       }
     }
 
-    if (type == DeviceType.xor103) {
-      return await _getDeviceInfoFromXor103(conn);
+    if (type == DeviceType.xor) {
+      return await _getDeviceInfoFromXor(conn as XorDeviceConnection);
     } else if (type == DeviceType.omi) {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
@@ -303,7 +305,7 @@ class BtDevice {
   }
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
-    var modelNumber = 'Omi Device';
+    var modelNumber = 'Omi';
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
@@ -392,17 +394,20 @@ class BtDevice {
     );
   }
 
-  Future _getDeviceInfoFromXor103(DeviceConnection conn) async {
-    var modelNumber = 'XOR103';
-    var firmwareRevision = '1.0.0';
-    var hardwareRevision = 'XOR103 Device';
-    var manufacturerName = 'XOR';
+  Future _getDeviceInfoFromXor(XorDeviceConnection conn) async {
+    var modelNumber = 'XOR';
+    var firmwareRevision = '0.0.1';
+    var hardwareRevision = '0.0.1';
+    var manufacturerName = '--';
 
     try {
-      // XOR103 uses opus fs320 codec by default
-      // Add any device-specific info retrieval here
+      final deviceInfo = await conn.getDeviceInfo();
+      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
     } catch (e) {
-      Logger.error('Error getting XOR103 device info: $e');
+      Logger.error('Error getting XOR device info: $e');
     }
 
     return copyWith(
@@ -410,7 +415,7 @@ class BtDevice {
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
-      type: DeviceType.xor103,
+      type: DeviceType.xor,
     );
   }
 
@@ -425,21 +430,46 @@ class BtDevice {
     );
   }
 
+  // Check if a scan result is from a supported device
+  static bool isSupportedDevice(ScanResult result) {
+    debugPrint("${result.device.name}");
+    return isXorDevice(result) || isOmiDevice(result) || isFrameDevice(result);
+  }
+
+  static bool isXorDevice(ScanResult result) {
+    return result.device.platformName.toUpperCase().startsWith('PLAUD');
+  }
+
+  static bool isXorDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid == Guid(xorServiceUuid)) ||
+        device.platformName.toUpperCase().startsWith('PLAUD');
+  }
+
+  static bool isOmiDevice(ScanResult result) {
+    return result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid));
+  }
+
+  static bool isOmiDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid == Guid(omiServiceUuid));
+  }
+
+  static bool isFrameDevice(ScanResult result) {
+    return result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid));
+  }
+
+  static bool isFrameDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid == Guid(frameServiceUuid));
+  }
+
   // from ScanResult
   static fromScanResult(ScanResult result) {
     DeviceType? deviceType;
-    
-    // Check for XOR103/PLAUD by service UUID
-    if (result.advertisementData.serviceUuids.contains(Guid(xor103ServiceUuid))) {
-      deviceType = DeviceType.xor103;
-    }
-    // Also check by device name for PLAUD devices
-    else if (result.device.platformName.toUpperCase().startsWith('PLAUD')) {
-      deviceType = DeviceType.xor103;
-    }
-    else if (result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid))) {
+
+    if (isXorDevice(result)) {
+      deviceType = DeviceType.xor;
+    } else if (isOmiDevice(result)) {
       deviceType = DeviceType.omi;
-    } else if (result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
+    } else if (isFrameDevice(result)) {
       deviceType = DeviceType.frame;
     }
     if (deviceType != null) {
