@@ -8,5 +8,7 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Omi needs access to your microphone to record audio conversations and transcribe them.</string>
+	<key>OmiAppGroupIdentifier</key>
+	<string>group.com.friend-app-with-wearable.ios12</string>
 </dict>
 </plist>

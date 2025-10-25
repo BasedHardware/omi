@@ -41,6 +41,7 @@ This document summarizes the comprehensive enhancement of the Omi Watch App for 
 - Recording duration tracking
 - Smart battery update deduplication
 - Improved message delivery reliability
+- RelevanceKit-driven Smart Stack surfacing (recording + low-battery signals)
 
 ### 6. ✅ Smart Stack Widget
 - New widget extension for watchOS 26
@@ -442,27 +443,23 @@ func sendBatteryLevel(force: Bool = false)
 
 ### Recommended Next Steps
 
-1. **RelevanceKit Integration**
-   - Contextual widget updates
-   - Smart suggestions based on usage patterns
-
-2. **Live Activities**
+1. **Live Activities**
    - Dynamic Island support on iPhone
    - Real-time recording status
 
-3. **On-Device Processing**
+2. **On-Device Processing**
    - Neural Engine utilization
    - Local audio analysis
 
-4. **Health Integration**
+3. **Health Integration**
    - Audio health metrics
    - Exposure level tracking
 
-5. **Complications**
+4. **Complications**
    - Watch face complications
    - Modular face support
 
-6. **Voice Shortcuts**
+5. **Voice Shortcuts**
    - Siri integration
    - "Hey Siri, start recording"
 
@@ -571,13 +568,15 @@ The implementation maintains 100% backwards compatibility with existing features
 3. `/app/ios/omiWatchApp/WatchAudioRecorderViewModel.swift` - Enhanced audio processing
 4. `/app/ios/omiWatchApp/BatteryManager.swift` - Smart battery monitoring
 
-### New Files (6)
+### New Files (8)
 1. `/app/ios/omiWatchApp/OmiWidget.swift` - Smart Stack widget
 2. `/app/ios/omiWatchAppTests/WatchAudioRecorderViewModelTests.swift` - Unit tests
 3. `/app/ios/omiWatchAppTests/BatteryManagerTests.swift` - Unit tests
 4. `/app/ios/omiWatchAppTests/ContentViewTests.swift` - UI tests
 5. `/app/ios/omiWatchAppTests/IntegrationTests.swift` - Integration tests
 6. `/app/ios/omiWatchApp/README.md` - Comprehensive documentation
+7. `/app/ios/omiWatchApp/SmartStackRelevanceStore.swift` - RelevanceKit context store
+8. `/app/ios/omiWatchAppTests/SmartStackRelevanceStoreTests.swift` - Smart Stack relevance tests
 
 ### Documentation (2)
 1. `/app/ios/omiWatchApp/README.md` - 520 lines

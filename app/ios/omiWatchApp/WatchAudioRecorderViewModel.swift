@@ -73,6 +73,11 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             if success {
                 self.setupAudioStreaming()
                 self.isRecording = true
+                if let startTime = self.recordingStartTime {
+                    Task {
+                        await SmartStackRelevanceStore.shared.recordingDidStart(at: startTime)
+                    }
+                }
                 self.sendMessageWithFallback(["method": "startRecording"])
                 self.logger.info("Recording started successfully")
             } else {
@@ -91,6 +96,8 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         }
 
         logger.info("Stopping recording session")
+        let stopDate = Date()
+        let finalDuration = recordingDuration
         isRecording = false
         isStreaming = false
 
@@ -117,6 +124,10 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         recordingStartTime = nil
         recordingDuration = 0
         audioLevel = 0.0
+
+        Task {
+            await SmartStackRelevanceStore.shared.recordingDidStop(at: stopDate, duration: finalDuration)
+        }
 
         sendMessageWithFallback(["method": "stopRecording"])
         logger.info("Recording stopped successfully")
@@ -442,5 +453,4 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
         }
     }
 }
-
 

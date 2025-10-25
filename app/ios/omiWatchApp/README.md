@@ -172,6 +172,36 @@ Smart Stack widget for watchOS 26:
 ✅ Comprehensive logging
 ✅ State management improvements
 
+### 6. RelevanceKit Smart Stack Signals
+
+- **Context Store**: `SmartStackRelevanceStore` captures recording/battery changes and persists them via App Groups for seamless data sharing between the watch app and widget.
+- **Relevance Attributes**: The widget provider advertises `WidgetRelevanceAttribute` contexts so watchOS promotes the widget while recording, after a capture finishes, or when battery dips below 20%.
+- **Timeline Scoring**: Each `OmiWidgetEntry` includes `TimelineEntryRelevance` to keep the Smart Stack in sync with contextual signals.
+- **Automatic Refresh**: Recording/battery events invalidate the widget's relevance, prompting immediate Smart Stack reevaluation.
+
+#### App Group Setup
+
+**Required for Smart Stack integration:**
+
+1. **Register App Group** in Apple Developer Portal:
+   - Go to Certificates, Identifiers & Profiles
+   - Create new App Group: `group.com.friend-app-with-wearable.ios12`
+   - Add to both watch app and widget extension identifiers
+
+2. **Enable in Xcode**:
+   - Select watch app target → Signing & Capabilities
+   - Add "App Groups" capability
+   - Check `group.com.friend-app-with-wearable.ios12`
+   - Repeat for widget extension target when created
+
+3. **Configured in Info.plist**:
+   ```xml
+   <key>OmiAppGroupIdentifier</key>
+   <string>group.com.friend-app-with-wearable.ios12</string>
+   ```
+
+The app will fall back to standard UserDefaults if App Groups are not configured, but Smart Stack integration will be limited.
+
 ## Testing
 
 ### Test Coverage
@@ -182,6 +212,7 @@ The app includes comprehensive test suites:
 - `WatchAudioRecorderViewModelTests.swift`: ViewModel logic and state management
 - `BatteryManagerTests.swift`: Battery monitoring and reporting
 - `ContentViewTests.swift`: UI components and interactions
+- `SmartStackRelevanceStoreTests.swift`: RelevanceKit context persistence and ranking signals
 
 #### Integration Tests
 - `IntegrationTests.swift`: End-to-end workflows
@@ -343,16 +374,41 @@ While optimized for watchOS 26, the app maintains core functionality on earlier 
 2. **Connectivity**: Requires paired iPhone for full functionality
 3. **Battery Impact**: Continuous recording affects battery life
 4. **Background Limits**: watchOS restricts background audio processing
+5. **Widget Target**: Currently widget code is in main app target; should be moved to separate Widget Extension target for production deployment
 
 ## Future Enhancements
 
 Potential features for future releases:
-- [ ] RelevanceKit integration for contextual widget updates
+- [ ] Separate Widget Extension target for production deployment
 - [ ] Live Activities for active recording sessions
 - [ ] On-device audio processing with Neural Engine
 - [ ] Complications for watch faces
 - [ ] Voice shortcuts integration
 - [ ] Health app integration for audio health metrics
+
+### Widget Extension Target Setup
+
+For production deployment, the widget should be in its own target:
+
+1. **Create Widget Extension**:
+   - In Xcode: File → New → Target → Widget Extension
+   - Name: "OmiWidgetExtension"
+   - Bundle ID: `com.friend-app-with-wearable.ios12.watchapp.widget`
+
+2. **Move Widget Files**:
+   - Move `OmiWidget.swift` to widget extension target
+   - Move `SmartStackRelevanceStore.swift` to shared framework
+   - Update target membership in Xcode
+
+3. **Configure Extension**:
+   - Add App Groups capability
+   - Add microphone usage description (if needed)
+   - Configure deployment target to watchOS 26+
+
+4. **Update Build Settings**:
+   - Set `SUPPORTS_MACCATALYST = NO`
+   - Set `TARGETED_DEVICE_FAMILY = 4` (watchOS)
+   - Configure code signing
 
 ## Troubleshooting
 

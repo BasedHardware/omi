@@ -51,11 +51,17 @@ class BatteryManager: NSObject {
         lastSentBatteryLevel = level
         lastSentBatteryState = state
 
+        let timestamp = Date()
+
+        Task {
+            await SmartStackRelevanceStore.shared.updateBattery(level: Int(level), at: timestamp)
+        }
+
         let data: [String: Any] = [
             "method": "batteryUpdate",
             "batteryLevel": level,
             "batteryState": state,
-            "timestamp": Date().timeIntervalSince1970
+            "timestamp": timestamp.timeIntervalSince1970
         ]
 
         logger.info("Sending battery update: \(level)%, state: \(state)")

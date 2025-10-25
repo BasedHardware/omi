@@ -5,30 +5,42 @@ import WidgetKit
 /// Provides quick access to recording status and battery information
 struct OmiWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> OmiWidgetEntry {
-        OmiWidgetEntry(date: Date(), isRecording: false, batteryLevel: 100, recordingDuration: 0)
+        OmiWidgetEntry(
+            date: Date(),
+            isRecording: false,
+            batteryLevel: 100,
+            recordingDuration: 0,
+            relevance: TimelineEntryRelevance(score: 0.1)
+        )
     }
 
     func getSnapshot(in context: Context, completion: @escaping (OmiWidgetEntry) -> Void) {
-        let entry = OmiWidgetEntry(date: Date(), isRecording: false, batteryLevel: 85, recordingDuration: 0)
-        completion(entry)
+        Task {
+            let now = Date()
+            let snapshot = await SmartStackRelevanceStore.shared.snapshot()
+            let entry = OmiWidgetEntry(snapshot: snapshot, referenceDate: now)
+            await MainActor.run {
+                completion(entry)
+            }
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<OmiWidgetEntry>) -> Void) {
-        // Get current status
-        let batteryInfo = BatteryManager.shared.getBatteryInfo()
-        let batteryLevel = batteryInfo["level"] as? Float ?? 0
+        Task {
+            let now = Date()
+            let snapshot = await SmartStackRelevanceStore.shared.snapshot()
+            let entry = OmiWidgetEntry(snapshot: snapshot, referenceDate: now)
+            let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: now) ?? now.addingTimeInterval(300)
+            let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+            await MainActor.run {
+                completion(timeline)
+            }
+        }
+    }
 
-        let entry = OmiWidgetEntry(
-            date: Date(),
-            isRecording: false, // This would be updated from shared state
-            batteryLevel: Int(batteryLevel),
-            recordingDuration: 0
-        )
-
-        // Update every 15 minutes or when recording state changes
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
-        completion(timeline)
+    @available(watchOS 26.0, *)
+    func relevance() async -> WidgetRelevance<Void> {
+        await SmartStackRelevanceStore.shared.widgetRelevance()
     }
 }
 
@@ -37,6 +49,29 @@ struct OmiWidgetEntry: TimelineEntry {
     let isRecording: Bool
     let batteryLevel: Int
     let recordingDuration: TimeInterval
+    let relevance: TimelineEntryRelevance?
+
+    init(
+        date: Date,
+        isRecording: Bool,
+        batteryLevel: Int,
+        recordingDuration: TimeInterval,
+        relevance: TimelineEntryRelevance? = nil
+    ) {
+        self.date = date
+        self.isRecording = isRecording
+        self.batteryLevel = batteryLevel
+        self.recordingDuration = recordingDuration
+        self.relevance = relevance
+    }
+
+    init(snapshot: SmartStackRelevanceStore.Snapshot, referenceDate: Date = Date()) {
+        self.date = referenceDate
+        self.isRecording = snapshot.isRecording
+        self.batteryLevel = snapshot.batteryLevel
+        self.recordingDuration = snapshot.recordingDuration(at: referenceDate)
+        self.relevance = snapshot.timelineRelevance(currentDate: referenceDate)
+    }
 }
 
 struct OmiWidgetView: View {
@@ -233,7 +268,8 @@ private extension OmiWidgetView {
     }
 }
 
-// TODO: Move this to a separate Widget Extension target to avoid @main conflict
+// NOTE: Widget should be moved to a separate Widget Extension target in production
+// Currently in main app target to avoid @main conflict during development
 // For now, commented out to allow main watch app to build
 /*
 @main
