@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 /// Omi Smart Stack Widget for watchOS 26
-/// Provides quick access to recording status and battery information
+/// Uses native materials and framework-provided Liquid Glass effects
 struct OmiWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> OmiWidgetEntry {
         OmiWidgetEntry(date: Date(), isRecording: false, batteryLevel: 100, recordingDuration: 0)
@@ -58,44 +58,25 @@ struct OmiWidgetView: View {
 
     private var circularWidget: some View {
         ZStack {
-            // Background with Liquid Glass effect
+            // Native Liquid Glass material background
             Circle()
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.2),
-                            Color.white.opacity(0.1)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                )
+                .fill(.ultraThinMaterial)
 
             VStack(spacing: 4) {
                 if entry.isRecording {
                     Image(systemName: "waveform.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.red, .orange],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                        .foregroundStyle(.red)
                     Text("REC")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundColor(.red)
+                        .foregroundStyle(.red)
                 } else {
                     Image(systemName: "waveform")
                         .font(.system(size: 24))
-                        .foregroundColor(.white)
+                        .foregroundStyle(.white)
                     Text("\(entry.batteryLevel)%")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -103,39 +84,26 @@ struct OmiWidgetView: View {
 
     private var rectangularWidget: some View {
         HStack(spacing: 12) {
-            // Icon with Liquid Glass styling
+            // Icon with native material background
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.white.opacity(0.2),
-                                Color.white.opacity(0.1)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(.thinMaterial)
                     .frame(width: 40, height: 40)
 
                 Image(systemName: entry.isRecording ? "waveform.circle.fill" : "waveform")
                     .font(.system(size: 20))
-                    .foregroundStyle(
-                        entry.isRecording ?
-                        LinearGradient(colors: [.red, .orange], startPoint: .top, endPoint: .bottom) :
-                        LinearGradient(colors: [.white], startPoint: .top, endPoint: .bottom)
-                    )
+                    .foregroundStyle(entry.isRecording ? .red : .white)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Omi")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.primary)
 
                 if entry.isRecording {
                     Text("Recording")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(.red)
+                        .foregroundStyle(.red)
                 } else {
                     HStack(spacing: 4) {
                         Image(systemName: "battery.100")
@@ -143,7 +111,7 @@ struct OmiWidgetView: View {
                         Text("\(entry.batteryLevel)%")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                     }
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundStyle(.secondary)
                 }
             }
 
@@ -158,17 +126,11 @@ struct OmiWidgetView: View {
             if entry.isRecording {
                 Image(systemName: "waveform.circle.fill")
                     .font(.system(size: 24))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.red, .orange],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .foregroundStyle(.red)
             } else {
                 Image(systemName: "waveform")
                     .font(.system(size: 24))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
         }
     }
