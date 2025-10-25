@@ -11,25 +11,20 @@ The Omi Watch App is a native watchOS application that enables audio recording d
 The app now implements Apple's Liquid Glass design language, introduced in watchOS 26:
 
 #### Visual Enhancements
-- **Translucent Materials**: All UI elements use glass-like materials that reflect and refract light
-- **Depth-Aware Surfaces**: Button and container surfaces respond to user interaction with depth effects
-- **Dynamic Gradients**: Linear gradients create visual depth and hierarchy
-- **Adaptive Luminance**: UI automatically adjusts for Always-On Display mode
+- **Native Glass Materials**: Surfaces now rely on SwiftUI's `glassEffect` for GPU-accelerated refraction and reflections
+- **Shared Visual Identity**: `glassEffectID` keeps the button, capsule, and container optically linked for depth-aware rendering
+- **Adaptive Luminance**: Materials automatically follow light/dark and Always-On Display modes
+- **Interactive Response**: Glass intensity and highlights respond to touch via the native interactive glass style
 
 #### Implementation Details
 ```swift
-// Liquid Glass button with gradient fill
+@Namespace private var glassNamespace
+
+// Native Liquid Glass button surface
 Circle()
-    .fill(
-        LinearGradient(
-            gradient: Gradient(colors: [
-                Color.white,
-                Color.white.opacity(0.9)
-            ]),
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    )
+    .fill(Color.white)
+    .glassEffect(.regular.interactive())
+    .glassEffectID("recordButton", in: glassNamespace)
 ```
 
 ### 2. Enhanced Animations
@@ -41,7 +36,6 @@ Circle()
 ```swift
 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
     isPressed = true
-    glassIntensity = 1.0
 }
 ```
 

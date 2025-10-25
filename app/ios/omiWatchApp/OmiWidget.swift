@@ -42,6 +42,13 @@ struct OmiWidgetEntry: TimelineEntry {
 struct OmiWidgetView: View {
     var entry: OmiWidgetProvider.Entry
     @Environment(\.widgetFamily) var widgetFamily
+    @Namespace private var glassNamespace
+
+    private enum GlassID {
+        static let circular = "widget.circular.glass.container"
+        static let rectangular = "widget.rectangular.glass.container"
+        static let rectangularIcon = "widget.rectangular.glass.icon"
+    }
 
     var body: some View {
         switch widgetFamily {
@@ -56,101 +63,47 @@ struct OmiWidgetView: View {
         }
     }
 
+    @ViewBuilder
     private var circularWidget: some View {
-        ZStack {
-            // Background with Liquid Glass effect
-            Circle()
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.2),
-                            Color.white.opacity(0.1)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                )
+        if #available(watchOS 26.0, *) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.12))
+                    .glassEffect(.regular)
+                    .glassEffectID(GlassID.circular, in: glassNamespace)
 
-            VStack(spacing: 4) {
-                if entry.isRecording {
-                    Image(systemName: "waveform.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.red, .orange],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                    Text("REC")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundColor(.red)
-                } else {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
-                    Text("\(entry.batteryLevel)%")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
-                }
+                circularContent
             }
+        } else {
+            legacyCircularWidget
         }
     }
 
+    @ViewBuilder
     private var rectangularWidget: some View {
-        HStack(spacing: 12) {
-            // Icon with Liquid Glass styling
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.white.opacity(0.2),
-                                Color.white.opacity(0.1)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 40, height: 40)
+        if #available(watchOS 26.0, *) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(Color.white.opacity(0.15))
+                    .frame(width: 42, height: 42)
+                    .glassEffect(.regular)
+                    .glassEffectID(GlassID.rectangularIcon, in: glassNamespace)
+                    .overlay(rectangularIcon)
 
-                Image(systemName: entry.isRecording ? "waveform.circle.fill" : "waveform")
-                    .font(.system(size: 20))
-                    .foregroundStyle(
-                        entry.isRecording ?
-                        LinearGradient(colors: [.red, .orange], startPoint: .top, endPoint: .bottom) :
-                        LinearGradient(colors: [.white], startPoint: .top, endPoint: .bottom)
-                    )
+                rectangularTextStack
+                Spacer(minLength: 0)
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Omi")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
-
-                if entry.isRecording {
-                    Text("Recording")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(.red)
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "battery.100")
-                            .font(.system(size: 10))
-                        Text("\(entry.batteryLevel)%")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                    }
-                    .foregroundColor(.white.opacity(0.7))
-                }
-            }
-
-            Spacer()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(0.12))
+                    .glassEffect(.regular)
+                    .glassEffectID(GlassID.rectangular, in: glassNamespace)
+            )
+        } else {
+            legacyRectangularWidget
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
     }
 
     private var cornerWidget: some View {
@@ -174,6 +127,115 @@ struct OmiWidgetView: View {
     }
 }
 
+// MARK: - Legacy + Shared Widget Views
+
+private extension OmiWidgetView {
+    private var circularContent: some View {
+        VStack(spacing: 4) {
+            if entry.isRecording {
+                Image(systemName: "waveform.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(
+                        LinearGradient(colors: [.red, .orange], startPoint: .top, endPoint: .bottom)
+                    )
+                Text("REC")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(.red)
+            } else {
+                Image(systemName: "waveform")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white)
+                Text("\(entry.batteryLevel)%")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.8))
+            }
+        }
+    }
+
+    private var legacyCircularWidget: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.white.opacity(0.2),
+                            Color.white.opacity(0.1)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                )
+
+            circularContent
+        }
+    }
+
+    private var rectangularIcon: some View {
+        Image(systemName: entry.isRecording ? "waveform.circle.fill" : "waveform")
+            .font(.system(size: 20))
+            .foregroundStyle(
+                entry.isRecording ?
+                LinearGradient(colors: [.red, .orange], startPoint: .top, endPoint: .bottom) :
+                LinearGradient(colors: [.white], startPoint: .top, endPoint: .bottom)
+            )
+    }
+
+    private var rectangularTextStack: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Omi")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white)
+
+            if entry.isRecording {
+                Text("Recording")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.red)
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "battery.100")
+                        .font(.system(size: 10))
+                    Text("\(entry.batteryLevel)%")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                }
+                .foregroundColor(.white.opacity(0.7))
+            }
+        }
+    }
+
+    private var legacyRectangularWidget: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.2),
+                                Color.white.opacity(0.1)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 40, height: 40)
+
+                rectangularIcon
+            }
+
+            rectangularTextStack
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+    }
+}
+
+// TODO: Move this to a separate Widget Extension target to avoid @main conflict
+// For now, commented out to allow main watch app to build
+/*
 @main
 struct OmiWidget: Widget {
     let kind: String = "OmiWidget"
@@ -192,6 +254,7 @@ struct OmiWidget: Widget {
     }
 }
 
+// Previews also commented out until widget is in separate target
 #Preview("Circular - Not Recording", as: .accessoryCircular) {
     OmiWidget()
 } timeline: {
@@ -215,3 +278,4 @@ struct OmiWidget: Widget {
 } timeline: {
     OmiWidgetEntry(date: Date(), isRecording: true, batteryLevel: 85, recordingDuration: 120)
 }
+*/

@@ -6,5 +6,7 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Omi needs access to your microphone to record audio conversations and transcribe them.</string>
 </dict>
 </plist>

@@ -1,184 +1,182 @@
 import SwiftUI
 import WatchKit
 
-/// Main recording view for the Omi Watch app
-/// Enhanced with watchOS 26 Liquid Glass effects for modern, fluid UI
+/// Main recording view for the Omi Watch app.
+/// Refactored to use the native watchOS Liquid Glass APIs for surfaces and shared identities.
 struct WatchRecorderView: View {
     @ObservedObject var viewModel: WatchAudioRecorderViewModel
+    @Namespace private var glassNamespace
     @State private var isPressed = false
-    @State private var pulseScale: CGFloat = 1.0
     @State private var rippleScale: CGFloat = 1.0
     @State private var rippleOpacity: Double = 0.0
-    @State private var glassIntensity: Double = 0.0
-    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
-    
+
+    private enum GlassID {
+        static let container = "watch.recorder.glass.container"
+        static let button = "watch.recorder.glass.button"
+        static let status = "watch.recorder.glass.status"
+    }
+
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Background with Liquid Glass material
-                Color.black
-                    .ignoresSafeArea()
-                    .overlay(
-                        // Subtle gradient for depth
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.white.opacity(isLuminanceReduced ? 0.02 : 0.05),
-                                Color.clear
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-
-                VStack(spacing: 0) {
-                    Spacer()
-
-                    // Recording control button with Liquid Glass effects
-                    Button(action: {
-                        // Haptic feedback for watchOS 26
-                        WKInterfaceDevice.current().play(.click)
-
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                            isPressed = true
-                            glassIntensity = 1.0
-                        }
-
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                isPressed = false
-                                glassIntensity = 0.0
-                            }
-                        }
-
-                        if viewModel.isRecording {
-                            viewModel.stopRecording()
-                        } else {
-                            viewModel.startRecording()
-                        }
-                    }) {
-                        ZStack {
-                            // Pulsating ripple effect when recording with Liquid Glass
-                            if viewModel.isRecording {
-                                ForEach(0..<3, id: \.self) { index in
-                                    Circle()
-                                        .stroke(
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [
-                                                    Color.white.opacity(0.4),
-                                                    Color.blue.opacity(0.2)
-                                                ]),
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            ),
-                                            lineWidth: 2
-                                        )
-                                        .frame(width: 100, height: 100)
-                                        .scaleEffect(rippleScale)
-                                        .opacity(rippleOpacity)
-                                        .animation(
-                                            Animation.easeOut(duration: 1.5)
-                                                .repeatForever(autoreverses: false)
-                                                .delay(Double(index) * 0.3),
-                                            value: rippleScale
-                                        )
-                                        .onAppear {
-                                            rippleScale = 2.5
-                                            rippleOpacity = 0.8
-                                        }
-                                }
-                            }
-
-                            // Main button circle with Liquid Glass effect
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.white,
-                                            Color.white.opacity(0.9)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 80, height: 80)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                                        .blur(radius: isPressed ? 2 : 0)
-                                )
-                                .shadow(color: Color.white.opacity(isPressed ? 0.4 : 0.2), radius: isPressed ? 12 : 8)
-                                .scaleEffect(isPressed ? 1.08 : 1.0)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
-
-                            // Logo with enhanced visual feedback
-                            Image("OmiLogo")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 40, height: 40)
-                                .scaleEffect(isPressed ? 1.08 : 1.0)
-                                .opacity(isPressed ? 0.8 : 1.0)
-                                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
-                        }
-                    }
-                    .buttonStyle(PlainButtonStyle())
-
-                    Spacer()
-
-                    // Status text with Liquid Glass styling
-                    Text(viewModel.isRecording ? "Listening" : "Tap to Record")
-                        .font(.system(size: 16, weight: .medium, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.white,
-                                    Color.white.opacity(0.8)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(Color.white.opacity(0.1))
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-                                )
-                        )
-                        .padding(.bottom, 20)
-                        .shadow(color: Color.black.opacity(0.3), radius: 4, y: 2)
-                }
-            }
+        ZStack {
+            background
+            recorderSurface
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if viewModel.isRecording {
                 startRippleAnimation()
             }
-            // Animate glass effect on appear
-            withAnimation(.easeIn(duration: 0.5)) {
-                glassIntensity = 0.5
-            }
         }
-        .onChange(of: viewModel.isRecording) { isRecording in
-            if isRecording {
-                startRippleAnimation()
+        .onChange(of: viewModel.isRecording) { _, isRecording in
+            isRecording ? startRippleAnimation() : stopRippleAnimation()
+        }
+    }
+
+    private var background: some View {
+        Color.black
+            .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var recorderSurface: some View {
+        let layout = VStack(spacing: 0) {
+            Spacer()
+            recordButton
+            Spacer()
+            statusLabel
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 20)
+
+        if #available(watchOS 26.0, *) {
+            layout.glassEffectID(GlassID.container, in: glassNamespace)
+        } else {
+            layout
+        }
+    }
+
+    private var recordButton: some View {
+        Button(action: toggleRecording) {
+            ZStack {
+                if viewModel.isRecording {
+                    rippleLayer
+                }
+
+                glassButtonSurface
+
+                Image("OmiLogo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 40, height: 40)
+                    .scaleEffect(isPressed ? 1.08 : 1.0)
+                    .opacity(isPressed ? 0.8 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+            }
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var glassButtonSurface: some View {
+        let circle = Circle()
+            .fill(.white)
+            .frame(width: 86, height: 86)
+            .scaleEffect(isPressed ? 1.08 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+
+        if #available(watchOS 26.0, *) {
+            circle
+                .glassEffect(.regular.interactive())
+                .glassEffectID(GlassID.button, in: glassNamespace)
+        } else {
+            circle
+                .shadow(color: .white.opacity(0.35), radius: 10)
+                .shadow(color: .blue.opacity(0.2), radius: 16)
+        }
+    }
+
+    @ViewBuilder
+    private var rippleLayer: some View {
+        ForEach(0..<3, id: \.self) { index in
+            let ripple = Circle()
+                .strokeBorder(lineWidth: 2)
+                .frame(width: 120, height: 120)
+                .foregroundStyle(.white.opacity(0.4))
+                .scaleEffect(rippleScale)
+                .opacity(rippleOpacity)
+                .animation(
+                    Animation.easeOut(duration: 1.5)
+                        .repeatForever(autoreverses: false)
+                        .delay(Double(index) * 0.3),
+                    value: rippleScale
+                )
+
+            if #available(watchOS 26.0, *) {
+                ripple.glassEffect(.clear)
             } else {
-                stopRippleAnimation()
+                ripple
             }
         }
     }
-    
+
+    private var statusLabel: some View {
+        Text(viewModel.isRecording ? "Listening" : "Tap to Record")
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 10)
+            .background(statusBackground)
+            .accessibilityLabel(viewModel.isRecording ? "Listening" : "Tap to Record")
+    }
+
+    @ViewBuilder
+    private var statusBackground: some View {
+        let capsule = Capsule()
+            .fill(Color.white.opacity(0.2))
+
+        if #available(watchOS 26.0, *) {
+            capsule
+                .glassEffect(.regular)
+                .glassEffectID(GlassID.status, in: glassNamespace)
+        } else {
+            capsule
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
+        }
+    }
+
+    private func toggleRecording() {
+        WKInterfaceDevice.current().play(.click)
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isPressed = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                isPressed = false
+            }
+        }
+
+        if viewModel.isRecording {
+            viewModel.stopRecording()
+        } else {
+            viewModel.startRecording()
+        }
+    }
+
     private func startRippleAnimation() {
         rippleScale = 1.0
         rippleOpacity = 0.8
         withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-            rippleScale = 2.5
+            rippleScale = 2.6
             rippleOpacity = 0.0
         }
     }
-    
+
     private func stopRippleAnimation() {
         rippleScale = 1.0
         rippleOpacity = 0.0
