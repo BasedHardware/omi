@@ -13,6 +13,10 @@ class BatteryInfoWidget extends StatelessWidget {
   const BatteryInfoWidget({super.key});
 
   String _getDeviceImagePath(String? deviceName) {
+    if (deviceName != null && deviceName.toUpperCase().contains('PLAUD')) {
+      return Assets.images.plaudNotePin.path;
+    }
+
     if (deviceName != null && deviceName.contains('Glass')) {
       return Assets.images.omiGlass.path;
     }
