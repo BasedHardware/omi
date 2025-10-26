@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -104,14 +105,19 @@ class WebhookOnlySocketService implements IPureSocketListener, ITranscriptSegmen
   @override
   Future send(dynamic message) async {
     if (message is List<int>) {
+      debugPrint('[WEBHOOK-SEND] Received ${message.length} bytes, total buffered: ${_audioBuffer.length + message.length}');
       _audioBuffer.addAll(message);
 
-      _batchTimer?.cancel();
-      _batchTimer = Timer(Duration(seconds: _batchDelay), () async {
-        await _flushBuffer();
-      });
+      if (_batchTimer == null) {
+        debugPrint('[WEBHOOK-SEND] ⏱️ Starting batch timer for ${_batchDelay}s');
+        _batchTimer = Timer(Duration(seconds: _batchDelay), () async {
+          debugPrint('[WEBHOOK-SEND] ⏰ Batch timeout - flushing ${_audioBuffer.length} bytes');
+          _batchTimer = null;
+          await _flushBuffer();
+        });
+      }
     } else if (message is String) {
-      debugPrint('WebhookOnlySocketService: Ignoring non-audio message (likely image chunk)');
+      debugPrint('[WEBHOOK-SEND] Ignoring non-audio message (likely image chunk)');
     }
   }
 
@@ -133,49 +139,64 @@ class WebhookOnlySocketService implements IPureSocketListener, ITranscriptSegmen
     final webhookUrl = SharedPreferencesUtil().webhookAudioBytes;
 
     if (webhookUrl.isEmpty) {
-      debugPrint('WebhookOnlySocketService: No webhook URL configured');
+      debugPrint('[WEBHOOK] No webhook URL configured');
       return;
     }
 
     try {
-      final base64Audio = base64Encode(Uint8List.fromList(audioBytes));
+      var uid = SharedPreferencesUtil().uid;
 
-      final payload = {
-        'audio_bytes': base64Audio,
-        'timestamp': DateTime.now().toIso8601String(),
-        'uid': SharedPreferencesUtil().uid,
-        'sample_rate': sampleRate,
-        'codec': codec.toString().split('.').last,
-        'language': language,
-        'duration_seconds': _batchDelay,
-      };
-
-      if (onWebhookPayloadCapture != null) {
-        onWebhookPayloadCapture!(payload);
+      // Fallback to device name if no user UID is available
+      if (uid.isEmpty) {
+        uid = SharedPreferencesUtil().deviceName;
+        if (uid.isEmpty) {
+          uid = 'webhook-device';
+        }
+        debugPrint('[WEBHOOK] Using fallback UID: $uid');
       }
 
-      debugPrint('WebhookOnlySocketService: Sending ${audioBytes.length} bytes to $webhookUrl');
+      final url = '$webhookUrl?uid=$uid&sample_rate=$sampleRate';
 
-      final response = await makeApiCall(
-        url: webhookUrl,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
-        method: 'POST',
-      );
+      debugPrint('[WEBHOOK] URL: $url');
+      debugPrint('[WEBHOOK] Sending ${audioBytes.length} raw PCM bytes');
 
-      if (response != null && response.statusCode >= 200 && response.statusCode < 300) {
-        debugPrint('WebhookOnlySocketService: Successfully sent audio bytes (${response.statusCode})');
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/octet-stream'},
+        body: audioBytes,
+      ).timeout(const Duration(seconds: 30));
+
+      debugPrint('[WEBHOOK] Response: ${response.statusCode}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        debugPrint('[WEBHOOK] ✅ Successfully sent audio bytes (${response.statusCode})');
+
+        final payload = {
+          'audio_bytes': '[${audioBytes.length} raw bytes]',
+          'timestamp': DateTime.now().toIso8601String(),
+          'uid': uid,
+          'sample_rate': sampleRate,
+          'codec': codec.toString().split('.').last,
+          'language': language,
+          'duration_seconds': _batchDelay,
+        };
+
+        if (onWebhookPayloadCapture != null) {
+          onWebhookPayloadCapture!(payload);
+        }
+
         if (onWebhookCalled != null) {
           onWebhookCalled!();
         }
       } else {
-        final errorMsg = 'Webhook failed with status: ${response?.statusCode}';
-        debugPrint('WebhookOnlySocketService: $errorMsg');
+        final errorMsg = 'Webhook failed with status: ${response.statusCode}';
+        debugPrint('[WEBHOOK] ❌ $errorMsg');
+        debugPrint('[WEBHOOK] Response body: ${response.body}');
         _notifyWebhookError(errorMsg);
       }
     } catch (e) {
       final errorMsg = 'Error sending to webhook: $e';
-      debugPrint('WebhookOnlySocketService: $errorMsg');
+      debugPrint('[WEBHOOK] ❌ $errorMsg');
       _notifyWebhookError(errorMsg);
     }
   }

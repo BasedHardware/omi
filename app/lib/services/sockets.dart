@@ -57,14 +57,20 @@ class SocketServicePool extends ISocketService {
 
       // Check if webhook-only mode is enabled
       final prefs = SharedPreferencesUtil();
+      debugPrint('[SOCKET] Webhook-only mode enabled: ${prefs.webhookOnlyModeEnabled}');
+      debugPrint('[SOCKET] Webhook URL: ${prefs.webhookAudioBytes}');
+      debugPrint('[SOCKET] User UID: ${prefs.uid}');
+
       if (prefs.webhookOnlyModeEnabled) {
         if (prefs.webhookAudioBytes.isEmpty) {
-          debugPrint('Webhook-only mode enabled but no URL configured. Cannot connect.');
+          debugPrint('[SOCKET] ❌ Webhook-only mode enabled but no URL configured. Cannot connect.');
           return null;
         }
-        debugPrint('Using webhook-only mode (bypassing Omi servers)');
+        debugPrint('[SOCKET] ✅ Using webhook-only mode (bypassing Omi servers)');
+        debugPrint('[SOCKET] Creating WebhookOnlySocketService with codec=$codec sampleRate=$sampleRate');
         _socket = WebhookOnlySocketService.create(sampleRate, codec, language);
         await _socket?.start();
+        debugPrint('[SOCKET] ✅ WebhookOnlySocketService started');
         return _socket;
       }
 
