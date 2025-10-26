@@ -253,9 +253,9 @@ class $AssetsImagesGen {
   /// File path: assets/images/onboarding.mp4
   String get onboarding => 'assets/images/onboarding.mp4';
 
-  /// File path: assets/images/plaud_note_pin.png
+  /// File path: assets/images/plaud_note_pin.webp
   AssetGenImage get plaudNotePin =>
-      const AssetGenImage('assets/images/plaud_note_pin.png');
+      const AssetGenImage('assets/images/plaud_note_pin.webp');
 
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
