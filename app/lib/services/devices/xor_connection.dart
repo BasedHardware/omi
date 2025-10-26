@@ -7,6 +7,7 @@ import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 
 class XorDeviceConnection extends DeviceConnection {
+  static const int _cmdGetBattery = 9;
   static const int _cmdStartRecord = 20;
   static const int _cmdStopRecord = 23;
   static const int _cmdSyncFileStart = 28;
@@ -119,11 +120,82 @@ class XorDeviceConnection extends DeviceConnection {
   @override
   Future<int> performRetrieveBatteryLevel() async {
     try {
-      final data = await transport.readCharacteristic(batteryServiceUuid, batteryLevelCharacteristicUuid);
-      return data.isNotEmpty ? data[0] : -1;
+      final response = await _sendCommand(_cmdGetBattery, []);
+      if (response != null && response.length >= 2) {
+        // Response format: [is_charging, battery_level]
+        final batteryLevel = response[1];
+        final isCharging = response[0] != 0;
+        debugPrint('[XOR] Battery: $batteryLevel% ${isCharging ? "(Charging)" : ""}');
+        return batteryLevel;
+      }
+      return -1;
     } catch (e) {
+      debugPrint('[XOR] Error retrieving battery level: $e');
       return -1;
     }
+  }
+
+  Future<Map<String, dynamic>?> getBatteryState() async {
+    try {
+      final response = await _sendCommand(_cmdGetBattery, []);
+      if (response != null && response.length >= 2) {
+        return {
+          'isCharging': response[0] != 0,
+          'level': response[1],
+        };
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[XOR] Error getting battery state: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
+    void Function(int)? onBatteryLevelChange,
+  }) async {
+    // XOR devices use command-based battery retrieval, not automatic notifications
+    // Battery state must be explicitly requested via CMD_GET_BATTERY (command 9)
+    // Therefore we poll periodically rather than relying on unsolicited notifications
+    if (onBatteryLevelChange == null) return null;
+
+    final controller = StreamController<List<int>>();
+    Timer? pollingTimer;
+    int? lastBatteryLevel;
+
+    // Set up cleanup when stream is cancelled
+    controller.onCancel = () {
+      pollingTimer?.cancel();
+    };
+
+    // Poll battery every 60 seconds
+    pollingTimer = Timer.periodic(const Duration(seconds: 60), (timer) async {
+      try {
+        final batteryLevel = await performRetrieveBatteryLevel();
+        if (batteryLevel >= 0 && batteryLevel != lastBatteryLevel) {
+          lastBatteryLevel = batteryLevel;
+          controller.add([batteryLevel]);
+          onBatteryLevelChange(batteryLevel);
+        }
+      } catch (e) {
+        debugPrint('[XOR] Error polling battery level: $e');
+      }
+    });
+
+    // Get initial battery level immediately
+    try {
+      final batteryLevel = await performRetrieveBatteryLevel();
+      if (batteryLevel >= 0) {
+        lastBatteryLevel = batteryLevel;
+        controller.add([batteryLevel]);
+        onBatteryLevelChange(batteryLevel);
+      }
+    } catch (e) {
+      debugPrint('[XOR] Error getting initial battery level: $e');
+    }
+
+    return controller.stream.listen(null);
   }
 
   @override
