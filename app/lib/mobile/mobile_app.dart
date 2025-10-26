@@ -12,9 +12,24 @@ class MobileApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isWebhookOnlyMode = SharedPreferencesUtil().webhookOnlyModeEnabled;
+    final hasUid = SharedPreferencesUtil().uid.isNotEmpty;
+    final onboardingDone = SharedPreferencesUtil().onboardingCompleted;
+
+    debugPrint('📱 MobileApp routing: webhookOnly=$isWebhookOnlyMode, hasUid=$hasUid, onboardingDone=$onboardingDone');
+
+    // FORCE bypass auth if webhook-only mode
+    if (isWebhookOnlyMode && hasUid) {
+      debugPrint('📱 BYPASSING AUTH - Going to HomePageWrapper');
+      return const HomePageWrapper();
+    }
+
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (authProvider.isSignedIn()) {
+        final isWebhookOnlyModeInner = SharedPreferencesUtil().webhookOnlyModeEnabled;
+        final hasAnonymousUid = SharedPreferencesUtil().uid.isNotEmpty;
+
+        if (authProvider.isSignedIn() || (isWebhookOnlyModeInner && hasAnonymousUid)) {
           if (SharedPreferencesUtil().onboardingCompleted) {
             return const HomePageWrapper();
           } else {

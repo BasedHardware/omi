@@ -33,7 +33,7 @@ class SpeechProfileProvider extends ChangeNotifier
   late WavBytesUtil audioStorage;
   StreamSubscription? _bleBytesStream;
 
-  TranscriptSegmentSocketService? _socket;
+  ITranscriptSegmentSocketService? _socket;
 
   bool startedRecording = false;
   double percentageCompleted = 0;

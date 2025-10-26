@@ -23,6 +23,18 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onClosed([int? closeCode]);
 }
 
+abstract class ITranscriptSegmentSocketService {
+  SocketServiceState get state;
+  int get sampleRate;
+  BleAudioCodec get codec;
+  String get language;
+  void subscribe(Object context, ITransctipSegmentSocketServiceListener listener);
+  void unsubscribe(Object context);
+  Future start();
+  Future stop({String? reason});
+  Future send(dynamic message);
+}
+
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
   SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
       : super.create(includeSpeechProfile: false);
@@ -38,7 +50,7 @@ enum SocketServiceState {
   disconnected,
 }
 
-class TranscriptSegmentSocketService implements IPureSocketListener {
+class TranscriptSegmentSocketService implements IPureSocketListener, ITranscriptSegmentSocketService {
   late PureSocket _socket;
   final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
 

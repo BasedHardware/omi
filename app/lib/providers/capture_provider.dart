@@ -40,7 +40,7 @@ class CaptureProvider extends ChangeNotifier
   PeopleProvider? peopleProvider;
   UsageProvider? usageProvider;
 
-  TranscriptSegmentSocketService? _socket;
+  ITranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
 
@@ -327,9 +327,18 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
+  List<int> _frameBuffer = [];
+  int _getCoalesceThreshold() {
+    final batteryLevel = SharedPreferencesUtil().batteryOptimizationLevel;
+    return batteryLevel == 2 ? 960 : 320; // Aggressive: 3x buffer
+  }
+
   Future streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
+    _frameBuffer.clear();
+    final coalesceThreshold = _getCoalesceThreshold();
+
     _bleBytesStream = await _getBleAudioBytesListener(deviceId, onAudioBytesReceived: (List<int> value) {
       final snapshot = List<int>.from(value);
       if (snapshot.isEmpty || snapshot.length < 3) return;
@@ -350,10 +359,17 @@ class CaptureProvider extends ChangeNotifier
         _wal.getSyncs().phone.onByteStream(snapshot);
       }
 
-      // Send WS
+      // Send WS with optional frame coalescing for battery optimization
       if (_socket?.state == SocketServiceState.connected) {
         final trimmedValue = value.sublist(3);
-        _socket?.send(trimmedValue);
+
+        // Battery optimization: coalesce frames
+        _frameBuffer.addAll(trimmedValue);
+
+        if (_frameBuffer.length >= coalesceThreshold) {
+          _socket?.send(List<int>.from(_frameBuffer));
+          _frameBuffer.clear();
+        }
 
         // Mark as synced
         if (_isWalSupported) {
@@ -831,14 +847,29 @@ class CaptureProvider extends ChangeNotifier
     _startKeepAliveServices();
   }
 
+  int _getAdaptiveKeepAliveInterval() {
+    final batteryLevel = SharedPreferencesUtil().batteryOptimizationLevel;
+    switch (batteryLevel) {
+      case 0:
+        return 10; // No optimization: more frequent
+      case 1:
+        return 15; // Balanced: standard
+      case 2:
+        return 30; // Aggressive: less frequent (default)
+      default:
+        return 30;
+    }
+  }
+
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-      debugPrint("[Provider] keep alive");
-      // rate 1/15s
+    final keepAliveInterval = _getAdaptiveKeepAliveInterval();
+    _keepAliveTimer = Timer.periodic(Duration(seconds: keepAliveInterval), (t) async {
+      debugPrint("[Provider] keep alive (interval: ${keepAliveInterval}s)");
+      // rate limiting
       if (_keepAliveLastExecutedAt != null &&
-          DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
-        debugPrint("[Provider] keep alive - hitting rate limits 1/15s");
+          DateTime.now().subtract(Duration(seconds: keepAliveInterval)).isBefore(_keepAliveLastExecutedAt!)) {
+        debugPrint("[Provider] keep alive - hitting rate limits");
         return;
       }
 

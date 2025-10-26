@@ -29,59 +29,92 @@ class DeveloperModeProvider extends BaseProvider {
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
 
-  void onConversationEventsToggled(bool value) {
+  Future<void> onConversationEventsToggled(bool value) async {
     conversationEventsToggled = value;
-    if (!value) {
-      disableWebhook(type: 'memory_created');
-    } else {
-      enableWebhook(type: 'memory_created');
-    }
+    SharedPreferencesUtil().conversationEventsToggled = value;
     notifyListeners();
+
+    try {
+      if (!value) {
+        await disableWebhook(type: 'memory_created');
+      } else {
+        await enableWebhook(type: 'memory_created');
+      }
+    } catch (e) {
+      Logger.error('Failed to toggle conversation events webhook: $e');
+      conversationEventsToggled = !value;
+      SharedPreferencesUtil().conversationEventsToggled = !value;
+      notifyListeners();
+    }
   }
 
-  void onTranscriptsToggled(bool value) {
+  Future<void> onTranscriptsToggled(bool value) async {
     transcriptsToggled = value;
-    if (!value) {
-      disableWebhook(type: 'realtime_transcript');
-    } else {
-      enableWebhook(type: 'realtime_transcript');
-    }
+    SharedPreferencesUtil().transcriptsToggled = value;
     notifyListeners();
+
+    try {
+      if (!value) {
+        await disableWebhook(type: 'realtime_transcript');
+      } else {
+        await enableWebhook(type: 'realtime_transcript');
+      }
+    } catch (e) {
+      Logger.error('Failed to toggle transcripts webhook: $e');
+      transcriptsToggled = !value;
+      SharedPreferencesUtil().transcriptsToggled = !value;
+      notifyListeners();
+    }
   }
 
-  void onAudioBytesToggled(bool value) {
+  Future<void> onAudioBytesToggled(bool value) async {
     audioBytesToggled = value;
-    if (!value) {
-      disableWebhook(type: 'audio_bytes');
-    } else {
-      enableWebhook(type: 'audio_bytes');
-    }
+    SharedPreferencesUtil().audioBytesToggled = value;
     notifyListeners();
+
+    try {
+      if (!value) {
+        await disableWebhook(type: 'audio_bytes');
+      } else {
+        await enableWebhook(type: 'audio_bytes');
+      }
+    } catch (e) {
+      Logger.error('Failed to toggle audio bytes webhook: $e');
+      audioBytesToggled = !value;
+      SharedPreferencesUtil().audioBytesToggled = !value;
+      notifyListeners();
+    }
   }
 
-  void onDaySummaryToggled(bool value) {
+  Future<void> onDaySummaryToggled(bool value) async {
     daySummaryToggled = value;
-    if (!value) {
-      disableWebhook(type: 'day_summary');
-    } else {
-      enableWebhook(type: 'day_summary');
-    }
+    SharedPreferencesUtil().daySummaryToggled = value;
     notifyListeners();
+
+    try {
+      if (!value) {
+        await disableWebhook(type: 'day_summary');
+      } else {
+        await enableWebhook(type: 'day_summary');
+      }
+    } catch (e) {
+      Logger.error('Failed to toggle day summary webhook: $e');
+      daySummaryToggled = !value;
+      SharedPreferencesUtil().daySummaryToggled = !value;
+      notifyListeners();
+    }
   }
 
   Future getWebhooksStatus() async {
     var res = await webhooksStatus();
     if (res == null) {
-      conversationEventsToggled = false;
-      transcriptsToggled = false;
-      audioBytesToggled = false;
-      daySummaryToggled = false;
-    } else {
-      conversationEventsToggled = res['memory_created'];
-      transcriptsToggled = res['realtime_transcript'];
-      audioBytesToggled = res['audio_bytes'];
-      daySummaryToggled = res['day_summary'];
+      return;
     }
+    conversationEventsToggled = res['memory_created'] ?? false;
+    transcriptsToggled = res['realtime_transcript'] ?? false;
+    audioBytesToggled = res['audio_bytes'] ?? false;
+    daySummaryToggled = res['day_summary'] ?? false;
+
     SharedPreferencesUtil().conversationEventsToggled = conversationEventsToggled;
     SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
     SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;
@@ -104,38 +137,47 @@ class DeveloperModeProvider extends BaseProvider {
     daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
 
     await Future.wait([
-      getWebhooksStatus(),
       getUserWebhookUrl(type: 'audio_bytes').then((url) {
-        List<dynamic> parts = url.split(',');
-        if (parts.length == 2) {
-          webhookAudioBytes.text = parts[0].toString();
-          webhookAudioBytesDelay.text = parts[1].toString();
-        } else {
-          webhookAudioBytes.text = url;
-          webhookAudioBytesDelay.text = '5';
+        if (url.isNotEmpty) {
+          List<dynamic> parts = url.split(',');
+          if (parts.length == 2) {
+            webhookAudioBytes.text = parts[0].toString();
+            webhookAudioBytesDelay.text = parts[1].toString();
+          } else {
+            webhookAudioBytes.text = url;
+            webhookAudioBytesDelay.text = '5';
+          }
+          SharedPreferencesUtil().webhookAudioBytes = webhookAudioBytes.text;
+          SharedPreferencesUtil().webhookAudioBytesDelay = webhookAudioBytesDelay.text;
         }
-        SharedPreferencesUtil().webhookAudioBytes = webhookAudioBytes.text;
-        SharedPreferencesUtil().webhookAudioBytesDelay = webhookAudioBytesDelay.text;
       }),
       getUserWebhookUrl(type: 'realtime_transcript').then((url) {
-        webhookOnTranscriptReceived.text = url;
-        SharedPreferencesUtil().webhookOnTranscriptReceived = url;
+        if (url.isNotEmpty) {
+          webhookOnTranscriptReceived.text = url;
+          SharedPreferencesUtil().webhookOnTranscriptReceived = url;
+        }
       }),
       getUserWebhookUrl(type: 'memory_created').then((url) {
-        webhookOnConversationCreated.text = url;
-        SharedPreferencesUtil().webhookOnConversationCreated = url;
+        if (url.isNotEmpty) {
+          webhookOnConversationCreated.text = url;
+          SharedPreferencesUtil().webhookOnConversationCreated = url;
+        }
       }),
       getUserWebhookUrl(type: 'day_summary').then((url) {
-        webhookDaySummary.text = url;
-        SharedPreferencesUtil().webhookDaySummary = url;
+        if (url.isNotEmpty) {
+          webhookDaySummary.text = url;
+          SharedPreferencesUtil().webhookDaySummary = url;
+        }
       }),
     ]);
-    // getUserWebhookUrl(type: 'audio_bytes_websocket').then((url) => webhookWsAudioBytes.text = url);
+
+    await getWebhooksStatus();
+
     setIsLoading(false);
     notifyListeners();
   }
 
-  void saveSettings() async {
+  Future<void> saveSettings() async {
     if (savingSettingsLoading) return;
     setIsLoading(true);
     final prefs = SharedPreferencesUtil();
@@ -179,7 +221,7 @@ class DeveloperModeProvider extends BaseProvider {
     var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     try {
-      Future.wait([w1, w2, w3, w4]);
+      await Future.wait([w1, w2, w3, w4]);
       prefs.webhookAudioBytes = webhookAudioBytes.text;
       prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
       prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
@@ -187,6 +229,9 @@ class DeveloperModeProvider extends BaseProvider {
       prefs.webhookDaySummary = webhookDaySummary.text;
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
+      setIsLoading(false);
+      AppSnackbar.showSnackbarError('Failed to save webhook settings. Please try again.');
+      return;
     }
     // Experimental
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
@@ -220,5 +265,16 @@ class DeveloperModeProvider extends BaseProvider {
   void onAutoCreateSpeakersChanged(var value) {
     autoCreateSpeakersEnabled = value;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    webhookOnConversationCreated.dispose();
+    webhookOnTranscriptReceived.dispose();
+    webhookAudioBytes.dispose();
+    webhookAudioBytesDelay.dispose();
+    webhookWsAudioBytes.dispose();
+    webhookDaySummary.dispose();
+    super.dispose();
   }
 }

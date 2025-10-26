@@ -108,6 +108,14 @@ class SharedPreferencesUtil {
 
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
+  bool get webhookOnlyModeEnabled => getBool('webhookOnlyModeEnabled') ?? true;
+
+  set webhookOnlyModeEnabled(bool value) => saveBool('webhookOnlyModeEnabled', value);
+
+  int get batteryOptimizationLevel => getInt('batteryOptimizationLevel') ?? 2;
+
+  set batteryOptimizationLevel(int value) => saveInt('batteryOptimizationLevel', value);
+
   set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
 
   bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;

@@ -1,0 +1,239 @@
+# Omi App - Flutter Development Commands
+# Install just: cargo install just
+# Usage: just <command>
+
+# Default device ID - change if you have multiple devices
+DEVICE := "57081FDCH0047C"
+PACKAGE := "com.friend.ios"
+
+# List all available commands
+default:
+    @just --list
+
+# === Quick Development Workflows ===
+
+# Build and install to phone (most common workflow)
+deploy: build-debug install
+
+# Full clean rebuild and install
+fresh: clean build-debug install
+
+# Quick rebuild (no clean)
+quick: build-debug install
+
+# Kill app, uninstall, rebuild, install (clean slate)
+nuke: kill uninstall clean build-debug install
+
+# === Build Commands ===
+
+# Build debug APK
+build-debug:
+    @echo "🔨 Building debug APK..."
+    flutter build apk --flavor dev --debug
+
+# Build release APK
+build-release:
+    @echo "🔨 Building release APK..."
+    flutter build apk --release
+
+# Build release APK (production flavor)
+build-prod:
+    @echo "🔨 Building production APK..."
+    flutter build apk --flavor prod --release
+
+# Clean build artifacts
+clean:
+    @echo "🧹 Cleaning build artifacts..."
+    flutter clean
+    flutter pub get
+
+# === Install Commands ===
+
+# Install debug APK to phone
+install:
+    @echo "📱 Installing to device {{DEVICE}}..."
+    adb -s {{DEVICE}} install -r build/app/outputs/flutter-apk/app-dev-debug.apk
+
+# Install production APK to phone
+install-prod:
+    @echo "📱 Installing production APK to device {{DEVICE}}..."
+    adb -s {{DEVICE}} install -r build/app/outputs/flutter-apk/app-prod-release.apk
+
+# Uninstall app from phone
+uninstall:
+    @echo "🗑️  Uninstalling {{PACKAGE}} from device {{DEVICE}}..."
+    -adb -s {{DEVICE}} uninstall {{PACKAGE}}
+
+# === App Control ===
+
+# Kill the running app
+kill:
+    @echo "💀 Killing app..."
+    -adb -s {{DEVICE}} shell am force-stop {{PACKAGE}}
+
+# Launch the app
+launch:
+    @echo "🚀 Launching app..."
+    adb -s {{DEVICE}} shell monkey -p {{PACKAGE}} 1
+
+# Restart app (kill + launch)
+restart: kill launch
+
+# === Logs & Debugging ===
+
+# View app logs (filtered)
+logs:
+    @echo "📋 Viewing logs (Ctrl+C to stop)..."
+    adb -s {{DEVICE}} logcat | grep -E "Flutter|Omi|Webhook"
+
+# View all logs
+logs-all:
+    @echo "📋 Viewing all logs (Ctrl+C to stop)..."
+    adb -s {{DEVICE}} logcat
+
+# Clear logcat buffer and start fresh
+logs-clear:
+    @echo "🧹 Clearing logcat..."
+    adb -s {{DEVICE}} logcat -c
+    @echo "📋 Viewing fresh logs..."
+    adb -s {{DEVICE}} logcat | grep -E "Flutter|Omi|Webhook"
+
+# View crash logs only
+logs-crash:
+    @echo "💥 Viewing crash logs..."
+    adb -s {{DEVICE}} logcat | grep -E "FATAL|AndroidRuntime|ERROR"
+
+# === Testing ===
+
+# Run all tests
+test:
+    @echo "🧪 Running all tests..."
+    flutter test
+
+# Run specific test file
+test-file FILE:
+    @echo "🧪 Running {{FILE}}..."
+    flutter test {{FILE}}
+
+# Run tests with coverage
+test-coverage:
+    @echo "🧪 Running tests with coverage..."
+    ./test_coverage.sh
+
+# Run webhook-related tests only
+test-webhook:
+    @echo "🧪 Running webhook tests..."
+    flutter test test/backend/preferences_webhook_test.dart test/providers/developer_mode_provider_test.dart
+
+# Generate and view coverage report (requires lcov)
+coverage:
+    @echo "📊 Generating coverage report..."
+    flutter test --coverage test/backend/preferences_webhook_test.dart test/providers/developer_mode_provider_test.dart
+    genhtml coverage/lcov.info -o coverage/html
+    @echo "✅ Coverage report generated at coverage/html/index.html"
+    xdg-open coverage/html/index.html 2>/dev/null || open coverage/html/index.html 2>/dev/null || echo "Open coverage/html/index.html manually"
+
+# === Device Info ===
+
+# List connected devices
+devices:
+    @echo "📱 Connected devices:"
+    adb devices -l
+
+# Show device info
+device-info:
+    @echo "📱 Device info for {{DEVICE}}:"
+    adb -s {{DEVICE}} shell getprop | grep -E "ro.product.model|ro.build.version"
+
+# Show app info
+app-info:
+    @echo "📦 App info:"
+    adb -s {{DEVICE}} shell dumpsys package {{PACKAGE}} | grep -E "versionName|versionCode"
+
+# Check battery usage
+battery:
+    @echo "🔋 Battery stats for {{PACKAGE}}:"
+    adb -s {{DEVICE}} shell dumpsys batterystats | grep -i {{PACKAGE}}
+
+# === Database & Storage ===
+
+# Clear app data (keeps app installed)
+clear-data:
+    @echo "🗑️  Clearing app data..."
+    adb -s {{DEVICE}} shell pm clear {{PACKAGE}}
+
+# Pull app database (requires root or debug build)
+pull-db:
+    @echo "💾 Pulling database..."
+    adb -s {{DEVICE}} shell run-as {{PACKAGE}} cat databases/app.db > app_backup.db
+    @echo "✅ Database saved to app_backup.db"
+
+# === Dependency Management ===
+
+# Update Flutter dependencies
+deps-update:
+    @echo "📦 Updating dependencies..."
+    flutter pub upgrade
+
+# Get dependencies
+deps-get:
+    @echo "📦 Getting dependencies..."
+    flutter pub get
+
+# Outdated dependencies check
+deps-outdated:
+    @echo "📦 Checking for outdated dependencies..."
+    flutter pub outdated
+
+# === Code Quality ===
+
+# Run Flutter analyzer
+analyze:
+    @echo "🔍 Running Flutter analyzer..."
+    flutter analyze
+
+# Format code
+format:
+    @echo "✨ Formatting code..."
+    dart format lib/ test/
+
+# Run all quality checks (format, analyze, test)
+check: format analyze test
+
+# === Screenshots & Screen Recording ===
+
+# Take screenshot
+screenshot:
+    @echo "📸 Taking screenshot..."
+    adb -s {{DEVICE}} shell screencap -p /sdcard/screenshot.png
+    adb -s {{DEVICE}} pull /sdcard/screenshot.png screenshot_$(date +%Y%m%d_%H%M%S).png
+    @echo "✅ Screenshot saved"
+
+# Start screen recording (30 seconds max)
+record:
+    @echo "🎥 Recording screen (30 seconds, Ctrl+C to stop early)..."
+    adb -s {{DEVICE}} shell screenrecord /sdcard/recording.mp4 &
+    @echo "Recording started. Press Ctrl+C when done..."
+
+# Stop recording and pull video
+record-pull:
+    @echo "⏹️  Stopping recording..."
+    adb -s {{DEVICE}} shell pkill -SIGINT screenrecord
+    sleep 2
+    adb -s {{DEVICE}} pull /sdcard/recording.mp4 recording_$(date +%Y%m%d_%H%M%S).mp4
+    @echo "✅ Recording saved"
+
+# === Common Workflows ===
+
+# Morning setup: clean, build, install, launch
+morning: clean build-debug install launch logs-clear
+
+# Quick test workflow: test, build, install
+quick-test: test build-debug install
+
+# Pre-commit: format, analyze, test
+pre-commit: format analyze test
+
+# Release workflow: test, clean, build release
+release: test clean build-release
+    @echo "✅ Release APK ready at build/app/outputs/flutter-apk/app-release.apk"

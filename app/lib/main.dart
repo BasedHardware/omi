@@ -131,8 +131,32 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
-  bool isAuth = (await AuthService.instance.getIdToken()) != null;
-  if (isAuth) PlatformManager.instance.mixpanel.identify();
+  if (SharedPreferencesUtil().webhookOnlyModeEnabled) {
+    debugPrint('🔧 WEBHOOK-ONLY MODE DETECTED');
+
+    if (SharedPreferencesUtil().uid.isEmpty) {
+      final anonymousUid = 'webhook-anonymous-${DateTime.now().millisecondsSinceEpoch}';
+      await SharedPreferencesUtil().saveString('uid', anonymousUid);
+      debugPrint('✅ Generated anonymous UID: $anonymousUid');
+    } else {
+      debugPrint('✅ Using existing UID: ${SharedPreferencesUtil().uid}');
+    }
+
+    await SharedPreferencesUtil().saveBool('onboardingCompleted', true);
+    debugPrint('✅ Set onboardingCompleted = true');
+
+    // Verify it was set
+    final verified = SharedPreferencesUtil().onboardingCompleted;
+    debugPrint('✅ Verified onboardingCompleted = $verified');
+
+    debugPrint('🔧 Webhook-only mode: Skipping authentication and onboarding');
+  }
+
+  bool isAuth = false;
+  if (!SharedPreferencesUtil().webhookOnlyModeEnabled) {
+    isAuth = (await AuthService.instance.getIdToken()) != null;
+    if (isAuth) PlatformManager.instance.mixpanel.identify();
+  }
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -142,7 +166,7 @@ Future _init() async {
   }
 
   await CrashlyticsManager.init();
-  if (isAuth) {
+  if (isAuth && !SharedPreferencesUtil().webhookOnlyModeEnabled) {
     PlatformManager.instance.crashReporter.identifyUser(
       FirebaseAuth.instance.currentUser?.email ?? '',
       SharedPreferencesUtil().fullName,
