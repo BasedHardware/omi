@@ -20,6 +20,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
@@ -82,6 +83,17 @@ class CaptureProvider extends ChangeNotifier
 
   List<int> _systemAudioBuffer = [];
   bool _systemAudioCaching = true;
+
+  // BLE streaming metrics
+  int _blesBytesReceived = 0;
+  int _wsSocketBytesSent = 0;
+  double _bleReceiveRateKbps = 0.0;
+  double _wsSendRateKbps = 0.0;
+  DateTime? _metricsLastCalculated;
+  Timer? _metricsTimer;
+
+  double get bleReceiveRateKbps => _bleReceiveRateKbps;
+  double get wsSendRateKbps => _wsSendRateKbps;
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
@@ -330,18 +342,23 @@ class CaptureProvider extends ChangeNotifier
   Future streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
+    _startMetricsTracking();
     _bleBytesStream = await _getBleAudioBytesListener(deviceId, onAudioBytesReceived: (List<int> value) {
       final snapshot = List<int>.from(value);
       if (snapshot.isEmpty || snapshot.length < 3) return;
 
+      // Track bytes received from BLE
+      _blesBytesReceived += snapshot.length;
+
       // Command button triggered
-      if (_voiceCommandSession != null) {
+      bool voiceCommandSupported = _recordingDevice != null ? (_recordingDevice?.type == DeviceType.omi) : false;
+      if (_voiceCommandSession != null && voiceCommandSupported) {
         _commandBytes.add(snapshot.sublist(3));
       }
 
-      // Local sync
-      // Support: opus codec
-      var checkWalSupported = codec.isOpusSupported() &&
+      // Local storage syncs
+      var checkWalSupported = _recordingDevice?.type == DeviceType.omi &&
+          codec.isOpusSupported() &&
           (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
@@ -352,8 +369,12 @@ class CaptureProvider extends ChangeNotifier
 
       // Send WS
       if (_socket?.state == SocketServiceState.connected) {
-        final trimmedValue = value.sublist(3);
+        final leftPadding = _recordingDevice?.type == DeviceType.omi ? 3 : 0;
+        final trimmedValue = leftPadding > 0 ? value.sublist(leftPadding) : value;
         _socket?.send(trimmedValue);
+
+        // Track bytes sent to websocket
+        _wsSocketBytesSent += trimmedValue.length;
 
         // Mark as synced
         if (_isWalSupported) {
@@ -517,9 +538,56 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  void _startMetricsTracking() {
+    _blesBytesReceived = 0;
+    _wsSocketBytesSent = 0;
+    _bleReceiveRateKbps = 0.0;
+    _wsSendRateKbps = 0.0;
+    _metricsLastCalculated = DateTime.now();
+
+    _metricsTimer?.cancel();
+    _metricsTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _calculateMetricsRates();
+    });
+  }
+
+  void _calculateMetricsRates() {
+    final now = DateTime.now();
+    if (_metricsLastCalculated == null) {
+      _metricsLastCalculated = now;
+      return;
+    }
+
+    final elapsedSeconds = now.difference(_metricsLastCalculated!).inMilliseconds / 1000.0;
+    if (elapsedSeconds > 0) {
+      // Calculate kbps (kilobits per second)
+      _bleReceiveRateKbps = (_blesBytesReceived * 8) / (elapsedSeconds * 1000);
+      _wsSendRateKbps = (_wsSocketBytesSent * 8) / (elapsedSeconds * 1000);
+
+      // Reset counters for next interval
+      _blesBytesReceived = 0;
+      _wsSocketBytesSent = 0;
+      _metricsLastCalculated = now;
+
+      notifyListeners();
+    }
+  }
+
+  void _stopMetricsTracking() {
+    _metricsTimer?.cancel();
+    _metricsTimer = null;
+    _blesBytesReceived = 0;
+    _wsSocketBytesSent = 0;
+    _bleReceiveRateKbps = 0.0;
+    _wsSendRateKbps = 0.0;
+    _metricsLastCalculated = null;
+    notifyListeners();
+  }
+
   Future _closeBleStream() async {
     await _bleBytesStream?.cancel();
     await _blePhotoStream?.cancel();
+    _stopMetricsTracking();
     if (_recordingDevice != null) {
       var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
       if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
@@ -537,6 +605,7 @@ class CaptureProvider extends ChangeNotifier
     _keepAliveTimer?.cancel();
     _connectionStateListener?.cancel();
     _recordingTimer?.cancel();
+    _metricsTimer?.cancel();
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
