@@ -1024,7 +1024,12 @@ async def _listen(
                         last_usage_record_timestamp = first_audio_byte_timestamp
                     data = message.get("bytes")
                     if codec == 'opus' and sample_rate == 16000:
-                        data = decoder.decode(bytes(data), frame_size=frame_size)
+                        try:
+                            data = decoder.decode(bytes(data), frame_size=frame_size)
+                        except:
+                            # TODO: dealing with #3296, remove soon
+                            data = data[3:]
+                            data = decoder.decode(bytes(data), frame_size=frame_size)
 
                     if soniox_socket is not None:
                         elapsed_seconds = time.time() - timer_start
