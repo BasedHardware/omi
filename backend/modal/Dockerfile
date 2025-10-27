@@ -18,7 +18,6 @@ RUN apt-get update && apt-get -y install build-essential ffmpeg curl unzip wget 
 wget https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
 dpkg -i cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
 cp /var/cuda-repo-debian12-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
-add-apt-repository contrib && \
 apt-get update && \
 apt-get -y install cuda-toolkit-12-6 && \
 rm -rf /var/lib/apt/lists/* cuda-repo-debian11-12-6-local_12.6.3-560.35.05-1_amd64.deb
