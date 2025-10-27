@@ -208,19 +208,43 @@ class _FoundDevicesState extends State<FoundDevices> {
             if (provider.isConnected)
               Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text(
-                    '🔋 ${provider.batteryPercentage.toString()}%',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 18,
-                      color: provider.batteryPercentage <= 25
-                          ? Colors.red
-                          : provider.batteryPercentage > 25 && provider.batteryPercentage <= 50
-                              ? Colors.orange
-                              : Colors.green,
-                    ),
-                  ))
+                  child: provider.batteryPercentage != null
+                      ? Text(
+                          '🔋 ${provider.batteryPercentage}%',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 18,
+                            color: provider.batteryPercentage! <= 25
+                                ? Colors.red
+                                : provider.batteryPercentage! <= 50
+                                    ? Colors.orange
+                                    : Colors.green,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Checking…',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 18,
+                                color: Color(0xCCFFFFFF),
+                              ),
+                            ),
+                          ],
+                        ))
           ],
         ),
       );
