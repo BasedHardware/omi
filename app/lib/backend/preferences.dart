@@ -76,6 +76,29 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  // -------------------------- Battery Persistence --------------------------- //
+  int? getLastBatteryLevel(String deviceId) {
+    if (deviceId.isEmpty) return null;
+    return getInt('lastBattery:$deviceId');
+  }
+
+  DateTime? getLastBatteryTimestamp(String deviceId) {
+    if (deviceId.isEmpty) return null;
+    final ts = getInt('lastBatteryTs:$deviceId');
+    if (ts == null) return null;
+    try {
+      return DateTime.fromMillisecondsSinceEpoch(ts);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveLastBatteryLevel(String deviceId, int level, DateTime timestamp) async {
+    if (deviceId.isEmpty) return;
+    await saveInt('lastBattery:$deviceId', level);
+    await saveInt('lastBatteryTs:$deviceId', timestamp.millisecondsSinceEpoch);
+  }
+
   //----------------------------- Permissions ---------------------------------//
 
   set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);

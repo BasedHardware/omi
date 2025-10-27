@@ -24,9 +24,10 @@ import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
+  VoidCallback? _deviceProviderListener;
   bool isClicked = false;
   bool isConnected = false;
-  int batteryPercentage = -1;
+  int? batteryPercentage;
   String deviceName = '';
   String deviceId = '';
   String? connectingToDeviceId;
@@ -391,8 +392,37 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
   //----------------- Onboarding Permissions -----------------
 
+  void _detachDeviceProviderListener() {
+    if (deviceProvider != null && _deviceProviderListener != null) {
+      deviceProvider!.removeListener(_deviceProviderListener!);
+    }
+    _deviceProviderListener = null;
+  }
+
+  void _attachDeviceProviderListener({bool immediateOnly = false}) {
+    if (deviceProvider == null || _deviceProviderListener != null) {
+      return;
+    }
+    _deviceProviderListener = () {
+      final latest = deviceProvider!.lastKnownBatteryLevel;
+      if (latest != null && latest >= 0) {
+        batteryPercentage = latest;
+        notifyListeners();
+      }
+      if (deviceProvider!.hasBatteryReading || immediateOnly) {
+        _detachDeviceProviderListener();
+      }
+    };
+    deviceProvider!.addListener(_deviceProviderListener!);
+  }
+
   void setDeviceProvider(DeviceProvider provider) {
+    if (deviceProvider == provider) return;
+    _detachDeviceProviderListener();
     deviceProvider = provider;
+    final latest = deviceProvider!.lastKnownBatteryLevel;
+    batteryPercentage = latest;
+    _attachDeviceProviderListener(immediateOnly: latest == null);
   }
 
   // Method to handle taps on devices
@@ -415,12 +445,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         deviceProvider!.setConnectedDevice(cDevice);
+        _attachDeviceProviderListener(immediateOnly: batteryPercentage == null);
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
       await deviceProvider?.scanAndConnectToDevice();
       var connectedDevice = deviceProvider!.connectedDevice;
-      batteryPercentage = deviceProvider!.batteryLevel;
+      batteryPercentage = deviceProvider!.lastKnownBatteryLevel;
       isConnected = true;
       isClicked = false;
       connectingToDeviceId = null; // Reset the connecting device
@@ -449,7 +480,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   void deviceAlreadyUnpaired() {
-    batteryPercentage = -1;
+    batteryPercentage = null;
     isConnected = false;
     deviceName = '';
     deviceId = '';
@@ -493,6 +524,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   @override
   void dispose() {
     _didNotMakeItTimer.cancel();
+    _detachDeviceProviderListener();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }

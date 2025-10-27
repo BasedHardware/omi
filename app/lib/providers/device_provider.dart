@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
@@ -48,7 +49,67 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
+  // Battery handling state
+  bool _awaitingFreshBattery = false;
+  bool get isAwaitingFreshBattery => _awaitingFreshBattery;
+  bool get hasBatteryReading => !_awaitingFreshBattery && batteryLevel >= 0;
+  int? get lastKnownBatteryLevel => batteryLevel >= 0 ? batteryLevel : _lastPersistedBattery;
+
+  int? _lastPersistedBattery;
+  DateTime? _batteryLastUpdatedAt;
+  DateTime? _previousBatteryTimestamp;
+  int? _baselineBeforeReconnect;
+  DateTime? _riseWindowStart;
+  int? _riseWindowMinValue;
+  int? _riseWindowMaxValue;
+  int? _riseWindowLastSample;
+  int _riseWindowDistinctSteps = 0;
+  bool _isPrimingBattery = false;
+  Timer? _batteryPrimeRetryTimer;
+
+  static const int _riseIncreaseThreshold = 5;
+  static const int _firstRiseCap = 10;
+  static const int _requiredRiseSteps = 2;
+  static const int _riseStepMinimumDelta = 1;
+  static const Duration _baselineStaleThreshold = Duration(hours: 6);
+  static const double _riseWindowEmaAlpha = 0.3;
+  int _riseWindowMs = 45000;
+
+  // Non-charging rise suppression and stabilization
+  static const Duration _noRiseSuppressDuration = Duration(seconds: 45);
+  static const int _nonChargingRiseSoftCap = 2;
+  static const Duration _nonChargingStableWindow = Duration(minutes: 3);
+  static const Duration _earlyAttachWindow = Duration(seconds: 12);
+  static const int _earlyAttachNeededSamples = 3;
+  DateTime? _noRiseUntil;
+  DateTime? _ncStableStart;
+  int? _ncStableMin;
+  int? _ncStableMax;
+  DateTime _appStartedAt = DateTime.now();
+  final List<int> _earlyAttachSamples = [];
+
+  // Telemetry and charging detection
+  static const int _metricsLogEvery = 12;
+  static const int _chargingRiseMinSamples = 3;
+  static const int _chargingRiseMinDelta = 3;
+  static const Duration _chargingObservationWindow = Duration(minutes: 2);
+  static const int _defaultStableStreakThreshold = 20;
+  DateTime? _lastBatteryEventAt;
+  int _batteryEventCount = 0;
+  double _batteryIntervalSumMs = 0;
+  int? _lastRawSample;
+  int _sameValueStreak = 0;
+  int _maxSameValueStreak = 0;
+  final List<int> _recentStreakLengths = [];
+  static const int _recentStreakWindow = 10;
+  int _chargingRiseSamples = 0;
+  int _chargingRiseDelta = 0;
+  DateTime? _chargingWindowStart;
+  int? _chargingLastRaw;
+  bool _chargingLikely = false;
+
   DeviceProvider() {
+    _appStartedAt = DateTime.now();
     ServiceManager.instance().device.subscribe(this, this);
   }
 
@@ -60,6 +121,61 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void setConnectedDevice(BtDevice? device) async {
     connectedDevice = device;
     pairedDevice = device;
+
+    if (connectedDevice != null) {
+      final id = connectedDevice!.id;
+      final cached = SharedPreferencesUtil().getLastBatteryLevel(id);
+      final ts = SharedPreferencesUtil().getLastBatteryTimestamp(id);
+      _lastPersistedBattery = cached;
+      _batteryLastUpdatedAt = ts;
+      _previousBatteryTimestamp = ts;
+      _baselineBeforeReconnect = cached;
+      final storedWindow = SharedPreferencesUtil().getInt('batteryRiseWindow:$id');
+      if (storedWindow != null) {
+        _riseWindowMs = storedWindow.clamp(20000, 90000);
+      } else {
+        _riseWindowMs = 45000;
+      }
+
+      if (cached != null && cached >= 0) {
+        batteryLevel = cached;
+      } else {
+        batteryLevel = -1;
+      }
+
+      _awaitingFreshBattery = true;
+      notifyListeners();
+
+      // Initialize non-charging suppression window and stabilization trackers
+      final now = DateTime.now();
+      _noRiseUntil = now.add(_noRiseSuppressDuration);
+      _ncStableStart = null;
+      _ncStableMin = null;
+      _ncStableMax = null;
+      _earlyAttachSamples.clear();
+
+      await initiateBleBatteryListener();
+      _primeBatteryLevel();
+    } else {
+      _awaitingFreshBattery = false;
+      _baselineBeforeReconnect = null;
+      _noRiseUntil = null;
+      _ncStableStart = null;
+      _ncStableMin = null;
+      _ncStableMax = null;
+      _earlyAttachSamples.clear();
+      _lastRawSample = null;
+      _sameValueStreak = 0;
+      _maxSameValueStreak = 0;
+      _recentStreakLengths.clear();
+      _batteryEventCount = 0;
+      _batteryIntervalSumMs = 0;
+      _lastBatteryEventAt = null;
+      _batteryPrimeRetryTimer?.cancel();
+      _batteryPrimeRetryTimer = null;
+      _isPrimingBattery = false;
+    }
+
     await getDeviceInfo();
     Logger.debug('setConnectedDevice: $device');
     notifyListeners();
@@ -130,20 +246,463 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
-        batteryLevel = value;
-        if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
+        _handleIncomingBatteryValue(value);
+        if (batteryLevel >= 0 && batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           NotificationService.instance.createNotification(
             title: "Low Battery Alert",
             body: "Your device is running low on battery. Time for a recharge! 🔋",
           );
-        } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = true;
+        } else if (batteryLevel >= 20) {
+          _hasLowBatteryAlerted = false;
         }
-        notifyListeners();
       },
     );
     notifyListeners();
+  }
+
+  void _persistBatteryLevel(int level, DateTime timestamp) {
+    final id = connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+    if (id.isEmpty) return;
+    _lastPersistedBattery = level;
+    _batteryLastUpdatedAt = timestamp;
+    _previousBatteryTimestamp = timestamp;
+    SharedPreferencesUtil().saveLastBatteryLevel(id, level, timestamp);
+  }
+
+  void _recordBatteryMetrics(int rawValue, DateTime now) {
+    if (_lastBatteryEventAt != null) {
+      _batteryIntervalSumMs += now.difference(_lastBatteryEventAt!).inMilliseconds;
+    }
+    _batteryEventCount++;
+
+    if (_lastRawSample != null && rawValue == _lastRawSample) {
+      _sameValueStreak++;
+    } else {
+      if (_lastRawSample != null) {
+        _recentStreakLengths.add(_sameValueStreak);
+        if (_recentStreakLengths.length > _recentStreakWindow) {
+          _recentStreakLengths.removeAt(0);
+        }
+        Logger.debug(
+            'Battery repetition: value=$_lastRawSample count=$_sameValueStreak avg=${_calculateAverageStreak().toStringAsFixed(1)}');
+      }
+      _sameValueStreak = 1;
+    }
+    if (_sameValueStreak > _maxSameValueStreak) {
+      _maxSameValueStreak = _sameValueStreak;
+    }
+
+    _lastRawSample = rawValue;
+    _lastBatteryEventAt = now;
+
+    assert(() {
+      Logger.debug(
+          'Battery sample $_batteryEventCount value=$rawValue streak=$_sameValueStreak baseline=${_baselineBeforeReconnect ?? _lastPersistedBattery}');
+      return true;
+    }());
+
+    if (_batteryEventCount % _metricsLogEvery == 0) {
+      final avgSeconds = _batteryEventCount <= 1
+          ? 0
+          : (_batteryIntervalSumMs / (_batteryEventCount - 1)) / 1000;
+      Logger.debug(
+          'Battery cadence: events=$_batteryEventCount avg=${avgSeconds.toStringAsFixed(1)}s maxStreak=$_maxSameValueStreak');
+    }
+  }
+
+  void _resetChargingMonitor() {
+    _chargingRiseSamples = 0;
+    _chargingRiseDelta = 0;
+    _chargingWindowStart = null;
+    _chargingLastRaw = null;
+    _chargingLikely = false;
+  }
+
+  double _calculateAverageStreak() {
+    if (_recentStreakLengths.isEmpty) {
+      return _defaultStableStreakThreshold.toDouble();
+    }
+    final total = _recentStreakLengths.fold<int>(0, (sum, value) => sum + value);
+    return total / _recentStreakLengths.length;
+  }
+
+  int _requiredStableStreakLength() {
+    final average = _calculateAverageStreak();
+    return math.max(5, average.ceil());
+  }
+
+  void _updateChargingMonitor(int rawValue, int baseline, DateTime now) {
+    if (rawValue <= baseline) {
+      _resetChargingMonitor();
+      return;
+    }
+
+    if (_chargingLastRaw != null && rawValue < _chargingLastRaw!) {
+      _resetChargingMonitor();
+    }
+
+    if (_chargingRiseSamples == 0) {
+      _chargingWindowStart = now;
+      _chargingRiseDelta = rawValue - baseline;
+      _chargingRiseSamples = 1;
+    } else {
+      _chargingRiseDelta += rawValue - (_chargingLastRaw ?? rawValue);
+      _chargingRiseSamples++;
+    }
+
+    final window = _chargingWindowStart == null ? Duration.zero : now.difference(_chargingWindowStart!);
+    if (_chargingRiseSamples >= _chargingRiseMinSamples &&
+        (rawValue - baseline) >= _chargingRiseMinDelta &&
+        window <= _chargingObservationWindow) {
+      _chargingLikely = true;
+    }
+
+    _chargingLastRaw = rawValue;
+  }
+
+  bool _shouldAcceptStableRise(int rawValue, int baseline) {
+    if (rawValue <= baseline) {
+      return false;
+    }
+    if (_sameValueStreak < 3) {
+      return false;
+    }
+
+    final threshold = _requiredStableStreakLength();
+    if (_sameValueStreak < threshold) {
+      return false;
+    }
+
+    // Guard against unrealistically high jumps.
+    if (rawValue > baseline + _firstRiseCap) {
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _handleIncomingBatteryValue(int rawValue, {DateTime? timestamp}) {
+    if (rawValue < 0 || rawValue > 100) {
+      return false;
+    }
+
+    final now = timestamp ?? DateTime.now();
+    _recordBatteryMetrics(rawValue, now);
+    final baselineCandidate = _baselineBeforeReconnect ?? _lastPersistedBattery;
+    final hasBaseline = baselineCandidate != null;
+    final attachElapsed = now.difference(_appStartedAt);
+
+    // First ever reading: accept immediately
+    if (_riseWindowStart == null && !hasBaseline && _lastPersistedBattery == null) {
+      return _finalizeAndApply(rawValue, now);
+    }
+
+    if (hasBaseline) {
+      final baselineAge = _batteryLastUpdatedAt == null ? Duration.zero : now.difference(_batteryLastUpdatedAt!);
+      final baselineStale = baselineAge > _baselineStaleThreshold;
+      if (!baselineStale && rawValue > baselineCandidate! + _riseIncreaseThreshold) {
+        final allowEarlyAttach = _awaitingFreshBattery && attachElapsed <= _earlyAttachWindow;
+        if (!allowEarlyAttach) {
+          if (!_isPrimingBattery) {
+            _primeBatteryLevel();
+          }
+          return false;
+        }
+      }
+    }
+
+    if (!_awaitingFreshBattery) {
+      // Ongoing mode: conservative acceptance when not charging.
+      final display = batteryLevel >= 0 ? batteryLevel : (_lastPersistedBattery ?? rawValue);
+      final baseline = _baselineBeforeReconnect ?? _lastPersistedBattery ?? display;
+
+      int nextValue;
+      if (rawValue <= display) {
+        // Immediate drops are accepted; allow baseline to move down only.
+        nextValue = rawValue;
+        _ncStableStart = null;
+        _ncStableMin = null;
+        _ncStableMax = null;
+        if (_earlyAttachSamples.isNotEmpty) {
+          _earlyAttachSamples.clear();
+        }
+        _resetChargingMonitor();
+      } else if (attachElapsed <= _earlyAttachWindow) {
+        _earlyAttachSamples.add(rawValue);
+        if (_earlyAttachSamples.length > 5) {
+          _earlyAttachSamples.removeAt(0);
+        }
+        final minSample = _earlyAttachSamples.reduce(math.min);
+        final maxSample = _earlyAttachSamples.reduce(math.max);
+        final stable = _earlyAttachSamples.length >= _earlyAttachNeededSamples && (maxSample - minSample) <= 1;
+        if (stable) {
+          nextValue = math.min(rawValue, baseline + _firstRiseCap);
+          _noRiseUntil = null;
+          _ncStableStart = null;
+          _ncStableMin = null;
+          _ncStableMax = null;
+          _earlyAttachSamples.clear();
+          _resetChargingMonitor();
+        } else {
+          return false;
+        }
+      } else if (rawValue > baseline) {
+        if (_earlyAttachSamples.isNotEmpty) {
+          _earlyAttachSamples.clear();
+        }
+        _updateChargingMonitor(rawValue, baseline, now);
+        if (_shouldAcceptStableRise(rawValue, baseline)) {
+          nextValue = math.min(rawValue, baseline + _firstRiseCap);
+          _ncStableStart = null;
+          _ncStableMin = null;
+          _ncStableMax = null;
+          _resetChargingMonitor();
+        } else {
+          // Suppress initial rises for a short window after reconnect; always accept drops earlier.
+          if (_noRiseUntil != null && now.isBefore(_noRiseUntil!)) {
+            return false;
+          }
+        // Potential rise while not charging.
+        if (rawValue <= baseline + _nonChargingRiseSoftCap) {
+          nextValue = rawValue;
+          _ncStableStart = null;
+          _ncStableMin = null;
+          _ncStableMax = null;
+          _resetChargingMonitor();
+        } else {
+          // Require a long, stable plateau before accepting a larger rise.
+          if (_chargingLikely) {
+            nextValue = math.min(rawValue, baseline + _firstRiseCap);
+            _ncStableStart = null;
+            _ncStableMin = null;
+            _ncStableMax = null;
+            _resetChargingMonitor();
+          } else if (_ncStableStart == null) {
+            _ncStableStart = now;
+            _ncStableMin = rawValue;
+            _ncStableMax = rawValue;
+            return false;
+          } else {
+            _ncStableMin = (_ncStableMin == null) ? rawValue : math.min(_ncStableMin!, rawValue);
+            _ncStableMax = (_ncStableMax == null) ? rawValue : math.max(_ncStableMax!, rawValue);
+            final elapsed = now.difference(_ncStableStart!);
+            final jitter = (_ncStableMax! - _ncStableMin!).abs();
+            if (elapsed >= _nonChargingStableWindow && jitter <= 1) {
+              nextValue = math.min(rawValue, baseline + _firstRiseCap);
+              _ncStableStart = null;
+              _ncStableMin = null;
+              _ncStableMax = null;
+              _resetChargingMonitor();
+            } else {
+              return false;
+            }
+          }
+        }
+        }
+      } else {
+        // rawValue <= baseline but greater than display; accept but clamp naturally by value.
+        nextValue = rawValue;
+        _ncStableStart = null;
+        _ncStableMin = null;
+        _ncStableMax = null;
+        if (_earlyAttachSamples.isNotEmpty) {
+          _earlyAttachSamples.clear();
+        }
+        _resetChargingMonitor();
+      }
+
+      if (batteryLevel != nextValue) {
+        batteryLevel = nextValue;
+        _persistBatteryLevel(nextValue, now);
+        notifyListeners();
+      } else {
+        _persistBatteryLevel(nextValue, now);
+      }
+
+      // Baseline: only decrease; allow promotion when we deliberately accept a stabilized rise.
+      if (_baselineBeforeReconnect == null || nextValue <= _baselineBeforeReconnect!) {
+        _baselineBeforeReconnect = nextValue;
+      } else if (attachElapsed <= _earlyAttachWindow) {
+        _baselineBeforeReconnect = nextValue;
+      }
+      return true;
+    }
+
+    if (_awaitingFreshBattery) {
+      if (baselineCandidate != null && attachElapsed <= _earlyAttachWindow && rawValue > baselineCandidate) {
+        _earlyAttachSamples.add(rawValue);
+        if (_earlyAttachSamples.length > 5) {
+          _earlyAttachSamples.removeAt(0);
+        }
+        final minSample = _earlyAttachSamples.reduce(math.min);
+        final maxSample = _earlyAttachSamples.reduce(math.max);
+        final stable = _earlyAttachSamples.length >= _earlyAttachNeededSamples && (maxSample - minSample) <= 1;
+        if (stable) {
+          _noRiseUntil = null;
+          _ncStableStart = null;
+          _ncStableMin = null;
+          _ncStableMax = null;
+          _resetChargingMonitor();
+          return _finalizeAndApply(rawValue, now);
+        }
+        return false;
+      }
+    }
+
+    if (_riseWindowStart == null) {
+      _riseWindowStart = now;
+      _riseWindowMinValue = rawValue;
+      _riseWindowMaxValue = rawValue;
+      _riseWindowLastSample = rawValue;
+      _riseWindowDistinctSteps = 0;
+    } else {
+      _riseWindowMinValue = _riseWindowMinValue == null ? rawValue : math.min(_riseWindowMinValue!, rawValue);
+      _riseWindowMaxValue = _riseWindowMaxValue == null ? rawValue : math.max(_riseWindowMaxValue!, rawValue);
+      if (_riseWindowLastSample != null && rawValue > _riseWindowLastSample!) {
+        if (rawValue - _riseWindowLastSample! >= _riseStepMinimumDelta) {
+          _riseWindowDistinctSteps++;
+        }
+      }
+      _riseWindowLastSample = rawValue;
+    }
+
+    if (baselineCandidate != null && rawValue <= baselineCandidate) {
+      return _finalizeAndApply(rawValue, now);
+    }
+
+    if (baselineCandidate != null) {
+      final elapsedMs = now.difference(_riseWindowStart!).inMilliseconds;
+      final minVal = _riseWindowMinValue ?? rawValue;
+      final maxVal = _riseWindowMaxValue ?? rawValue;
+      final sustainedRise = minVal >= baselineCandidate + _riseIncreaseThreshold;
+      final sawRamp = _riseWindowDistinctSteps >= _requiredRiseSteps;
+      final plateauSpan = (maxVal - minVal).abs();
+      final stableRise = sustainedRise && plateauSpan <= 1 && elapsedMs >= _riseWindowMs;
+      final timedOut = elapsedMs >= _riseWindowMs && minVal >= baselineCandidate;
+      if ((sustainedRise && sawRamp && elapsedMs >= _riseWindowMs) || stableRise || timedOut) {
+        _updateRiseWindow(elapsedMs);
+        final candidate = math.min(minVal, rawValue);
+        final capped = math.min(candidate, baselineCandidate + _firstRiseCap);
+        return _finalizeAndApply(capped, now);
+      }
+    } else {
+      final elapsedMs = now.difference(_riseWindowStart!).inMilliseconds;
+      final minVal = _riseWindowMinValue ?? rawValue;
+      final maxVal = _riseWindowMaxValue ?? rawValue;
+      if (elapsedMs >= _riseWindowMs && (maxVal - minVal).abs() <= _riseIncreaseThreshold) {
+        return _finalizeAndApply(minVal, now);
+      }
+    }
+
+    if (!_isPrimingBattery) {
+      _primeBatteryLevel();
+    }
+    return false;
+  }
+
+  bool _finalizeAndApply(int acceptedValue, DateTime timestamp) {
+    _awaitingFreshBattery = false;
+    final previousDisplayed = batteryLevel;
+    final previousBaseline = _baselineBeforeReconnect;
+    _baselineBeforeReconnect = acceptedValue;
+    _riseWindowStart = null;
+    _riseWindowMinValue = null;
+    _riseWindowMaxValue = null;
+    _riseWindowLastSample = null;
+    _riseWindowDistinctSteps = 0;
+    if (_earlyAttachSamples.isNotEmpty) {
+      _earlyAttachSamples.clear();
+    }
+    _resetChargingMonitor();
+    _lastRawSample = acceptedValue;
+    _sameValueStreak = 1;
+    _maxSameValueStreak = math.max(_maxSameValueStreak, 1);
+
+    assert(() {
+      final durationMs = _lastBatteryEventAt == null
+          ? 0
+          : timestamp.difference(_lastBatteryEventAt!).inMilliseconds;
+      final summary = StringBuffer('Battery accepted: $acceptedValue%');
+      if (previousDisplayed != null && previousDisplayed >= 0) {
+        summary.write(' (prev ${previousDisplayed}%)');
+      }
+      if (previousBaseline != null) {
+        summary.write(' baseline was ${previousBaseline}%');
+      }
+      summary.write(' streak=$_sameValueStreak duration=${durationMs / 1000.0}s');
+      Logger.debug(summary.toString());
+      return true;
+    }());
+
+    if (batteryLevel != acceptedValue) {
+      batteryLevel = acceptedValue;
+      _persistBatteryLevel(acceptedValue, timestamp);
+      notifyListeners();
+    } else {
+      _persistBatteryLevel(acceptedValue, timestamp);
+    }
+    return true;
+  }
+
+  void _updateRiseWindow(int elapsedMs) {
+    if (elapsedMs <= 0) return;
+    final id = connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+    if (id.isEmpty) return;
+    final updated = ((_riseWindowMs * (1 - _riseWindowEmaAlpha)) + (elapsedMs * _riseWindowEmaAlpha)).round();
+    _riseWindowMs = updated.clamp(20000, 90000);
+    SharedPreferencesUtil().saveInt('batteryRiseWindow:$id', _riseWindowMs);
+  }
+
+  Future<void> _primeBatteryLevel() async {
+    if (connectedDevice == null || _isPrimingBattery) {
+      return;
+    }
+    _isPrimingBattery = true;
+    _batteryPrimeRetryTimer?.cancel();
+
+    const delays = <Duration>[
+      Duration(milliseconds: 0),
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 600),
+      Duration(milliseconds: 1200),
+      Duration(milliseconds: 3000),
+      Duration(milliseconds: 6000),
+      Duration(milliseconds: 9000),
+      Duration(milliseconds: 12000),
+      Duration(milliseconds: 15000),
+    ];
+
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+      if (connection == null) {
+        return;
+      }
+      for (final delay in delays) {
+        if (delay.inMilliseconds > 0) {
+          await Future.delayed(delay);
+        }
+        try {
+          final level = await connection.retrieveBatteryLevel();
+          if (level >= 0 && level <= 100) {
+            final accepted = _handleIncomingBatteryValue(level);
+            if (accepted) {
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+    } finally {
+      _isPrimingBattery = false;
+    }
+
+    if (_awaitingFreshBattery) {
+      _batteryPrimeRetryTimer = Timer(const Duration(seconds: 1), () {
+        if (connectedDevice != null && _awaitingFreshBattery) {
+          _primeBatteryLevel();
+        }
+      });
+    }
   }
 
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
@@ -257,6 +816,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _bleBatteryLevelListener?.cancel();
     _reconnectionTimer?.cancel();
+    _batteryPrimeRetryTimer?.cancel();
+    _isPrimingBattery = false;
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
