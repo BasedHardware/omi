@@ -351,15 +351,18 @@ class CaptureProvider extends ChangeNotifier
       _blesBytesReceived += snapshot.length;
 
       // Command button triggered
-      bool voiceCommandSupported = _recordingDevice != null ? (_recordingDevice?.type == DeviceType.omi) : false;
+      bool voiceCommandSupported = _recordingDevice != null
+          ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
+          : false;
       if (_voiceCommandSession != null && voiceCommandSupported) {
         _commandBytes.add(snapshot.sublist(3));
       }
 
       // Local storage syncs
-      var checkWalSupported = _recordingDevice?.type == DeviceType.omi &&
-          codec.isOpusSupported() &&
-          (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
+      var checkWalSupported =
+          (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+              codec.isOpusSupported() &&
+              (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
@@ -369,8 +372,9 @@ class CaptureProvider extends ChangeNotifier
 
       // Send WS
       if (_socket?.state == SocketServiceState.connected) {
-        final leftPadding = _recordingDevice?.type == DeviceType.omi ? 3 : 0;
-        final trimmedValue = leftPadding > 0 ? value.sublist(leftPadding) : value;
+        final paddingLeft =
+            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) ? 3 : 0;
+        final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
         _socket?.send(trimmedValue);
 
         // Track bytes sent to websocket
