@@ -829,12 +829,15 @@ async def _listen(
 
             if not current_conversation_id:
                 print(f"WARN: the current conversation is not valid", uid, session_id)
+                websocket_active = False
+                websocket_close_code = 1011
                 continue
 
             conversation = conversations_db.get_conversation(uid, current_conversation_id)
             if not conversation:
                 print(f"WARN: the current conversation is not found (id: {current_conversation_id})", uid, session_id)
-                await _create_new_in_progress_conversation()
+                websocket_active = False
+                websocket_close_code = 1011
                 continue
 
             # Check if conversation should be processed
