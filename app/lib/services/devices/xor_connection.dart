@@ -82,7 +82,7 @@ class XorDeviceConnection extends DeviceConnection {
     await transport.writeCharacteristic(xorServiceUuid, xorWriteCharUuid, command);
 
     try {
-      return await _commandQueues[cmdId]!.stream.first.timeout(const Duration(seconds: 2));
+      return await _commandQueues[cmdId]!.stream.first.timeout(const Duration(seconds: 10));
     } on TimeoutException {
       return null;
     }
