@@ -209,7 +209,7 @@ async def _listen(
                     except Exception as e:
                         print(f"Error sending silent user notification: {e}", uid, session_id)
 
-    async def _asend_message_event(msg: MessageEvent):
+    async def _send_message_event(msg: MessageEvent):
         nonlocal websocket_active
         print(f"Message: type ${msg.event_type}", uid, session_id)
         if not websocket_active:
@@ -225,16 +225,13 @@ async def _listen(
 
         return False
 
-    def _send_message_event(msg: MessageEvent):
-        nonlocal websocket_active
-        if not websocket_active:
-            return
-        return asyncio.create_task(_asend_message_event(msg))
-
     # Heart beat
     started_at = time.time()
     inactivity_timeout_seconds = 30
     last_audio_received_time = None
+
+    async def _ping():
+        await websocket.send_text("ping")
 
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
@@ -249,7 +246,7 @@ async def _listen(
             while websocket_active:
                 # ping fast
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_text("ping")
+                    await _ping()
                 else:
                     break
 
@@ -273,7 +270,7 @@ async def _listen(
     # Start heart beat
     heartbeat_task = asyncio.create_task(send_heartbeat())
 
-    _send_message_event(
+    await _send_message_event(
         MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting")
     )
 
@@ -283,14 +280,17 @@ async def _listen(
         await websocket.close(code=1008, reason="Bad user")
         return
 
-    # Create or get conversation ID early for audio chunk storage
     private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
 
     # Stream transcript
     async def _create_conversation(conversation_data: dict):
         conversation = Conversation(**conversation_data)
         if conversation.status != ConversationStatus.processing:
-            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
+            await _send_message_event(
+                ConversationEvent(
+                    event_type="memory_processing_started", memory=conversation, memory_id=conversation.id
+                )
+            )
             conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
             conversation.status = ConversationStatus.processing
 
@@ -302,14 +302,15 @@ async def _listen(
                 conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
             conversation = process_conversation(uid, language, conversation)
-            messages = trigger_external_integrations(uid, conversation)
+            trigger_external_integrations(uid, conversation)
         except Exception as e:
             print(f"Error processing conversation: {e}", uid, session_id)
             conversations_db.set_conversation_as_discarded(uid, conversation.id)
             conversation.discarded = True
-            messages = []
 
-        _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
+        await _send_message_event(
+            ConversationEvent(event_type="memory_created", memory=conversation, memory_id=conversation.id)
+        )
 
     async def finalize_processing_conversations():
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
@@ -328,12 +329,12 @@ async def _listen(
     asyncio.create_task(finalize_processing_conversations())
 
     # Send last completed conversation to client
-    def send_last_conversation():
+    async def send_last_conversation():
         last_conversation = conversations_db.get_last_completed_conversation(uid)
         if last_conversation:
-            _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
+            await _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
 
-    send_last_conversation()
+    await send_last_conversation()
 
     # Create new stub conversation for next batch
     async def _create_new_in_progress_conversation():
@@ -363,8 +364,8 @@ async def _listen(
 
         print(f"Created new stub conversation: {new_conversation_id}", uid, session_id)
 
-    async def _process_current_conversation(conversation_id: str):
-        print("_process_current_conversation", uid, session_id)
+    async def _process_conversation(conversation_id: str):
+        print("_process_conversation", uid, session_id)
         conversation = conversations_db.get_conversation(uid, conversation_id)
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
@@ -373,8 +374,6 @@ async def _listen(
             else:
                 print(f'Clean up the conversation {conversation_id}, reason: no content', uid, session_id)
                 conversations_db.delete_conversation(uid, conversation_id)
-
-        await _create_new_in_progress_conversation()
 
     # Conversation timeout (to process the conversation after x seconds of silence)
     # Max: 4h, min 2m
@@ -385,46 +384,51 @@ async def _listen(
         conversation_creation_timeout = 120
 
     # Process existing conversations
-    def _prepare_in_progess_conversations():
+    async def _prepare_in_progess_conversations():
         nonlocal seconds_to_add
         nonlocal current_conversation_id
 
         # Determine previous disconnected socket seconds to add for timestamp alignment
         # Check if conversation has timed out
-        if existing_conversation := retrieve_in_progress_conversation(uid):
-            finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
+        if convo := retrieve_in_progress_conversation(uid):
+            finished_at = datetime.fromisoformat(convo['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             if seconds_since_last_segment >= conversation_creation_timeout:
                 print(
-                    f'Processing existing conversation {existing_conversation["id"]} (timed out: {seconds_since_last_segment:.1f}s)',
+                    f'Processing existing conversation {convo["id"]} (timed out: {seconds_since_last_segment:.1f}s)',
                     uid,
                     session_id,
                 )
-                asyncio.create_task(_process_current_conversation(existing_conversation["id"]))
-                return
+                await _process_conversation(convo["id"])
+            else:
+                # Continue with the existing conversation
+                current_conversation_id = convo['id']
+                started_at = datetime.fromisoformat(convo['started_at'].isoformat())
+                seconds_to_add = (
+                    (datetime.now(timezone.utc) - started_at).total_seconds() if convo['transcript_segments'] else None
+                )
+                print(
+                    f"Resuming conversation {current_conversation_id} with {(seconds_to_add if seconds_to_add else 0):.1f}s offset. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s",
+                    uid,
+                    session_id,
+                )
 
-            # Continue with the existing conversation
-            current_conversation_id = existing_conversation['id']
-            started_at = datetime.fromisoformat(existing_conversation['started_at'].isoformat())
-            seconds_to_add = (
-                (datetime.now(timezone.utc) - started_at).total_seconds()
-                if existing_conversation['transcript_segments']
-                else None
-            )
-            print(
-                f"Resuming conversation {current_conversation_id} with {(seconds_to_add if seconds_to_add else 0):.1f}s offset. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s",
-                uid,
-                session_id,
-            )
-            return
+        # Clean all stale in-progress conversations but not the current conversation
+        stale_convos = conversations_db.get_in_progress_conversations(uid)
+        if stale_convos and len(stale_convos) > 0:
+            print(f"Cleaning {len(stale_convos)} stale convos", uid, session_id)
+            for convo in stale_convos:
+                if convo['id'] != current_conversation_id:
+                    await _process_conversation(convo['id'])
 
-        # Or create new
-        asyncio.create_task(_create_new_in_progress_conversation())
+        # Or/then create new
+        if not current_conversation_id:
+            await _create_new_in_progress_conversation()
 
-    _send_message_event(
+    await _send_message_event(
         MessageServiceStatusEvent(status="in_progress_conversations_processing", status_text="Processing Conversations")
     )
-    _prepare_in_progess_conversations()
+    await _prepare_in_progess_conversations()
 
     def _process_speaker_assigned_segments(transcript_segments: List[TranscriptSegment]):
         for segment in transcript_segments:
@@ -473,17 +477,6 @@ async def _listen(
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
         return conversation, (starts, ends)
-
-    # STT
-    # Validate websocket_active before initiating STT
-    if not websocket_active or websocket.client_state != WebSocketState.CONNECTED:
-        print("websocket was closed", uid, session_id)
-        if websocket.client_state == WebSocketState.CONNECTED:
-            try:
-                await websocket.close(code=websocket_close_code)
-            except Exception as e:
-                print(f"Error closing WebSocket: {e}", uid, session_id)
-        return
 
     # Process STT
     soniox_socket = None
@@ -820,7 +813,7 @@ async def _listen(
                     )
 
             if websocket_active:
-                _send_message_event(TranslationEvent(segments=[s.dict() for s in translated_segments]))
+                await _send_message_event(TranslationEvent(segments=[s.dict() for s in translated_segments]))
 
         except Exception as e:
             print(f"Translation error: {e}", uid, session_id)
@@ -832,16 +825,19 @@ async def _listen(
         print(f"Starting conversation lifecycle manager (timeout: {conversation_creation_timeout}s)", uid, session_id)
 
         while websocket_active:
-            await asyncio.sleep(5)
+            await asyncio.sleep(30)
 
             if not current_conversation_id:
                 print(f"WARN: the current conversation is not valid", uid, session_id)
+                websocket_active = False
+                websocket_close_code = 1011
                 continue
 
             conversation = conversations_db.get_conversation(uid, current_conversation_id)
             if not conversation:
                 print(f"WARN: the current conversation is not found (id: {current_conversation_id})", uid, session_id)
-                await _create_new_in_progress_conversation()
+                websocket_active = False
+                websocket_close_code = 1011
                 continue
 
             # Check if conversation should be processed
@@ -853,7 +849,8 @@ async def _listen(
                     uid,
                     session_id,
                 )
-                await _process_current_conversation(current_conversation_id)
+                await _process_conversation(current_conversation_id)
+                await _create_new_in_progress_conversation()
 
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
@@ -932,7 +929,7 @@ async def _listen(
                         # Session consistency
                         if segment.speaker_id in speaker_to_person_map:
                             person_id, person_name = speaker_to_person_map[segment.speaker_id]
-                            _send_message_event(
+                            await _send_message_event(
                                 SpeakerLabelSuggestionEvent(
                                     speaker_id=segment.speaker_id,
                                     person_id=person_id,
@@ -948,7 +945,7 @@ async def _listen(
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         person_id = person['id'] if person else ''
-                        _send_message_event(
+                        await _send_message_event(
                             SpeakerLabelSuggestionEvent(
                                 speaker_id=segment.speaker_id,
                                 person_id=person_id,
@@ -1105,50 +1102,73 @@ async def _listen(
         finally:
             websocket_active = False
 
+    # Is WS still connected?
+    print("Verifying WS still connected?", uid, session_id)
+    if websocket.client_state != WebSocketState.CONNECTED:
+        websocket_active = False
+    else:
+        # Sure? ping
+        try:
+            print("Pinging to client", uid, session_id)
+            await _ping()
+        except WebSocketDisconnect:
+            print("WebSocket disconnected", uid, session_id)
+            websocket_close_code = 1011
+            websocket_active = False
+        except Exception as e:
+            print(f'Pinging error: {e}', uid, session_id)
+            websocket_active = False
+            websocket_close_code = 1011
+
     # Start
     #
     try:
-        # Init STT
-        _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
-        await _process_stt()
+        if websocket_active:
+            print("All good, let's start", uid, session_id)
 
-        # Init pusher
-        pusher_tasks = []
-        if PUSHER_ENABLED:
-            (
-                pusher_connect,
-                pusher_close,
-                transcript_send,
-                transcript_consume,
-                audio_bytes_send,
-                audio_bytes_consume,
-            ) = create_pusher_task_handler()
+            # Init STT
+            await _send_message_event(
+                MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting")
+            )
+            await _process_stt()
 
-            # Pusher tasks
-            pusher_tasks.append(asyncio.create_task(pusher_connect()))
-            if transcript_consume is not None:
-                pusher_tasks.append(asyncio.create_task(transcript_consume()))
-            if audio_bytes_consume is not None:
-                pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
+            # Init pusher
+            pusher_tasks = []
+            if PUSHER_ENABLED:
+                (
+                    pusher_connect,
+                    pusher_close,
+                    transcript_send,
+                    transcript_consume,
+                    audio_bytes_send,
+                    audio_bytes_consume,
+                ) = create_pusher_task_handler()
 
-        # Tasks
-        data_process_task = asyncio.create_task(
-            receive_data(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
-        )
-        stream_transcript_task = asyncio.create_task(stream_transcript_process())
-        record_usage_task = asyncio.create_task(_record_usage_periodically())
-        lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
+                # Pusher tasks
+                pusher_tasks.append(asyncio.create_task(pusher_connect()))
+                if transcript_consume is not None:
+                    pusher_tasks.append(asyncio.create_task(transcript_consume()))
+                if audio_bytes_consume is not None:
+                    pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
-        _send_message_event(MessageServiceStatusEvent(status="ready"))
+            # Tasks
+            data_process_task = asyncio.create_task(
+                receive_data(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
+            )
+            stream_transcript_task = asyncio.create_task(stream_transcript_process())
+            record_usage_task = asyncio.create_task(_record_usage_periodically())
+            lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
 
-        tasks = [
-            data_process_task,
-            stream_transcript_task,
-            heartbeat_task,
-            record_usage_task,
-            lifecycle_manager_task,
-        ] + pusher_tasks
-        await asyncio.gather(*tasks)
+            await _send_message_event(MessageServiceStatusEvent(status="ready"))
+
+            tasks = [
+                data_process_task,
+                stream_transcript_task,
+                heartbeat_task,
+                record_usage_task,
+                lifecycle_manager_task,
+            ] + pusher_tasks
+            await asyncio.gather(*tasks)
 
     except Exception as e:
         print(f"Error during WebSocket operation: {e}", uid, session_id)

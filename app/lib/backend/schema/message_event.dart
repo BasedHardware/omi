@@ -51,26 +51,27 @@ class MessageServiceStatusEvent extends MessageEvent {
 
 class ConversationProcessingStartedEvent extends MessageEvent {
   final ServerConversation memory;
+  final String memoryId;
 
-  ConversationProcessingStartedEvent({required this.memory}) : super(eventType: 'memory_processing_started');
+  ConversationProcessingStartedEvent({required this.memory, required this.memoryId})
+      : super(eventType: 'memory_processing_started');
 
   factory ConversationProcessingStartedEvent.fromJson(Map<String, dynamic> json) {
     return ConversationProcessingStartedEvent(
       memory: ServerConversation.fromJson(json['memory']),
+      memoryId: json['memory_id'],
     );
   }
 }
 
 class ConversationEvent extends MessageEvent {
-  final ServerConversation memory;
-  final List messages;
+  final String memoryId;
 
-  ConversationEvent({required this.memory, required this.messages}) : super(eventType: 'memory_created');
+  ConversationEvent({required this.memoryId}) : super(eventType: 'memory_created');
 
   factory ConversationEvent.fromJson(Map<String, dynamic> json) {
     return ConversationEvent(
-      memory: ServerConversation.fromJson(json['memory']),
-      messages: json['messages'] ?? [],
+      memoryId: json['memory_id'],
     );
   }
 }

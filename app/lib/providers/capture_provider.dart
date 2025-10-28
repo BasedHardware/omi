@@ -986,15 +986,12 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
-      conversationProvider!.addProcessingConversation(event.memory);
-      _resetStateVariables();
+      _handleConvoProcessingEvent(event.memory, event.memoryId);
       return;
     }
 
     if (event is ConversationEvent) {
-      event.memory.isNew = true;
-      conversationProvider!.removeProcessingConversation(event.memory.id);
-      _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
+      _handleConvoCreatedEvent(event.memoryId);
       return;
     }
 
@@ -1058,13 +1055,31 @@ class CaptureProvider extends ChangeNotifier
       }
       conversationProvider!.removeProcessingConversation('0');
       result.conversation!.isNew = true;
-      _processConversationCreated(result.conversation, result.messages);
+      _processConversationCreated(result.conversation);
     });
 
     return;
   }
 
-  Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
+  Future<void> _handleConvoProcessingEvent(ServerConversation? convo, String convoId) async {
+    convo ??= await getConversationById(convoId);
+    if (convo != null) {
+      conversationProvider!.addProcessingConversation(convo);
+    }
+    _resetStateVariables();
+    return;
+  }
+
+  Future<void> _handleConvoCreatedEvent(String memoryId) async {
+    conversationProvider!.removeProcessingConversation(memoryId);
+    ServerConversation? convo = await getConversationById(memoryId);
+    if (convo != null) {
+      convo.isNew = true;
+      _processConversationCreated(convo);
+    }
+  }
+
+  Future<void> _processConversationCreated(ServerConversation? conversation) async {
     if (conversation == null) return;
     conversationProvider?.upsertConversation(conversation);
     MixpanelManager().conversationCreated(conversation);

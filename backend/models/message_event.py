@@ -1,8 +1,8 @@
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 from pydantic import BaseModel
 
-from models.conversation import Conversation, Message, ConversationPhoto
+from models.conversation import Conversation, ConversationPhoto, Message
 
 
 class MessageEvent(BaseModel):
@@ -17,32 +17,7 @@ class MessageEvent(BaseModel):
 
 class ConversationEvent(MessageEvent):
     memory: Conversation
-    messages: Optional[List[Message]] = []
-
-    def to_json(self):
-        j = self.model_dump(mode="json")
-        j["type"] = self.event_type
-        del j["event_type"]
-        return j
-
-
-class NewConversationCreated(MessageEvent):
-    processing_memory_id: Optional[str] = None
-    memory_id: Optional[str] = None
-    message_ids: Optional[List[str]] = []
-    memory: Conversation
-    messages: Optional[List[Message]] = []
-
-    def to_json(self):
-        j = self.model_dump(mode="json")
-        j["type"] = self.event_type
-        del j["event_type"]
-        return j
-
-
-class NewProcessingConversationCreated(MessageEvent):
-    processing_memory_id: Optional[str] = None
-    memory_id: Optional[str] = None
+    memory_id: str
 
     def to_json(self):
         j = self.model_dump(mode="json")
