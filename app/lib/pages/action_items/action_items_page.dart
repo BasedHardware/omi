@@ -137,6 +137,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: provider.isSelectionMode ? _buildSelectionAppBar(provider, currentTabItems) : null,
+          floatingActionButton: provider.isSelectionMode
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: 60.0),
+                  child: FloatingActionButton(
+                    onPressed: _showCreateActionItemSheet,
+                    backgroundColor: Colors.deepPurpleAccent,
+                    child: const Icon(
+                      Icons.add,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
           body: RefreshIndicator(
             onRefresh: () async {
               HapticFeedback.mediumImpact();
@@ -528,7 +541,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  PreferredSizeWidget _buildSelectionAppBar(ActionItemsProvider provider, List<ActionItemWithMetadata> currentTabItems) {
+  PreferredSizeWidget _buildSelectionAppBar(
+      ActionItemsProvider provider, List<ActionItemWithMetadata> currentTabItems) {
     return AppBar(
       backgroundColor: Colors.black.withValues(alpha: 0.05),
       elevation: 0,
