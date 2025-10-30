@@ -606,28 +606,6 @@ class GetAppsWidgets extends StatelessWidget {
               : [
                   // Show the summarized app
                   if (!provider.conversation.discarded) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Summary',
-                          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-                          textAlign: TextAlign.start,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                          onPressed: () {
-                            final String content = summarizedApp.content.decodeString;
-                            Clipboard.setData(ClipboardData(text: content));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Summary copied to clipboard'),
-                              duration: Duration(seconds: 1),
-                            ));
-                            MixpanelManager().copiedConversationDetails(provider.conversation, source: 'App Response');
-                          },
-                        ),
-                      ],
-                    ),
                     AppResultDetailWidget(
                       appResponse: summarizedApp,
                       app: provider.findAppById(summarizedApp.appId),
