@@ -216,45 +216,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header with subheading and add button
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Action Items',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Tap to edit • Long press to select • Swipe for actions',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Create icon
-                              IconButton(
-                                onPressed: _showCreateActionItemSheet,
-                                icon: const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
                           // Segmented Control - Full width like action items
                           Container(
                             width: double.infinity,
