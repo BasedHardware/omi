@@ -822,7 +822,7 @@ class _GetGeolocationWidgetsState extends State<GetGeolocationWidgets> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.95),
+                          color: Colors.blueGrey.withOpacity(0.95),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.1),
@@ -838,19 +838,19 @@ class _GetGeolocationWidgetsState extends State<GetGeolocationWidgets> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text(
-                                    'Location',
-                                    style: TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
+                                  // const Text(
+                                  //   'Location',
+                                  //   style: TextStyle(
+                                  //     color: Colors.black87,
+                                  //     fontSize: 13,
+                                  //     fontWeight: FontWeight.w500,
+                                  //   ),
+                                  // ),
+                                  // const SizedBox(height: 2),
                                   Text(
-                                    geolocation.address!.decodeString,
+                                    geolocation.address!.decodeString.split(',').first,
                                     style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                      color: Colors.white,
                                       fontSize: 15,
                                       fontWeight: FontWeight.w400,
                                     ),
@@ -862,7 +862,7 @@ class _GetGeolocationWidgetsState extends State<GetGeolocationWidgets> {
                             ),
                             Icon(
                               Icons.chevron_right,
-                              color: Colors.grey.shade400,
+                              color: Colors.white,
                               size: 24,
                             ),
                           ],
