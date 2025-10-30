@@ -629,12 +629,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 child: Consumer<ConversationDetailProvider>(
                   builder: (context, provider, child) {
                     final conversation = provider.conversation;
+                    final hasActionItems =
+                        conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
                       hasSegments: conversation.transcriptSegments.isNotEmpty ||
                           conversation.photos.isNotEmpty ||
                           conversation.externalIntegration != null,
+                      hasActionItems: hasActionItems,
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {

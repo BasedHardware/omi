@@ -299,7 +299,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     children: [
                       Text(
                         dateTimeFormat(
-                          'MMM d, h:mm a',
+                          'h:mm a',
                           widget.conversation.startedAt ?? widget.conversation.createdAt,
                         ),
                         style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
