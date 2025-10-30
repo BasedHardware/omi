@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -41,10 +42,7 @@ class MemoryItem extends StatelessWidget {
       },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppStyles.spacingL,
-          vertical: AppStyles.spacingL,
-        ),
+        padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
           borderRadius: BorderRadius.circular(16),
@@ -173,10 +171,12 @@ class MemoryItem extends StatelessWidget {
           color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
-        child: const Icon(
-          Icons.chat_bubble_outline,
-          size: 16,
-          color: Colors.white70,
+        child: const Center(
+          child: FaIcon(
+            FontAwesomeIcons.message,
+            size: 16,
+            color: Colors.white70,
+          ),
         ),
       ),
     );
