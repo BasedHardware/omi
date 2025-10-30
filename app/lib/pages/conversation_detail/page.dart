@@ -47,6 +47,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
+  final GlobalKey _shareButtonKey = GlobalKey();
   TabController? _controller;
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
@@ -352,6 +353,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     children: [
                       // Share button (first) - directly share summary link
                       Container(
+                        key: _shareButtonKey,
                         width: 36,
                         height: 36,
                         margin: const EdgeInsets.only(right: 8),
@@ -381,8 +383,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       return;
                                     }
                                     String content = 'https://h.omi.me/memories/${provider.conversation.id}';
-                                    // Start sharing and immediately clear loading state
-                                    Share.share(content);
+                                    // Start sharing and get the position for iOS
+                                    final RenderBox? box =
+                                        _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+                                    if (box != null) {
+                                      final Offset position = box.localToGlobal(Offset.zero);
+                                      final Size size = box.size;
+                                      Share.share(
+                                        content,
+                                        sharePositionOrigin:
+                                            Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                                      );
+                                    } else {
+                                      Share.share(content);
+                                    }
                                     // Small delay to let share sheet appear, then clear loading
                                     await Future.delayed(const Duration(milliseconds: 150));
                                     setState(() {

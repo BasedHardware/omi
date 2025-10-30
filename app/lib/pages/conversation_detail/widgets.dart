@@ -914,6 +914,10 @@ class _GetShareOptionsState extends State<GetShareOptions> {
   bool loadingShareTranscript = false;
   bool loadingShareSummary = false;
 
+  final GlobalKey _shareUrlKey = GlobalKey();
+  final GlobalKey _shareTranscriptKey = GlobalKey();
+  final GlobalKey _shareSummaryKey = GlobalKey();
+
   void changeLoadingShareConversationViaURL(bool value) {
     setState(() {
       loadingShareConversationViaURL = value;
@@ -939,6 +943,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
         Card(
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
           child: ListTile(
+            key: _shareUrlKey,
             title: const Text('Send web url'),
             leading: loadingShareConversationViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
             onTap: () async {
@@ -954,7 +959,17 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               String content =
                   '''https://h.omi.me/conversations/${widget.conversation.id}'''.replaceAll('  ', '').trim();
               print(content);
-              await Share.share(content);
+              final RenderBox? box = _shareUrlKey.currentContext?.findRenderObject() as RenderBox?;
+              if (box != null) {
+                final Offset position = box.localToGlobal(Offset.zero);
+                final Size size = box.size;
+                await Share.share(
+                  content,
+                  sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                );
+              } else {
+                await Share.share(content);
+              }
               changeLoadingShareConversationViaURL(false);
             },
           ),
@@ -965,6 +980,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           child: Column(
             children: [
               ListTile(
+                key: _shareTranscriptKey,
                 title: const Text('Send Transcript'),
                 leading: loadingShareTranscript ? _getLoadingIndicator() : const Icon(Icons.description),
                 onTap: () async {
@@ -978,20 +994,41 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       .replaceAll('  ', '')
                       .trim();
                   // TODO: Deeplink that let people download the app.
-                  await Share.share(content);
+                  final RenderBox? box = _shareTranscriptKey.currentContext?.findRenderObject() as RenderBox?;
+                  if (box != null) {
+                    final Offset position = box.localToGlobal(Offset.zero);
+                    final Size size = box.size;
+                    await Share.share(
+                      content,
+                      sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                    );
+                  } else {
+                    await Share.share(content);
+                  }
                   changeLoadingShareTranscript(false);
                 },
               ),
               widget.conversation.discarded
                   ? const SizedBox()
                   : ListTile(
+                      key: _shareSummaryKey,
                       title: const Text('Send Summary'),
                       leading: loadingShareSummary ? _getLoadingIndicator() : const Icon(Icons.summarize),
                       onTap: () async {
                         if (loadingShareSummary) return;
                         changeLoadingShareSummary(true);
                         String content = widget.conversation.structured.toString().replaceAll('  ', '').trim();
-                        await Share.share(content);
+                        final RenderBox? box = _shareSummaryKey.currentContext?.findRenderObject() as RenderBox?;
+                        if (box != null) {
+                          final Offset position = box.localToGlobal(Offset.zero);
+                          final Size size = box.size;
+                          await Share.share(
+                            content,
+                            sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                          );
+                        } else {
+                          await Share.share(content);
+                        }
                         changeLoadingShareSummary(false);
                       },
                     )
