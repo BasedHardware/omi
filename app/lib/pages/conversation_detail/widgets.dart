@@ -76,9 +76,7 @@ class GetSummaryWidgets extends StatelessWidget {
   const GetSummaryWidgets({super.key, this.searchQuery = ''});
 
   String setTime(DateTime? startedAt, DateTime createdAt, DateTime? finishedAt) {
-    return startedAt == null
-        ? dateTimeFormat('h:mm a', createdAt)
-        : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
+    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : dateTimeFormat('h:mm a', startedAt);
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
@@ -94,6 +92,23 @@ class GetSummaryWidgets extends StatelessWidget {
     return secondsToHumanReadable(durationSeconds);
   }
 
+  String _getDateFormat(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else if (date.year == now.year) {
+      return dateTimeFormat('MMM d', date);
+    } else {
+      return dateTimeFormat('MMM d, yyyy', date);
+    }
+  }
+
   Widget _buildInfoChips(ServerConversation conversation) {
     return Wrap(
       spacing: 8,
@@ -101,7 +116,7 @@ class GetSummaryWidgets extends StatelessWidget {
       children: [
         // Date chip
         _buildChip(
-          label: dateTimeFormat('MMM d, yyyy', conversation.createdAt),
+          label: _getDateFormat(conversation.createdAt),
           icon: Icons.calendar_today,
         ),
         // Time chip
