@@ -3,7 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/preferences.dart';
+// import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -28,10 +28,10 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
-import 'share.dart';
+// import 'share.dart';
 import 'test_prompts.dart';
-import 'package:omi/pages/settings/developer.dart';
-import 'package:omi/backend/http/webhooks.dart';
+// import 'package:omi/pages/settings/developer.dart';
+// import 'package:omi/backend/http/webhooks.dart';
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -217,21 +217,21 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case 'copy_summary':
         _copyContent(context, provider.conversation.structured.toString());
         break;
-      case 'export_transcript':
-        showShareBottomSheet(context, provider.conversation, (fn) {});
-        break;
-      case 'export_summary':
-        showShareBottomSheet(context, provider.conversation, (fn) {});
-        break;
-      case 'copy_raw_transcript':
-        _copyContent(context, provider.conversation.getTranscript());
-        break;
-      case 'copy_conversation_raw':
-        _copyContent(context, provider.conversation.toJson().toString());
-        break;
-      case 'trigger_integration':
-        _triggerWebhookIntegration(context, provider.conversation);
-        break;
+      // case 'export_transcript':
+      //   showShareBottomSheet(context, provider.conversation, (fn) {});
+      //   break;
+      // case 'export_summary':
+      //   showShareBottomSheet(context, provider.conversation, (fn) {});
+      //   break;
+      // case 'copy_raw_transcript':
+      //   _copyContent(context, provider.conversation.getTranscript());
+      //   break;
+      // case 'copy_conversation_raw':
+      //   _copyContent(context, provider.conversation.toJson().toString());
+      //   break;
+      // case 'trigger_integration':
+      //   _triggerWebhookIntegration(context, provider.conversation);
+      //   break;
       case 'test_prompt':
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
@@ -240,6 +240,44 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await provider.reprocessConversation();
         }
         break;
+      case 'delete':
+        _handleDelete(context, provider);
+        break;
+    }
+  }
+
+  void _handleDelete(BuildContext context, ConversationDetailProvider provider) {
+    HapticFeedback.mediumImpact();
+    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+    if (connectivityProvider.isConnected) {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () {
+            context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
+            Navigator.pop(context); // Close dialog
+            Navigator.pop(context, {'deleted': true}); // Close detail page
+          },
+          'Delete Conversation?',
+          'Are you sure you want to delete this conversation? This action cannot be undone.',
+          okButtonText: 'Confirm',
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () => Navigator.pop(context),
+          'Unable to Delete Conversation',
+          'Please check your internet connection and try again.',
+          singleButton: true,
+          okButtonText: 'OK',
+        ),
+      );
     }
   }
 
@@ -251,40 +289,40 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     HapticFeedback.lightImpact();
   }
 
-  void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
-    if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () {
-            Navigator.pop(context);
-            routeToPage(context, const DeveloperSettingsPage());
-          },
-          'Webhook URL not set',
-          'Please set the webhook URL in developer settings to use this feature.',
-          okButtonText: 'Settings',
-        ),
-      );
-      return;
-    }
-
-    webhookOnConversationCreatedCall(conversation, returnRawBody: true).then((response) {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () => Navigator.pop(context),
-          'Result:',
-          response,
-          okButtonText: 'Ok',
-          singleButton: true,
-        ),
-      );
-    });
-  }
+  // void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
+  //   if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
+  //     showDialog(
+  //       context: context,
+  //       builder: (c) => getDialog(
+  //         context,
+  //         () => Navigator.pop(context),
+  //         () {
+  //           Navigator.pop(context);
+  //           routeToPage(context, const DeveloperSettingsPage());
+  //         },
+  //         'Webhook URL not set',
+  //         'Please set the webhook URL in developer settings to use this feature.',
+  //         okButtonText: 'Settings',
+  //       ),
+  //     );
+  //     return;
+  //   }
+  //
+  //   webhookOnConversationCreatedCall(conversation, returnRawBody: true).then((response) {
+  //     showDialog(
+  //       context: context,
+  //       builder: (c) => getDialog(
+  //         context,
+  //         () => Navigator.pop(context),
+  //         () => Navigator.pop(context),
+  //         'Result:',
+  //         response,
+  //         okButtonText: 'Ok',
+  //         singleButton: true,
+  //       ),
+  //     );
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -465,27 +503,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                               onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                             ),
-                            PullDownMenuItem(
-                              title: 'Export Transcript',
-                              iconWidget: FaIcon(FontAwesomeIcons.download, size: 16),
-                              onTap: () => _handleMenuSelection(context, 'export_transcript', provider),
-                            ),
-                            if (!provider.conversation.discarded)
-                              PullDownMenuItem(
-                                title: 'Export Summary',
-                                iconWidget: FaIcon(FontAwesomeIcons.fileExport, size: 16),
-                                onTap: () => _handleMenuSelection(context, 'export_summary', provider),
-                              ),
-                            PullDownMenuItem(
-                              title: 'Copy Raw Transcript',
-                              iconWidget: FaIcon(FontAwesomeIcons.fileCode, size: 16),
-                              onTap: () => _handleMenuSelection(context, 'copy_conversation_raw', provider),
-                            ),
-                            PullDownMenuItem(
-                              title: 'Trigger Integration',
-                              iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
-                              onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
-                            ),
+                            // PullDownMenuItem(
+                            //   title: 'Trigger Integration',
+                            //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
+                            //   onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
+                            // ),
                             PullDownMenuItem(
                               title: 'Test Prompt',
                               iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
@@ -497,6 +519,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                               ),
+                            PullDownMenuItem(
+                              title: 'Delete Conversation',
+                              iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                              onTap: () => _handleMenuSelection(context, 'delete', provider),
+                            ),
                           ],
                           buttonBuilder: (context, showMenu) => GestureDetector(
                             onTap: () {
@@ -515,57 +542,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      // Delete button (third)
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: provider.loadingReprocessConversation
-                              ? null
-                              : () {
-                                  HapticFeedback.mediumImpact();
-                                  final connectivityProvider =
-                                      Provider.of<ConnectivityProvider>(context, listen: false);
-                                  if (connectivityProvider.isConnected) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (c) => getDialog(
-                                        context,
-                                        () => Navigator.pop(context),
-                                        () {
-                                          context
-                                              .read<ConversationProvider>()
-                                              .deleteConversation(provider.conversation, provider.conversationIdx);
-                                          Navigator.pop(context); // Close dialog
-                                          Navigator.pop(context, {'deleted': true}); // Close detail page
-                                        },
-                                        'Delete Conversation?',
-                                        'Are you sure you want to delete this conversation? This action cannot be undone.',
-                                        okButtonText: 'Confirm',
-                                      ),
-                                    );
-                                  } else {
-                                    showDialog(
-                                      context: context,
-                                      builder: (c) => getDialog(
-                                          context,
-                                          () => Navigator.pop(context),
-                                          () => Navigator.pop(context),
-                                          'Unable to Delete Conversation',
-                                          'Please check your internet connection and try again.',
-                                          singleButton: true,
-                                          okButtonText: 'OK'),
-                                    );
-                                  }
-                                },
-                          icon: const FaIcon(FontAwesomeIcons.trashCan, size: 16.0, color: Colors.white),
                         ),
                       ),
                     ],
