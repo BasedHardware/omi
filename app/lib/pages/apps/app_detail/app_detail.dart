@@ -249,6 +249,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
           MixpanelManager().appPurchaseCompleted(appId);
           prefs.enableApp(appId);
           MixpanelManager().appEnabled(appId);
+
+          if (!mounted) {
+            timer.cancel();
+            _paymentCheckTimer?.cancel();
+            return;
+          }
+
           context.read<AppProvider>().filterApps();
           setState(() {
             app.isUserPaid = true;
