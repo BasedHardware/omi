@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -691,8 +694,48 @@ class GetAppsWidgets extends StatelessWidget {
   }
 }
 
-class GetGeolocationWidgets extends StatelessWidget {
+class GetGeolocationWidgets extends StatefulWidget {
   const GetGeolocationWidgets({super.key});
+
+  @override
+  State<GetGeolocationWidgets> createState() => _GetGeolocationWidgetsState();
+}
+
+class _GetGeolocationWidgetsState extends State<GetGeolocationWidgets> {
+  static const platform = MethodChannel('com.omi.map_snapshot');
+  Uint8List? _mapImageBytes;
+  bool _isLoading = false;
+
+  Future<void> _loadMapSnapshot(double latitude, double longitude) async {
+    if (_mapImageBytes != null) return; // Already loaded
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final Uint8List result = await platform.invokeMethod('getMapSnapshot', {
+        'latitude': latitude,
+        'longitude': longitude,
+        'width': 600.0,
+        'height': 400.0,
+      });
+
+      if (mounted) {
+        setState(() {
+          _mapImageBytes = result;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading map snapshot: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -700,63 +743,139 @@ class GetGeolocationWidgets extends StatelessWidget {
       if (provider.conversation.discarded) return null;
       return provider.conversation.geolocation;
     }, builder: (context, geolocation, child) {
+      // Only show on iOS
+      if (!Platform.isIOS) {
+        return const SizedBox.shrink();
+      }
+
+      // Check if geolocation exists and has valid coordinates
+      if (geolocation == null ||
+          geolocation.latitude == null ||
+          geolocation.longitude == null ||
+          geolocation.address == null) {
+        return const SizedBox.shrink();
+      }
+
+      // Load map snapshot if not loaded yet - schedule after build
+      if (_mapImageBytes == null && !_isLoading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _loadMapSnapshot(geolocation.latitude!, geolocation.longitude!);
+        });
+      }
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: geolocation == null
-            ? []
-            : [
-                Text(
-                  'Taken at',
-                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${geolocation.address?.decodeString}',
-                  style: TextStyle(color: Colors.grey.shade300),
-                ),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: () async {
-                    MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
-                  },
-                  child: CachedNetworkImage(
-                    imageBuilder: (context, imageProvider) {
-                      return Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        height: 200,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          image: DecorationImage(
-                            image: imageProvider,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      );
-                    },
-                    errorWidget: (context, url, error) {
-                      return Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        height: 200,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: Color(0xFF35343B),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'Could not load Maps. Please check your internet connection.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      );
-                    },
-                    imageUrl: MapsUtil.getMapImageUrl(
-                      geolocation.latitude!,
-                      geolocation.longitude!,
-                    ),
+        children: [
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: () async {
+              MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
+            },
+            child: Container(
+              height: 200,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Map image from Apple Maps
+                    if (_mapImageBytes != null)
+                      Image.memory(
+                        _mapImageBytes!,
+                        fit: BoxFit.cover,
+                      )
+                    else if (_isLoading)
+                      Container(
+                        color: const Color(0xFF2C2C2E),
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.white70,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        color: const Color(0xFF2C2C2E),
+                        child: Center(
+                          child: Icon(
+                            Icons.map,
+                            size: 60,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    // Bottom info overlay
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.95),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                              offset: const Offset(0, -2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Location',
+                                    style: TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    geolocation.address!.decodeString,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: Colors.grey.shade400,
+                              size: 24,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-              ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
       );
     });
   }

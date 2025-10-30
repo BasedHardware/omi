@@ -946,6 +946,7 @@ class SummaryTab extends StatelessWidget {
                       data.item1
                           ? const ReprocessDiscardedWidget()
                           : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
+                      const GetGeolocationWidgets(),
                       const SizedBox(height: 150)
                     ],
                   ),
