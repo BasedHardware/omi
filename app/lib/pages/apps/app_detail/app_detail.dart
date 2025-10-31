@@ -395,7 +395,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
             GestureDetector(
               child: const Icon(
-                Icons.open_in_browser_rounded,
+                FontAwesomeIcons.gear,
                 color: Colors.white,
               ),
               onTap: () {
@@ -453,7 +453,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               ? (isLoading
                   ? const SizedBox.shrink()
                   : IconButton(
-                      icon: const Icon(Icons.settings),
+                      icon: const FaIcon(FontAwesomeIcons.edit),
                       padding: const EdgeInsets.only(right: 12),
                       onPressed: () async {
                         await showModalBottomSheet(
@@ -499,7 +499,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     ),
                     placeholder: (context, url) => const CircularProgressIndicator(),
-                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                    errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
                   ),
                   const SizedBox(width: 20),
                   Column(
@@ -550,6 +550,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     fontSize: 16,
                                   ),
                                 ),
+                                const SizedBox(width: 4),
                                 RatingBar.builder(
                                   initialRating: app.ratingAvg ?? 0,
                                   minRating: 1,
@@ -557,10 +558,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   direction: Axis.horizontal,
                                   allowHalfRating: true,
                                   itemCount: 1,
-                                  itemSize: 20,
+                                  itemSize: 16,
                                   tapOnlyMode: false,
-                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                  itemPadding: const EdgeInsets.symmetric(horizontal: 1),
+                                  itemBuilder: (context, _) =>
+                                      const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
                                   maxRating: 5.0,
                                   onRatingUpdate: (rating) {},
                                 ),
@@ -777,7 +779,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(
-                              Icons.info_outline,
+                              FontAwesomeIcons.circleInfo,
                               color: Colors.grey,
                               size: 18,
                             ),
@@ -803,7 +805,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(
-                              Icons.info_outline,
+                              FontAwesomeIcons.circleInfo,
                               color: Colors.grey,
                               size: 18,
                             ),
@@ -829,7 +831,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(
-                              Icons.error_outline,
+                              FontAwesomeIcons.circleExclamation,
                               color: Colors.grey,
                               size: 18,
                             ),
@@ -885,7 +887,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           },
                           trailing: const Padding(
                             padding: EdgeInsets.only(right: 12.0),
-                            child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                            child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
                           ));
                     }).toList()
                   : <Widget>[const SizedBox.shrink()]),
@@ -913,7 +915,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       },
                       trailing: const Padding(
                         padding: EdgeInsets.only(right: 12.0),
-                        child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                        child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
                       ),
                       title: const Text(
                         'Integration Instructions',
@@ -986,7 +988,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       color: Colors.grey[900],
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: const Icon(Icons.error),
+                                    child: const Icon(FontAwesomeIcons.circleExclamation),
                                   ),
                                 ),
                               ),
@@ -1077,7 +1079,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           const Spacer(),
                           app.reviews.isNotEmpty
                               ? const Icon(
-                                  Icons.arrow_forward,
+                                  FontAwesomeIcons.arrowRight,
                                   size: 20,
                                 )
                               : const SizedBox.shrink(),
@@ -1099,10 +1101,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   direction: Axis.horizontal,
                                   allowHalfRating: true,
                                   itemCount: 5,
-                                  itemSize: 20,
+                                  itemSize: 16,
                                   tapOnlyMode: false,
-                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                  itemPadding: const EdgeInsets.symmetric(horizontal: 2),
+                                  itemBuilder: (context, _) =>
+                                      const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
                                   maxRating: 5.0,
                                   onRatingUpdate: (rating) {},
                                 ),
@@ -1315,10 +1318,10 @@ class RecentReviewsSection extends StatelessWidget {
                           direction: Axis.horizontal,
                           allowHalfRating: true,
                           itemCount: 5,
-                          itemSize: 20,
+                          itemSize: 16,
                           tapOnlyMode: false,
-                          itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                          itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                          itemPadding: const EdgeInsets.symmetric(horizontal: 2),
+                          itemBuilder: (context, _) => const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
                           maxRating: 5.0,
                           onRatingUpdate: (rating) {},
                         ),
