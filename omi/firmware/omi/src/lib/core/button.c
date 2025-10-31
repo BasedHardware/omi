@@ -222,6 +222,7 @@ void check_button_level(struct k_work *work_item)
         is_off = true;
         transport_off();
         k_msleep(300);
+        
         turnoff_all();
     }
 
