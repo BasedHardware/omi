@@ -289,25 +289,10 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    setLoadingConversations(true);
     groupedConversations = {};
     notifyListeners();
 
-    DateTime startDate = DateTime(date.year, date.month, date.day, 0, 0, 0);
-    DateTime endDate = DateTime(date.year, date.month, date.day, 23, 59, 59);
-
-    conversations = await getConversations(
-      includeDiscarded: showDiscardedConversations,
-      startDate: startDate,
-      endDate: endDate,
-    );
-
-    processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
-    conversations = conversations.where((m) => m.status == ConversationStatus.completed).toList();
-
-    _groupConversationsByDateWithoutNotify();
-    setLoadingConversations(false);
-    notifyListeners();
+    await fetchConversations();
   }
 
   /// Clear the date filter
@@ -320,7 +305,6 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    setLoadingConversations(true);
     groupedConversations = {};
     notifyListeners();
 
@@ -370,7 +354,18 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future _getConversationsFromServer() async {
-    return await getConversations(includeDiscarded: showDiscardedConversations);
+    DateTime? startDate;
+    DateTime? endDate;
+    if (selectedDate != null) {
+      startDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
+      endDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
+    }
+
+    return await getConversations(
+      includeDiscarded: showDiscardedConversations,
+      startDate: startDate,
+      endDate: endDate,
+    );
   }
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
