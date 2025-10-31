@@ -363,24 +363,30 @@ void turnoff_all()
 
     // Always turn off microphone
     mic_off();
+    k_msleep(100);
 
     // Turn off speaker if enabled
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
     speaker_off();
+    k_msleep(100);
 #endif
 
     // Turn off accelerometer if enabled
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
     accel_off();
+    k_msleep(100);
 #endif
 
     if (is_sd_on()) {
         app_sd_off();
     }
+    k_msleep(300);
+
 
     // Put the buttons device to sleep if button is enabled
 #ifdef CONFIG_OMI_ENABLE_BUTTON
     pm_device_runtime_put(buttons);
+    k_msleep(100);
 #endif
 
     // Disable USB if enabled
