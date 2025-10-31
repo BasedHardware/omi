@@ -32,6 +32,8 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> processingConversations = [];
 
+  final Set<String> _pendingRefreshConversations = {};
+
   final AppReviewService _appReviewService = AppReviewService();
 
   bool isFetchingConversations = false;
@@ -127,8 +129,39 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void removeProcessingConversation(String conversationId) {
+    final convo = processingConversations.where((m) => m.id == conversationId).isNotEmpty
+        ? processingConversations.firstWhere((m) => m.id == conversationId)
+        : null;
+
     processingConversations.removeWhere((m) => m.id == conversationId);
     notifyListeners();
+
+    if (convo != null && convo.status == ConversationStatus.completed) {
+      upsertConversation(convo);
+    }
+
+    _pendingRefreshConversations.add(conversationId);
+    _refreshDebounceTimer?.cancel();
+
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+
+      Set<String> conversationsNeedingRefresh = {};
+      
+      for (String pendingId in _pendingRefreshConversations) {
+        bool conversationExists = conversations.any((conv) => conv.id == pendingId);
+        if (!conversationExists) {
+          conversationsNeedingRefresh.add(pendingId);
+        }
+      }
+      
+      if (conversationsNeedingRefresh.isNotEmpty) {
+        forceRefreshConversations();
+      } else {
+        debugPrint('No refresh needed');
+      }
+      
+      _pendingRefreshConversations.clear();
+    });
   }
 
   void onConversationTap(int idx) {
@@ -209,17 +242,20 @@ class ConversationProvider extends ChangeNotifier {
       processingConversations.insertAll(0, upsertConvos);
     }
 
-    // completed convos
-    upsertConvos = newConversations
-        .where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1)
-        .toList();
-    if (upsertConvos.isNotEmpty) {
-      // Check if this is the first conversation
-      bool wasEmpty = conversations.isEmpty;
+    for (var c in newConversations) {
+      if (c.status == ConversationStatus.completed) {
+        int idx = conversations.indexWhere((cc) => cc.id == c.id);
+        if (idx == -1) {
+          conversations.insert(0, c);
+        } else {
+          conversations[idx] = c;
+        }
+      }
+    }
 
-      conversations.insertAll(0, upsertConvos);
-
-      // Mark first conversation for app review
+    // Check if this is the first conversation for app review
+    if (conversations.isNotEmpty) {
+      bool wasEmpty = conversations.length == newConversations.where((c) => c.status == ConversationStatus.completed).length;
       if (wasEmpty && await _appReviewService.isFirstConversation()) {
         await _appReviewService.markFirstConversation();
       }
