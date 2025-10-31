@@ -131,6 +131,20 @@ int main(void)
 
     printk("Starting omi ...\n");
 
+    // Initialize Haptic driver first
+    // this is building up for future of omi turn on sequence - long press to turn on instead of short press
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    ret = haptic_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
+        error_haptic();
+        // Non-critical, continue boot
+    } else {
+        LOG_INF("Haptic driver initialized");
+        play_haptic_milli(100);
+    }
+#endif
+
     // Suspend unused modules
     LOG_PRINTK("\n");
     LOG_INF("Suspending unused modules...\n");
@@ -200,19 +214,6 @@ int main(void)
     }
     LOG_INF("Button initialized");
     activate_button_work();
-#endif
-
-    // Initialize Haptic driver
-#ifdef CONFIG_OMI_ENABLE_HAPTIC
-    ret = haptic_init();
-    if (ret) {
-        LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
-        error_haptic();
-        // Non-critical, continue boot
-    } else {
-        LOG_INF("Haptic driver initialized");
-        play_haptic_milli(50);
-    }
 #endif
 
     // SD Card
