@@ -512,16 +512,17 @@ FSM_STATE_T get_current_button_state()
 
 void turnoff_all()
 {
+    // Immediate feedback - turn off LEDs and play haptic first
+    set_led_blue(false);
+    set_led_red(false);
+    set_led_green(false);
+    play_haptic_milli(50);
+    k_msleep(50);
 
     mic_off();
     sd_off();
     speaker_off();
     accel_off();
-    play_haptic_milli(50);
-    k_msleep(100);
-    set_led_blue(false);
-    set_led_red(false);
-    set_led_green(false);
     gpio_remove_callback(d5_pin_input.port, &button_cb_data);
     gpio_pin_interrupt_configure_dt(&d5_pin_input, GPIO_INT_LEVEL_INACTIVE);
     // maybe save something here to indicate success. next time the button is pressed we should know about it

@@ -216,13 +216,12 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("single tap detected\n");
         btn_last_event = event;
         notify_tap();
-        k_msleep(1000);
+        k_msleep(10);
 
         // // Enter the low power mode
         is_off = true;
         transport_off();
-        k_msleep(300);
-
+        k_msleep(10);
         turnoff_all();
     }
 
@@ -352,41 +351,36 @@ void turnoff_all()
 {
     int rc;
 
+    // Immediate feedback - turn off LED and play haptic first
+    led_off();
+
+    // Play haptic feedback if enabled
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    play_haptic_milli(100);
+    k_msleep(100);
+    haptic_off();
+#endif
+
     // Always turn off microphone
     mic_off();
-    k_msleep(100);
 
     // Turn off speaker if enabled
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
     speaker_off();
-    k_msleep(100);
 #endif
 
     // Turn off accelerometer if enabled
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
     accel_off();
-    k_msleep(100);
 #endif
 
     if (is_sd_on()) {
         app_sd_off();
     }
-    k_msleep(300);
-
-    // Play haptic feedback if enabled
-#ifdef CONFIG_OMI_ENABLE_HAPTIC
-    play_haptic_milli(100);
-    k_msleep(300);
-    haptic_off();
-#endif
-
-    led_off();
-    k_msleep(100);
 
     // Put the buttons device to sleep if button is enabled
 #ifdef CONFIG_OMI_ENABLE_BUTTON
     pm_device_runtime_put(buttons);
-    k_msleep(100);
 #endif
 
     // Disable USB if enabled
@@ -411,7 +405,6 @@ void turnoff_all()
     }
 
     LOG_INF("Entering system off; press usr_btn to restart");
-    k_msleep(1000);
 
     // Power off the system using sys_poweroff
     sys_poweroff();
