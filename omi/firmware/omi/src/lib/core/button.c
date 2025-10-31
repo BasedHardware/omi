@@ -216,12 +216,12 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("single tap detected\n");
         btn_last_event = event;
         notify_tap();
-        k_msleep(10);
+        k_msleep(1000);
 
         // // Enter the low power mode
         is_off = true;
         transport_off();
-        k_msleep(10);
+        k_msleep(300);
         turnoff_all();
     }
 
@@ -351,13 +351,13 @@ void turnoff_all()
 {
     int rc;
 
-    // Immediate feedback - turn off LED and play haptic first
     led_off();
+    k_msleep(100);
 
     // Play haptic feedback if enabled
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     play_haptic_milli(100);
-    k_msleep(100);
+    k_msleep(300);
     haptic_off();
 #endif
 
@@ -411,6 +411,7 @@ void turnoff_all()
     }
 
     LOG_INF("Entering system off; press usr_btn to restart");
+    k_msleep(1000);
 
     // Power off the system using sys_poweroff
     sys_poweroff();
