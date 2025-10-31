@@ -518,7 +518,7 @@ void turnoff_all()
     speaker_off();
     accel_off();
     play_haptic_milli(50);
-    k_msleep(50);
+    k_msleep(100);
     set_led_blue(false);
     set_led_red(false);
     set_led_green(false);
