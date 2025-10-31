@@ -517,11 +517,11 @@ void turnoff_all()
     sd_off();
     speaker_off();
     accel_off();
+    play_haptic_milli(50);
+    k_msleep(50);
     set_led_blue(false);
     set_led_red(false);
     set_led_green(false);
-    play_haptic_milli(50);
-    k_msleep(50);
     gpio_remove_callback(d5_pin_input.port, &button_cb_data);
     gpio_pin_interrupt_configure_dt(&d5_pin_input, GPIO_INT_LEVEL_INACTIVE);
     // maybe save something here to indicate success. next time the button is pressed we should know about it
