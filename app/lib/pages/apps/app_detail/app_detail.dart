@@ -328,151 +328,192 @@ class _AppDetailPageState extends State<AppDetailPage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
+        automaticallyImplyLeading: false,
+        leading: Container(
+          width: 36,
+          height: 36,
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.3),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              Navigator.pop(context);
+            },
+            icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+          ),
+        ),
         actions: [
           if (app.enabled && app.worksWithChat()) ...[
-            GestureDetector(
-              onTap: chatButtonLoading
-                  ? null
-                  : () async {
-                      HapticFeedback.mediumImpact();
+            Container(
+              width: 36,
+              height: 36,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                onPressed: chatButtonLoading
+                    ? null
+                    : () async {
+                        HapticFeedback.mediumImpact();
 
-                      // Prevent multiple clicks
-                      if (chatButtonLoading) return;
+                        // Prevent multiple clicks
+                        if (chatButtonLoading) return;
 
-                      setState(() => chatButtonLoading = true);
+                        setState(() => chatButtonLoading = true);
 
-                      try {
-                        // Navigate directly to chat page with this app selected
-                        var appId = app.id;
-                        var appProvider = Provider.of<AppProvider>(context, listen: false);
-                        var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                        try {
+                          // Navigate directly to chat page with this app selected
+                          var appId = app.id;
+                          var appProvider = Provider.of<AppProvider>(context, listen: false);
+                          var messageProvider = Provider.of<MessageProvider>(context, listen: false);
 
-                        // Set the selected app
-                        appProvider.setSelectedChatAppId(appId);
+                          // Set the selected app
+                          appProvider.setSelectedChatAppId(appId);
 
-                        // Refresh messages and get the selected app
-                        await messageProvider.refreshMessages();
-                        App? selectedApp = await appProvider.getAppFromId(appId);
+                          // Refresh messages and get the selected app
+                          await messageProvider.refreshMessages();
+                          App? selectedApp = await appProvider.getAppFromId(appId);
 
-                        // Send initial message if chat is empty
-                        if (messageProvider.messages.isEmpty) {
-                          messageProvider.sendInitialAppMessage(selectedApp);
+                          // Send initial message if chat is empty
+                          if (messageProvider.messages.isEmpty) {
+                            messageProvider.sendInitialAppMessage(selectedApp);
+                          }
+
+                          // Navigate directly to chat page
+                          if (mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ChatPage(isPivotBottom: false),
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() => chatButtonLoading = false);
+                          }
                         }
-
-                        // Navigate directly to chat page
-                        if (mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ChatPage(isPivotBottom: false),
-                            ),
-                          );
-                        }
-                      } finally {
-                        if (mounted) {
-                          setState(() => chatButtonLoading = false);
-                        }
-                      }
-                    },
-              child: chatButtonLoading
-                  ? Container(
-                      width: 16,
-                      height: 16,
-                      alignment: Alignment.center,
-                      child: const SizedBox(
+                      },
+                icon: chatButtonLoading
+                    ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                          strokeWidth: 1,
+                          strokeWidth: 1.5,
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
-                      ),
-                    )
-                  : const Icon(FontAwesomeIcons.solidComments),
+                      )
+                    : const FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
+              ),
             ),
-            const SizedBox(width: 24),
           ],
           if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
-            GestureDetector(
-              child: const Icon(
-                FontAwesomeIcons.gear,
-                color: Colors.white,
+            Container(
+              width: 36,
+              height: 36,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                shape: BoxShape.circle,
               ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AppHomeWebPage(app: app),
-                  ),
-                );
-              },
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AppHomeWebPage(app: app),
+                    ),
+                  );
+                },
+              ),
             ),
-            const SizedBox(width: 24),
           ],
           isLoading || app.private
               ? const SizedBox.shrink()
               : Builder(
                   builder: (BuildContext context) {
-                    return GestureDetector(
-                      child: const Icon(FontAwesomeIcons.arrowUpFromBracket),
-                      onTap: () async {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().track('App Shared', properties: {'appId': app.id});
+                    return Container(
+                      width: 36,
+                      height: 36,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                        onPressed: () async {
+                          HapticFeedback.mediumImpact();
+                          MixpanelManager().track('App Shared', properties: {'appId': app.id});
 
-                        // Get the position of the share button for iOS
-                        final RenderBox? box = context.findRenderObject() as RenderBox?;
-                        final Rect? sharePositionOrigin =
-                            box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+                          // Get the position of the share button for iOS
+                          final RenderBox? box = context.findRenderObject() as RenderBox?;
+                          final Rect? sharePositionOrigin =
+                              box != null ? box.localToGlobal(Offset.zero) & box.size : null;
 
-                        if (app.isNotPersona()) {
-                          await Share.share(
-                            'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                            subject: app.name,
-                            sharePositionOrigin: sharePositionOrigin,
-                          );
-                        } else {
-                          await Share.share(
-                            'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
-                            subject: app.name,
-                            sharePositionOrigin: sharePositionOrigin,
-                          );
-                        }
-                      },
+                          if (app.isNotPersona()) {
+                            await Share.share(
+                              'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                              subject: app.name,
+                              sharePositionOrigin: sharePositionOrigin,
+                            );
+                          } else {
+                            await Share.share(
+                              'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                              subject: app.name,
+                              sharePositionOrigin: sharePositionOrigin,
+                            );
+                          }
+                        },
+                      ),
                     );
                   },
-                ),
-          // Cancel subscription
-          !context.watch<AppProvider>().isAppOwner
-              ? const SizedBox(
-                  width: 24,
-                )
-              : const SizedBox(
-                  width: 12,
                 ),
           context.watch<AppProvider>().isAppOwner
               ? (isLoading
                   ? const SizedBox.shrink()
-                  : IconButton(
-                      icon: const FaIcon(FontAwesomeIcons.edit),
-                      padding: const EdgeInsets.only(right: 12),
-                      onPressed: () async {
-                        await showModalBottomSheet(
-                          context: context,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
+                  : Container(
+                      width: 36,
+                      height: 36,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                        onPressed: () async {
+                          HapticFeedback.mediumImpact();
+                          await showModalBottomSheet(
+                            context: context,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(16),
+                                topRight: Radius.circular(16),
+                              ),
                             ),
-                          ),
-                          builder: (context) {
-                            return ShowAppOptionsSheet(
-                              app: app,
-                            );
-                          },
-                        );
-                      },
+                            builder: (context) {
+                              return ShowAppOptionsSheet(
+                                app: app,
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ))
-              : const SizedBox.shrink(),
+              : const SizedBox(width: 8),
         ],
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
