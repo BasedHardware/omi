@@ -179,7 +179,7 @@ int main(void)
     }
 
     // Run the boot LED sequence
-    boot_led_sequence();
+    // boot_led_sequence();
 
     if (setting_ret) {
         error_settings();
@@ -274,7 +274,7 @@ int main(void)
     LOG_INF("Device initialized successfully\n");
 
     // Show ready sequence
-    boot_ready_sequence();
+    // boot_ready_sequence();
 
     while (1) {
         monitor_log_metrics();
