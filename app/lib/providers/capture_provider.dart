@@ -321,7 +321,16 @@ class CaptureProvider extends ChangeNotifier
       var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("device button $buttonState");
 
-      // start long press
+      // Button states: 0=default, 1=single_tap, 2=double_tap, 3=long_tap, 4=press, 5=release
+
+      // double tap - process conversation immediately (same as red end button)
+      if (buttonState == 2) {
+        debugPrint("Double tap detected - processing conversation");
+        forceProcessingCurrentConversation();
+        return;
+      }
+
+      // start long press (for voice commands)
       if (buttonState == 3 && _voiceCommandSession == null) {
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
@@ -329,7 +338,7 @@ class CaptureProvider extends ChangeNotifier
         _playSpeakerHaptic(deviceId, 1);
       }
 
-      // release
+      // release (end voice command)
       if (buttonState == 5 && _voiceCommandSession != null) {
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
