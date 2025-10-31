@@ -11,7 +11,7 @@ abstract class Env {
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
-  static String? get apiBaseUrl => 'https://api.omi.me/';
+  static String? get apiBaseUrl => _instance.apiBaseUrl;
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 
