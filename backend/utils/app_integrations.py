@@ -144,12 +144,12 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     return messages
 
 
-async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
+async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None, photos: List = None):
     print("trigger_realtime_integrations", uid)
     """REALTIME STREAMING"""
     # TODO: don't retrieve token before knowing if to notify
     token = notification_db.get_token_only(uid)
-    _trigger_realtime_integrations(uid, token, segments, conversation_id)
+    _trigger_realtime_integrations(uid, token, segments, conversation_id, photos)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -284,7 +284,7 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     return results
 
 
-def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], conversation_id: str | None) -> dict:
+def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], conversation_id: str | None, photos: List = None) -> dict:
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
@@ -304,7 +304,12 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
+            # Build payload with photos if available
+            payload = {"session_id": uid, "segments": segments}
+            if photos:
+                payload["photos"] = [photo.dict() for photo in photos]
+
+            response = requests.post(url, json=payload, timeout=30)
             if response.status_code != 200:
                 print(
                     'trigger_realtime_integrations',
