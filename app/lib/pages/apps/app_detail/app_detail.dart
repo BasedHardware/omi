@@ -72,18 +72,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   Future<void> _tryAutoInstallAfterSetup() async {
     if (!mounted) return;
-    
+
     setState(() => appLoading = true);
     var prefs = SharedPreferencesUtil();
     var enabled = await enableAppServer(app.id);
-    
+
     if (!mounted) return;
-    
+
     if (enabled) {
       prefs.enableApp(app.id);
       MixpanelManager().appEnabled(app.id);
       context.read<AppProvider>().filterApps();
-      
+
       setState(() {
         app.enabled = true;
         appLoading = false;
@@ -411,22 +411,34 @@ class _AppDetailPageState extends State<AppDetailPage> {
           ],
           isLoading || app.private
               ? const SizedBox.shrink()
-              : GestureDetector(
-                  child: const Icon(FontAwesomeIcons.arrowUpFromBracket),
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().track('App Shared', properties: {'appId': app.id});
-                    if (app.isNotPersona()) {
-                      Share.share(
-                        'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                        subject: app.name,
-                      );
-                    } else {
-                      Share.share(
-                        'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
-                        subject: app.name,
-                      );
-                    }
+              : Builder(
+                  builder: (BuildContext context) {
+                    return GestureDetector(
+                      child: const Icon(FontAwesomeIcons.arrowUpFromBracket),
+                      onTap: () async {
+                        HapticFeedback.mediumImpact();
+                        MixpanelManager().track('App Shared', properties: {'appId': app.id});
+
+                        // Get the position of the share button for iOS
+                        final RenderBox? box = context.findRenderObject() as RenderBox?;
+                        final Rect? sharePositionOrigin =
+                            box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+
+                        if (app.isNotPersona()) {
+                          await Share.share(
+                            'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                            subject: app.name,
+                            sharePositionOrigin: sharePositionOrigin,
+                          );
+                        } else {
+                          await Share.share(
+                            'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                            subject: app.name,
+                            sharePositionOrigin: sharePositionOrigin,
+                          );
+                        }
+                      },
+                    );
                   },
                 ),
           // Cancel subscription
@@ -1192,12 +1204,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Future<void> _toggleApp(String appId, bool isEnabled) async {
     var prefs = SharedPreferencesUtil();
     setState(() => appLoading = true);
-    
+
     if (isEnabled) {
       var enabled = await enableAppServer(appId);
-      
+
       if (!mounted) return;
-      
+
       if (!enabled) {
         if (app.worksExternally()) {
           setState(() => appLoading = false);
@@ -1223,7 +1235,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       prefs.enableApp(appId);
       MixpanelManager().appEnabled(appId);
       context.read<AppProvider>().filterApps();
-      
+
       setState(() {
         app.enabled = true;
         appLoading = false;
@@ -1247,9 +1259,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       var res = await disableAppServer(appId);
       print(res);
       MixpanelManager().appDisabled(appId);
-      
+
       if (!mounted) return;
-      
+
       context.read<AppProvider>().filterApps();
       setState(() {
         app.enabled = false;

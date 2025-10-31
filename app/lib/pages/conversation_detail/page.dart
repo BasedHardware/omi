@@ -429,11 +429,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       final Size size = box.size;
                                       Share.share(
                                         content,
+                                        subject: provider.conversation.structured.title,
                                         sharePositionOrigin:
                                             Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
                                       );
                                     } else {
-                                      Share.share(content);
+                                      Share.share(content, subject: provider.conversation.structured.title);
                                     }
                                     // Small delay to let share sheet appear, then clear loading
                                     await Future.delayed(const Duration(milliseconds: 150));
