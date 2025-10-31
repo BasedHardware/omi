@@ -72,18 +72,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   Future<void> _tryAutoInstallAfterSetup() async {
     if (!mounted) return;
-    
+
     setState(() => appLoading = true);
     var prefs = SharedPreferencesUtil();
     var enabled = await enableAppServer(app.id);
-    
+
     if (!mounted) return;
-    
+
     if (enabled) {
       prefs.enableApp(app.id);
       MixpanelManager().appEnabled(app.id);
       context.read<AppProvider>().filterApps();
-      
+
       setState(() {
         app.enabled = true;
         appLoading = false;
@@ -328,139 +328,192 @@ class _AppDetailPageState extends State<AppDetailPage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
+        automaticallyImplyLeading: false,
+        leading: Container(
+          width: 36,
+          height: 36,
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.3),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              Navigator.pop(context);
+            },
+            icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+          ),
+        ),
         actions: [
           if (app.enabled && app.worksWithChat()) ...[
-            GestureDetector(
-              onTap: chatButtonLoading
-                  ? null
-                  : () async {
-                      HapticFeedback.mediumImpact();
+            Container(
+              width: 36,
+              height: 36,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                onPressed: chatButtonLoading
+                    ? null
+                    : () async {
+                        HapticFeedback.mediumImpact();
 
-                      // Prevent multiple clicks
-                      if (chatButtonLoading) return;
+                        // Prevent multiple clicks
+                        if (chatButtonLoading) return;
 
-                      setState(() => chatButtonLoading = true);
+                        setState(() => chatButtonLoading = true);
 
-                      try {
-                        // Navigate directly to chat page with this app selected
-                        var appId = app.id;
-                        var appProvider = Provider.of<AppProvider>(context, listen: false);
-                        var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                        try {
+                          // Navigate directly to chat page with this app selected
+                          var appId = app.id;
+                          var appProvider = Provider.of<AppProvider>(context, listen: false);
+                          var messageProvider = Provider.of<MessageProvider>(context, listen: false);
 
-                        // Set the selected app
-                        appProvider.setSelectedChatAppId(appId);
+                          // Set the selected app
+                          appProvider.setSelectedChatAppId(appId);
 
-                        // Refresh messages and get the selected app
-                        await messageProvider.refreshMessages();
-                        App? selectedApp = await appProvider.getAppFromId(appId);
+                          // Refresh messages and get the selected app
+                          await messageProvider.refreshMessages();
+                          App? selectedApp = await appProvider.getAppFromId(appId);
 
-                        // Send initial message if chat is empty
-                        if (messageProvider.messages.isEmpty) {
-                          messageProvider.sendInitialAppMessage(selectedApp);
+                          // Send initial message if chat is empty
+                          if (messageProvider.messages.isEmpty) {
+                            messageProvider.sendInitialAppMessage(selectedApp);
+                          }
+
+                          // Navigate directly to chat page
+                          if (mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ChatPage(isPivotBottom: false),
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() => chatButtonLoading = false);
+                          }
                         }
-
-                        // Navigate directly to chat page
-                        if (mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ChatPage(isPivotBottom: false),
-                            ),
-                          );
-                        }
-                      } finally {
-                        if (mounted) {
-                          setState(() => chatButtonLoading = false);
-                        }
-                      }
-                    },
-              child: chatButtonLoading
-                  ? Container(
-                      width: 16,
-                      height: 16,
-                      alignment: Alignment.center,
-                      child: const SizedBox(
+                      },
+                icon: chatButtonLoading
+                    ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                          strokeWidth: 1,
+                          strokeWidth: 1.5,
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
-                      ),
-                    )
-                  : const Icon(FontAwesomeIcons.solidComments),
+                      )
+                    : const FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
+              ),
             ),
-            const SizedBox(width: 24),
           ],
           if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
-            GestureDetector(
-              child: const Icon(
-                Icons.open_in_browser_rounded,
-                color: Colors.white,
+            Container(
+              width: 36,
+              height: 36,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                shape: BoxShape.circle,
               ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AppHomeWebPage(app: app),
-                  ),
-                );
-              },
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AppHomeWebPage(app: app),
+                    ),
+                  );
+                },
+              ),
             ),
-            const SizedBox(width: 24),
           ],
           isLoading || app.private
               ? const SizedBox.shrink()
-              : GestureDetector(
-                  child: const Icon(FontAwesomeIcons.arrowUpFromBracket),
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().track('App Shared', properties: {'appId': app.id});
-                    if (app.isNotPersona()) {
-                      Share.share(
-                        'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                        subject: app.name,
-                      );
-                    } else {
-                      Share.share(
-                        'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
-                        subject: app.name,
-                      );
-                    }
+              : Builder(
+                  builder: (BuildContext context) {
+                    return Container(
+                      width: 36,
+                      height: 36,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                        onPressed: () async {
+                          HapticFeedback.mediumImpact();
+                          MixpanelManager().track('App Shared', properties: {'appId': app.id});
+
+                          // Get the position of the share button for iOS
+                          final RenderBox? box = context.findRenderObject() as RenderBox?;
+                          final Rect? sharePositionOrigin =
+                              box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+
+                          if (app.isNotPersona()) {
+                            await Share.share(
+                              'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                              subject: app.name,
+                              sharePositionOrigin: sharePositionOrigin,
+                            );
+                          } else {
+                            await Share.share(
+                              'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                              subject: app.name,
+                              sharePositionOrigin: sharePositionOrigin,
+                            );
+                          }
+                        },
+                      ),
+                    );
                   },
-                ),
-          // Cancel subscription
-          !context.watch<AppProvider>().isAppOwner
-              ? const SizedBox(
-                  width: 24,
-                )
-              : const SizedBox(
-                  width: 12,
                 ),
           context.watch<AppProvider>().isAppOwner
               ? (isLoading
                   ? const SizedBox.shrink()
-                  : IconButton(
-                      icon: const Icon(Icons.settings),
-                      padding: const EdgeInsets.only(right: 12),
-                      onPressed: () async {
-                        await showModalBottomSheet(
-                          context: context,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
+                  : Container(
+                      width: 36,
+                      height: 36,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                        onPressed: () async {
+                          HapticFeedback.mediumImpact();
+                          await showModalBottomSheet(
+                            context: context,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(16),
+                                topRight: Radius.circular(16),
+                              ),
                             ),
-                          ),
-                          builder: (context) {
-                            return ShowAppOptionsSheet(
-                              app: app,
-                            );
-                          },
-                        );
-                      },
+                            builder: (context) {
+                              return ShowAppOptionsSheet(
+                                app: app,
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ))
-              : const SizedBox.shrink(),
+              : const SizedBox(width: 8),
         ],
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
@@ -487,7 +540,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     ),
                     placeholder: (context, url) => const CircularProgressIndicator(),
-                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                    errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
                   ),
                   const SizedBox(width: 20),
                   Column(
@@ -538,6 +591,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     fontSize: 16,
                                   ),
                                 ),
+                                const SizedBox(width: 4),
                                 RatingBar.builder(
                                   initialRating: app.ratingAvg ?? 0,
                                   minRating: 1,
@@ -545,10 +599,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   direction: Axis.horizontal,
                                   allowHalfRating: true,
                                   itemCount: 1,
-                                  itemSize: 20,
+                                  itemSize: 16,
                                   tapOnlyMode: false,
-                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                  itemPadding: const EdgeInsets.symmetric(horizontal: 1),
+                                  itemBuilder: (context, _) =>
+                                      const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
                                   maxRating: 5.0,
                                   onRatingUpdate: (rating) {},
                                 ),
@@ -765,7 +820,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(
-                              Icons.info_outline,
+                              FontAwesomeIcons.circleInfo,
                               color: Colors.grey,
                               size: 18,
                             ),
@@ -791,7 +846,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(
-                              Icons.info_outline,
+                              FontAwesomeIcons.circleInfo,
                               color: Colors.grey,
                               size: 18,
                             ),
@@ -817,7 +872,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(
-                              Icons.error_outline,
+                              FontAwesomeIcons.circleExclamation,
                               color: Colors.grey,
                               size: 18,
                             ),
@@ -873,7 +928,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           },
                           trailing: const Padding(
                             padding: EdgeInsets.only(right: 12.0),
-                            child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                            child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
                           ));
                     }).toList()
                   : <Widget>[const SizedBox.shrink()]),
@@ -901,7 +956,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       },
                       trailing: const Padding(
                         padding: EdgeInsets.only(right: 12.0),
-                        child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                        child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
                       ),
                       title: const Text(
                         'Integration Instructions',
@@ -918,18 +973,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ),
                 ),
                 SizedBox(
-                  height: MediaQuery.of(context).size.width * 0.9,
+                  height: 250,
                   child: ListView.builder(
                     padding: EdgeInsets.zero,
                     scrollDirection: Axis.horizontal,
                     itemCount: app.thumbnailUrls.length,
                     itemBuilder: (context, index) {
-                      final screenWidth = MediaQuery.of(context).size.width;
-                      // Calculate width to show 1.5 thumbnails
-                      final width = screenWidth * 0.65;
-                      // Calculate height to maintain 2:3 ratio (height = width * 1.5)
-                      final height = width * 1.5;
-
                       return GestureDetector(
                         onTap: () {
                           Navigator.push(
@@ -941,56 +990,50 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             ),
                           );
                         },
-                        child: CachedNetworkImage(
-                          imageUrl: app.thumbnailUrls[index],
-                          imageBuilder: (context, imageProvider) => Container(
-                            width: width,
-                            height: height,
-                            clipBehavior: Clip.hardEdge,
-                            margin: EdgeInsets.only(
-                              left: index == 0 ? 16 : 8,
-                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFF424242),
-                                width: 1,
-                              ),
-                              image: DecorationImage(
-                                image: imageProvider,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
+                        child: Container(
+                          margin: EdgeInsets.only(
+                            left: index == 0 ? 16 : 8,
+                            right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
                           ),
-                          placeholder: (context, url) => Shimmer.fromColors(
-                            baseColor: Colors.grey[900]!,
-                            highlightColor: Colors.grey[800]!,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              width: width,
-                              height: height,
-                              margin: EdgeInsets.only(
-                                left: index == 0 ? 16 : 8,
-                                right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
-                              ),
                               decoration: BoxDecoration(
-                                color: Colors.black,
+                                border: Border.all(
+                                  color: const Color(0xFF424242),
+                                  width: 1,
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(11),
+                                child: CachedNetworkImage(
+                                  imageUrl: app.thumbnailUrls[index],
+                                  fit: BoxFit.contain,
+                                  placeholder: (context, url) => SizedBox(
+                                    width: 150,
+                                    child: Shimmer.fromColors(
+                                      baseColor: Colors.grey[900]!,
+                                      highlightColor: Colors.grey[800]!,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.black,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  errorWidget: (context, url, error) => Container(
+                                    width: 150,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[900],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(FontAwesomeIcons.circleExclamation),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            width: width,
-                            height: height,
-                            margin: EdgeInsets.only(
-                              left: index == 0 ? 16 : 8,
-                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[900],
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.error),
                           ),
                         ),
                       );
@@ -1077,7 +1120,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           const Spacer(),
                           app.reviews.isNotEmpty
                               ? const Icon(
-                                  Icons.arrow_forward,
+                                  FontAwesomeIcons.arrowRight,
                                   size: 20,
                                 )
                               : const SizedBox.shrink(),
@@ -1099,10 +1142,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   direction: Axis.horizontal,
                                   allowHalfRating: true,
                                   itemCount: 5,
-                                  itemSize: 20,
+                                  itemSize: 16,
                                   tapOnlyMode: false,
-                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                  itemPadding: const EdgeInsets.symmetric(horizontal: 2),
+                                  itemBuilder: (context, _) =>
+                                      const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
                                   maxRating: 5.0,
                                   onRatingUpdate: (rating) {},
                                 ),
@@ -1192,12 +1236,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Future<void> _toggleApp(String appId, bool isEnabled) async {
     var prefs = SharedPreferencesUtil();
     setState(() => appLoading = true);
-    
+
     if (isEnabled) {
       var enabled = await enableAppServer(appId);
-      
+
       if (!mounted) return;
-      
+
       if (!enabled) {
         if (app.worksExternally()) {
           setState(() => appLoading = false);
@@ -1223,7 +1267,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       prefs.enableApp(appId);
       MixpanelManager().appEnabled(appId);
       context.read<AppProvider>().filterApps();
-      
+
       setState(() {
         app.enabled = true;
         appLoading = false;
@@ -1247,9 +1291,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       var res = await disableAppServer(appId);
       print(res);
       MixpanelManager().appDisabled(appId);
-      
+
       if (!mounted) return;
-      
+
       context.read<AppProvider>().filterApps();
       setState(() {
         app.enabled = false;
@@ -1315,10 +1359,10 @@ class RecentReviewsSection extends StatelessWidget {
                           direction: Axis.horizontal,
                           allowHalfRating: true,
                           itemCount: 5,
-                          itemSize: 20,
+                          itemSize: 16,
                           tapOnlyMode: false,
-                          itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                          itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                          itemPadding: const EdgeInsets.symmetric(horizontal: 2),
+                          itemBuilder: (context, _) => const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
                           maxRating: 5.0,
                           onRatingUpdate: (rating) {},
                         ),
