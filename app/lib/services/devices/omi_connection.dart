@@ -14,6 +14,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsServiceUuid = '19b10010-e8f2-537e-4f6c-d104768a1214';
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDeviceNameCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -542,6 +543,30 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error getting mic gain: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<void> performSetDeviceName(String name) async {
+    try {
+      final nameBytes = name.codeUnits;
+      await transport.writeCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid, nameBytes);
+    } catch (e) {
+      debugPrint('OmiDeviceConnection: Error setting device name: $e');
+    }
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    try {
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid);
+      if (value.isNotEmpty) {
+        return String.fromCharCodes(value);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('OmiDeviceConnection: Error getting device name: $e');
       return null;
     }
   }

@@ -457,7 +457,18 @@ class CaptureProvider extends ChangeNotifier
     // Set device info for WAL creation
     var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
     var pd = await _recordingDevice!.getDeviceInfo(connection);
+    
+    // Try to get custom device name first, then model number, then fallback to "Omi"
     String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    try {
+      String? customName = await connection?.getDeviceName();
+      if (customName != null && customName.isNotEmpty) {
+        deviceModel = customName;
+      }
+    } catch (e) {
+      // If getting custom name fails, use the existing logic
+    }
+    
     _wal.getSyncs().phone.setDeviceInfo(_recordingDevice!.id, deviceModel);
 
     await streamButton(deviceId);

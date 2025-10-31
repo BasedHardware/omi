@@ -438,6 +438,25 @@ abstract class DeviceConnection {
 
   Future<int?> performGetMicGain();
 
+  Future<void> setDeviceName(String name) async {
+    if (await isConnected()) {
+      return await performSetDeviceName(name);
+    }
+    _showDeviceDisconnectedNotification();
+  }
+
+  Future<void> performSetDeviceName(String name);
+
+  Future<String?> getDeviceName() async {
+    if (await isConnected()) {
+      return await performGetDeviceName();
+    }
+    _showDeviceDisconnectedNotification();
+    return null;
+  }
+
+  Future<String?> performGetDeviceName();
+
   void _showDeviceDisconnectedNotification() {
     NotificationService.instance.createNotification(
       title: '${device.name} Disconnected',

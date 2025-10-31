@@ -264,6 +264,18 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<void> performSetDeviceName(String name) async {
+    // Apple Watch does not support device name setting
+    return;
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    // Apple Watch does not support device name setting
+    return null;
+  }
+
+  @override
   Future performCameraStartPhotoController() {
     throw UnimplementedError();
   }
