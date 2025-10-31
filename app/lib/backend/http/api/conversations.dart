@@ -26,17 +26,26 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   return null;
 }
 
-Future<List<ServerConversation>> getConversations(
-    {int limit = 50,
-    int offset = 0,
-    List<ConversationStatus> statuses = const [],
-    bool includeDiscarded = true}) async {
-  var response = await makeApiCall(
-      url:
-          '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
-      headers: {},
-      method: 'GET',
-      body: '');
+Future<List<ServerConversation>> getConversations({
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+}) async {
+  String url =
+      '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
+
+  // Add date filters if provided
+  if (startDate != null) {
+    url += '&start_date=${startDate.toIso8601String()}';
+  }
+  if (endDate != null) {
+    url += '&end_date=${endDate.toIso8601String()}';
+  }
+
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues

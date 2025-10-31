@@ -275,15 +275,6 @@ class ConversationProvider extends ChangeNotifier {
           return false;
         }
       }
-
-      // Apply date filter if selected
-      if (selectedDate != null) {
-        var convoDate = DateTime(convo.createdAt.year, convo.createdAt.month, convo.createdAt.day);
-        var filterDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day);
-        if (convoDate != filterDate) {
-          return false;
-        }
-      }
       return true;
     }).toList();
   }
@@ -298,8 +289,24 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // Re-apply grouping with date filter
-    groupConversationsByDate();
+    setLoadingConversations(true);
+    groupedConversations = {};
+    notifyListeners();
+
+    DateTime startDate = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    DateTime endDate = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+    conversations = await getConversations(
+      includeDiscarded: showDiscardedConversations,
+      startDate: startDate,
+      endDate: endDate,
+    );
+
+    processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
+    conversations = conversations.where((m) => m.status == ConversationStatus.completed).toList();
+
+    _groupConversationsByDateWithoutNotify();
+    setLoadingConversations(false);
     notifyListeners();
   }
 
@@ -313,9 +320,11 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // Re-apply grouping without date filter
-    groupConversationsByDate();
+    setLoadingConversations(true);
+    groupedConversations = {};
     notifyListeners();
+
+    await fetchConversations();
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
@@ -375,8 +384,21 @@ class ConversationProvider extends ChangeNotifier {
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations =
-        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
+
+    // Date filter if selected
+    DateTime? startDate;
+    DateTime? endDate;
+    if (selectedDate != null) {
+      startDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
+      endDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
+    }
+
+    var newConversations = await getConversations(
+      offset: conversations.length,
+      includeDiscarded: showDiscardedConversations,
+      startDate: startDate,
+      endDate: endDate,
+    );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     _groupConversationsByDateWithoutNotify();
