@@ -4,6 +4,7 @@ import UserNotifications
 import app_links
 import WatchConnectivity
 import AVFoundation
+import MapKit
 
 
 extension FlutterError: Error {}
@@ -13,6 +14,7 @@ extension FlutterError: Error {}
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
+  private var mapSnapshotChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
 
   private var notificationTitleOnKill: String?
@@ -61,6 +63,12 @@ extension FlutterError: Error {}
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleRemindersCall(call, result: result)
     }
+    
+    // Create Map Snapshot method channel
+    mapSnapshotChannel = FlutterMethodChannel(name: "com.omi.map_snapshot", binaryMessenger: controller!.binaryMessenger)
+    mapSnapshotChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.handleMapSnapshotCall(call, result: result)
+    }
 
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
@@ -94,6 +102,114 @@ extension FlutterError: Error {}
   
   private func handleAppleRemindersCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     appleRemindersService.handleMethodCall(call, result: result)
+  }
+  
+  private func handleMapSnapshotCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "getMapSnapshot" {
+      guard let args = call.arguments as? [String: Any],
+            let latitude = args["latitude"] as? Double,
+            let longitude = args["longitude"] as? Double,
+            let width = args["width"] as? Double,
+            let height = args["height"] as? Double else {
+        result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+        return
+      }
+      
+      generateMapSnapshot(latitude: latitude, longitude: longitude, width: width, height: height, result: result)
+    } else {
+      result(FlutterMethodNotImplemented)
+    }
+  }
+  
+  private func generateMapSnapshot(latitude: Double, longitude: Double, width: Double, height: Double, result: @escaping FlutterResult) {
+    let location = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    let region = MKCoordinateRegion(center: location, latitudinalMeters: 1000, longitudinalMeters: 1000)
+    
+    let mapSnapshotOptions = MKMapSnapshotter.Options()
+    mapSnapshotOptions.region = region
+    mapSnapshotOptions.size = CGSize(width: width, height: height)
+    mapSnapshotOptions.scale = UIScreen.main.scale
+    
+    let snapshotter = MKMapSnapshotter(options: mapSnapshotOptions)
+    
+    snapshotter.start { snapshot, error in
+      guard let snapshot = snapshot, error == nil else {
+        result(FlutterError(code: "SNAPSHOT_ERROR", message: error?.localizedDescription, details: nil))
+        return
+      }
+      
+      // Create an image with the pin annotation
+      let image = snapshot.image
+      let finalImage = UIGraphicsImageRenderer(size: image.size).image { context in
+        image.draw(at: .zero)
+        
+        // Draw a pin at the location
+        let pinPoint = snapshot.point(for: location)
+        
+        // Pin dimensions
+        let pinWidth: CGFloat = 30
+        let pinHeight: CGFloat = 40
+        let pinTop = pinPoint.y - pinHeight
+        let pinLeft = pinPoint.x - pinWidth / 2
+        
+        // Draw shadow first
+        context.cgContext.saveGState()
+        context.cgContext.setShadow(offset: CGSize(width: 0, height: 3), blur: 6, color: UIColor.black.withAlphaComponent(0.4).cgColor)
+        
+        // Draw the pin shape (teardrop/balloon)
+        let pinPath = UIBezierPath()
+        
+        // Start at the bottom point (where the pin touches the map)
+        pinPath.move(to: CGPoint(x: pinPoint.x, y: pinPoint.y))
+        
+        // Draw the left curve up
+        pinPath.addQuadCurve(
+          to: CGPoint(x: pinLeft, y: pinTop + pinHeight * 0.4),
+          controlPoint: CGPoint(x: pinLeft + pinWidth * 0.2, y: pinPoint.y - pinHeight * 0.3)
+        )
+        
+        // Draw the top rounded part (left side of circle)
+        pinPath.addArc(
+          withCenter: CGPoint(x: pinPoint.x, y: pinTop + pinHeight * 0.35),
+          radius: pinWidth / 2,
+          startAngle: .pi,
+          endAngle: 0,
+          clockwise: true
+        )
+        
+        // Draw the right curve down to the point
+        pinPath.addQuadCurve(
+          to: CGPoint(x: pinPoint.x, y: pinPoint.y),
+          controlPoint: CGPoint(x: pinLeft + pinWidth * 0.8, y: pinPoint.y - pinHeight * 0.3)
+        )
+        
+        pinPath.close()
+        
+        // Fill the pin with red
+        UIColor.systemRed.setFill()
+        pinPath.fill()
+        
+        context.cgContext.restoreGState()
+        
+        // Draw white circle in the center of the pin
+        let circleDiameter: CGFloat = 8
+        let circleRect = CGRect(
+          x: pinPoint.x - circleDiameter / 2,
+          y: pinTop + pinHeight * 0.35 - circleDiameter / 2,
+          width: circleDiameter,
+          height: circleDiameter
+        )
+        UIColor.white.setFill()
+        context.cgContext.fillEllipse(in: circleRect)
+      }
+      
+      // Convert to PNG data
+      if let imageData = finalImage.pngData() {
+        result(FlutterStandardTypedData(bytes: imageData))
+      } else {
+        result(FlutterError(code: "CONVERSION_ERROR", message: "Failed to convert image to PNG", details: nil))
+      }
+    }
   }
     
 
