@@ -76,6 +76,11 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  // Double tap behavior: true = pause/mute, false = end conversation (default)
+  bool get doubleTapPausesMuting => getBool('doubleTapPausesMuting') ?? false;
+
+  set doubleTapPausesMuting(bool value) => saveBool('doubleTapPausesMuting', value);
+
   //----------------------------- Permissions ---------------------------------//
 
   set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
