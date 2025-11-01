@@ -222,7 +222,6 @@ void check_button_level(struct k_work *work_item)
         is_off = true;
         transport_off();
         k_msleep(300);
-
         turnoff_all();
     }
 
@@ -352,6 +351,16 @@ void turnoff_all()
 {
     int rc;
 
+    led_off();
+    k_msleep(100);
+
+    // Play haptic feedback if enabled
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    play_haptic_milli(100);
+    k_msleep(300);
+    haptic_off();
+#endif
+
     // Always turn off microphone
     mic_off();
     k_msleep(100);
@@ -373,15 +382,6 @@ void turnoff_all()
     }
     k_msleep(300);
 
-    // Play haptic feedback if enabled
-#ifdef CONFIG_OMI_ENABLE_HAPTIC
-    play_haptic_milli(100);
-    k_msleep(300);
-    haptic_off();
-#endif
-
-    led_off();
-    k_msleep(100);
 
     // Put the buttons device to sleep if button is enabled
 #ifdef CONFIG_OMI_ENABLE_BUTTON

@@ -131,6 +131,29 @@ int main(void)
 
     printk("Starting omi ...\n");
 
+    // Initialize Haptic driver first; this is building up for future of omi turn on sequence - long press to turn on instead of short press
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    ret = haptic_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
+        error_haptic();
+        // Non-critical, continue boot
+    } else {
+        LOG_INF("Haptic driver initialized");
+        play_haptic_milli(100);
+    }
+#endif
+
+    // Initialize LEDs
+    LOG_INF("Initializing LEDs...\n");
+
+    ret = led_start();
+    if (ret) {
+        LOG_ERR("Failed to initialize LEDs (err %d)", ret);
+        error_led_driver();
+        return ret;
+    }
+
     // Suspend unused modules
     LOG_PRINTK("\n");
     LOG_INF("Suspending unused modules...\n");
@@ -153,19 +176,6 @@ int main(void)
     if (ret) {
         LOG_ERR("Failed to initialize monitoring system (err %d)", ret);
     }
-
-    // Initialize LEDs
-    LOG_INF("Initializing LEDs...\n");
-
-    ret = led_start();
-    if (ret) {
-        LOG_ERR("Failed to initialize LEDs (err %d)", ret);
-        error_led_driver();
-        return ret;
-    }
-
-    // Run the boot LED sequence
-    boot_led_sequence();
 
     if (setting_ret) {
         error_settings();
@@ -200,19 +210,6 @@ int main(void)
     }
     LOG_INF("Button initialized");
     activate_button_work();
-#endif
-
-    // Initialize Haptic driver
-#ifdef CONFIG_OMI_ENABLE_HAPTIC
-    ret = haptic_init();
-    if (ret) {
-        LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
-        error_haptic();
-        // Non-critical, continue boot
-    } else {
-        LOG_INF("Haptic driver initialized");
-        play_haptic_milli(50);
-    }
 #endif
 
     // SD Card
@@ -273,7 +270,7 @@ int main(void)
     LOG_INF("Device initialized successfully\n");
 
     // Show ready sequence
-    boot_ready_sequence();
+    // boot_ready_sequence();
 
     while (1) {
         monitor_log_metrics();
