@@ -24,10 +24,12 @@ class AppListItem extends StatelessWidget {
     return Selector<AppProvider, ({bool enabled, bool isLoading})>(
       selector: (context, provider) {
         // Check if this specific app is loading
-        final isLoading = index != -1 &&
-            provider.appLoading.isNotEmpty &&
-            index < provider.appLoading.length &&
-            provider.appLoading[index];
+        bool isLoading = false;
+        if (provider.appLoading.isNotEmpty && 
+            index >= 0 && 
+            index < provider.appLoading.length) {
+          isLoading = provider.appLoading[index];
+        }
 
         return (enabled: app.enabled, isLoading: isLoading);
       },
@@ -35,8 +37,9 @@ class AppListItem extends StatelessWidget {
         return GestureDetector(
           onTap: () async {
             MixpanelManager().pageOpened('App Detail');
+            final appProvider = context.read<AppProvider>();
             await routeToPage(context, AppDetailPage(app: app));
-            context.read<AppProvider>().setApps();
+            appProvider.setApps();
           },
           child: Container(
             padding: const EdgeInsets.all(16),
@@ -147,6 +150,8 @@ class AppListItem extends StatelessWidget {
                             return;
                           }
 
+                          final appProvider = context.read<AppProvider>();
+
                           // App is not enabled, toggle it on
                           if (app.worksExternally()) {
                             showDialog(
@@ -156,7 +161,7 @@ class AppListItem extends StatelessWidget {
                                 () => Navigator.pop(context),
                                 () async {
                                   Navigator.pop(context);
-                                  context.read<AppProvider>().toggleApp(app.id.toString(), true, index);
+                                  appProvider.toggleApp(app.id.toString(), true, index);
                                 },
                                 'Authorize External App',
                                 'Do you allow this app to access your memories, transcripts, and recordings? Your data will be sent to the app\'s server for processing.',
@@ -164,7 +169,7 @@ class AppListItem extends StatelessWidget {
                               ),
                             );
                           } else {
-                            context.read<AppProvider>().toggleApp(app.id.toString(), true, index);
+                            appProvider.toggleApp(app.id.toString(), true, index);
                           }
                         },
                         child: Container(
