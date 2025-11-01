@@ -859,6 +859,13 @@ class CaptureProvider extends ChangeNotifier
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
     }
+
+    // Notify backend that recording is paused
+    if (_socket?.state == SocketServiceState.connected) {
+      final payload = jsonEncode({'type': 'recording_paused'});
+      _socket?.send(payload);
+    }
+
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
     notifyListeners();
@@ -869,6 +876,13 @@ class CaptureProvider extends ChangeNotifier
     if (!PlatformService.isDesktop) return;
     _isPaused = false; // Clear paused state
     await streamSystemAudioRecording(); // Re-trigger the recording flow
+
+    // Notify backend that recording resumed
+    if (_socket?.state == SocketServiceState.connected) {
+      final payload = jsonEncode({'type': 'recording_resumed'});
+      _socket?.send(payload);
+    }
+
     _broadcastRecordingState();
   }
 
@@ -1257,6 +1271,13 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
+
+    // Notify backend that recording is paused
+    if (_socket?.state == SocketServiceState.connected) {
+      final payload = jsonEncode({'type': 'recording_paused'});
+      _socket?.send(payload);
+    }
+
     // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
     await _bleButtonStream?.cancel();
@@ -1270,6 +1291,13 @@ class CaptureProvider extends ChangeNotifier
     _isPaused = false;
     // Resume streaming from the device
     await _initiateDeviceAudioStreaming();
+
+    // Notify backend that recording resumed
+    if (_socket?.state == SocketServiceState.connected) {
+      final payload = jsonEncode({'type': 'recording_resumed'});
+      _socket?.send(payload);
+    }
+
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
