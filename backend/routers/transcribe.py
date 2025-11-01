@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import struct
@@ -8,13 +9,16 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
+import av
 import opuslib  # type: ignore
 import webrtcvad  # type: ignore
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
-from pydub import AudioSegment  # type: ignore
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
+
+# Suppress FFmpeg duration estimation warnings
+av.logging.set_level(av.logging.ERROR)
 
 import database.conversations as conversations_db
 import database.users as user_db
@@ -69,6 +73,62 @@ router = APIRouter()
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
+
+
+class AACDecoder:
+    """AAC decoder with persistent codec context for true streaming."""
+
+    def __init__(self, uid: str = '', session_id: str = '', sample_rate: int = 16000, channels: int = 1):
+        self.uid = uid
+        self.session_id = session_id
+
+        # Initialize codec context immediately
+        self.codec_context = av.CodecContext.create('aac', 'r')
+
+        # Initialize resampler immediately
+        from av.audio.resampler import AudioResampler
+
+        target_layout = 'mono' if channels == 1 else 'stereo'
+        self.resampler = AudioResampler(format='s16', layout=target_layout, rate=sample_rate)
+
+    def decode(self, aac_data: bytes) -> bytes:
+        """Decode AAC frame using persistent codec context.
+
+        Args:
+            aac_data: Complete AAC frame with ADTS header
+
+        Returns:
+            PCM data as bytes
+        """
+        if not aac_data:
+            return b''
+
+        try:
+            # Create packet and decode
+            packet = av.Packet(aac_data)
+            frames = self.codec_context.decode(packet)
+
+            if not frames:
+                return b''
+
+            # Resample and collect PCM data
+            pcm_chunks = []
+            for frame in frames:
+                resampled_frames = self.resampler.resample(frame)
+                for resampled_frame in resampled_frames:
+                    frame_array = resampled_frame.to_ndarray()
+                    if frame_array.ndim > 1:
+                        frame_array = frame_array.T.flatten()
+                    pcm_chunks.append(frame_array.tobytes())
+
+            return b''.join(pcm_chunks)
+
+        except (EOFError, av.AVError):
+            # Expected for incomplete frames, return empty
+            return b''
+        except Exception as e:
+            print(f"[AAC] Decode error: {e}", self.uid, self.session_id)
+            return b''
 
 
 async def _listen(
@@ -518,7 +578,13 @@ async def _listen(
                 and include_speech_profile
             ):
                 file_path = get_profile_audio_if_exists(uid)
-                speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
+                if file_path:
+                    with av.open(file_path) as container:
+                        speech_profile_duration = (
+                            (float(container.duration) / av.time_base) + 5 if container.duration else 0
+                        )
+                else:
+                    speech_profile_duration = 0
 
             speech_profile_processed = not (speech_profile_duration > 0)
 
@@ -1005,7 +1071,13 @@ async def _listen(
             del image_chunks_cache[temp_id]
             safe_create_task(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
 
-    decoder = opuslib.Decoder(sample_rate, 1)
+    # Initialize decoders based on codec
+    opus_decoder = None
+    aac_decoder = None
+    if codec == 'opus':
+        opus_decoder = opuslib.Decoder(sample_rate, 1)
+    elif codec == 'aac':
+        aac_decoder = AACDecoder(uid=uid, session_id=session_id, sample_rate=sample_rate, channels=channels)
 
     async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
@@ -1023,13 +1095,24 @@ async def _listen(
                         first_audio_byte_timestamp = last_audio_received_time
                         last_usage_record_timestamp = first_audio_byte_timestamp
                     data = message.get("bytes")
+
+                    # Decode based on codec
                     if codec == 'opus' and sample_rate == 16000:
                         try:
-                            data = decoder.decode(bytes(data), frame_size=frame_size)
-                        except:
-                            # TODO: dealing with #3296, remove soon
-                            data = data[3:]
-                            data = decoder.decode(bytes(data), frame_size=frame_size)
+                            data = opus_decoder.decode(bytes(data), frame_size=frame_size)
+                            if not data:
+                                continue
+                        except Exception as e:
+                            print(f"[OPUS] Decoding error: {e}", uid, session_id)
+                            continue
+                    elif codec == 'aac':
+                        try:
+                            data = aac_decoder.decode(bytes(data))
+                            if not data:
+                                continue
+                        except Exception as e:
+                            print(f"[AAC] Decoding error: {e}", uid, session_id)
+                            continue
 
                     if soniox_socket is not None:
                         elapsed_seconds = time.time() - timer_start
