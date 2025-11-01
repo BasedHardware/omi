@@ -102,15 +102,16 @@ def create_example_langfuse_export():
                 f.write(json.dumps(entry) + "\n")
 
 
-# Function to count labeled examples
+# Function to count labeled examples and category stats
 def get_label_stats():
     if not os.path.exists(LABEL_FILE):
-        return {"total": 0, "high_quality": 0, "low_quality": 0}
+        return {"total": 0, "high_quality": 0, "low_quality": 0, "categories": {}}
 
     try:
         total = 0
         high_quality = 0
         low_quality = 0
+        category_counts = {'personal': 0, 'preference': 0, 'event': 0, 'fact': 0, 'other': 0}
 
         with open(LABEL_FILE, "r") as f:
             for line in f:
@@ -120,23 +121,57 @@ def get_label_stats():
                     high_quality += 1
                 else:
                     low_quality += 1
+                
+                # Count categories
+                for memory_list in [data.get("output", {}).get("interesting_memories", []), 
+                                  data.get("output", {}).get("system_memories", [])]:
+                    for mem in memory_list:
+                        if isinstance(mem, dict):
+                            category = mem.get('category', 'other')
+                            if category in category_counts:
+                                category_counts[category] += 1
+                            else:
+                                category_counts['other'] += 1
 
-        return {"total": total, "high_quality": high_quality, "low_quality": low_quality}
+        return {
+            "total": total, 
+            "high_quality": high_quality, 
+            "low_quality": low_quality,
+            "categories": category_counts
+        }
     except Exception as e:
         st.error(f"Error reading label file: {e}")
-        return {"total": 0, "high_quality": 0, "low_quality": 0}
+        return {"total": 0, "high_quality": 0, "low_quality": 0, "categories": {}}
 
+
+def format_memory(mem):
+    """Helper to format memory with category if not already formatted"""
+    if isinstance(mem, dict) and 'content' in mem:
+        return mem
+    return {'content': str(mem), 'category': 'fact'}  # Default category
+
+
+def display_memory_with_category(mem):
+    """Helper to display a memory with its category emoji and formatting"""
+    if isinstance(mem, dict):
+        category = mem.get('category', 'unknown')
+        content = mem.get('content', str(mem))
+        category_emoji = {'personal': '👤', 'preference': '❤️', 'event': '📅', 'fact': '📚'}.get(category, '❓')
+        return f"- **{category_emoji} {category.upper()}**: {content}"
+    else:
+        return f"- {mem}"
 
 # Function to generate memories safely
 def generate_memories_safe(conversation, user_name):
     try:
         # Check if model is properly configured
         if not MODEL_CONFIGURED:
+            error_msg = "ERROR: OpenAI API key not configured properly"
             return {
                 "input": {"context": conversation, "user_name": user_name},
                 "output": {
-                    "interesting_memories": ["ERROR: OpenAI API key not configured properly"],
-                    "system_memories": ["ERROR: OpenAI API key not configured properly"],
+                    "interesting_memories": [{'content': error_msg, 'category': 'system'}],
+                    "system_memories": [{'content': error_msg, 'category': 'system'}],
                 },
                 "error": True,
             }
@@ -145,22 +180,27 @@ def generate_memories_safe(conversation, user_name):
         program = MemoryReActProgram()
         result = program(conversation, user_name)
 
-        # Create entry for labeling
-        return {
-            "input": {"context": conversation, "user_name": user_name},
-            "output": {"interesting_memories": result.interesting_memories, "system_memories": result.system_memories},
-            "error": False,
-        }
-    except Exception as e:
-        st.error(f"Error generating memories: {e}")
-        traceback.print_exc()
+        # Format memories to include categories
+        interesting = [format_memory(mem) for mem in result.interesting_memories]
+        system = [format_memory(mem) for mem in result.system_memories]
+        
         return {
             "input": {"context": conversation, "user_name": user_name},
             "output": {
-                "interesting_memories": [f"Error: {str(e)}"],
-                "system_memories": ["Error occurred during memory generation"],
+                "interesting_memories": interesting,
+                "system_memories": system,
             },
-            "error": True,
+            "error": False
+        }
+        
+    except Exception as e:
+        return {
+            "input": {"context": conversation, "user_name": user_name},
+            "output": {
+                "interesting_memories": [{'content': f"Error generating memories: {str(e)}", 'category': 'error'}],
+                "system_memories": [],
+            },
+            "error": True
         }
 
 
@@ -185,6 +225,13 @@ if st.session_state["page"] == "home":
         ### Getting Started
         
         Use the navigation sidebar to move between different functions.
+        
+        ### Memory Categories
+        
+        - 👤 **PERSONAL**: Personal details about the user (name, age, occupation)
+        - ❤️ **PREFERENCE**: User's likes, dislikes, and preferences  
+        - 📅 **EVENT**: Specific events, plans, or activities mentioned
+        - 📚 **FACT**: General knowledge or factual information
         """
         )
 
@@ -202,6 +249,17 @@ if st.session_state["page"] == "home":
             st.warning(
                 f"⚠️ You need at least 5 high-quality examples to start tuning. Currently have: {stats['high_quality']}"
             )
+            
+        # Display category distribution if we have data
+        if stats.get("categories") and sum(stats["categories"].values()) > 0:
+            st.markdown("### Memory Categories Distribution")
+            categories = stats["categories"]
+            category_emojis = {'personal': '👤', 'preference': '❤️', 'event': '📅', 'fact': '📚', 'other': '❓'}
+            
+            for category, count in categories.items():
+                if count > 0:
+                    emoji = category_emojis.get(category, '❓')
+                    st.metric(f"{emoji} {category.title()}", count)
 
     st.markdown("---")
     create_example_langfuse_export()
@@ -252,18 +310,20 @@ elif st.session_state["page"] == "manual data entry":
 
         submitted = st.form_submit_button("Generate Memories")
 
-        if submitted and conversation and user_name:
-            entry = generate_memories_safe(conversation, user_name)
+    if submitted and conversation and user_name:
+        entry = generate_memories_safe(conversation, user_name)
 
-            # Add to entries for labeling
-            st.session_state["entries"] = [entry]
-            st.session_state["current_index"] = 0
+        # Add to entries for labeling
+        st.session_state["entries"] = [entry]
+        st.session_state["current_index"] = 0
 
-            if not entry["error"]:
-                st.success("✅ Memories generated! Go to 'Label Memories' to rate them.")
-                st.button("Go to Label Memories", on_click=lambda: setattr(st.session_state, "page", "label memories"))
-            else:
-                st.error("❌ Error generating memories. Please check the configuration.")
+        if not entry["error"]:
+            st.success("✅ Memories generated! Go to 'Label Memories' to rate them.")
+            if st.button("Go to Label Memories"):
+                st.session_state["page"] = "label memories"
+                st.rerun()
+        else:
+            st.error("❌ Error generating memories. Please check the configuration.")
 
 # Labeling page
 elif st.session_state["page"] == "label memories":
@@ -293,6 +353,12 @@ elif st.session_state["page"] == "label memories":
             try:
                 with open(LANGFUSE_EXPORT_SAMPLE, "r") as f:
                     entries = [json.loads(line) for line in f]
+                    # Normalize demo data memories to dict format with categories
+                    for e in entries:
+                        out = e.get("output", {})
+                        out["interesting_memories"] = [format_memory(m) for m in out.get("interesting_memories", [])]
+                        out["system_memories"] = [format_memory(m) for m in out.get("system_memories", [])]
+                        e["output"] = out
                     st.session_state["entries"] = entries
                     st.session_state["current_index"] = 0
                     st.success(f"✅ Loaded {len(entries)} demo entries!")
@@ -322,7 +388,7 @@ elif st.session_state["page"] == "label memories":
                 st.subheader("Interesting Memories")
                 if entry['output']['interesting_memories']:
                     for mem in entry['output']['interesting_memories']:
-                        st.markdown(f"- {mem}")
+                        st.markdown(display_memory_with_category(mem))
                 else:
                     st.markdown("*No interesting memories generated*")
 
@@ -330,7 +396,7 @@ elif st.session_state["page"] == "label memories":
                 st.subheader("System Memories")
                 if entry['output']['system_memories']:
                     for mem in entry['output']['system_memories']:
-                        st.markdown(f"- {mem}")
+                        st.markdown(display_memory_with_category(mem))
                 else:
                     st.markdown("*No system memories generated*")
 
@@ -515,7 +581,7 @@ elif st.session_state["page"] == "test memories":
                         st.subheader("Interesting Memories")
                         if result.interesting_memories:
                             for mem in result.interesting_memories:
-                                st.markdown(f"- {mem}")
+                                st.markdown(display_memory_with_category(mem))
                         else:
                             st.markdown("*No interesting memories generated*")
 
@@ -523,7 +589,7 @@ elif st.session_state["page"] == "test memories":
                         st.subheader("System Memories")
                         if result.system_memories:
                             for mem in result.system_memories:
-                                st.markdown(f"- {mem}")
+                                st.markdown(display_memory_with_category(mem))
                         else:
                             st.markdown("*No system memories generated*")
 
@@ -586,12 +652,12 @@ elif st.session_state["page"] == "test memories":
                 with col1:
                     st.markdown("**Interesting Memories:**")
                     for mem in test['output']['interesting_memories']:
-                        st.markdown(f"- {mem}")
+                        st.markdown(display_memory_with_category(mem))
 
                 with col2:
                     st.markdown("**System Memories:**")
                     for mem in test['output']['system_memories']:
-                        st.markdown(f"- {mem}")
+                        st.markdown(display_memory_with_category(mem))
 
                 if st.button("Delete This Test", key=f"delete_{test['id']}"):
                     st.session_state["test_history"] = [
