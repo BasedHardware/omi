@@ -70,6 +70,9 @@ class DeviceUtils {
       if (upperModel.contains('FRAME')) {
         return Assets.images.omiDevkitWithoutRope.path;
       }
+      if (upperModel.contains('BEE')) {
+        return Assets.images.beeDevice.path;
+      }
       if (upperModel.contains('WATCH')) {
         return Assets.images.appleWatch.path;
       }
@@ -87,6 +90,9 @@ class DeviceUtils {
       }
       if (upperName.contains('OMI DEVKIT') || upperName.contains('OMI DEV') || upperName.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
+      }
+      if (upperName.contains('BEE')) {
+        return Assets.images.beeDevice.path;
       }
       if (upperName.contains('WATCH')) {
         return Assets.images.appleWatch.path;

@@ -41,6 +41,7 @@ enum BleAudioCodec {
   mulaw8,
   opus,
   opusFS320,
+  aac,
   unknown;
 
   @override
@@ -60,6 +61,8 @@ enum BleAudioCodec {
         return 'PCM (16kHz)';
       case BleAudioCodec.pcm8:
         return 'PCM (8kHz)';
+      case BleAudioCodec.aac:
+        return 'AAC';
       default:
         return toString().split('.').last.toUpperCase();
     }
@@ -89,6 +92,8 @@ String mapCodecToName(BleAudioCodec codec) {
       return 'pcm16';
     case BleAudioCodec.pcm8:
       return 'pcm8';
+    case BleAudioCodec.aac:
+      return 'aac';
     default:
       return 'pcm8';
   }
@@ -104,6 +109,8 @@ BleAudioCodec mapNameToCodec(String codec) {
       return BleAudioCodec.pcm16;
     case 'pcm8':
       return BleAudioCodec.pcm8;
+    case 'aac':
+      return BleAudioCodec.aac;
     default:
       return BleAudioCodec.pcm8;
   }
@@ -147,7 +154,9 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
   await device.discoverServices();
 
   // Check for device types using helper methods
-  if (BtDevice.isXorDeviceFromDevice(device)) {
+  if (BtDevice.isBeeDeviceFromDevice(device)) {
+    deviceType = DeviceType.bee;
+  } else if (BtDevice.isXorDeviceFromDevice(device)) {
     deviceType = DeviceType.xor;
   } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
@@ -171,6 +180,7 @@ enum DeviceType {
   frame,
   appleWatch,
   xor,
+  bee,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -289,7 +299,9 @@ class BtDevice {
       }
     }
 
-    if (type == DeviceType.xor) {
+    if (type == DeviceType.bee) {
+      return await _getDeviceInfoFromBee(conn);
+    } else if (type == DeviceType.xor) {
       return await _getDeviceInfoFromXor(conn as XorDeviceConnection);
     } else if (type == DeviceType.omi) {
       return await _getDeviceInfoFromOmi(conn);
@@ -394,6 +406,28 @@ class BtDevice {
     );
   }
 
+  Future _getDeviceInfoFromBee(DeviceConnection conn) async {
+    var modelNumber = 'Bee';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = '1.0.0';
+    var manufacturerName = 'Bee';
+
+    try {
+      // Bee devices don't have standard device info service
+      // Use defaults
+    } catch (e) {
+      Logger.error('Error getting Bee device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.bee,
+    );
+  }
+
   Future _getDeviceInfoFromXor(XorDeviceConnection conn) async {
     var modelNumber = 'XOR';
     var firmwareRevision = '0.0.1';
@@ -433,7 +467,16 @@ class BtDevice {
   // Check if a scan result is from a supported device
   static bool isSupportedDevice(ScanResult result) {
     debugPrint("${result.device.name}");
-    return isXorDevice(result) || isOmiDevice(result) || isFrameDevice(result);
+    return isBeeDevice(result) || isXorDevice(result) || isOmiDevice(result) || isFrameDevice(result);
+  }
+
+  static bool isBeeDevice(ScanResult result) {
+    return result.device.platformName.toLowerCase().contains('bee');
+  }
+
+  static bool isBeeDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == beeServiceUuid.toLowerCase()) ||
+        device.platformName.toLowerCase().contains('bee');
   }
 
   static bool isXorDevice(ScanResult result) {
@@ -465,7 +508,9 @@ class BtDevice {
   static fromScanResult(ScanResult result) {
     DeviceType? deviceType;
 
-    if (isXorDevice(result)) {
+    if (isBeeDevice(result)) {
+      deviceType = DeviceType.bee;
+    } else if (isXorDevice(result)) {
       deviceType = DeviceType.xor;
     } else if (isOmiDevice(result)) {
       deviceType = DeviceType.omi;
