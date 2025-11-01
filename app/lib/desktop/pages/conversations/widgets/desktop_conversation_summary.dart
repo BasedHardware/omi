@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -77,9 +76,7 @@ class DesktopConversationSummary extends StatelessWidget {
   }
 
   Widget _buildSummaryHeader(BuildContext context, ConversationDetailProvider provider, AppResponse? summarizedApp) {
-    final app = summarizedApp != null
-        ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId)
-        : null;
+    final app = summarizedApp != null ? provider.findAppById(summarizedApp.appId) : null;
     final isReprocessing = provider.loadingReprocessConversation;
     final reprocessingApp = provider.selectedAppForReprocessing;
 
@@ -219,7 +216,7 @@ class DesktopConversationSummary extends StatelessWidget {
   }
 
   Widget _buildAppSummaryCard(BuildContext context, AppResponse summarizedApp, ConversationDetailProvider provider) {
-    final app = provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId);
+    final app = provider.findAppById(summarizedApp.appId);
     final content = summarizedApp.content.trim().decodeString;
 
     return Container(
@@ -495,13 +492,13 @@ class _DesktopAppSelectionSheet extends StatelessWidget {
                     const SizedBox(height: 8),
 
                     // Installed apps
-                    ...provider.appsList.where((app) => app.worksWithMemories() && app.enabled).map(
-                          (app) => _AppSelectionItem(
-                            app: app,
-                            isSelected: app.id == currentAppId,
-                            onTap: () => _handleAppTap(context, app),
-                          ),
-                        ),
+                    ...provider.cachedEnabledConversationApps.map(
+                      (app) => _AppSelectionItem(
+                        app: app,
+                        isSelected: app.id == currentAppId,
+                        onTap: () => _handleAppTap(context, app),
+                      ),
+                    ),
 
                     const SizedBox(height: 16),
 
