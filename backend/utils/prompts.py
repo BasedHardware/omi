@@ -12,68 +12,223 @@ from langchain_core.prompts import ChatPromptTemplate
 extract_memories_prompt = ChatPromptTemplate.from_messages(
     [
         '''
-    **Optimized Instructions for Generating Memories from Conversations**
+You are an expert memory curator. Your task is to extract high-quality, genuinely valuable memories from conversations while filtering out trivial, mundane, or uninteresting content.
 
-    When generating memories from a conversation between the user and others, the goal is to capture both interesting and system details that can serve as reference points for the user. Follow these structured guidelines:
+CRITICAL CONTEXT:
+• You are extracting memories about {user_name} (the primary user having/recording this conversation)
+• Focus on information about {user_name} and people {user_name} directly interacts with
+• NEVER use "Speaker 0", "Speaker 1", "Speaker 2" etc. in memory descriptions
+• If you can identify actual names from the conversation with high confidence (>90%), use those names
+• If unsure about names, use natural phrasing like "{user_name} discussed...", "{user_name} learned...", "{user_name}'s colleague mentioned..."
 
-    **Interesting Memories:**
-    - **Purpose:** Capture engaging, surprising, or valuable insights that the user might find enjoyable or useful to revisit.
-    - **Content:**
-      - Highlight unique facts, anecdotes, or discussions that are likely to spark curiosity or interest.
-      - Include any notable experiences, plans, or discoveries shared during the conversation.
-      - Focus on elements that provide new knowledge or perspective to the user.
-    - **Format:**
-      - Keep each memory concise, catchy, and focused on the key intriguing detail.
-      - Use a narrative style that enhances the excitement or novelty of the information.
-    - **Examples:** 
-      - Zara learned that microwave technology originated from a WWII radar engineer's accidental discovery.
-      - Aria shared that merged black holes create spacetime ripples, akin to a bell's echo.
+WORKFLOW:
+1. FIRST: Read the ENTIRE conversation to understand context and identify who is speaking
+2. SECOND: Identify actual names of people mentioned or speaking (use these instead of "Speaker X")
+3. THIRD: Apply the SHAREABILITY TEST to every potential memory
+4. FOURTH: Filter based on STRICT QUALITY CRITERIA below
+5. FIFTH: Categorize as "interesting" or "system" based on criteria
+6. SIXTH: Ensure memories are concise, specific, and use real names when known
 
-    **System Memories:**
-    - **Purpose:** Record mundane, factual details that are part of the conversation but hold minimal ongoing interest.
-    - **Content:**
-      - Document logistical or background details such as plans, preferences, or routine actions.
-      - Capture information that, while useful for context, is not engaging enough for future reference.
-    - **Format:**
-      - Ensure these memories are clear, factual, and devoid of any embellishment or unnecessary detail.
-      - Keep them straightforward and to the point.
-    - **Examples:**
-      - Zara and Liam discussed a microwave mishap involving a fork.
-      - Aria and Noah decided to purchase almond milk over oat milk.
+THE SHAREABILITY TEST (CRITICAL):
+Before extracting ANY memory, ask: "Would {user_name} actually share this with a friend, colleague, or family member?"
 
-    **General Tips for Memory Generation:**
-    - **Clarity and Conciseness:** All memories should be precise and directly drawn from the conversation content.
-    - **Contextual Relevance:** Ensure that the memories are tailored to the user's interests and potential future needs.
-    - **Balance:** Strive for a balanced mix of interesting and system memories to provide a comprehensive snapshot of the conversation.
-    - **Limit**: Identify up to 2 interesting memories and 2 system memories. If there are none, output an empty list.
-    - **Short and Simple**: Keep the memories very short, concise and catchy. They must be extremely short and simple.
+If the answer is "no" or "maybe", DO NOT EXTRACT IT. Only "definitely yes" passes.
 
-    **Categories for Facts**:
+INTERESTING MEMORIES (The Shareability Standard):
+These are memories that pass the "dinner party test" - things {user_name} would excitedly share with others.
 
-    Each fact you provide should fall under one of the following categories:
+CRITICAL: Do NOT extract memories that are:
+- Opinions or feelings ("concerned about X", "thinks Y is important", "believes Z")
+- Generic discussions ("discussed X", "talked about Y", "mentioned Z")
+- Obvious facts everyone knows ("X saves time", "Y is important", "Z is useful")
 
-    - **interesting**: Capture engaging, surprising, or valuable insights that the user might find enjoyable or useful to revisit.
-    - **system**: Record mundane, factual details that are part of the conversation but hold minimal ongoing interest.
+INCLUDE interesting memories if they meet AT LEAST ONE of these criteria strongly (ideally multiple):
+1. **Genuinely Surprising or Counter-Intuitive**: Information that challenges common knowledge or expectations
+   ✅ "Pineapple on pizza can cause severe allergic reactions in people with latex allergies"
+   ✅ "9 out of 10 billionaires at the summit got their start by solving unsexy problems like waste management"
+   ❌ "Alex likes pizza" (boring, not shareable)
+   ❌ "Sarah went to a tech conference" (mundane, everyone goes to conferences)
 
-    **Output Instructions**:
+2. **Rare or Exclusive Knowledge**: Information most people don't know or have access to
+   ✅ "The Apollo 11 computer had less processing power than a modern calculator but used revolutionary error-correction algorithms"
+   ✅ "YC's first batch only had 8 startups and met in a room above a pizza shop"
+   ❌ "Python is a popular programming language" (common knowledge)
+   ❌ "Exercise is good for health" (everyone knows this)
 
-    - Identify up to 2 interesting memories and 2 system memories.
-    - If you do not find any new (different to the list of existing ones below) or new noteworthy facts, provide an empty list.
-    - Do not include any explanations or additional text; only list the facts.
-    - Keep the memories very short, concise and catchy. They must be extremely short and simple.
-    - Most of the memories would be system memories, as they are facts about the conversation. Interesting memories are rare. Interesting memories are only very interesting things that the user would want to remember. If ambiguous, favor system memories. Interesting memories are like fun facts.
+3. **Actionable Insights with High Impact**: Information that could meaningfully change behavior or decisions
+   ✅ "Negotiating salary after receiving offer letter can increase compensation by 15-20% on average with minimal risk"
+   ✅ "Writing down 3 things you're grateful for before bed improves sleep quality by 35% according to Stanford research"
+   ❌ "Should drink more water" (vague, low impact)
+   ❌ "Good to network at events" (generic advice)
 
-    **Existing memories you already know about {user_name} and their friends (DO NOT REPEAT ANY)**:
-    ```
-    {memories_str}
-    ```
+4. **Remarkable Stories or Anecdotes**: Narratives with memorable details or unexpected outcomes
+   ✅ "{user_name}'s mentor got their first customer by cold-calling 1000 people in 2 weeks and was rejected 997 times"
+   ✅ "Airbnb was rejected by 7 investors in a single day, then changed their pitch and raised $600k the next week"
+   ❌ "Had a good meeting with the team" (forgettable)
+   ❌ "Caught up with an old friend" (not remarkable)
 
-    **Conversation transcript**:
-    ```
-    {conversation}
-    ```
-    {format_instructions}
-    '''.replace(
+5. **Unique Personal Insights or Discoveries**: Realizations that reveal something deep or meaningful
+   ✅ "{user_name} realized they've been avoiding difficult conversations for 5 years, leading to chronic stress"
+   ✅ "{user_name} discovered their most productive hours are 5-7am, not evening as they assumed"
+   ❌ "Feeling stressed about work" (common, not insightful)
+   ❌ "Prefers working in the morning" (preference, not discovery)
+
+SYSTEM MEMORIES (Useful Context, Not Shareable):
+These are factual details useful for context but NOT interesting enough to share with others.
+
+INCLUDE system memories for:
+• Concrete plans, decisions, or commitments made
+• Important preferences or specific requirements stated
+• Logistical details that may be referenced later
+• Relationship context (who knows who, what roles people have)
+• Specific facts about {user_name}'s work, projects, or life
+
+Examples:
+✅ "{user_name} and Jamie are working on the Q4 budget presentation"
+✅ "{user_name} prefers dark roast coffee with oat milk, no sugar"
+✅ "{user_name}'s colleague David is the lead engineer on the authentication system"
+✅ "Rachel is the project lead for the client presentation"
+❌ "Had coffee this morning" (too trivial)
+❌ "Talked about the weather" (no value)
+❌ "Meeting with Jamie on Thursday" (temporal, not timeless)
+
+STRICT EXCLUSION RULES - DO NOT extract if memory is:
+
+**Trivial Personal Preferences:**
+❌ "Likes coffee" / "Enjoys reading" / "Prefers the color blue"
+❌ "Went to the gym" / "Had lunch with a friend"
+❌ "Watched a movie last night" / "Listened to music"
+
+**Generic Activities or Events:**
+❌ "Attended a meeting" / "Went to a conference"
+❌ "Traveled to New York" (unless there's remarkable context)
+❌ "Worked on a project" (unless specific and notable)
+
+**Common Knowledge or Obvious Facts:**
+❌ "Exercise is good for health"
+❌ "Important to save money"
+❌ "JavaScript is used for web development"
+❌ "Automation saves time" / "AI needs development" / "Robots are hard to build"
+❌ "Technology products announced before ready" / "Premature announcements are bad"
+
+**Vague or Generic Statements:**
+❌ "Had an interesting conversation"
+❌ "Learned something new"
+❌ "Feeling motivated"
+❌ "Expressed concern about X" / "Discussed Y" / "Mentioned Z"
+❌ "Thinks X is important" / "Believes Y" / "Feels Z"
+
+**Low-Impact Observations:**
+❌ "It's been a busy week"
+❌ "The office is crowded today"
+❌ "Coffee shop was noisy"
+
+**Already Obvious from Context:**
+❌ "Uses a computer for work" (if user is a software engineer)
+❌ "Has meetings regularly" (if user is in a corporate job)
+
+CRITICAL DEDUPLICATION RULES:
+• DO NOT extract memories >90% similar to existing memories listed below
+• Check both the content AND the context
+• Consider semantic similarity, not just exact word matches
+• If unsure whether something is duplicate, treat it as duplicate (DON'T extract)
+
+Examples of DUPLICATES (DO NOT extract):
+- "Loves Italian food" (existing) vs "Enjoys pasta and pizza" → DUPLICATE
+- "Works at Google" (existing) vs "Employed by Google as engineer" → DUPLICATE
+- "Friend named John who is a designer" (existing) vs "Has a designer friend John" → DUPLICATE
+
+FORMAT REQUIREMENTS:
+• Maximum 15 words per memory (strict limit)
+• Use clear, specific, direct language
+• NO vague references - read the full conversation to resolve what "it", "that", "this" refers to
+• Use actual names when you can identify them with confidence from conversation
+• Start with {user_name} when the memory is about them
+• Keep it concise and focused on the core insight
+
+CRITICAL - Date and Time Handling:
+• NEVER use vague time references like "Thursday", "next week", "tomorrow", "Monday"
+• These become meaningless after a few days and make memories useless
+• Memories should be TIMELESS - they're for long-term context, not scheduling
+• If conversation mentions a scheduled event with a specific time:
+  - DO NOT create a memory about it (it's handled by action items/calendar events separately)
+  - Instead, extract the timeless context: relationships, roles, preferences, facts
+• Focus on "who" and "what", not "when"
+• Examples:
+  ✅ "Mike Johnson is head of enterprise sales"
+  ✅ "Rachel prefers Google Slides for client presentations"
+  ❌ "Client meeting on Thursday at 2pm" (temporal, not a memory)
+  ❌ "Follow up with Rachel next week" (temporal, not a memory)
+  ❌ "Meeting scheduled for January 15th" (temporal, not a memory)
+
+Examples of GOOD memory format:
+✅ "{user_name} learned that honey never spoils; 3000-year-old honey found in Egyptian tombs was still edible"
+✅ "Jamie (CTO) mentioned 90% of bugs come from async race conditions in their codebase"
+✅ "{user_name} discovered writing for 10 min daily reduced anxiety by 40% in 3 weeks"
+
+Examples of BAD memory format:
+❌ "Speaker 0 learned something interesting about that thing we discussed" (vague, uses Speaker X)
+❌ "They talked about the project and decided to do it tomorrow" (unclear who, what project, time ref)
+❌ "Someone mentioned that interesting fact about those people" (completely vague)
+
+CRITICAL - Name Resolution:
+• Read the ENTIRE conversation first to map out who is speaking
+• Look for explicit name introductions ("Hi, I'm Sarah", "This is John")
+• Look for vocative case ("Hey Mike", "Sarah, can you...")
+• If you identify a name with >90% confidence, use it
+• If uncertain about names but know roles/relationships, use those ("colleague", "friend", "manager")
+• NEVER use "Speaker 0/1/2" in final memories
+
+BEFORE YOU OUTPUT - MANDATORY DOUBLE-CHECK:
+For EACH memory you're about to extract, verify it does NOT match these patterns:
+❌ "{user_name} expressed [feeling/opinion] about X" → DELETE THIS
+❌ "{user_name} discussed X" or "talked about Y" → DELETE THIS
+❌ "{user_name} mentioned that [obvious fact]" → DELETE THIS
+❌ "{user_name} thinks/believes/feels X" → DELETE THIS
+
+If a memory matches ANY of the above patterns, REMOVE it from your output.
+
+FINAL CHECK - For each INTERESTING memory, ask yourself:
+1. "If I told this to a stranger at a party, would they find it interesting?" (If no → DELETE)
+2. "Does this contain specific numbers, names, or surprising details?" (If no → DELETE)
+3. "Is this something everyone already knows?" (If yes → DELETE)
+4. "Would this make someone say 'Wow, I didn't know that!'?" (If no → DELETE)
+
+For SYSTEM memories, ask:
+1. "Is this specific enough to be useful later?" (If no → DELETE)
+2. "Would this help understand context in the future?" (If no → DELETE)
+3. "Does this contain a date/time reference like 'Thursday', 'next week', etc.?" (If yes → DELETE or make timeless)
+4. "Will this memory still make sense in 6 months?" (If no → DELETE)
+
+OUTPUT LIMITS (These are MAXIMUMS, not targets):
+• Extract AT MOST 2 interesting memories (most conversations will have 0-1)
+• Extract AT MOST 2 system memories (most conversations will have 0-2)
+• Interesting memories are RARE - only extract if they truly pass the shareability test
+• Many conversations will result in 0 interesting memories and 0-2 system memories - this is NORMAL and EXPECTED
+• Better to extract 0 memories than to include low-quality ones
+• When in doubt, DON'T extract - be conservative and selective
+• Think: "Would someone actually want to remember this?"
+• DEFAULT TO EMPTY LIST - only extract if memories are truly exceptional
+
+QUALITY OVER QUANTITY:
+• Most conversations have 0 interesting memories - this is completely fine
+• If ambiguous whether something is interesting or system, categorize as system
+• Better to have an empty list than to flood with mediocre memories
+• Apply the shareability test rigorously
+• Only extract system memories if they're genuinely useful for future context
+• When uncertain, choose: EMPTY LIST over low-quality memories
+
+**Existing memories you already know about {user_name} and their friends (DO NOT REPEAT ANY)**:
+```
+{memories_str}
+```
+
+**Conversation transcript**:
+```
+{conversation}
+```
+{format_instructions}
+'''.replace(
             '    ', ''
         ).strip()
     ]
