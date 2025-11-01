@@ -429,12 +429,46 @@ class DesktopConversationSummary extends StatelessWidget {
   }
 }
 
-class _DesktopAppSelectionSheet extends StatelessWidget {
+class _DesktopAppSelectionSheet extends StatefulWidget {
   final ConversationDetailProvider provider;
 
   const _DesktopAppSelectionSheet({
     required this.provider,
   });
+
+  @override
+  State<_DesktopAppSelectionSheet> createState() => _DesktopAppSelectionSheetState();
+}
+
+class _DesktopAppSelectionSheetState extends State<_DesktopAppSelectionSheet> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchApps();
+  }
+
+  Future<void> _fetchApps() async {
+    try {
+      await Future.wait([
+        widget.provider.fetchAndCacheSuggestedApps(),
+        widget.provider.fetchAndCacheEnabledConversationApps(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching apps: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -444,9 +478,9 @@ class _DesktopAppSelectionSheet extends StatelessWidget {
       maxChildSize: 0.9,
       expand: false,
       builder: (context, scrollController) {
-        final summarizedApp = provider.getSummarizedApp();
+        final summarizedApp = widget.provider.getSummarizedApp();
         final currentAppId = summarizedApp?.appId;
-        final conversationId = provider.conversation.id;
+        final conversationId = widget.provider.conversation.id;
 
         MixpanelManager().summarizedAppSheetViewed(
           conversationId: conversationId,
@@ -473,84 +507,92 @@ class _DesktopAppSelectionSheet extends StatelessWidget {
 
               // Apps list
               Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    // Auto option
-                    _AppSelectionItem(
-                      app: null,
-                      isSelected: currentAppId == null,
-                      onTap: () => _handleAutoAppTap(context),
-                      trailingIcon: const Icon(
-                        FontAwesomeIcons.wandMagicSparkles,
-                        color: ResponsiveHelper.textSecondary,
-                        size: 16,
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Installed apps
-                    ...provider.cachedEnabledConversationApps.map(
-                      (app) => _AppSelectionItem(
-                        app: app,
-                        isSelected: app.id == currentAppId,
-                        onTap: () => _handleAppTap(context, app),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Enable Apps option
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.pop(context);
-                          MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
-                          routeToPage(context, const AppsPage(showAppBar: true));
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                              width: 1,
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                        ),
+                      )
+                    : ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          // Auto option
+                          _AppSelectionItem(
+                            app: null,
+                            isSelected: currentAppId == null,
+                            onTap: () => _handleAutoAppTap(context),
+                            provider: widget.provider,
+                            trailingIcon: const Icon(
+                              FontAwesomeIcons.wandMagicSparkles,
+                              color: ResponsiveHelper.textSecondary,
+                              size: 16,
                             ),
                           ),
-                          child: const Row(
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.store,
-                                color: ResponsiveHelper.textSecondary,
-                                size: 16,
-                              ),
-                              SizedBox(width: 12),
-                              Text(
-                                'Enable More Apps',
-                                style: TextStyle(
-                                  color: ResponsiveHelper.textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+
+                          const SizedBox(height: 8),
+
+                          // Installed apps
+                          ...widget.provider.cachedEnabledConversationApps.map(
+                            (app) => _AppSelectionItem(
+                              app: app,
+                              isSelected: app.id == currentAppId,
+                              onTap: () => _handleAppTap(context, app),
+                              provider: widget.provider,
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Enable Apps option
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.pop(context);
+                                MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
+                                routeToPage(context, const AppsPage(showAppBar: true));
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(
+                                      FontAwesomeIcons.store,
+                                      color: ResponsiveHelper.textSecondary,
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 12),
+                                    Text(
+                                      'Enable More Apps',
+                                      style: TextStyle(
+                                        color: ResponsiveHelper.textPrimary,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Spacer(),
+                                    Icon(
+                                      FontAwesomeIcons.chevronRight,
+                                      color: ResponsiveHelper.textTertiary,
+                                      size: 12,
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Spacer(),
-                              Icon(
-                                FontAwesomeIcons.chevronRight,
-                                color: ResponsiveHelper.textTertiary,
-                                size: 12,
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -561,8 +603,8 @@ class _DesktopAppSelectionSheet extends StatelessWidget {
 
   void _handleAutoAppTap(BuildContext context) async {
     Navigator.pop(context);
-    final previousAppId = provider.getSummarizedApp()?.appId;
-    final conversationId = provider.conversation.id;
+    final previousAppId = widget.provider.getSummarizedApp()?.appId;
+    final conversationId = widget.provider.conversation.id;
 
     MixpanelManager().summarizedAppSelected(
       conversationId: conversationId,
@@ -570,18 +612,18 @@ class _DesktopAppSelectionSheet extends StatelessWidget {
       previousAppId: previousAppId,
     );
 
-    provider.clearSelectedAppForReprocessing();
-    await provider.reprocessConversation();
+    widget.provider.clearSelectedAppForReprocessing();
+    await widget.provider.reprocessConversation();
   }
 
   void _handleAppTap(BuildContext context, App app) async {
-    final currentAppId = provider.getSummarizedApp()?.appId;
+    final currentAppId = widget.provider.getSummarizedApp()?.appId;
 
     if (app.id != currentAppId) {
       Navigator.pop(context);
 
-      final previousAppId = provider.getSummarizedApp()?.appId;
-      final conversationId = provider.conversation.id;
+      final previousAppId = widget.provider.getSummarizedApp()?.appId;
+      final conversationId = widget.provider.conversation.id;
 
       MixpanelManager().summarizedAppSelected(
         conversationId: conversationId,
@@ -589,9 +631,9 @@ class _DesktopAppSelectionSheet extends StatelessWidget {
         previousAppId: previousAppId,
       );
 
-      provider.setSelectedAppForReprocessing(app);
-      provider.setPreferredSummarizationApp(app.id);
-      await provider.reprocessConversation(appId: app.id);
+      widget.provider.setSelectedAppForReprocessing(app);
+      widget.provider.setPreferredSummarizationApp(app.id);
+      await widget.provider.reprocessConversation(appId: app.id);
     }
   }
 }
@@ -601,13 +643,57 @@ class _AppSelectionItem extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final Widget? trailingIcon;
+  final ConversationDetailProvider? provider;
 
   const _AppSelectionItem({
     required this.app,
     required this.isSelected,
     required this.onTap,
     this.trailingIcon,
+    this.provider,
   });
+
+  Widget _buildStarButton(BuildContext context, ConversationDetailProvider provider) {
+    final isDefault = provider.preferredSummarizationAppId == app!.id;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          if (!isDefault) {
+            provider.setPreferredSummarizationApp(app!.id);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${app!.name} set as default summarization app'),
+                backgroundColor: ResponsiveHelper.purplePrimary,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isDefault ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.2) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isDefault
+                  ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.4)
+                  : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Icon(
+            isDefault ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+            size: 14,
+            color: isDefault ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -622,13 +708,13 @@ class _AppSelectionItem extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isSelected
-                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                  ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.15)
+                  : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isSelected
-                    ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
-                    : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                    ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
+                    : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -693,6 +779,14 @@ class _AppSelectionItem extends StatelessWidget {
                 ),
 
                 const SizedBox(width: 12),
+
+                // Star button for setting default (only for actual apps, not Auto)
+                if (app != null && provider != null) ...[
+                  Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, _) => _buildStarButton(context, provider),
+                  ),
+                  const SizedBox(width: 8),
+                ],
 
                 // Selection indicator or trailing icon
                 if (isSelected)
