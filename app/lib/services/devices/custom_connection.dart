@@ -138,12 +138,18 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   void _handleAudioNotification(List<int> data) {
     final payload = stripAudioHeader(data);
     if (payload != null && payload.isNotEmpty) {
-      _chunkCount++;
-      _audioStream.add(payload);
+      processAudioData(payload);
+    }
+  }
 
-      if (_chunkCount % 100 == 0) {
-        debugPrint('[CustomDevice] Received $_chunkCount audio chunks');
-      }
+  /// Process audio payload - subclasses can override for buffering/frame detection
+  /// Default implementation sends payload directly to stream
+  void processAudioData(List<int> payload) {
+    _chunkCount++;
+    _audioStream.add(payload);
+
+    if (_chunkCount % 100 == 0) {
+      debugPrint('[CustomDevice] Received $_chunkCount audio chunks');
     }
   }
 

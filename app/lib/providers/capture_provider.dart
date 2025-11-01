@@ -376,7 +376,6 @@ class CaptureProvider extends ChangeNotifier
         final paddingLeft =
             (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) ? 3 : 0;
         final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
-        debugPrint("${paddingLeft} - ${trimmedValue}");
         _socket?.send(trimmedValue);
 
         // Track bytes sent to websocket

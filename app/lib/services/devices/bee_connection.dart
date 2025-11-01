@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/custom_connection.dart';
 import 'package:omi/services/devices/models.dart';
@@ -17,6 +18,10 @@ class BeeDeviceConnection extends CustomDeviceConnection {
   // Response codes
   static const int _respWrapper = 0x8000; // Response wrapper
   static const int _eventCharging = 0x8002; // Charging event
+
+  // Audio buffering for ADTS frame detection
+  final List<int> _audioBuffer = [];
+  int _frameCount = 0;
 
   BeeDeviceConnection(super.device, super.transport);
 
@@ -115,6 +120,70 @@ class BeeDeviceConnection extends CustomDeviceConnection {
       'level': payload[0], // 0-100
       'is_charging': payload[1] != 0, // 0=not charging, non-zero=charging
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //                    Audio Processing Override
+  // ═══════════════════════════════════════════════════════════════
+
+  @override
+  void processAudioData(List<int> payload) {
+    // Add payload to buffer
+    _audioBuffer.addAll(payload);
+
+    // Process all complete ADTS frames in buffer
+    while (_audioBuffer.isNotEmpty) {
+      final frameSize = _detectAdtsFrame(_audioBuffer, 0);
+
+      if (frameSize == null) {
+        // No valid ADTS header found
+        if (_audioBuffer.length > 7) {
+          // Discard first byte and try again
+          _audioBuffer.removeAt(0);
+        } else {
+          // Not enough data yet
+          break;
+        }
+      } else if (_audioBuffer.length >= frameSize) {
+        // Complete frame available
+        final frame = _audioBuffer.sublist(0, frameSize);
+        _audioBuffer.removeRange(0, frameSize);
+
+        _frameCount++;
+
+        // Send complete ADTS frame to stream
+        // Note: We access the parent's stream through the public getter if available
+        // or we need to call a method. Since _audioStream is private, we'll work around it.
+        // Actually, we can call super.processAudioData with the frame
+        super.processAudioData(frame);
+
+        if (_frameCount % 10 == 0) {
+          debugPrint('[BeeDevice] Sent $_frameCount complete AAC frames');
+        }
+      } else {
+        // Not enough data for complete frame yet
+        break;
+      }
+    }
+  }
+
+  /// Detect ADTS frame header and return frame size
+  /// Returns null if no valid ADTS header found at offset
+  int? _detectAdtsFrame(List<int> data, int offset) {
+    if (data.length - offset < 7) {
+      return null;
+    }
+
+    // Check for ADTS sync word (12 bits set to 1: 0xFFF)
+    if (data[offset] != 0xFF || (data[offset + 1] & 0xF0) != 0xF0) {
+      return null;
+    }
+
+    // Extract frame length (13 bits starting at bit 30)
+    // Byte layout: ...LLLLLLLL LLLXXXXX
+    final frameLength = ((data[offset + 3] & 0x03) << 11) | (data[offset + 4] << 3) | ((data[offset + 5] & 0xE0) >> 5);
+
+    return frameLength;
   }
 
   // ═══════════════════════════════════════════════════════════════
