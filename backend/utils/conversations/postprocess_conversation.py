@@ -11,6 +11,7 @@ from models.conversation import *
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.speaker_diarization import diarize_segments
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 
@@ -153,6 +154,16 @@ async def _process_user_emotion(uid: str, language_code: str, conversation: Conv
 
 
 def _handle_segment_embedding_matching(uid: str, file_path: str, segments: List[TranscriptSegment], aseg: AudioSegment):
+    # Speaker diarization using ECAPA embeddings
+    segments_dict = [s.dict() for s in segments]
+    diarized_segments = diarize_segments(segments_dict, file_path, aseg.duration_seconds)
+    
+    # Apply diarization results
+    for i, seg in enumerate(segments):
+        if i < len(diarized_segments):
+            seg.speaker = diarized_segments[i]['speaker']
+    
+    # Speech profile matching for is_user identification
     if aseg.frame_rate == 16000:
         matches = get_speech_profile_matching_predictions(uid, file_path, [s.dict() for s in segments])
         for i, segment in enumerate(segments):
