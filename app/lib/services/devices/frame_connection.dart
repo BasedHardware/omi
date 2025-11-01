@@ -202,6 +202,18 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<void> performSetDeviceName(String name) async {
+    // Frame does not support device name setting
+    return;
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    // Frame does not support device name setting
+    return null;
+  }
+
+  @override
   Future<List<int>> performGetStorageList() {
     return Future.value(<int>[]);
   }

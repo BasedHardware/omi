@@ -280,7 +280,13 @@ class SDCardWalSync implements IWalSync {
       // Device model
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       var pd = await _device!.getDeviceInfo(connection);
+      
+      // Get custom device name first
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+      String? customName = await connection?.getDeviceName();
+      if (customName != null && customName.isNotEmpty) {
+        deviceModel = customName;
+      }
 
       wals.add(Wal(
         codec: codec,

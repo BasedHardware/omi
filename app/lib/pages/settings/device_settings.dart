@@ -130,6 +130,17 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     }
   }
 
+  void _updateDeviceName(String name) async {
+    final deviceProvider = context.read<DeviceProvider>();
+    if (deviceProvider.pairedDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+      await connection?.setDeviceName(name);
+      
+      // Refresh device info in provider to reflect the new name
+      await deviceProvider.getDeviceInfo();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(builder: (context, provider, child) {
@@ -565,6 +576,53 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
     ListTile(
       title: const Text('Device Name'),
       subtitle: Text(device?.name ?? 'Omi DevKit'),
+      trailing: const Icon(Icons.edit),
+      onTap: () {
+        // Get the current device name or use default
+        String currentName = device?.name ?? 'Omi DevKit';
+        TextEditingController controller = TextEditingController(text: currentName);
+        
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Edit Device Name'),
+            content: TextField(
+              controller: controller,
+              maxLength: 8, // Match firmware limit
+              decoration: const InputDecoration(
+                labelText: 'Device Name',
+                hintText: 'Enter custom device name (max 8 chars)',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  String newName = controller.text.trim();
+                  if (newName.isNotEmpty && newName != currentName) {
+                    // Update device name via connection
+                    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                    if (deviceProvider.pairedDevice != null) {
+                      var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+                      await connection?.setDeviceName(newName);
+                      // Refresh the provider to update UI
+                      deviceProvider.notifyListeners();
+                    }
+                  }
+                },
+                child: const Text(
+                  'Save',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     ),
     ListTile(
       title: const Text('Device ID'),
