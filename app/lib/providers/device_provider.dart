@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
@@ -48,6 +49,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
+  // Battery handling state
+  bool _awaitingFreshBattery = false;
+  bool get isAwaitingFreshBattery => _awaitingFreshBattery;
+  bool get hasBatteryReading => !_awaitingFreshBattery && batteryLevel >= 0;
+  int? get lastKnownBatteryLevel => batteryLevel >= 0 ? batteryLevel : _lastPersistedBattery;
+
+  int? _lastPersistedBattery;
+  DateTime? _batteryLastUpdatedAt;
+  DateTime? _previousBatteryTimestamp;
+  int? _baselineBeforeReconnect;
+  DateTime? _riseWindowStart;
+  int? _riseWindowMinValue;
+  int? _riseWindowMaxValue;
+  int? _riseWindowLastSample;
+  int _riseWindowDistinctSteps = 0;
+  bool _isPrimingBattery = false;
+  Timer? _batteryPrimeRetryTimer;
+
+  static const int _riseIncreaseThreshold = 5;
+  static const int _firstRiseCap = 10;
+  static const int _requiredRiseSteps = 2;
+  static const int _riseStepMinimumDelta = 1;
+  static const double _riseWindowEmaAlpha = 0.3;
+  int _riseWindowMs = 45000;
+
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
   }
@@ -60,6 +86,41 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void setConnectedDevice(BtDevice? device) async {
     connectedDevice = device;
     pairedDevice = device;
+
+    if (connectedDevice != null) {
+      final id = connectedDevice!.id;
+      final cached = SharedPreferencesUtil().getLastBatteryLevel(id);
+      final ts = SharedPreferencesUtil().getLastBatteryTimestamp(id);
+      _lastPersistedBattery = cached;
+      _batteryLastUpdatedAt = ts;
+      _previousBatteryTimestamp = ts;
+      _baselineBeforeReconnect = cached;
+      final storedWindow = SharedPreferencesUtil().getInt('batteryRiseWindow:$id');
+      if (storedWindow != null) {
+        _riseWindowMs = storedWindow.clamp(20000, 90000);
+      } else {
+        _riseWindowMs = 45000;
+      }
+
+      if (cached != null && cached >= 0) {
+        batteryLevel = cached;
+      } else {
+        batteryLevel = -1;
+      }
+
+      _awaitingFreshBattery = true;
+      notifyListeners();
+
+      await initiateBleBatteryListener();
+      _primeBatteryLevel();
+    } else {
+      _awaitingFreshBattery = false;
+      _baselineBeforeReconnect = null;
+      _batteryPrimeRetryTimer?.cancel();
+      _batteryPrimeRetryTimer = null;
+      _isPrimingBattery = false;
+    }
+
     await getDeviceInfo();
     Logger.debug('setConnectedDevice: $device');
     notifyListeners();
@@ -130,20 +191,183 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
-        batteryLevel = value;
-        if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
+        _handleIncomingBatteryValue(value);
+        if (batteryLevel >= 0 && batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           NotificationService.instance.createNotification(
             title: "Low Battery Alert",
             body: "Your device is running low on battery. Time for a recharge! 🔋",
           );
-        } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = true;
+        } else if (batteryLevel >= 20) {
+          _hasLowBatteryAlerted = false;
         }
-        notifyListeners();
       },
     );
     notifyListeners();
+  }
+
+  void _persistBatteryLevel(int level, DateTime timestamp) {
+    final id = connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+    if (id.isEmpty) return;
+    _lastPersistedBattery = level;
+    _batteryLastUpdatedAt = timestamp;
+    _previousBatteryTimestamp = timestamp;
+    SharedPreferencesUtil().saveLastBatteryLevel(id, level, timestamp);
+  }
+
+  bool _handleIncomingBatteryValue(int rawValue, {DateTime? timestamp}) {
+    if (rawValue < 0 || rawValue > 100) {
+      return false;
+    }
+
+    final now = timestamp ?? DateTime.now();
+    final baselineCandidate = _baselineBeforeReconnect ?? _lastPersistedBattery;
+    final hasBaseline = baselineCandidate != null;
+
+    // First ever reading: accept immediately
+    if (_riseWindowStart == null && !hasBaseline && _lastPersistedBattery == null) {
+      return _finalizeAndApply(rawValue, now);
+    }
+
+    if (!_awaitingFreshBattery) {
+      if (batteryLevel != rawValue) {
+        batteryLevel = rawValue;
+        _persistBatteryLevel(rawValue, now);
+        notifyListeners();
+      } else {
+        _persistBatteryLevel(rawValue, now);
+      }
+      return true;
+    }
+
+    if (_riseWindowStart == null) {
+      _riseWindowStart = now;
+      _riseWindowMinValue = rawValue;
+      _riseWindowMaxValue = rawValue;
+      _riseWindowLastSample = rawValue;
+      _riseWindowDistinctSteps = 0;
+    } else {
+      _riseWindowMinValue = _riseWindowMinValue == null ? rawValue : math.min(_riseWindowMinValue!, rawValue);
+      _riseWindowMaxValue = _riseWindowMaxValue == null ? rawValue : math.max(_riseWindowMaxValue!, rawValue);
+      if (_riseWindowLastSample != null && rawValue > _riseWindowLastSample!) {
+        if (rawValue - _riseWindowLastSample! >= _riseStepMinimumDelta) {
+          _riseWindowDistinctSteps++;
+        }
+      }
+      _riseWindowLastSample = rawValue;
+    }
+
+    if (baselineCandidate != null && rawValue <= baselineCandidate) {
+      return _finalizeAndApply(rawValue, now);
+    }
+
+    if (baselineCandidate != null) {
+      final elapsedMs = now.difference(_riseWindowStart!).inMilliseconds;
+      final minVal = _riseWindowMinValue ?? rawValue;
+      final maxVal = _riseWindowMaxValue ?? rawValue;
+      final sustainedRise = minVal >= baselineCandidate + _riseIncreaseThreshold;
+      final sawRamp = _riseWindowDistinctSteps >= _requiredRiseSteps;
+      final plateauSpan = (maxVal - minVal).abs();
+      final stableRise = sustainedRise && plateauSpan <= 1 && elapsedMs >= _riseWindowMs;
+      final timedOut = elapsedMs >= _riseWindowMs && minVal >= baselineCandidate;
+      if ((sustainedRise && sawRamp && elapsedMs >= _riseWindowMs) || stableRise || timedOut) {
+        _updateRiseWindow(elapsedMs);
+        final candidate = math.min(minVal, rawValue);
+        final capped = math.min(candidate, baselineCandidate + _firstRiseCap);
+        return _finalizeAndApply(capped, now);
+      }
+    } else {
+      final elapsedMs = now.difference(_riseWindowStart!).inMilliseconds;
+      final minVal = _riseWindowMinValue ?? rawValue;
+      final maxVal = _riseWindowMaxValue ?? rawValue;
+      if (elapsedMs >= _riseWindowMs && (maxVal - minVal).abs() <= _riseIncreaseThreshold) {
+        return _finalizeAndApply(minVal, now);
+      }
+    }
+
+    if (!_isPrimingBattery) {
+      _primeBatteryLevel();
+    }
+    return false;
+  }
+
+  bool _finalizeAndApply(int acceptedValue, DateTime timestamp) {
+    _awaitingFreshBattery = false;
+    _baselineBeforeReconnect = acceptedValue;
+    _riseWindowStart = null;
+    _riseWindowMinValue = null;
+    _riseWindowMaxValue = null;
+    _riseWindowLastSample = null;
+    _riseWindowDistinctSteps = 0;
+
+    if (batteryLevel != acceptedValue) {
+      batteryLevel = acceptedValue;
+      _persistBatteryLevel(acceptedValue, timestamp);
+      notifyListeners();
+    } else {
+      _persistBatteryLevel(acceptedValue, timestamp);
+    }
+    return true;
+  }
+
+  void _updateRiseWindow(int elapsedMs) {
+    if (elapsedMs <= 0) return;
+    final id = connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+    if (id.isEmpty) return;
+    final updated = ((_riseWindowMs * (1 - _riseWindowEmaAlpha)) + (elapsedMs * _riseWindowEmaAlpha)).round();
+    _riseWindowMs = updated.clamp(20000, 90000);
+    SharedPreferencesUtil().saveInt('batteryRiseWindow:$id', _riseWindowMs);
+  }
+
+  Future<void> _primeBatteryLevel() async {
+    if (connectedDevice == null || _isPrimingBattery) {
+      return;
+    }
+    _isPrimingBattery = true;
+    _batteryPrimeRetryTimer?.cancel();
+
+    const delays = <Duration>[
+      Duration(milliseconds: 0),
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 600),
+      Duration(milliseconds: 1200),
+      Duration(milliseconds: 3000),
+      Duration(milliseconds: 6000),
+      Duration(milliseconds: 9000),
+      Duration(milliseconds: 12000),
+      Duration(milliseconds: 15000),
+    ];
+
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+      if (connection == null) {
+        return;
+      }
+      for (final delay in delays) {
+        if (delay.inMilliseconds > 0) {
+          await Future.delayed(delay);
+        }
+        try {
+          final level = await connection.retrieveBatteryLevel();
+          if (level >= 0 && level <= 100) {
+            final accepted = _handleIncomingBatteryValue(level);
+            if (accepted) {
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+    } finally {
+      _isPrimingBattery = false;
+    }
+
+    if (_awaitingFreshBattery) {
+      _batteryPrimeRetryTimer = Timer(const Duration(seconds: 1), () {
+        if (connectedDevice != null && _awaitingFreshBattery) {
+          _primeBatteryLevel();
+        }
+      });
+    }
   }
 
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
@@ -257,6 +481,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _bleBatteryLevelListener?.cancel();
     _reconnectionTimer?.cancel();
+    _batteryPrimeRetryTimer?.cancel();
+    _isPrimingBattery = false;
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
