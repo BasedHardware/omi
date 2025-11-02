@@ -8,6 +8,7 @@ import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/xor_connection.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 
@@ -158,6 +159,8 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
     deviceType = DeviceType.bee;
   } else if (BtDevice.isXorDeviceFromDevice(device)) {
     deviceType = DeviceType.xor;
+  } else if (BtDevice.isFieldyDeviceFromDevice(device)) {
+    deviceType = DeviceType.fieldy;
   } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
@@ -181,6 +184,7 @@ enum DeviceType {
   appleWatch,
   xor,
   bee,
+  fieldy,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -303,6 +307,8 @@ class BtDevice {
       return await _getDeviceInfoFromBee(conn);
     } else if (type == DeviceType.xor) {
       return await _getDeviceInfoFromXor(conn as XorDeviceConnection);
+    } else if (type == DeviceType.fieldy) {
+      return await _getDeviceInfoFromFieldy(conn);
     } else if (type == DeviceType.omi) {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
@@ -453,6 +459,33 @@ class BtDevice {
     );
   }
 
+  Future _getDeviceInfoFromFieldy(DeviceConnection conn) async {
+    var modelNumber = 'Fieldy';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = 'Fieldy Hardware';
+    var manufacturerName = 'Fieldy';
+
+    try {
+      if (conn is FieldyDeviceConnection) {
+        final deviceInfo = await conn.getDeviceInfo();
+        modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+        firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+        hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+        manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+      }
+    } catch (e) {
+      Logger.error('Error getting Fieldy device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.fieldy,
+    );
+  }
+
   // from BluetoothDevice
   Future fromBluetoothDevice(BluetoothDevice device) async {
     var rssi = await device.readRssi();
@@ -466,7 +499,11 @@ class BtDevice {
 
   // Check if a scan result is from a supported device
   static bool isSupportedDevice(ScanResult result) {
-    return isBeeDevice(result) || isXorDevice(result) || isOmiDevice(result) || isFrameDevice(result);
+    return isBeeDevice(result) ||
+        isXorDevice(result) ||
+        isFieldyDevice(result) ||
+        isOmiDevice(result) ||
+        isFrameDevice(result);
   }
 
   static bool isBeeDevice(ScanResult result) {
@@ -485,6 +522,18 @@ class BtDevice {
   static bool isXorDeviceFromDevice(BluetoothDevice device) {
     return device.servicesList.any((s) => s.uuid == Guid(xorServiceUuid)) ||
         device.platformName.toUpperCase().startsWith('PLAUD');
+  }
+
+  static bool isFieldyDevice(ScanResult result) {
+    final name = result.device.platformName.toLowerCase();
+    return name == 'compass' || name == 'fieldy';
+  }
+
+  static bool isFieldyDeviceFromDevice(BluetoothDevice device) {
+    final name = device.platformName.toLowerCase();
+    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == fieldyServiceUuid.toLowerCase()) ||
+        name == 'compass' ||
+        name == 'fieldy';
   }
 
   static bool isOmiDevice(ScanResult result) {
@@ -511,6 +560,8 @@ class BtDevice {
       deviceType = DeviceType.bee;
     } else if (isXorDevice(result)) {
       deviceType = DeviceType.xor;
+    } else if (isFieldyDevice(result)) {
+      deviceType = DeviceType.fieldy;
     } else if (isOmiDevice(result)) {
       deviceType = DeviceType.omi;
     } else if (isFrameDevice(result)) {
