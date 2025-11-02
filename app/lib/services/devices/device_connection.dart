@@ -10,6 +10,7 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/xor_connection.dart';
 import 'package:omi/services/devices/bee_connection.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
@@ -59,6 +60,8 @@ class DeviceConnectionFactory {
         return FrameDeviceConnection(device, transport);
       case DeviceType.appleWatch:
         return AppleWatchDeviceConnection(device, transport);
+      case DeviceType.fieldy:
+        return FieldyDeviceConnection(device, transport);
     }
   }
 }
