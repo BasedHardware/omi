@@ -156,7 +156,29 @@ typedef enum {
 // Power Button and LED Control
 #define POWER_BUTTON_PIN 1 // Custom button (GPIO1/A0) - power on/off
 #define STATUS_LED_PIN 21  // User LED (GPIO21) - status indicator
+
+// Microphone Configuration (Built-in PDM microphone on XIAO ESP32-S3 Sense)
+#define MIC_CLK_PIN 42   // PDM Clock
+#define MIC_DATA_PIN 41  // PDM Data
 #endif
+
+// =============================================================================
+// AUDIO CONFIGURATION
+// =============================================================================
+#define AUDIO_SAMPLE_RATE 16000      // 16 kHz sample rate for voice
+#define AUDIO_BITS_PER_SAMPLE 16     // 16-bit audio
+#define AUDIO_CHANNELS 1             // Mono audio
+#define AUDIO_BUFFER_SIZE 320        // 320 samples = 20ms @ 16kHz
+#define AUDIO_DMA_BUFFER_COUNT 8     // Number of DMA buffers
+#define AUDIO_DMA_BUFFER_SIZE 1024   // Size of each DMA buffer
+#define AUDIO_USE_MULAW_COMPRESSION true // Use mu-law compression (16-bit -> 8-bit)
+
+// Audio Task Configuration
+#define AUDIO_CAPTURE_TASK_STACK_SIZE 4096
+#define AUDIO_CAPTURE_TASK_PRIORITY 3
+#define AUDIO_UPLOAD_TASK_STACK_SIZE 4096
+#define AUDIO_UPLOAD_TASK_PRIORITY 2
+#define AUDIO_QUEUE_SIZE 20 // Queue for audio chunks
 
 // =============================================================================
 // POWER BUTTON & LED CONFIGURATION

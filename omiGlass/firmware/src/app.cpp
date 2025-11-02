@@ -9,6 +9,8 @@
 #include "config.h" // Use config.h for all configurations
 #include "esp_camera.h"
 #include "esp_sleep.h"
+#include "driver/i2s.h"
+#include "mulaw.h"
 
 // Battery state
 float batteryVoltage = 0.0f;
@@ -46,10 +48,14 @@ bool lightSleepEnabled = true;
 static BLEUUID serviceUUID(OMI_SERVICE_UUID);
 static BLEUUID photoDataUUID(PHOTO_DATA_UUID);
 static BLEUUID photoControlUUID(PHOTO_CONTROL_UUID);
+static BLEUUID audioDataUUID(AUDIO_DATA_UUID);
+static BLEUUID audioControlUUID(AUDIO_CONTROL_UUID);
 
 // Characteristics
 BLECharacteristic *photoDataCharacteristic;
 BLECharacteristic *photoControlCharacteristic;
+BLECharacteristic *audioDataCharacteristic;
+BLECharacteristic *audioControlCharacteristic;
 BLECharacteristic *batteryLevelCharacteristic;
 
 // State
@@ -68,8 +74,30 @@ bool photoDataUploading = false;
 camera_fb_t *fb = nullptr;
 image_orientation_t current_photo_orientation = ORIENTATION_0_DEGREES;
 
+// -------------------------------------------------------------------------
+// Audio / Microphone
+// -------------------------------------------------------------------------
+#define I2S_PORT I2S_NUM_0
+#define I2S_QUEUE_SIZE 4
+
+// Audio state
+bool isCapturingAudio = false;
+bool audioInitialized = false;
+
+// Audio chunk structure for queue
+typedef struct {
+    size_t n;
+    uint8_t data[AUDIO_BUFFER_SIZE * 2]; // Buffer is sized for the maximum possible audio chunk: 640 bytes for uncompressed PCM (320 samples * 2 bytes), or 320 bytes for compressed mu-law. Actual used size depends on mode.
+} AudioChunk;
+
+// FreeRTOS queue for audio chunks
+QueueHandle_t audioQueue = nullptr;
+TaskHandle_t audioCaptureThandle = nullptr;
+TaskHandle_t audioUploadTaskHandle = nullptr;
+
 // Forward declarations
 void handlePhotoControl(int8_t controlValue);
+void handleAudioControl(int8_t controlValue);
 void readBatteryLevel();
 void updateBatteryService();
 void IRAM_ATTR buttonISR();
@@ -80,6 +108,10 @@ void enterPowerSave();
 void exitPowerSave();
 void shutdownDevice();
 void enableLightSleep();
+bool initializeMicrophone();
+void deinitializeMicrophone();
+void audioCaptureTTask(void *param);
+void audioUploadTask(void *param);
 
 // -------------------------------------------------------------------------
 // Button ISR
@@ -300,6 +332,20 @@ class PhotoControlCallback : public BLECharacteristicCallbacks
     }
 };
 
+class AudioControlCallback : public BLECharacteristicCallbacks
+{
+    void onWrite(BLECharacteristic *characteristic) override
+    {
+        if (characteristic->getLength() == 1) {
+            int8_t received = characteristic->getData()[0];
+            Serial.print("AudioControl received: ");
+            Serial.println(received);
+            lastActivity = millis(); // Register activity - prevents sleep
+            handleAudioControl(received);
+        }
+    }
+};
+
 // -------------------------------------------------------------------------
 // Battery Functions
 // -------------------------------------------------------------------------
@@ -378,6 +424,245 @@ void updateBatteryService()
 }
 
 // -------------------------------------------------------------------------
+// Audio / Microphone Functions
+// -------------------------------------------------------------------------
+void handleAudioControl(int8_t controlValue)
+{
+    if (controlValue == 1) {
+        // Start audio capture
+        Serial.println("Received command: Start audio capture.");
+        if (!audioInitialized) {
+            if (initializeMicrophone()) {
+                isCapturingAudio = true;
+                Serial.println("Audio capture started.");
+            } else {
+                Serial.println("Failed to initialize microphone.");
+            }
+        } else {
+            isCapturingAudio = true;
+            Serial.println("Audio capture resumed.");
+        }
+    } else if (controlValue == 0) {
+        // Stop audio capture
+        Serial.println("Received command: Stop audio capture.");
+        isCapturingAudio = false;
+    } else if (controlValue == -1) {
+        // Deinitialize microphone
+        Serial.println("Received command: Deinitialize microphone.");
+        isCapturingAudio = false;
+        deinitializeMicrophone();
+    }
+}
+
+bool initializeMicrophone()
+{
+    if (audioInitialized) {
+        Serial.println("Microphone already initialized.");
+        return true;
+    }
+
+    Serial.println("Initializing microphone (I2S PDM)...");
+
+    // Configure I2S for PDM microphone
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM),
+        .sample_rate = AUDIO_SAMPLE_RATE,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = AUDIO_DMA_BUFFER_COUNT,
+        .dma_buf_len = AUDIO_DMA_BUFFER_SIZE,
+        .use_apll = false,
+        .tx_desc_auto_clear = false,
+        .fixed_mclk = 0
+    };
+
+    // Install I2S driver
+    esp_err_t err = i2s_driver_install(I2S_PORT, &i2s_config, I2S_QUEUE_SIZE, nullptr);
+    if (err != ESP_OK) {
+        Serial.printf("Failed to install I2S driver: %d\n", err);
+        return false;
+    }
+
+    // Configure I2S pins for PDM
+    i2s_pin_config_t pin_config = {
+        .bck_io_num = I2S_PIN_NO_CHANGE,
+        .ws_io_num = MIC_CLK_PIN,
+        .data_out_num = I2S_PIN_NO_CHANGE,
+        .data_in_num = MIC_DATA_PIN
+    };
+
+    err = i2s_set_pin(I2S_PORT, &pin_config);
+    if (err != ESP_OK) {
+        Serial.printf("Failed to set I2S pins: %d\n", err);
+        i2s_driver_uninstall(I2S_PORT);
+        return false;
+    }
+
+    // Create audio queue
+    audioQueue = xQueueCreate(AUDIO_QUEUE_SIZE, sizeof(AudioChunk));
+    if (audioQueue == nullptr) {
+        Serial.println("Failed to create audio queue!");
+        i2s_driver_uninstall(I2S_PORT);
+        return false;
+    }
+
+    // Create audio capture task (Core 0 - for audio/sensor tasks)
+    BaseType_t result = xTaskCreatePinnedToCore(
+        audioCaptureTTask,
+        "AudioCapture",
+        AUDIO_CAPTURE_TASK_STACK_SIZE,
+        nullptr,
+        AUDIO_CAPTURE_TASK_PRIORITY,
+        &audioCaptureThandle,
+        0 // Core 0
+    );
+
+    if (result != pdPASS) {
+        Serial.println("Failed to create audio capture task!");
+        vQueueDelete(audioQueue);
+        i2s_driver_uninstall(I2S_PORT);
+        return false;
+    }
+
+    // Create audio upload task (Core 1 - for network tasks)
+    result = xTaskCreatePinnedToCore(
+        audioUploadTask,
+        "AudioUpload",
+        AUDIO_UPLOAD_TASK_STACK_SIZE,
+        nullptr,
+        AUDIO_UPLOAD_TASK_PRIORITY,
+        &audioUploadTaskHandle,
+        1 // Core 1
+    );
+
+    if (result != pdPASS) {
+        Serial.println("Failed to create audio upload task!");
+        if (audioCaptureThandle) {
+            vTaskDelete(audioCaptureThandle);
+            audioCaptureThandle = nullptr;
+        }
+        vQueueDelete(audioQueue);
+        i2s_driver_uninstall(I2S_PORT);
+        return false;
+    }
+
+    audioInitialized = true;
+    Serial.println("Microphone initialized successfully.");
+    return true;
+}
+
+void deinitializeMicrophone()
+{
+    if (!audioInitialized) {
+        return;
+    }
+
+    Serial.println("Deinitializing microphone...");
+    isCapturingAudio = false;
+
+    // Delete tasks
+    if (audioCaptureThandle) {
+        vTaskDelete(audioCaptureThandle);
+        audioCaptureThandle = nullptr;
+    }
+    if (audioUploadTaskHandle) {
+        vTaskDelete(audioUploadTaskHandle);
+        audioUploadTaskHandle = nullptr;
+    }
+
+    // Delete queue
+    if (audioQueue) {
+        vQueueDelete(audioQueue);
+        audioQueue = nullptr;
+    }
+
+    // Uninstall I2S driver
+    i2s_driver_uninstall(I2S_PORT);
+
+    audioInitialized = false;
+    Serial.println("Microphone deinitialized.");
+}
+
+// Audio Capture Task - Runs on Core 0
+void audioCaptureTTask(void *param)
+{
+    Serial.println("Audio capture task started.");
+    int16_t i2s_buffer[AUDIO_BUFFER_SIZE];
+
+    while (true) {
+        if (isCapturingAudio && connected) {
+            size_t bytes_read = 0;
+
+            // Read audio data from I2S with timeout to allow checking stop flag
+            esp_err_t err = i2s_read(I2S_PORT, i2s_buffer, AUDIO_BUFFER_SIZE * sizeof(int16_t),
+                                     &bytes_read, pdMS_TO_TICKS(100));
+
+            if (err == ESP_OK && bytes_read > 0) {
+                size_t samples_read = bytes_read / sizeof(int16_t);
+
+                if (samples_read >= AUDIO_BUFFER_SIZE) {
+                    AudioChunk chunk;
+
+#if AUDIO_USE_MULAW_COMPRESSION
+                    // Apply mu-law compression (16-bit -> 8-bit)
+                    for (size_t i = 0; i < AUDIO_BUFFER_SIZE; i++) {
+                        chunk.data[i] = linear2ulaw(i2s_buffer[i]);
+                    }
+                    chunk.n = AUDIO_BUFFER_SIZE; // 320 bytes (compressed)
+#else
+                    // No compression - copy raw PCM16 data
+                    memcpy(chunk.data, i2s_buffer, AUDIO_BUFFER_SIZE * sizeof(int16_t));
+                    chunk.n = AUDIO_BUFFER_SIZE * sizeof(int16_t); // 640 bytes
+#endif
+
+                    // Send to queue with proper handling of queue-full condition
+                    if (xQueueSend(audioQueue, &chunk, 0) != pdPASS) {
+                        // Queue full - attempt to drop oldest and retry
+                        AudioChunk dump;
+                        if (xQueueReceive(audioQueue, &dump, 0) == pdPASS) {
+                            // Successfully removed oldest, now send new chunk
+                            if (xQueueSend(audioQueue, &chunk, 0) != pdPASS) {
+                                // Still failed - this shouldn't happen but log for debugging
+                                Serial.println("Audio queue send failed even after dropping oldest");
+                            }
+                        } else {
+                            // Failed to receive - queue might be empty now (race condition)
+                            Serial.println("Audio queue race condition detected");
+                        }
+                    }
+                }
+            }
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Sleep when not capturing
+        }
+    }
+}
+
+// Audio Upload Task - Runs on Core 1
+void audioUploadTask(void *param)
+{
+    Serial.println("Audio upload task started.");
+    AudioChunk chunk;
+
+    while (true) {
+        if (isCapturingAudio && connected) {
+            // Receive audio chunk from queue
+            if (xQueueReceive(audioQueue, &chunk, pdMS_TO_TICKS(100)) == pdPASS) {
+                // Send over BLE
+                if (audioDataCharacteristic) {
+                    audioDataCharacteristic->setValue(chunk.data, chunk.n);
+                    audioDataCharacteristic->notify();
+                }
+            }
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Sleep when not capturing
+        }
+    }
+}
+
+// -------------------------------------------------------------------------
 // configure_ble()
 // -------------------------------------------------------------------------
 void configure_ble()
@@ -402,6 +687,19 @@ void configure_ble()
     photoControlCharacteristic->setCallbacks(new PhotoControlCallback());
     uint8_t controlValue = 0;
     photoControlCharacteristic->setValue(&controlValue, 1);
+
+    // Audio Data characteristic
+    audioDataCharacteristic = service->createCharacteristic(
+        audioDataUUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+    BLE2902 *audioCcc = new BLE2902();
+    audioCcc->setNotifications(true);
+    audioDataCharacteristic->addDescriptor(audioCcc);
+
+    // Audio Control characteristic
+    audioControlCharacteristic = service->createCharacteristic(audioControlUUID, BLECharacteristic::PROPERTY_WRITE);
+    audioControlCharacteristic->setCallbacks(new AudioControlCallback());
+    uint8_t audioControlValue = 0;
+    audioControlCharacteristic->setValue(&audioControlValue, 1);
 
     // Battery Service
     BLEService *batteryService = server->createService(BATTERY_SERVICE_UUID);
