@@ -73,7 +73,7 @@ typedef struct {
     uint8_t percentage;
 } BatteryState;
 
-#define BATTERY_STATES_COUNT 20
+#define BATTERY_STATES_COUNT 21
 // Enhanced 1S 250mAh LiPo battery discharge profile with improved granularity
 // Additional data points at critical ranges for more accurate percentage calculation
 BatteryState battery_states[BATTERY_STATES_COUNT] = {
@@ -96,6 +96,7 @@ BatteryState battery_states[BATTERY_STATES_COUNT] = {
     {3437, 10},
     {3346, 5},
     {3255, 2},
+    {3150, 1}, // Critical low battery
     {3000, 0} // Below safe level
 };
 
@@ -179,23 +180,42 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
         sorted_samples[i] = sample_buffer[i];
     }
 
-    // Simple bubble sort for median calculation
-    for (int i = 0; i < ADC_TOTAL_SAMPLES - 1; i++) {
-        for (int j = 0; j < ADC_TOTAL_SAMPLES - i - 1; j++) {
-            if (sorted_samples[j] > sorted_samples[j + 1]) {
-                int16_t temp = sorted_samples[j];
-                sorted_samples[j] = sorted_samples[j + 1];
-                sorted_samples[j + 1] = temp;
+    // Optimized selection sort for finding median (only sorts what's needed)
+    // For small arrays (50 samples), this is efficient and simple
+    int mid = ADC_TOTAL_SAMPLES / 2;
+    for (int i = 0; i <= mid; i++) {
+        int min_idx = i;
+        for (int j = i + 1; j < ADC_TOTAL_SAMPLES; j++) {
+            if (sorted_samples[j] < sorted_samples[min_idx]) {
+                min_idx = j;
             }
+        }
+        if (min_idx != i) {
+            int16_t temp = sorted_samples[i];
+            sorted_samples[i] = sorted_samples[min_idx];
+            sorted_samples[min_idx] = temp;
         }
     }
 
     // Calculate median value
     int32_t adc_raw_val;
     if (ADC_TOTAL_SAMPLES % 2 == 0) {
-        adc_raw_val = (sorted_samples[ADC_TOTAL_SAMPLES / 2 - 1] + sorted_samples[ADC_TOTAL_SAMPLES / 2]) / 2;
+        // For even number of samples, we need both middle values
+        // Ensure mid+1 is also in correct position
+        int next_min = mid;
+        for (int j = mid + 1; j < ADC_TOTAL_SAMPLES; j++) {
+            if (sorted_samples[j] < sorted_samples[next_min]) {
+                next_min = j;
+            }
+        }
+        if (next_min != mid) {
+            int16_t temp = sorted_samples[mid];
+            sorted_samples[mid] = sorted_samples[next_min];
+            sorted_samples[next_min] = temp;
+        }
+        adc_raw_val = (sorted_samples[mid - 1] + sorted_samples[mid]) / 2;
     } else {
-        adc_raw_val = sorted_samples[ADC_TOTAL_SAMPLES / 2];
+        adc_raw_val = sorted_samples[mid];
     }
 
     LOG_DBG("Median ADC raw value: %d", adc_raw_val);
