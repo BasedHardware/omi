@@ -38,6 +38,7 @@ import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -291,6 +292,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => UserProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
+          ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
