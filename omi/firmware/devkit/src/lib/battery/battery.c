@@ -182,8 +182,12 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
 
     // Optimized selection sort for finding median (only sorts what's needed)
     // For small arrays (50 samples), this is efficient and simple
+    // For even-length arrays, we need elements at positions mid-1 and mid
+    // For odd-length arrays, we need element at position mid
     int mid = ADC_TOTAL_SAMPLES / 2;
-    for (int i = 0; i <= mid; i++) {
+    int sort_to = (ADC_TOTAL_SAMPLES % 2 == 0) ? mid + 1 : mid + 1;
+    
+    for (int i = 0; i < sort_to; i++) {
         int min_idx = i;
         for (int j = i + 1; j < ADC_TOTAL_SAMPLES; j++) {
             if (sorted_samples[j] < sorted_samples[min_idx]) {
@@ -200,19 +204,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     // Calculate median value
     int32_t adc_raw_val;
     if (ADC_TOTAL_SAMPLES % 2 == 0) {
-        // For even number of samples, we need both middle values
-        // Ensure mid+1 is also in correct position
-        int next_min = mid;
-        for (int j = mid + 1; j < ADC_TOTAL_SAMPLES; j++) {
-            if (sorted_samples[j] < sorted_samples[next_min]) {
-                next_min = j;
-            }
-        }
-        if (next_min != mid) {
-            int16_t temp = sorted_samples[mid];
-            sorted_samples[mid] = sorted_samples[next_min];
-            sorted_samples[next_min] = temp;
-        }
+        // For even number of samples, average the two middle values
         adc_raw_val = (sorted_samples[mid - 1] + sorted_samples[mid]) / 2;
     } else {
         adc_raw_val = sorted_samples[mid];
