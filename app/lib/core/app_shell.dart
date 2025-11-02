@@ -166,7 +166,7 @@ class _AppShellState extends State<AppShell> {
       AppSnackbar.showSnackbar('Successfully connected to Asana!');
 
       // Notify task integration provider to refresh UI from Firebase
-      await context.read<TaskIntegrationProvider>().refresh();
+      context.read<TaskIntegrationProvider>().refresh();
 
       // Auto-open settings page for configuration
       if (requiresSetup && mounted) {

@@ -11,8 +11,8 @@ abstract class Env {
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
-  // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
-  static String? get apiBaseUrl => _instance.apiBaseUrl;
+  static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
+  // static String? get apiBaseUrl => _instance.apiBaseUrl;
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 
@@ -28,23 +28,8 @@ abstract class Env {
 
   static String? get googleClientSecret => _instance.googleClientSecret;
 
-  static String? get todoistClientId => _instance.todoistClientId;
-
-  static String? get todoistClientSecret => _instance.todoistClientSecret;
-
-  static String? get todoistVerificationToken => _instance.todoistVerificationToken;
-
-  static String? get asanaClientId => _instance.asanaClientId;
-
-  static String? get asanaClientSecret => _instance.asanaClientSecret;
-
-  static String? get googleTasksClientId => _instance.googleTasksClientId;
-
-  static String? get googleTasksClientSecret => _instance.googleTasksClientSecret;
-
-  static String? get clickupClientId => _instance.clickupClientId;
-
-  static String? get clickupClientSecret => _instance.clickupClientSecret;
+  // All task integration OAuth credentials moved to backend
+  // Frontend gets OAuth URLs from backend API
 }
 
 abstract class EnvFields {
@@ -68,21 +53,5 @@ abstract class EnvFields {
 
   String? get googleClientSecret;
 
-  String? get todoistClientId;
-
-  String? get todoistClientSecret;
-
-  String? get todoistVerificationToken;
-
-  String? get asanaClientId;
-
-  String? get asanaClientSecret;
-
-  String? get googleTasksClientId;
-
-  String? get googleTasksClientSecret;
-
-  String? get clickupClientId;
-
-  String? get clickupClientSecret;
+  // All task integration OAuth credentials moved to backend
 }
