@@ -138,6 +138,9 @@ class $AssetsImagesGen {
   AssetGenImage get facebookLogo =>
       const AssetGenImage('assets/images/facebook_logo.png');
 
+  /// File path: assets/images/fieldy.webp
+  AssetGenImage get fieldy => const AssetGenImage('assets/images/fieldy.webp');
+
   /// File path: assets/images/google_logo.png
   AssetGenImage get googleLogo =>
       const AssetGenImage('assets/images/google_logo.png');
@@ -331,6 +334,7 @@ class $AssetsImagesGen {
     emailLogo,
     emotionalFeedback1,
     facebookLogo,
+    fieldy,
     googleLogo,
     gradientCard,
     herologo,

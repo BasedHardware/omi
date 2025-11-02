@@ -75,6 +75,9 @@ class DeviceUtils {
       if (upperModel.contains('WATCH')) {
         return Assets.images.appleWatch.path;
       }
+      if (upperModel.contains('FIELDY') || upperModel.contains('COMPASS')) {
+        return Assets.images.fieldy.path;
+      }
     }
 
     // Fallback: Use device name
@@ -95,6 +98,9 @@ class DeviceUtils {
       }
       if (upperName.contains('WATCH')) {
         return Assets.images.appleWatch.path;
+      }
+      if (upperName.contains('FIELDY') || upperName.contains('COMPASS')) {
+        return Assets.images.fieldy.path;
       }
     }
 
