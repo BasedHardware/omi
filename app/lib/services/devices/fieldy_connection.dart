@@ -2,18 +2,53 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/custom_connection.dart';
 import 'package:omi/services/devices/models.dart';
 
-class FieldyDeviceConnection extends DeviceConnection {
+class FieldyDeviceConnection extends CustomDeviceConnection {
   FieldyDeviceConnection(super.device, super.transport);
 
-  get deviceId => device.id;
+  @override
+  String get serviceUuid => fieldyServiceUuid;
 
   @override
-  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+  String get controlCharacteristicUuid => "82a48422-3ca9-4156-ae67-4170f58666e0";
+
+  @override
+  String get audioCharacteristicUuid => "82a48422-3ca9-4156-ae67-4170f58666e0";
+
+  @override
+  BleAudioCodec get audioCodec => BleAudioCodec.opusFS320;
+
+  @override
+  int get unmuteCommandCode => 0x00;
+
+  @override
+  int get muteCommandCode => 0x00;
+
+  @override
+  int get batteryCommandCode => 0x00;
+
+  @override
+  List<int> get unmuteCommandData => [];
+
+  @override
+  List<int> get muteCommandData => [];
+
+  @override
+  Map<String, dynamic> parseResponse(List<int> data) {
+    return {'type': 'unknown', 'data': data};
+  }
+
+  @override
+  List<int>? processAudioPacket(List<int> data) {
+    return data;
+  }
+
+  @override
+  Map<String, dynamic>? parseBatteryResponse(List<int> payload) {
+    if (payload.isEmpty) return null;
+    return {'level': payload[0]};
   }
 
   @override
@@ -29,37 +64,11 @@ class FieldyDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
-    void Function(int)? onBatteryLevelChange,
-  }) async {
-    try {
-      final stream = transport.getCharacteristicStream(batteryServiceUuid, batteryLevelCharacteristicUuid);
-
-      final subscription = stream.listen((value) {
-        if (value.isNotEmpty && onBatteryLevelChange != null) {
-          debugPrint('Battery level changed: ${value[0]}');
-          onBatteryLevelChange(value[0]);
-        }
-      });
-
-      return subscription;
-    } catch (e) {
-      debugPrint('Fieldy: Error setting up battery listener: $e');
-      return null;
-    }
-  }
-
-  @override
-  Future<BleAudioCodec> performGetAudioCodec() async {
-    return BleAudioCodec.opusFS320;
-  }
-
-  @override
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(fieldyServiceUuid, fieldyOpusAudioCharacteristicUuid);
+      final stream = transport.getCharacteristicStream(serviceUuid, audioCharacteristicUuid);
 
       debugPrint('Subscribed to audioBytes stream from Fieldy Device');
       final subscription = stream.listen((value) {
@@ -98,71 +107,6 @@ class FieldyDeviceConnection extends DeviceConnection {
       debugPrint('Fieldy: Error setting up audio listener: $e');
       return null;
     }
-  }
-
-  @override
-  Future<List<int>> performGetButtonState() async {
-    return <int>[];
-  }
-
-  @override
-  Future<StreamSubscription?> performGetBleButtonListener({
-    required void Function(List<int>) onButtonReceived,
-  }) async {
-    return null;
-  }
-
-  @override
-  Future<StreamSubscription?> performGetBleStorageBytesListener({
-    required void Function(List<int>) onStorageBytesReceived,
-  }) async {
-    return null;
-  }
-
-  @override
-  Future performCameraStartPhotoController() async {}
-
-  @override
-  Future performCameraStopPhotoController() async {}
-
-  @override
-  Future<bool> performHasPhotoStreamingCharacteristic() async {
-    return false;
-  }
-
-  @override
-  Future<StreamSubscription?> performGetImageListener({
-    required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async {
-    return null;
-  }
-
-  @override
-  Future<StreamSubscription<List<int>>?> performGetAccelListener({
-    void Function(int)? onAccelChange,
-  }) async {
-    return null;
-  }
-
-  @override
-  Future<int> performGetFeatures() async {
-    return 0;
-  }
-
-  @override
-  Future<void> performSetLedDimRatio(int ratio) async {}
-
-  @override
-  Future<int?> performGetLedDimRatio() async {
-    return null;
-  }
-
-  @override
-  Future<void> performSetMicGain(int gain) async {}
-
-  @override
-  Future<int?> performGetMicGain() async {
-    return null;
   }
 
   Future<Map<String, String>> getDeviceInfo() async {

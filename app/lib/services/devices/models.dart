@@ -53,7 +53,6 @@ const String xorNotifyCharUuid = "00002bb0-0000-1000-8000-00805f9b34fb";
 const String beeServiceUuid = "03d5d5c4-a86c-11ee-9d89-8f2089a49e7e";
 
 const String fieldyServiceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-const String fieldyOpusAudioCharacteristicUuid = "82a48422-3ca9-4156-ae67-4170f58666e0"; // Primary audio characteristic
 
 Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
