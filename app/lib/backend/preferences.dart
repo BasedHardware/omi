@@ -318,6 +318,47 @@ class SharedPreferencesUtil {
     }
   }
 
+  // Google Tasks Integration
+  String? get googleTasksAccessToken => getString('googleTasksAccessToken');
+
+  set googleTasksAccessToken(String? value) {
+    if (value != null) {
+      saveString('googleTasksAccessToken', value);
+    } else {
+      remove('googleTasksAccessToken');
+    }
+  }
+
+  String? get googleTasksRefreshToken => getString('googleTasksRefreshToken');
+
+  set googleTasksRefreshToken(String? value) {
+    if (value != null) {
+      saveString('googleTasksRefreshToken', value);
+    } else {
+      remove('googleTasksRefreshToken');
+    }
+  }
+
+  String? get googleTasksDefaultListId => getString('googleTasksDefaultListId');
+
+  set googleTasksDefaultListId(String? value) {
+    if (value != null) {
+      saveString('googleTasksDefaultListId', value);
+    } else {
+      remove('googleTasksDefaultListId');
+    }
+  }
+
+  String? get googleTasksDefaultListTitle => getString('googleTasksDefaultListTitle');
+
+  set googleTasksDefaultListTitle(String? value) {
+    if (value != null) {
+      saveString('googleTasksDefaultListTitle', value);
+    } else {
+      remove('googleTasksDefaultListTitle');
+    }
+  }
+
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());

@@ -67,4 +67,12 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'ASANA_CLIENT_SECRET', obfuscate: true)
   final String? asanaClientSecret = _ProdEnv.asanaClientSecret;
+
+  @override
+  @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_ID', obfuscate: true)
+  final String? googleTasksClientId = _ProdEnv.googleTasksClientId;
+
+  @override
+  @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_SECRET', obfuscate: true)
+  final String? googleTasksClientSecret = _ProdEnv.googleTasksClientSecret;
 }

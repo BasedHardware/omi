@@ -5,6 +5,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:provider/provider.dart';
 
@@ -115,10 +116,11 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
   }
 
   bool get isAvailable {
-    // Apple Reminders, Todoist, and Asana are available
+    // Apple Reminders, Todoist, Asana, and Google Tasks are available
     return this == TaskIntegrationApp.appleReminders ||
         this == TaskIntegrationApp.todoist ||
-        this == TaskIntegrationApp.asana;
+        this == TaskIntegrationApp.asana ||
+        this == TaskIntegrationApp.googleTasks;
   }
 
   String get comingSoonText {
@@ -219,6 +221,43 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Failed to start Asana authentication'),
+                  backgroundColor: Colors.red,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+        }
+        return;
+      }
+    }
+
+    // Check if Google Tasks requires authentication
+    if (app == TaskIntegrationApp.googleTasks) {
+      final googleTasksService = GoogleTasksService();
+      if (!googleTasksService.isAuthenticated) {
+        final shouldAuth = await _showAuthDialog(app);
+        if (shouldAuth == true) {
+          final success = await googleTasksService.authenticate();
+          if (success) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
+                  duration: Duration(seconds: 5),
+                ),
+              );
+            }
+            setState(() {
+              _selectedApp = app;
+            });
+            SharedPreferencesUtil().selectedTaskIntegration = app.key;
+            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Failed to start Google Tasks authentication'),
                   backgroundColor: Colors.red,
                   duration: Duration(seconds: 3),
                 ),

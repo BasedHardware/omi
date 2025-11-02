@@ -15,6 +15,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -78,6 +79,15 @@ class _AppShellState extends State<AppShell> {
       } else {
         debugPrint('Asana callback received but no code found');
       }
+    } else if (uri.host == 'google-tasks' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Google Tasks OAuth callback
+      final code = uri.queryParameters['code'];
+      if (code != null) {
+        debugPrint('Received Google Tasks OAuth code: ${code.substring(0, 10)}...');
+        _handleGoogleTasksCallback(code);
+      } else {
+        debugPrint('Google Tasks callback received but no code found');
+      }
     } else {
       debugPrint('Unknown link: $uri');
     }
@@ -118,6 +128,25 @@ class _AppShellState extends State<AppShell> {
     } else {
       debugPrint('Failed to complete Asana authentication');
       AppSnackbar.showSnackbarError('Failed to connect to Asana. Please try again.');
+    }
+  }
+
+  Future<void> _handleGoogleTasksCallback(String code) async {
+    final googleTasksService = GoogleTasksService();
+    final success = await googleTasksService.handleCallback(code);
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ Google Tasks authentication completed successfully');
+      debugPrint('✓ Task integration enabled: Google Tasks - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to Google Tasks!');
+
+      // Notify task integration provider to refresh UI
+      context.read<TaskIntegrationProvider>().refresh();
+    } else {
+      debugPrint('Failed to complete Google Tasks authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to Google Tasks. Please try again.');
     }
   }
 

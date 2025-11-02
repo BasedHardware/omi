@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
 
 class TaskIntegrationProvider extends ChangeNotifier {
@@ -39,6 +40,8 @@ class TaskIntegrationProvider extends ChangeNotifier {
         return TodoistService().isAuthenticated;
       case TaskIntegrationApp.asana:
         return AsanaService().isAuthenticated;
+      case TaskIntegrationApp.googleTasks:
+        return GoogleTasksService().isAuthenticated;
       default:
         return false;
     }
