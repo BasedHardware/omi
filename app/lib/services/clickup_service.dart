@@ -3,7 +3,6 @@ import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:omi/env/env.dart';
 
 class ClickUpService {
   static final ClickUpService _instance = ClickUpService._internal();
@@ -191,11 +190,5 @@ class ClickUpService {
     } catch (e) {
       debugPrint('Error disconnecting from ClickUp: $e');
     }
-  }
-
-  /// Manually refresh current user info (for settings page)
-  Future<void> refreshCurrentUser() async {
-    // User info is now in Firebase, loaded by provider
-    debugPrint('User info loaded from Firebase');
   }
 }

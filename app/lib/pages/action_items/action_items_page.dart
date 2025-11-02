@@ -11,8 +11,6 @@ import 'widgets/task_integrations_banner.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/services/apple_reminders_service.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
@@ -26,7 +24,6 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-  Set<String> _exportedToAppleReminders = <String>{};
   final AppReviewService _appReviewService = AppReviewService();
 
   // Tab state: 0 = To Do, 1 = Done, 2 = snoozed
@@ -46,7 +43,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
       }
-      _checkExistingAppleReminders();
     });
   }
 
@@ -55,23 +51,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  Future<void> _checkExistingAppleReminders() async {
-    if (!PlatformService.isApple) return;
-
-    try {
-      final service = AppleRemindersService();
-      final existingReminders = await service.getExistingReminders();
-
-      if (mounted) {
-        setState(() {
-          _exportedToAppleReminders = existingReminders.toSet();
-        });
-      }
-    } catch (e) {
-      print('Error checking existing Apple Reminders: $e');
-    }
   }
 
   // checks if it's the first action item completed
@@ -502,8 +481,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             _onActionItemCompleted(isSnoozed: _selectedTabIndex == 2);
           }
         },
-        exportedToAppleReminders: _exportedToAppleReminders,
-        onExportedToAppleReminders: _checkExistingAppleReminders,
+        onRefresh: () => provider.fetchActionItems(),
         isSelectionMode: provider.isSelectionMode,
         isSelected: provider.isItemSelected(item.id),
         onLongPress: () => _handleItemLongPress(item, provider),

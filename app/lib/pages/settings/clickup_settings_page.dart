@@ -32,7 +32,6 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
   }
 
   Future<void> _initializeClickUp() async {
-    await _clickupService.refreshCurrentUser();
     await _loadTeams();
   }
 

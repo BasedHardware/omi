@@ -3,7 +3,6 @@ import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:omi/env/env.dart';
 
 class AsanaService {
   static final AsanaService _instance = AsanaService._internal();

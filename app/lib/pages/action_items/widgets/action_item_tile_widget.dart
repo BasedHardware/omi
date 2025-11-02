@@ -24,8 +24,7 @@ import 'action_item_form_sheet.dart';
 class ActionItemTileWidget extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
   final Function(bool) onToggle;
-  final Set<String>? exportedToAppleReminders;
-  final VoidCallback? onExportedToAppleReminders;
+  final VoidCallback? onRefresh;
   final bool isSelectionMode;
   final bool isSelected;
   final VoidCallback? onLongPress;
@@ -36,8 +35,7 @@ class ActionItemTileWidget extends StatefulWidget {
     super.key,
     required this.actionItem,
     required this.onToggle,
-    this.exportedToAppleReminders,
-    this.onExportedToAppleReminders,
+    this.onRefresh,
     this.isSelectionMode = false,
     this.isSelected = false,
     this.onLongPress,
@@ -89,8 +87,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       backgroundColor: Colors.transparent,
       builder: (context) => ActionItemFormSheet(
         actionItem: widget.actionItem,
-        exportedToAppleReminders: widget.exportedToAppleReminders,
-        onExportedToAppleReminders: widget.onExportedToAppleReminders,
+        onRefresh: widget.onRefresh,
       ),
     );
   }
@@ -436,7 +433,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           exportDate: DateTime.now(),
           exportPlatform: 'todoist',
         );
-        widget.onExportedToAppleReminders?.call();
+        widget.onRefresh?.call();
       }
     }
   }
@@ -544,7 +541,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           exportDate: DateTime.now(),
           exportPlatform: 'asana',
         );
-        widget.onExportedToAppleReminders?.call();
+        widget.onRefresh?.call();
       }
     }
   }
@@ -740,7 +737,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           exportDate: DateTime.now(),
           exportPlatform: 'clickup',
         );
-        widget.onExportedToAppleReminders?.call();
+        widget.onRefresh?.call();
       }
     }
   }
@@ -858,7 +855,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           exportDate: DateTime.now(),
           exportPlatform: 'apple_reminders',
         );
-        widget.onExportedToAppleReminders?.call();
+        widget.onRefresh?.call();
       }
     }
   }
