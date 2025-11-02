@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/custom_connection.dart';
+import 'package:omi/services/devices/models.dart';
 
 class BeeDeviceConnection extends CustomDeviceConnection {
   final _audioBuffer = <int>[];
@@ -7,7 +8,7 @@ class BeeDeviceConnection extends CustomDeviceConnection {
   BeeDeviceConnection(super.device, super.transport);
 
   @override
-  String get serviceUuid => "03d5d5c4-a86c-11ee-9d89-8f2089a49e7e";
+  String get serviceUuid => beeServiceUuid;
 
   @override
   String get controlCharacteristicUuid => "05e1f93c-d8d0-5ed8-dd88-379e4c1a3e3e";

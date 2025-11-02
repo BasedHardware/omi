@@ -51,8 +51,6 @@ const String xorWriteCharUuid = "00002bb1-0000-1000-8000-00805f9b34fb";
 const String xorNotifyCharUuid = "00002bb0-0000-1000-8000-00805f9b34fb";
 
 const String beeServiceUuid = "03d5d5c4-a86c-11ee-9d89-8f2089a49e7e";
-const String beeControlCharUuid = "05e1f93c-d8d0-5ed8-dd88-379e4c1a3e3e";
-const String beeAudioCharUuid = "b189a505-a86c-11ee-a5fb-8f2089a49e7e";
 
 Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
