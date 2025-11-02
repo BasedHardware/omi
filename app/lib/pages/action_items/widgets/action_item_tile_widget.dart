@@ -2,10 +2,13 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/services/apple_reminders_service.dart';
+import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -214,11 +217,17 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     }
   }
 
-  Widget _buildAppleRemindersIcon(BuildContext context) {
+  Widget _buildTaskExportIcon(BuildContext context) {
+    final selectedTaskIntegration = SharedPreferencesUtil().selectedTaskIntegration;
+    final taskApp = TaskIntegrationApp.values.firstWhere(
+      (app) => app.key == selectedTaskIntegration,
+      orElse: () => TaskIntegrationApp.appleReminders,
+    );
+
     final isExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
 
     return GestureDetector(
-      onTap: () => _handleAppleRemindersExport(context),
+      onTap: () => _handleTaskExport(context, taskApp),
       child: Container(
         width: 32,
         height: 32,
@@ -228,23 +237,30 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Apple Reminders logo
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.asset(
-                  Assets.images.appleRemindersLogo.path,
-                  width: 24,
-                  height: 24,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
+            // Task app logo or icon
+            taskApp.logoPath != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.asset(
+                      taskApp.logoPath!,
+                      width: 24,
+                      height: 24,
+                      fit: BoxFit.contain,
+                    ),
+                  )
+                : Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      color: taskApp.iconColor.withOpacity(0.2),
+                    ),
+                    child: Icon(
+                      taskApp.icon,
+                      color: taskApp.iconColor,
+                      size: 16,
+                    ),
+                  ),
             // Status indicator at bottom right
             Positioned(
               bottom: 0,
@@ -271,6 +287,242 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleTaskExport(BuildContext context, TaskIntegrationApp taskApp) async {
+    if (taskApp == TaskIntegrationApp.appleReminders) {
+      await _handleAppleRemindersExport(context);
+    } else if (taskApp == TaskIntegrationApp.todoist) {
+      await _handleTodoistExport(context);
+    } else if (taskApp == TaskIntegrationApp.asana) {
+      await _handleAsanaExport(context);
+    } else {
+      // Show coming soon message for other integrations
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.info, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('${taskApp.displayName} integration coming soon'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleTodoistExport(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+
+    final service = TodoistService();
+
+    // Check if authenticated
+    if (!service.isAuthenticated) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Please authenticate with Todoist in Settings > Task Integrations'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check if already exported (using the same set for now)
+    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
+
+    if (isAlreadyExported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Already added to Todoist'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show loading state
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Adding to Todoist...'),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+
+    // Create task in Todoist
+    final success = await service.createTask(
+      content: widget.actionItem.description,
+      description: 'From Omi',
+      dueDate: widget.actionItem.dueAt,
+      priority: 2, // Priority 2 = normal priority in Todoist
+    );
+
+    if (context.mounted) {
+      // Clear the loading snackbar
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      // Show result
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(success ? Icons.check_circle : Icons.error, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(success ? 'Added to Todoist' : 'Failed to add to Todoist'),
+            ],
+          ),
+          backgroundColor: success ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // If successful, update the exported list
+      if (success) {
+        widget.onExportedToAppleReminders?.call();
+      }
+    }
+  }
+
+  Future<void> _handleAsanaExport(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+
+    final service = AsanaService();
+
+    // Check if authenticated
+    if (!service.isAuthenticated) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Please authenticate with Asana in Settings > Task Integrations'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check if already exported (using the same set for now)
+    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
+
+    if (isAlreadyExported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Already added to Asana'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show loading state
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Adding to Asana...'),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+
+    // Create task in Asana (workspace/project from settings, assignee is current user)
+    final success = await service.createTask(
+      name: widget.actionItem.description,
+      notes: 'From Omi',
+      dueDate: widget.actionItem.dueAt,
+    );
+
+    if (context.mounted) {
+      // Clear the loading snackbar
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      // Show result
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(success ? Icons.check_circle : Icons.error, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(success ? 'Added to Asana' : 'Failed to add to Asana'),
+            ],
+          ),
+          backgroundColor: success ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // If successful, update the exported list
+      if (success) {
+        widget.onExportedToAppleReminders?.call();
+      }
+    }
   }
 
   Future<void> _handleAppleRemindersExport(BuildContext context) async {
@@ -501,10 +753,10 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                       ],
                     ),
                   ),
-                  // Apple Reminders icon (only show on Apple platforms)
+                  // Task export icon (currently only available on Apple platforms)
                   if (PlatformService.isApple) ...[
                     const SizedBox(width: 12),
-                    _buildAppleRemindersIcon(context),
+                    _buildTaskExportIcon(context),
                   ],
                 ],
               ),
