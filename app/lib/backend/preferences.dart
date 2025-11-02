@@ -231,9 +231,6 @@ class SharedPreferencesUtil {
 
   set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
 
-  // Task Integration Settings - All data now stored in Firebase
-  // No local storage needed for OAuth tokens or connection details
-
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());
