@@ -155,6 +155,29 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
     );
   }
 
+  bool _shouldShowSettingsIcon() {
+    // Show settings icon only for apps that have configuration pages
+    final hasSettings = (_selectedApp == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+        (_selectedApp == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated);
+    return hasSettings;
+  }
+
+  void _openSelectedAppSettings() {
+    if (_selectedApp == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const AsanaSettingsPage(),
+        ),
+      );
+    } else if (_selectedApp == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const ClickUpSettingsPage(),
+        ),
+      );
+    }
+  }
+
   Future<void> _selectApp(TaskIntegrationApp app) async {
     if (!app.isAvailable) {
       _showComingSoonDialog(app);
@@ -570,6 +593,15 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
           ),
         ),
         centerTitle: true,
+        actions: [
+          // Settings icon for apps that have configuration options
+          if (_shouldShowSettingsIcon())
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              onPressed: _openSelectedAppSettings,
+              tooltip: 'Configure Settings',
+            ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
