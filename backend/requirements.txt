@@ -14,6 +14,7 @@ asteroid-filterbanks==0.4.0
 asttokens==2.4.1
 attrs==24.1.0
 audioread==3.0.1
+av==12.0.0
 backoff==2.2.1
 blinker==1.8.2
 CacheControl==0.14.0

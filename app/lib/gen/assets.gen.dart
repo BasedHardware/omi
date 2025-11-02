@@ -109,6 +109,10 @@ class $AssetsImagesGen {
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
 
+  /// File path: assets/images/bee_device.webp
+  AssetGenImage get beeDevice =>
+      const AssetGenImage('assets/images/bee_device.webp');
+
   /// File path: assets/images/blob.webp
   AssetGenImage get blob => const AssetGenImage('assets/images/blob.webp');
 
@@ -319,6 +323,7 @@ class $AssetsImagesGen {
     appleLogo,
     appleWatch,
     background,
+    beeDevice,
     blob,
     calendarLogo,
     checkbox,
