@@ -75,4 +75,12 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_SECRET', obfuscate: true)
   final String? googleTasksClientSecret = _DevEnv.googleTasksClientSecret;
+
+  @override
+  @EnviedField(varName: 'CLICKUP_CLIENT_ID', obfuscate: true)
+  final String? clickupClientId = _DevEnv.clickupClientId;
+
+  @override
+  @EnviedField(varName: 'CLICKUP_CLIENT_SECRET', obfuscate: true)
+  final String? clickupClientSecret = _DevEnv.clickupClientSecret;
 }

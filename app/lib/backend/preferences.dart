@@ -359,6 +359,87 @@ class SharedPreferencesUtil {
     }
   }
 
+  // ClickUp Integration
+  String? get clickupAccessToken => getString('clickupAccessToken');
+
+  set clickupAccessToken(String? value) {
+    if (value != null) {
+      saveString('clickupAccessToken', value);
+    } else {
+      remove('clickupAccessToken');
+    }
+  }
+
+  String? get clickupUserId => getString('clickupUserId');
+
+  set clickupUserId(String? value) {
+    if (value != null) {
+      saveString('clickupUserId', value);
+    } else {
+      remove('clickupUserId');
+    }
+  }
+
+  String? get clickupTeamId => getString('clickupTeamId');
+
+  set clickupTeamId(String? value) {
+    if (value != null) {
+      saveString('clickupTeamId', value);
+    } else {
+      remove('clickupTeamId');
+    }
+  }
+
+  String? get clickupTeamName => getString('clickupTeamName');
+
+  set clickupTeamName(String? value) {
+    if (value != null) {
+      saveString('clickupTeamName', value);
+    } else {
+      remove('clickupTeamName');
+    }
+  }
+
+  String? get clickupSpaceId => getString('clickupSpaceId');
+
+  set clickupSpaceId(String? value) {
+    if (value != null) {
+      saveString('clickupSpaceId', value);
+    } else {
+      remove('clickupSpaceId');
+    }
+  }
+
+  String? get clickupSpaceName => getString('clickupSpaceName');
+
+  set clickupSpaceName(String? value) {
+    if (value != null) {
+      saveString('clickupSpaceName', value);
+    } else {
+      remove('clickupSpaceName');
+    }
+  }
+
+  String? get clickupListId => getString('clickupListId');
+
+  set clickupListId(String? value) {
+    if (value != null) {
+      saveString('clickupListId', value);
+    } else {
+      remove('clickupListId');
+    }
+  }
+
+  String? get clickupListName => getString('clickupListName');
+
+  set clickupListName(String? value) {
+    if (value != null) {
+      saveString('clickupListName', value);
+    } else {
+      remove('clickupListName');
+    }
+  }
+
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());

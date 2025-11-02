@@ -15,6 +15,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/todoist_service.dart';
@@ -88,6 +89,15 @@ class _AppShellState extends State<AppShell> {
       } else {
         debugPrint('Google Tasks callback received but no code found');
       }
+    } else if (uri.host == 'clickup' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle ClickUp OAuth callback
+      final code = uri.queryParameters['code'];
+      if (code != null) {
+        debugPrint('Received ClickUp OAuth code: ${code.substring(0, 10)}...');
+        _handleClickUpCallback(code);
+      } else {
+        debugPrint('ClickUp callback received but no code found');
+      }
     } else {
       debugPrint('Unknown link: $uri');
     }
@@ -147,6 +157,25 @@ class _AppShellState extends State<AppShell> {
     } else {
       debugPrint('Failed to complete Google Tasks authentication');
       AppSnackbar.showSnackbarError('Failed to connect to Google Tasks. Please try again.');
+    }
+  }
+
+  Future<void> _handleClickUpCallback(String code) async {
+    final clickupService = ClickUpService();
+    final success = await clickupService.handleCallback(code);
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ ClickUp authentication completed successfully');
+      debugPrint('✓ Task integration enabled: ClickUp - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to ClickUp!');
+
+      // Notify task integration provider to refresh UI
+      context.read<TaskIntegrationProvider>().refresh();
+    } else {
+      debugPrint('Failed to complete ClickUp authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to ClickUp. Please try again.');
     }
   }
 

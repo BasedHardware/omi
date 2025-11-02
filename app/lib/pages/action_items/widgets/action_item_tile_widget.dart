@@ -8,6 +8,7 @@ import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -299,6 +300,8 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       await _handleAsanaExport(context);
     } else if (taskApp == TaskIntegrationApp.googleTasks) {
       await _handleGoogleTasksExport(context);
+    } else if (taskApp == TaskIntegrationApp.clickup) {
+      await _handleClickUpExport(context);
     } else {
       // Show coming soon message for other integrations
       if (context.mounted) {
@@ -618,6 +621,130 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
               Icon(success ? Icons.check_circle : Icons.error, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Text(success ? 'Added to Google Tasks' : 'Failed to add to Google Tasks'),
+            ],
+          ),
+          backgroundColor: success ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // If successful, update the exported list
+      if (success) {
+        widget.onExportedToAppleReminders?.call();
+      }
+    }
+  }
+
+  Future<void> _handleClickUpExport(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+
+    final service = ClickUpService();
+
+    // Check if authenticated
+    if (!service.isAuthenticated) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Please authenticate with ClickUp in Settings > Task Integrations'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check if list is configured
+    if (SharedPreferencesUtil().clickupListId == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Please configure ClickUp settings first'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Check if already exported
+    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
+
+    if (isAlreadyExported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Already added to ClickUp'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show loading state
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Adding to ClickUp...'),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+
+    // Create task in ClickUp
+    final success = await service.createTask(
+      name: widget.actionItem.description,
+      description: 'From Omi',
+      dueDate: widget.actionItem.dueAt,
+    );
+
+    if (context.mounted) {
+      // Clear the loading snackbar
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      // Show result
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(success ? Icons.check_circle : Icons.error, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(success ? 'Added to ClickUp' : 'Failed to add to ClickUp'),
             ],
           ),
           backgroundColor: success ? Colors.green : Colors.red,

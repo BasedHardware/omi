@@ -75,4 +75,12 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_SECRET', obfuscate: true)
   final String? googleTasksClientSecret = _ProdEnv.googleTasksClientSecret;
+
+  @override
+  @EnviedField(varName: 'CLICKUP_CLIENT_ID', obfuscate: true)
+  final String? clickupClientId = _ProdEnv.clickupClientId;
+
+  @override
+  @EnviedField(varName: 'CLICKUP_CLIENT_SECRET', obfuscate: true)
+  final String? clickupClientSecret = _ProdEnv.clickupClientSecret;
 }
