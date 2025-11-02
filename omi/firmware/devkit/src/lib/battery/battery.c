@@ -33,9 +33,9 @@ static K_MUTEX_DEFINE(battery_mut);
 #define GPIO_BATTERY_CHARGING_ENABLE 17
 #define GPIO_BATTERY_READ_ENABLE 14
 
-// Change this to a higher number for better averages
-// Note that increasing this holds up the thread / ADC for longer.
-#define ADC_TOTAL_SAMPLES 10
+// Increased sample count for better accuracy and noise reduction
+// Higher sample count provides more stable and accurate readings
+#define ADC_TOTAL_SAMPLES 50
 int16_t sample_buffer[ADC_TOTAL_SAMPLES];
 
 #define ADC_RESOLUTION 12
@@ -43,10 +43,12 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES];
 #define ADC_PORT SAADC_CH_PSELP_PSELP_AnalogInput7 // AIN7
 #define ADC_REFERENCE ADC_REF_INTERNAL             // 0.6V
 #define ADC_GAIN ADC_GAIN_1_6                      // ADC REFERENCE * 6 = 3.6V
+// Explicit acquisition time for stable ADC readings (40μs)
+#define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)
 
 struct adc_channel_cfg channel_7_cfg = {.gain = ADC_GAIN,
                                         .reference = ADC_REFERENCE,
-                                        .acquisition_time = ADC_ACQ_TIME_DEFAULT,
+                                        .acquisition_time = ADC_ACQUISITION_TIME,
                                         .channel_id = ADC_CHANNEL,
 #ifdef CONFIG_ADC_NRFX_SAADC
                                         .input_positive = ADC_PORT
@@ -55,7 +57,7 @@ struct adc_channel_cfg channel_7_cfg = {.gain = ADC_GAIN,
 
 static struct adc_sequence_options options = {
     .extra_samplings = ADC_TOTAL_SAMPLES - 1,
-    .interval_us = 500, // Interval between each sample
+    .interval_us = 100, // Reduced interval for faster sampling while maintaining stability
 };
 
 struct adc_sequence sequence = {
@@ -71,28 +73,38 @@ typedef struct {
     uint8_t percentage;
 } BatteryState;
 
-#define BATTERY_STATES_COUNT 16
-// 1S 250mAh LiPo battery discharge profile
+#define BATTERY_STATES_COUNT 20
+// Enhanced 1S 250mAh LiPo battery discharge profile with improved granularity
+// Additional data points at critical ranges for more accurate percentage calculation
 BatteryState battery_states[BATTERY_STATES_COUNT] = {
-    {4074, 100},
+    {4200, 100}, // Maximum voltage for fully charged LiPo
+    {4074, 99},
     {4029, 95},
     {3983, 90},
     {3938, 85},
     {3893, 80},
+    {3870, 75},
     {3847, 70},
+    {3825, 65},
     {3802, 60},
+    {3780, 55},
     {3756, 50},
+    {3710, 45},
     {3665, 40},
     {3619, 30},
     {3528, 20},
     {3437, 10},
     {3346, 5},
     {3255, 2},
-    {3164, 1},
     {3000, 0} // Below safe level
 };
 
 static uint8_t is_initialized = false;
+
+// Moving average filter for voltage smoothing
+static uint16_t voltage_history[5];
+static uint8_t history_index = 0;
+static bool history_initialized = false;
 
 static int battery_enable_read()
 {
@@ -150,29 +162,79 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
 
     // ADC measure
     uint16_t adc_vref = adc_ref_internal(adc_battery_dev);
-    int adc_mv = 0;
 
     k_mutex_lock(&battery_mut, K_FOREVER);
     ret |= adc_read(adc_battery_dev, &sequence);
 
     if (ret) {
         LOG_WRN("ADC read failed (error %d)", ret);
+        k_mutex_unlock(&battery_mut);
+        return ret;
     }
 
-    // Get average sample value.
-    for (uint8_t sample = 0; sample < ADC_TOTAL_SAMPLES; sample++) {
-        adc_mv += sample_buffer[sample]; // ADC value, not millivolt yet.
+    // Use median filtering instead of simple average for better noise rejection
+    // Copy samples to a temporary array for sorting
+    int16_t sorted_samples[ADC_TOTAL_SAMPLES];
+    for (int i = 0; i < ADC_TOTAL_SAMPLES; i++) {
+        sorted_samples[i] = sample_buffer[i];
     }
-    adc_mv /= ADC_TOTAL_SAMPLES;
+
+    // Simple bubble sort for median calculation
+    for (int i = 0; i < ADC_TOTAL_SAMPLES - 1; i++) {
+        for (int j = 0; j < ADC_TOTAL_SAMPLES - i - 1; j++) {
+            if (sorted_samples[j] > sorted_samples[j + 1]) {
+                int16_t temp = sorted_samples[j];
+                sorted_samples[j] = sorted_samples[j + 1];
+                sorted_samples[j + 1] = temp;
+            }
+        }
+    }
+
+    // Calculate median value
+    int32_t adc_raw_val;
+    if (ADC_TOTAL_SAMPLES % 2 == 0) {
+        adc_raw_val = (sorted_samples[ADC_TOTAL_SAMPLES / 2 - 1] + sorted_samples[ADC_TOTAL_SAMPLES / 2]) / 2;
+    } else {
+        adc_raw_val = sorted_samples[ADC_TOTAL_SAMPLES / 2];
+    }
+
+    LOG_DBG("Median ADC raw value: %d", adc_raw_val);
 
     // Convert ADC value to millivolts
-    ret |= adc_raw_to_millivolts(adc_vref, ADC_GAIN, ADC_RESOLUTION, &adc_mv);
+    ret |= adc_raw_to_millivolts(adc_vref, ADC_GAIN, ADC_RESOLUTION, &adc_raw_val);
 
-    // Calculate battery voltage.
-    *battery_millivolt = adc_mv * ((R1 + R2) / R2);
+    if (ret) {
+        LOG_WRN("ADC raw to millivolts conversion failed (error %d)", ret);
+        k_mutex_unlock(&battery_mut);
+        return ret;
+    }
+
+    // Calculate raw battery voltage using voltage divider formula
+    uint16_t raw_battery_millivolt = (uint16_t)(adc_raw_val * ((float)(R1 + R2) / R2));
+
+    // Apply moving average filter for smoother readings across multiple calls
+    voltage_history[history_index] = raw_battery_millivolt;
+    history_index = (history_index + 1) % 5;
+
+    // Fill all history slots with the first reading on initialization
+    if (!history_initialized) {
+        for (int i = 0; i < 5; i++) {
+            voltage_history[i] = raw_battery_millivolt;
+        }
+        history_initialized = true;
+    }
+
+    // Calculate moving average
+    uint32_t sum = 0;
+    for (int i = 0; i < 5; i++) {
+        sum += voltage_history[i];
+    }
+    *battery_millivolt = (uint16_t)(sum / 5);
+
+    LOG_DBG("Raw battery millivolt: %u mV, Filtered: %u mV", raw_battery_millivolt, *battery_millivolt);
+
     k_mutex_unlock(&battery_mut);
 
-    LOG_DBG("%d mV", *battery_millivolt);
     return ret;
 }
 

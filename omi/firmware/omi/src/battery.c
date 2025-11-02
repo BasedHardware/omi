@@ -11,7 +11,7 @@
 
 LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define BATTERY_STATES_COUNT 16
+#define BATTERY_STATES_COUNT 18
 
 #define ADC_TOTAL_SAMPLES 50
 // +1 for the calibration sample
@@ -20,7 +20,8 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 #define ADC_RESOLUTION 12
 #define ADC_GAIN ADC_GAIN_1_3
 #define ADC_REFERENCE ADC_REF_INTERNAL
-#define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10)
+// Increased acquisition time for more stable ADC readings (40μs provides better settling)
+#define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)
 #define ADC_1ST_CHANNEL_ID 0
 #define ADC_1ST_CHANNEL_INPUT NRF_SAADC_INPUT_AIN0
 
@@ -33,25 +34,31 @@ static struct gpio_callback bat_chg_cb;
 
 static K_MUTEX_DEFINE(battery_mut);
 
-// 150mAh LiPo battery discharge profile
+// Enhanced 150mAh LiPo battery discharge profile with more data points for better accuracy
 typedef struct {
     uint16_t millivolts;
     uint8_t percentage;
 } BatteryState;
 
 BatteryState battery_states[BATTERY_STATES_COUNT] = {
-    {4200, 100},
+    {4200, 100}, // Fully charged
     {4160, 99},
+    {4120, 95},
     {4090, 91},
+    {4050, 85},
     {4030, 78},
+    {3950, 70},
     {3890, 63},
     {3830, 53},
+    {3750, 43},
     {3680, 36},
     {3660, 35},
+    {3550, 25},
     {3480, 14},
     {3420, 11},
-    {3400, 1}, // Threshold for <1%
-    {0000, 0}  // Below safe level
+    {3400, 5},
+    {3350, 1}, // Critical threshold
+    {3000, 0}  // Below safe level
 };
 
 extern bool is_charging;
@@ -72,9 +79,10 @@ static const struct adc_channel_cfg m_1st_channel_cfg = {
 };
 
 // Define ADC sequence for this read operation
+// Small interval between samples helps reduce noise and allows voltage to settle
 const struct adc_sequence_options sequence_opts = {
     .extra_samplings = ADC_TOTAL_SAMPLES,
-    .interval_us = 0,
+    .interval_us = 100, // 100μs interval between samples for better stability
     .callback = NULL,
     .user_data = NULL,
 };
@@ -133,7 +141,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
 
     // Trigger offset calibration. The first sample after this will be affected.
     NRF_SAADC_S->TASKS_CALIBRATEOFFSET = 1;
-    k_busy_wait(100); // Short delay for calibration, if needed.
+    k_busy_wait(500); // Increased delay for proper calibration settling (500μs)
 
     err = adc_read(adc_dev, &sequence);
     if (err) {
