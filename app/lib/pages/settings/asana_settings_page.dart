@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/asana_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
 class AsanaSettingsPage extends StatefulWidget {
@@ -147,10 +148,12 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       if (mounted) {
         // Also clear from task integrations if Asana was selected
         if (SharedPreferencesUtil().selectedTaskIntegration == 'asana') {
-          SharedPreferencesUtil().selectedTaskIntegration = 'apple_reminders';
-          debugPrint('✓ Task integration disabled: Asana - switched to Apple Reminders');
+          // Default to Google Tasks on Android, Apple Reminders on Apple platforms
+          final defaultApp = PlatformService.isApple ? 'apple_reminders' : 'google_tasks';
+          SharedPreferencesUtil().selectedTaskIntegration = defaultApp;
+          debugPrint('✓ Task integration disabled: Asana - switched to $defaultApp');
         }
-
+        
         // Trigger provider refresh to update UI
         context.read<TaskIntegrationProvider>().refresh();
 

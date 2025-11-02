@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/clickup_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
 class ClickUpSettingsPage extends StatefulWidget {
@@ -174,10 +175,12 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
 
       if (mounted) {
         if (SharedPreferencesUtil().selectedTaskIntegration == 'clickup') {
-          SharedPreferencesUtil().selectedTaskIntegration = 'apple_reminders';
-          debugPrint('✓ Task integration disabled: ClickUp - switched to Apple Reminders');
+          // Default to Google Tasks on Android, Apple Reminders on Apple platforms
+          final defaultApp = PlatformService.isApple ? 'apple_reminders' : 'google_tasks';
+          SharedPreferencesUtil().selectedTaskIntegration = defaultApp;
+          debugPrint('✓ Task integration disabled: ClickUp - switched to $defaultApp');
         }
-
+        
         context.read<TaskIntegrationProvider>().refresh();
         Navigator.of(context).pop();
 

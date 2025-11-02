@@ -9,15 +9,16 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
 enum TaskIntegrationApp {
   appleReminders,
   googleTasks,
+  todoist,
   clickup,
   asana,
   trello,
-  todoist,
   monday,
 }
 
@@ -151,7 +152,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
     final selectedKey = SharedPreferencesUtil().selectedTaskIntegration;
     _selectedApp = TaskIntegrationApp.values.firstWhere(
       (app) => app.key == selectedKey,
-      orElse: () => TaskIntegrationApp.appleReminders,
+      orElse: () => PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
     );
   }
 
@@ -612,7 +613,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
               // App List
               Expanded(
                 child: ListView(
-                  children: TaskIntegrationApp.values.map(_buildAppTile).toList(),
+                  children: TaskIntegrationApp.values
+                      .where((app) {
+                        // Hide Apple Reminders on Android
+                        if (app == TaskIntegrationApp.appleReminders && !PlatformService.isApple) {
+                          return false;
+                        }
+                        return true;
+                      })
+                      .map(_buildAppTile)
+                      .toList(),
                 ),
               ),
               const SizedBox(height: 16),

@@ -232,7 +232,13 @@ class SharedPreferencesUtil {
   set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
 
   // Task Integration Settings
-  String get selectedTaskIntegration => getString('selectedTaskIntegration') ?? 'apple_reminders';
+  String get selectedTaskIntegration {
+    final saved = getString('selectedTaskIntegration');
+    if (saved != null) return saved;
+
+    // Default to Google Tasks on Android, Apple Reminders on Apple platforms
+    return PlatformService.isApple ? 'apple_reminders' : 'google_tasks';
+  }
 
   set selectedTaskIntegration(String value) => saveString('selectedTaskIntegration', value);
 

@@ -5,6 +5,7 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class TaskIntegrationProvider extends ChangeNotifier {
   TaskIntegrationApp _selectedApp;
@@ -12,7 +13,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   TaskIntegrationProvider()
       : _selectedApp = TaskIntegrationApp.values.firstWhere(
           (app) => app.key == SharedPreferencesUtil().selectedTaskIntegration,
-          orElse: () => TaskIntegrationApp.appleReminders,
+          orElse: () => PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
         );
 
   TaskIntegrationApp get selectedApp => _selectedApp;
@@ -27,7 +28,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
     final selectedKey = SharedPreferencesUtil().selectedTaskIntegration;
     _selectedApp = TaskIntegrationApp.values.firstWhere(
       (app) => app.key == selectedKey,
-      orElse: () => TaskIntegrationApp.appleReminders,
+      orElse: () => PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
     );
     notifyListeners();
   }
