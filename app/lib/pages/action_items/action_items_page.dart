@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'widgets/task_integrations_banner.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -212,10 +213,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 else
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 0.0),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Task Integrations Banner
+                          const TaskIntegrationsBanner(),
+
                           // Segmented Control - Full width like action items
                           Container(
                             width: double.infinity,
