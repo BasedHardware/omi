@@ -180,7 +180,7 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
           SharedPreferencesUtil().selectedTaskIntegration = defaultApp;
           debugPrint('✓ Task integration disabled: ClickUp - switched to $defaultApp');
         }
-        
+
         context.read<TaskIntegrationProvider>().refresh();
         Navigator.of(context).pop();
 

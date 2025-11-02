@@ -153,7 +153,7 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
           SharedPreferencesUtil().selectedTaskIntegration = defaultApp;
           debugPrint('✓ Task integration disabled: Asana - switched to $defaultApp');
         }
-        
+
         // Trigger provider refresh to update UI
         context.read<TaskIntegrationProvider>().refresh();
 
