@@ -53,7 +53,6 @@ class DeviceUtils {
     String? modelNumber,
     String? deviceName,
   }) {
-    debugPrint("${deviceType} - ${modelNumber} - ${deviceName}");
     // Check modelNumber for specific variants
     if (modelNumber != null && modelNumber.isNotEmpty) {
       final upperModel = modelNumber.toUpperCase();
