@@ -378,10 +378,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           if (index < items.length) {
             final item = items[index];
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: _buildDismissibleActionItem(
-                item: item,
-                provider: provider,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 0),
+                    child: _buildDismissibleActionItem(
+                      item: item,
+                      provider: provider,
+                    ),
+                  ),
+                  if (index < items.length - 1)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 50),
+                      child: Divider(
+                        color: Colors.grey.withOpacity(0.2),
+                        thickness: 1,
+                        height: 1,
+                      ),
+                    ),
+                ],
               ),
             );
           }

@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
@@ -103,68 +104,65 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
     Color chipColor;
     Color textColor;
-    IconData icon;
     String dueDateText;
 
     // For snoozed tab, always show actual date/time instead of relative labels
     if (widget.isSnoozedTab) {
       chipColor = Colors.grey.withOpacity(0.2);
       textColor = Colors.grey.shade400;
-      icon = Icons.calendar_today;
       dueDateText = _formatDueDate(dueDate, showFullDate: true);
     } else if (widget.actionItem.completed) {
       chipColor = Colors.grey.withOpacity(0.2);
       textColor = Colors.grey.shade500;
-      icon = Icons.check_circle_outline;
       dueDateText = _formatDueDate(dueDate);
     } else if (isOverdue) {
       chipColor = Colors.red.withOpacity(0.15);
       textColor = Colors.red.shade300;
-      icon = Icons.warning_amber_rounded;
-      dueDateText = 'Overdue';
+      dueDateText = _formatDueDate(dueDate);
     } else if (isToday) {
-      chipColor = Colors.orange.withOpacity(0.15);
-      textColor = Colors.orange.shade300;
-      icon = Icons.today;
+      chipColor = Colors.yellow.withOpacity(0.15);
+      textColor = Colors.yellow.shade300;
       dueDateText = 'Today';
     } else if (isTomorrow) {
       chipColor = Colors.blue.withOpacity(0.15);
       textColor = Colors.blue.shade300;
-      icon = Icons.event;
       dueDateText = 'Tomorrow';
     } else if (isThisWeek) {
       chipColor = Colors.green.withOpacity(0.15);
       textColor = Colors.green.shade300;
-      icon = Icons.calendar_today;
       dueDateText = _formatDueDate(dueDate);
     } else {
       chipColor = Colors.purple.withOpacity(0.15);
       textColor = Colors.purple.shade300;
-      icon = Icons.schedule;
       dueDateText = _formatDueDate(dueDate);
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
       decoration: BoxDecoration(
-        color: chipColor,
+        // color: chipColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 14,
+          FaIcon(
+            FontAwesomeIcons.solidCalendar,
+            size: 11,
             color: textColor,
           ),
-          const SizedBox(width: 4),
-          Text(
-            dueDateText,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+          const SizedBox(width: 6),
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Text(
+              dueDateText,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -877,14 +875,12 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
-      color: widget.isSelected ? Colors.deepPurpleAccent.withOpacity(0.1) : const Color(0xFF1F1F25),
+      color: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: widget.isSelected
-              ? Colors.deepPurpleAccent.withOpacity(0.5)
-              : (widget.actionItem.completed ? Colors.grey.withOpacity(0.2) : Colors.transparent),
-          width: widget.isSelected ? 2 : 1,
+          color: Colors.transparent,
+          width: 0,
         ),
       ),
       clipBehavior: Clip.hardEdge,
@@ -893,10 +889,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         onTap: widget.isSelectionMode ? widget.onSelectionToggle : () => _showEditSheet(context),
         onLongPress: widget.onLongPress,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.fromLTRB(4, 12, 4, 12),
           child: Stack(
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Selection checkbox when in selection mode
                   if (widget.isSelectionMode)
@@ -926,28 +923,31 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                   else
                     GestureDetector(
                       onTap: _handleToggle,
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: (widget.actionItem.completed || _isAnimating)
+                                  ? Colors.deepPurpleAccent
+                                  : Colors.grey.shade600,
+                              width: 2,
+                            ),
                             color: (widget.actionItem.completed || _isAnimating)
                                 ? Colors.deepPurpleAccent
-                                : Colors.grey.shade600,
-                            width: 2,
+                                : Colors.transparent,
                           ),
-                          color: (widget.actionItem.completed || _isAnimating)
-                              ? Colors.deepPurpleAccent
-                              : Colors.transparent,
+                          child: (widget.actionItem.completed || _isAnimating)
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 16,
+                                )
+                              : null,
                         ),
-                        child: (widget.actionItem.completed || _isAnimating)
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 16,
-                              )
-                            : null,
                       ),
                     ),
                   const SizedBox(width: 16),
@@ -967,8 +967,9 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                                       color: (widget.actionItem.completed || _isAnimating)
                                           ? Colors.grey.shade400
                                           : Colors.white,
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w400,
+                                      height: 1.5,
                                       decoration: (widget.actionItem.completed || _isAnimating)
                                           ? TextDecoration.lineThrough
                                           : null,
