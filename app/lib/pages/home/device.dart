@@ -175,7 +175,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   Column(
                     children: [
                       Text(
-                        provider.pairedDevice?.name ?? 'Unknown Device',
+                        _customDeviceName ?? provider.pairedDevice?.name ?? 'Unknown Device',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 32,

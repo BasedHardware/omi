@@ -211,7 +211,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (isConnected) {
       if (connectedDevice == null) {
         connectedDevice = await _getConnectedDevice();
-        SharedPreferencesUtil().deviceName = connectedDevice!.name;
         MixpanelManager().deviceConnected();
       }
 
@@ -330,7 +329,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await captureProvider?.streamDeviceRecording(device: device);
 
     await getDeviceInfo();
-    SharedPreferencesUtil().deviceName = device.name;
 
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);

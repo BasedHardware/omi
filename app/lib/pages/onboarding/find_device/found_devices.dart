@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -127,7 +128,13 @@ class _FoundDevicesState extends State<FoundDevices> {
   Future<void> _completeAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
     try {
       provider.deviceId = device.id;
-      provider.deviceName = device.name;
+
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      String? customName = await connection?.getDeviceName();
+      provider.deviceName = customName ?? device.name;
+
+      SharedPreferencesUtil().deviceName = provider.deviceName;
+
       provider.isConnected = true;
       provider.isClicked = false;
       provider.connectingToDeviceId = null;
