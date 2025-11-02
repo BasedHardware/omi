@@ -27,9 +27,6 @@ abstract class Env {
   static String? get googleClientId => _instance.googleClientId;
 
   static String? get googleClientSecret => _instance.googleClientSecret;
-
-  // All task integration OAuth credentials moved to backend
-  // Frontend gets OAuth URLs from backend API
 }
 
 abstract class EnvFields {
@@ -52,6 +49,4 @@ abstract class EnvFields {
   String? get googleClientId;
 
   String? get googleClientSecret;
-
-  // All task integration OAuth credentials moved to backend
 }

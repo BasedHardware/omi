@@ -47,6 +47,4 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_CLIENT_SECRET', obfuscate: true)
   final String? googleClientSecret = _ProdEnv.googleClientSecret;
-
-  // All task integration OAuth credentials moved to backend environment
 }
