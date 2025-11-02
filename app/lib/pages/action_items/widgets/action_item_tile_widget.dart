@@ -682,48 +682,6 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       return;
     }
 
-    // Check if list is configured
-    if (SharedPreferencesUtil().clickupListId == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text('Please configure ClickUp settings first'),
-              ],
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Check if already exported
-    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
-
-    if (isAlreadyExported) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text('Already added to ClickUp'),
-              ],
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
-
     // Show loading state
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

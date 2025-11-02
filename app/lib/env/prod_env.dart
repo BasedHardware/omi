@@ -48,33 +48,5 @@ final class ProdEnv implements EnvFields {
   @EnviedField(varName: 'GOOGLE_CLIENT_SECRET', obfuscate: true)
   final String? googleClientSecret = _ProdEnv.googleClientSecret;
 
-  @override
-  @EnviedField(varName: 'TODOIST_CLIENT_ID', obfuscate: true)
-  final String? todoistClientId = _ProdEnv.todoistClientId;
-
-  @override
-  @EnviedField(varName: 'TODOIST_CLIENT_SECRET', obfuscate: true)
-  final String? todoistClientSecret = _ProdEnv.todoistClientSecret;
-
-  @override
-  @EnviedField(varName: 'TODOIST_VERIFICATION_TOKEN', obfuscate: true)
-  final String? todoistVerificationToken = _ProdEnv.todoistVerificationToken;
-
-  @override
-  @EnviedField(varName: 'ASANA_CLIENT_ID', obfuscate: true)
-  final String? asanaClientId = _ProdEnv.asanaClientId;
-
-  // Asana client secret moved to backend environment
-
-  @override
-  @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_ID', obfuscate: true)
-  final String? googleTasksClientId = _ProdEnv.googleTasksClientId;
-
-  // Google Tasks client secret moved to backend environment
-
-  @override
-  @EnviedField(varName: 'CLICKUP_CLIENT_ID', obfuscate: true)
-  final String? clickupClientId = _ProdEnv.clickupClientId;
-
-  // ClickUp client secret moved to backend environment
+  // All task integration OAuth credentials moved to backend environment
 }

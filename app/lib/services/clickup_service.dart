@@ -1,47 +1,39 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/task_integrations.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/env/env.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:omi/env/env.dart';
 
 class ClickUpService {
-  // ClickUp OAuth URLs - note that authorization happens via query params on the main URL
-  static const String _authBaseUrl = 'https://app.clickup.com/api';
-  static const String _tokenUrl = 'https://api.clickup.com/api/v2/oauth/token';
-  static const String _apiBaseUrl = 'https://api.clickup.com/api/v2';
-
-  // ClickUp OAuth redirect URL
-  static final String _redirectUri = '${Env.apiBaseUrl}v2/integrations/clickup/callback';
-
   static final ClickUpService _instance = ClickUpService._internal();
   factory ClickUpService() => _instance;
   ClickUpService._internal();
 
-  /// Check if user is authenticated with ClickUp
-  bool get isAuthenticated => SharedPreferencesUtil().clickupAccessToken != null;
+  bool _isAuthenticated = false;
+  String? _userId;
 
-  /// Get stored access token
-  String? get accessToken => SharedPreferencesUtil().clickupAccessToken;
+  /// Check if user is authenticated (updated by provider from Firebase)
+  bool get isAuthenticated => _isAuthenticated;
 
-  /// Get current user's ID
-  String? get currentUserId => SharedPreferencesUtil().clickupUserId;
+  String? get currentUserId => _userId;
 
-  /// Start OAuth authentication flow
+  void setAuthenticated(bool value, {String? userId}) {
+    _isAuthenticated = value;
+    _userId = userId;
+  }
+
+  /// Start OAuth authentication flow (get URL from backend)
   Future<bool> authenticate() async {
     try {
-      final clientId = Env.clickupClientId;
-      if (clientId == null || clientId.isEmpty) {
-        debugPrint('ClickUp Client ID not configured');
+      final authUrl = await getOAuthUrl('clickup');
+      if (authUrl == null) {
+        debugPrint('Failed to get ClickUp OAuth URL from backend');
         return false;
       }
 
-      // ClickUp uses query parameters directly in the URL
-      final authUrl = '$_authBaseUrl?client_id=$clientId&redirect_uri=${Uri.encodeComponent(_redirectUri)}';
       final authUri = Uri.parse(authUrl);
-
-      debugPrint('Opening ClickUp auth URL: $authUrl');
+      debugPrint('Opening ClickUp auth URL');
 
       final canLaunch = await canLaunchUrl(authUri);
       if (!canLaunch) {
@@ -61,256 +53,149 @@ class ClickUpService {
     }
   }
 
-  /// Handle OAuth callback and receive token from backend
-  Future<bool> handleCallback(String accessToken) async {
-    try {
-      if (accessToken.isEmpty) {
-        debugPrint('ClickUp: No access token received');
-        return false;
-      }
-
-      // Save token
-      await SharedPreferencesUtil().saveString('clickupAccessToken', accessToken);
-
-      debugPrint('✓ ClickUp tokens saved');
-
-      // Fetch and store current user info
-      await _fetchAndStoreCurrentUser();
-
-      debugPrint('✓ ClickUp authentication successful');
-      return true;
-    } catch (e) {
-      debugPrint('❌ Error handling ClickUp callback: $e');
-      return false;
-    }
+  /// Handle OAuth callback (tokens stored in backend Firebase)
+  Future<bool> handleCallback({String? userId}) async {
+    _isAuthenticated = true;
+    _userId = userId;
+    debugPrint('ClickUp authentication successful');
+    return true;
   }
 
-  /// Fetch and store current user info
-  Future<void> _fetchAndStoreCurrentUser() async {
-    try {
-      final token = accessToken;
-      if (token == null) {
-        debugPrint('No access token for fetching user info');
-        return;
-      }
-
-      debugPrint('Fetching ClickUp user info...');
-      final response = await http.get(
-        Uri.parse('$_apiBaseUrl/user'),
-        headers: {
-          'Authorization': token,
-        },
-      );
-
-      debugPrint('User info response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        debugPrint('User data: $data');
-        final userId = data['user']['id'].toString();
-        if (userId.isNotEmpty) {
-          await SharedPreferencesUtil().saveString('clickupUserId', userId);
-          debugPrint('✓ Stored ClickUp user ID: $userId');
-
-          // Save connection to Firebase
-          await saveTaskIntegration('clickup', {
-            'connected': true,
-            'user_id': userId,
-          });
-          debugPrint('✓ Saved ClickUp connection to Firebase');
-        }
-      } else {
-        debugPrint('❌ Failed to fetch user info: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('❌ Error fetching ClickUp user info: $e');
-    }
-  }
-
-  /// Manually refresh current user info
-  Future<void> refreshCurrentUser() async {
-    await _fetchAndStoreCurrentUser();
-  }
-
-  /// Get user's workspaces (teams)
+  /// Get user's workspaces/teams (via backend stored token)
   Future<List<Map<String, dynamic>>> getWorkspaces() async {
     try {
-      final token = accessToken;
-      if (token == null) {
-        debugPrint('No access token for fetching workspaces');
-        return [];
-      }
+      // Get integration from backend to access token
+      final integrations = await getTaskIntegrations();
+      if (integrations == null) return [];
+
+      final clickupIntegration = integrations.integrations['clickup'];
+      if (clickupIntegration == null) return [];
+
+      final accessToken = clickupIntegration['access_token'];
+      if (accessToken == null) return [];
 
       final response = await http.get(
-        Uri.parse('$_apiBaseUrl/team'),
-        headers: {
-          'Authorization': token,
-        },
+        Uri.parse('https://api.clickup.com/api/v2/team'),
+        headers = {'Authorization': accessToken},
       );
-
-      debugPrint('Workspaces response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        debugPrint('Workspaces data: $data');
-        final List<dynamic> teams = data['teams'] ?? [];
-        debugPrint('✓ Found ${teams.length} workspaces');
+        final List<dynamic> teams = data['teams'];
         return teams.cast<Map<String, dynamic>>();
-      } else {
-        debugPrint('❌ Failed to fetch workspaces: ${response.statusCode} - ${response.body}');
       }
 
       return [];
     } catch (e) {
-      debugPrint('❌ Error fetching ClickUp workspaces: $e');
+      debugPrint('Error fetching ClickUp workspaces: $e');
       return [];
     }
   }
 
-  /// Get spaces in a workspace
+  /// Get spaces in a team (via backend stored token)
   Future<List<Map<String, dynamic>>> getSpaces(String teamId) async {
     try {
-      final token = accessToken;
-      if (token == null) return [];
+      // Get integration from backend to access token
+      final integrations = await getTaskIntegrations();
+      if (integrations == null) return [];
 
-      debugPrint('Fetching spaces for team: $teamId');
+      final clickupIntegration = integrations.integrations['clickup'];
+      if (clickupIntegration == null) return [];
+
+      final accessToken = clickupIntegration['access_token'];
+      if (accessToken == null) return [];
+
       final response = await http.get(
-        Uri.parse('$_apiBaseUrl/team/$teamId/space?archived=false'),
-        headers: {
-          'Authorization': token,
-        },
+        Uri.parse('https://api.clickup.com/api/v2/team/$teamId/space?archived=false'),
+        headers = {'Authorization': accessToken},
       );
-
-      debugPrint('Spaces response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        debugPrint('Spaces response body: ${response.body}');
-        final List<dynamic> spaces = data['spaces'] ?? [];
-        debugPrint('✓ Found ${spaces.length} spaces');
+        final List<dynamic> spaces = data['spaces'];
         return spaces.cast<Map<String, dynamic>>();
-      } else {
-        debugPrint('❌ Failed to fetch spaces: ${response.statusCode} - ${response.body}');
       }
 
       return [];
     } catch (e) {
-      debugPrint('❌ Error fetching ClickUp spaces: $e');
+      debugPrint('Error fetching ClickUp spaces: $e');
       return [];
     }
   }
 
-  /// Get lists in a space
+  /// Get lists in a space (via backend stored token)
   Future<List<Map<String, dynamic>>> getLists(String spaceId) async {
     try {
-      final token = accessToken;
-      if (token == null) return [];
+      // Get integration from backend to access token
+      final integrations = await getTaskIntegrations();
+      if (integrations == null) return [];
 
-      debugPrint('Fetching lists for space: $spaceId');
+      final clickupIntegration = integrations.integrations['clickup'];
+      if (clickupIntegration == null) return [];
+
+      final accessToken = clickupIntegration['access_token'];
+      if (accessToken == null) return [];
+
       final response = await http.get(
-        Uri.parse('$_apiBaseUrl/space/$spaceId/list?archived=false'),
-        headers: {
-          'Authorization': token,
-        },
+        Uri.parse('https://api.clickup.com/api/v2/space/$spaceId/list?archived=false'),
+        headers = {'Authorization': accessToken},
       );
-
-      debugPrint('Lists response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        debugPrint('Lists response body: ${response.body}');
-        final List<dynamic> lists = data['lists'] ?? [];
-        debugPrint('✓ Found ${lists.length} lists');
+        final List<dynamic> lists = data['lists'];
         return lists.cast<Map<String, dynamic>>();
-      } else {
-        debugPrint('❌ Failed to fetch lists: ${response.statusCode} - ${response.body}');
       }
 
       return [];
     } catch (e) {
-      debugPrint('❌ Error fetching ClickUp lists: $e');
+      debugPrint('Error fetching ClickUp lists: $e');
       return [];
     }
   }
 
-  /// Create a task in ClickUp
+  /// Create a task in ClickUp (via backend API)
   Future<bool> createTask({
     required String name,
     String? description,
     DateTime? dueDate,
   }) async {
     try {
-      final token = accessToken;
-      if (token == null) {
-        debugPrint('Not authenticated with ClickUp');
-        return false;
-      }
-
-      // Get the selected list
-      String? listId = SharedPreferencesUtil().clickupListId;
-      if (listId == null) {
-        debugPrint('No ClickUp list selected');
-        return false;
-      }
-
-      // Get current user ID for assignee
-      final userId = currentUserId;
-      debugPrint('Creating task with user ID: $userId');
-
-      // Build task data
-      final taskData = <String, dynamic>{
-        'name': name,
-        if (description != null) 'description': description,
-        if (dueDate != null) 'due_date': dueDate.millisecondsSinceEpoch,
-        if (userId != null && userId.isNotEmpty) 'assignees': [int.parse(userId)],
-      };
-
-      debugPrint('Task data: $taskData');
-
-      final response = await http.post(
-        Uri.parse('$_apiBaseUrl/list/$listId/task'),
-        headers: {
-          'Authorization': token,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(taskData),
+      final result = await createTaskViaIntegration(
+        'clickup',
+        title: name,
+        description: description,
+        dueDate: dueDate,
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final responseData = jsonDecode(response.body);
-        debugPrint('✓ Task created successfully in ClickUp: ${responseData['id']}');
+      if (result != null && result['success'] == true) {
+        debugPrint('✓ Task created successfully in ClickUp');
         return true;
-      } else if (response.statusCode == 401) {
-        debugPrint('❌ ClickUp token invalid, clearing authentication');
-        await disconnect();
-        return false;
       }
 
-      debugPrint('❌ Failed to create task in ClickUp: ${response.statusCode} ${response.body}');
+      debugPrint('❌ Failed to create task in ClickUp: ${result?['error']}');
       return false;
     } catch (e) {
-      debugPrint('❌ Error creating task in ClickUp: $e');
+      debugPrint('Error creating task in ClickUp: $e');
       return false;
     }
   }
 
-  /// Disconnect from ClickUp (clear stored tokens and settings)
+  /// Disconnect from ClickUp (remove from Firebase)
   Future<void> disconnect() async {
-    SharedPreferencesUtil().clickupAccessToken = null;
-    SharedPreferencesUtil().clickupUserId = null;
-    SharedPreferencesUtil().clickupTeamId = null;
-    SharedPreferencesUtil().clickupTeamName = null;
-    SharedPreferencesUtil().clickupSpaceId = null;
-    SharedPreferencesUtil().clickupSpaceName = null;
-    SharedPreferencesUtil().clickupListId = null;
-    SharedPreferencesUtil().clickupListName = null;
-
-    // Remove connection from Firebase
     try {
       await deleteTaskIntegration('clickup');
-      debugPrint('✓ Removed ClickUp connection from Firebase');
+      _isAuthenticated = false;
+      _userId = null;
+      debugPrint('✓ Disconnected from ClickUp');
     } catch (e) {
-      debugPrint('Error removing ClickUp connection from Firebase: $e');
+      debugPrint('Error disconnecting from ClickUp: $e');
     }
+  }
+
+  /// Manually refresh current user info (for settings page)
+  Future<void> refreshCurrentUser() async {
+    // User info is now in Firebase, loaded by provider
+    debugPrint('User info loaded from Firebase');
   }
 }

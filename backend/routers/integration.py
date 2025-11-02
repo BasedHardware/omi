@@ -666,10 +666,25 @@ async def todoist_oauth_callback(
             token_data = token_response.json()
             access_token = token_data.get('access_token', '')
 
-            # Create deep link with token
-            from urllib.parse import quote
+            # Store token in Firebase
+            import database.users as users_db
 
-            deep_link = f'omi://todoist/callback?access_token={quote(access_token)}&state={state or ""}'
+            if access_token and state:
+                try:
+                    users_db.set_task_integration(
+                        state,
+                        'todoist',
+                        {
+                            'connected': True,
+                            'access_token': access_token,
+                        },
+                    )
+                    print(f'✓ Stored Todoist token in Firebase for user {state}')
+                except Exception as e:
+                    print(f'Error storing Todoist token: {e}')
+
+            # Create deep link for success (no token in URL)
+            deep_link = f'omi://todoist/callback?success=true&state={state or ""}'
         else:
             # Failed to exchange, return error
             deep_link = f'omi://todoist/callback?error=token_exchange_failed&state={state or ""}'
@@ -865,10 +880,37 @@ async def asana_oauth_callback(
             access_token = token_data.get('access_token', '')
             refresh_token = token_data.get('refresh_token', '')
 
-            # Create deep link with tokens
-            from urllib.parse import quote
+            # Fetch user info and store everything in Firebase
+            import database.users as users_db
 
-            deep_link = f'omi://asana/callback?access_token={quote(access_token)}&refresh_token={quote(refresh_token)}&state={state or ""}'
+            if access_token and state:
+                try:
+                    # Fetch user GID from Asana
+                    user_response = requests.get(
+                        'https://app.asana.com/api/1.0/users/me', headers={'Authorization': f'Bearer {access_token}'}
+                    )
+                    user_gid = None
+                    if user_response.status_code == 200:
+                        user_data = user_response.json()
+                        user_gid = user_data.get('data', {}).get('gid')
+
+                    # Store in Firebase
+                    users_db.set_task_integration(
+                        state,
+                        'asana',
+                        {
+                            'connected': True,
+                            'access_token': access_token,
+                            'refresh_token': refresh_token,
+                            'user_gid': user_gid,
+                        },
+                    )
+                    print(f'✓ Stored Asana tokens in Firebase for user {state}')
+                except Exception as e:
+                    print(f'Error storing Asana tokens: {e}')
+
+            # Create deep link for success (no tokens in URL)
+            deep_link = f'omi://asana/callback?success=true&requires_setup=true&state={state or ""}'
         else:
             # Failed to exchange, return error
             deep_link = f'omi://asana/callback?error=token_exchange_failed&state={state or ""}'
@@ -1061,10 +1103,36 @@ async def clickup_oauth_callback(
             token_data = token_response.json()
             access_token = token_data.get('access_token', '')
 
-            # Create deep link with token
-            from urllib.parse import quote
+            # Fetch user info and store in Firebase
+            import database.users as users_db
 
-            deep_link = f'omi://clickup/callback?access_token={quote(access_token)}&state={state or ""}'
+            if access_token and state:
+                try:
+                    # Fetch user ID from ClickUp
+                    user_response = requests.get(
+                        'https://api.clickup.com/api/v2/user', headers={'Authorization': access_token}
+                    )
+                    user_id = None
+                    if user_response.status_code == 200:
+                        user_data = user_response.json()
+                        user_id = str(user_data.get('user', {}).get('id', ''))
+
+                    # Store in Firebase
+                    users_db.set_task_integration(
+                        state,
+                        'clickup',
+                        {
+                            'connected': True,
+                            'access_token': access_token,
+                            'user_id': user_id,
+                        },
+                    )
+                    print(f'✓ Stored ClickUp token in Firebase for user {state}')
+                except Exception as e:
+                    print(f'Error storing ClickUp token: {e}')
+
+            # Create deep link for success (no token in URL)
+            deep_link = f'omi://clickup/callback?success=true&requires_setup=true&state={state or ""}'
         else:
             # Failed to exchange, return error
             deep_link = f'omi://clickup/callback?error=token_exchange_failed&state={state or ""}'
@@ -1260,10 +1328,43 @@ async def google_tasks_oauth_callback(
             access_token = token_data.get('access_token', '')
             refresh_token = token_data.get('refresh_token', '')
 
-            # Create deep link with tokens
-            from urllib.parse import quote
+            # Fetch task lists and store in Firebase
+            import database.users as users_db
 
-            deep_link = f'omi://google-tasks/callback?access_token={quote(access_token)}&refresh_token={quote(refresh_token)}&state={state or ""}'
+            if access_token and state:
+                try:
+                    # Fetch default task list
+                    lists_response = requests.get(
+                        'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
+                        headers={'Authorization': f'Bearer {access_token}'},
+                    )
+                    default_list_id = None
+                    default_list_title = None
+                    if lists_response.status_code == 200:
+                        lists_data = lists_response.json()
+                        items = lists_data.get('items', [])
+                        if items:
+                            default_list_id = items[0].get('id')
+                            default_list_title = items[0].get('title')
+
+                    # Store in Firebase
+                    users_db.set_task_integration(
+                        state,
+                        'google_tasks',
+                        {
+                            'connected': True,
+                            'access_token': access_token,
+                            'refresh_token': refresh_token,
+                            'default_list_id': default_list_id,
+                            'default_list_title': default_list_title,
+                        },
+                    )
+                    print(f'✓ Stored Google Tasks tokens in Firebase for user {state}')
+                except Exception as e:
+                    print(f'Error storing Google Tasks tokens: {e}')
+
+            # Create deep link for success (no tokens in URL)
+            deep_link = f'omi://google-tasks/callback?success=true&state={state or ""}'
         else:
             # Failed to exchange, return error
             deep_link = f'omi://google-tasks/callback?error=token_exchange_failed&state={state or ""}'

@@ -6,6 +6,8 @@ import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/desktop/desktop_app.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/settings/asana_settings_page.dart';
+import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -70,13 +72,13 @@ class _AppShellState extends State<AppShell> {
         AppSnackbar.showSnackbarError('Failed to connect to Todoist');
         return;
       }
-      
-      final accessToken = uri.queryParameters['access_token'];
-      if (accessToken != null) {
-        debugPrint('Received Todoist OAuth token');
-        _handleTodoistCallback(accessToken);
+
+      final success = uri.queryParameters['success'];
+      if (success == 'true') {
+        debugPrint('Todoist OAuth successful (tokens in Firebase)');
+        _handleTodoistCallback();
       } else {
-        debugPrint('Todoist callback received but no token found');
+        debugPrint('Todoist callback received but no success flag');
       }
     } else if (uri.host == 'asana' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Asana OAuth callback
@@ -86,14 +88,14 @@ class _AppShellState extends State<AppShell> {
         AppSnackbar.showSnackbarError('Failed to connect to Asana');
         return;
       }
-      
-      final accessToken = uri.queryParameters['access_token'];
-      final refreshToken = uri.queryParameters['refresh_token'];
-      if (accessToken != null) {
-        debugPrint('Received Asana OAuth tokens');
-        _handleAsanaCallback(accessToken, refreshToken);
+
+      final success = uri.queryParameters['success'];
+      final requiresSetup = uri.queryParameters['requires_setup'];
+      if (success == 'true') {
+        debugPrint('Asana OAuth successful (tokens in Firebase)');
+        _handleAsanaCallback(requiresSetup == 'true');
       } else {
-        debugPrint('Asana callback received but no token found');
+        debugPrint('Asana callback received but no success flag');
       }
     } else if (uri.host == 'google-tasks' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Google Tasks OAuth callback
@@ -103,14 +105,13 @@ class _AppShellState extends State<AppShell> {
         AppSnackbar.showSnackbarError('Failed to connect to Google Tasks');
         return;
       }
-      
-      final accessToken = uri.queryParameters['access_token'];
-      final refreshToken = uri.queryParameters['refresh_token'];
-      if (accessToken != null) {
-        debugPrint('Received Google Tasks OAuth tokens');
-        _handleGoogleTasksCallback(accessToken, refreshToken);
+
+      final success = uri.queryParameters['success'];
+      if (success == 'true') {
+        debugPrint('Google Tasks OAuth successful (tokens in Firebase)');
+        _handleGoogleTasksCallback();
       } else {
-        debugPrint('Google Tasks callback received but no token found');
+        debugPrint('Google Tasks callback received but no success flag');
       }
     } else if (uri.host == 'clickup' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle ClickUp OAuth callback
@@ -120,22 +121,23 @@ class _AppShellState extends State<AppShell> {
         AppSnackbar.showSnackbarError('Failed to connect to ClickUp');
         return;
       }
-      
-      final accessToken = uri.queryParameters['access_token'];
-      if (accessToken != null) {
-        debugPrint('Received ClickUp OAuth token');
-        _handleClickUpCallback(accessToken);
+
+      final success = uri.queryParameters['success'];
+      final requiresSetup = uri.queryParameters['requires_setup'];
+      if (success == 'true') {
+        debugPrint('ClickUp OAuth successful (tokens in Firebase)');
+        _handleClickUpCallback(requiresSetup == 'true');
       } else {
-        debugPrint('ClickUp callback received but no token found');
+        debugPrint('ClickUp callback received but no success flag');
       }
     } else {
       debugPrint('Unknown link: $uri');
     }
   }
 
-  Future<void> _handleTodoistCallback(String accessToken) async {
+  Future<void> _handleTodoistCallback() async {
     final todoistService = TodoistService();
-    final success = await todoistService.handleCallback(accessToken);
+    final success = await todoistService.handleCallback();
 
     if (!mounted) return;
 
@@ -144,7 +146,7 @@ class _AppShellState extends State<AppShell> {
       debugPrint('✓ Task integration enabled: Todoist - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to Todoist!');
 
-      // Notify task integration provider to refresh UI
+      // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
       debugPrint('Failed to complete Todoist authentication');
@@ -152,9 +154,9 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleAsanaCallback(String accessToken, String? refreshToken) async {
+  Future<void> _handleAsanaCallback(bool requiresSetup) async {
     final asanaService = AsanaService();
-    final success = await asanaService.handleCallback(accessToken, refreshToken);
+    final success = await asanaService.handleCallback();
 
     if (!mounted) return;
 
@@ -163,17 +165,26 @@ class _AppShellState extends State<AppShell> {
       debugPrint('✓ Task integration enabled: Asana - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to Asana!');
 
-      // Notify task integration provider to refresh UI
-      context.read<TaskIntegrationProvider>().refresh();
+      // Notify task integration provider to refresh UI from Firebase
+      await context.read<TaskIntegrationProvider>().refresh();
+
+      // Auto-open settings page for configuration
+      if (requiresSetup && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const AsanaSettingsPage(),
+          ),
+        );
+      }
     } else {
       debugPrint('Failed to complete Asana authentication');
       AppSnackbar.showSnackbarError('Failed to connect to Asana. Please try again.');
     }
   }
 
-  Future<void> _handleGoogleTasksCallback(String accessToken, String? refreshToken) async {
+  Future<void> _handleGoogleTasksCallback() async {
     final googleTasksService = GoogleTasksService();
-    final success = await googleTasksService.handleCallback(accessToken, refreshToken);
+    final success = await googleTasksService.handleCallback();
 
     if (!mounted) return;
 
@@ -182,7 +193,7 @@ class _AppShellState extends State<AppShell> {
       debugPrint('✓ Task integration enabled: Google Tasks - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to Google Tasks!');
 
-      // Notify task integration provider to refresh UI
+      // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
       debugPrint('Failed to complete Google Tasks authentication');
@@ -190,9 +201,9 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleClickUpCallback(String accessToken) async {
+  Future<void> _handleClickUpCallback(bool requiresSetup) async {
     final clickupService = ClickUpService();
-    final success = await clickupService.handleCallback(accessToken);
+    final success = await clickupService.handleCallback();
 
     if (!mounted) return;
 
@@ -201,8 +212,17 @@ class _AppShellState extends State<AppShell> {
       debugPrint('✓ Task integration enabled: ClickUp - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to ClickUp!');
 
-      // Notify task integration provider to refresh UI
-      context.read<TaskIntegrationProvider>().refresh();
+      // Notify task integration provider to refresh UI from Firebase
+      await context.read<TaskIntegrationProvider>().refresh();
+
+      // Auto-open settings page for configuration
+      if (requiresSetup && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const ClickUpSettingsPage(),
+          ),
+        );
+      }
     } else {
       debugPrint('Failed to complete ClickUp authentication');
       AppSnackbar.showSnackbarError('Failed to connect to ClickUp. Please try again.');

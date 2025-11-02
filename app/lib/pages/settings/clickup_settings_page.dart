@@ -40,7 +40,11 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     setState(() => _isLoadingTeams = true);
 
     final teams = await _clickupService.getWorkspaces();
-    final savedTeamId = SharedPreferencesUtil().clickupTeamId;
+
+    // Get saved team from Firebase (via provider)
+    final provider = context.read<TaskIntegrationProvider>();
+    final clickupDetails = provider.getConnectionDetails('clickup');
+    final savedTeamId = clickupDetails?['team_id'] as String?;
 
     setState(() {
       _teams = teams;
@@ -59,7 +63,11 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     setState(() => _isLoadingSpaces = true);
 
     final spaces = await _clickupService.getSpaces(teamId);
-    final savedSpaceId = SharedPreferencesUtil().clickupSpaceId;
+
+    // Get saved space from Firebase (via provider)
+    final provider = context.read<TaskIntegrationProvider>();
+    final clickupDetails = provider.getConnectionDetails('clickup');
+    final savedSpaceId = clickupDetails?['space_id'] as String?;
 
     setState(() {
       _spaces = spaces;
@@ -76,7 +84,11 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     setState(() => _isLoadingLists = true);
 
     final lists = await _clickupService.getLists(spaceId);
-    final savedListId = SharedPreferencesUtil().clickupListId;
+
+    // Get saved list from Firebase (via provider)
+    final provider = context.read<TaskIntegrationProvider>();
+    final clickupDetails = provider.getConnectionDetails('clickup');
+    final savedListId = clickupDetails?['list_id'] as String?;
 
     setState(() {
       _lists = lists;
@@ -95,19 +107,19 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
       _selectedListId = null;
     });
 
-    SharedPreferencesUtil().clickupTeamId = teamId;
-    SharedPreferencesUtil().clickupTeamName = teamName;
-    SharedPreferencesUtil().clickupSpaceId = null;
-    SharedPreferencesUtil().clickupSpaceName = null;
-    SharedPreferencesUtil().clickupListId = null;
-    SharedPreferencesUtil().clickupListName = null;
+    // Get current integration details and update with new team
+    final provider = context.read<TaskIntegrationProvider>();
+    final currentDetails = provider.getConnectionDetails('clickup') ?? {};
 
-    // Save to Firebase
-    await context.read<TaskIntegrationProvider>().saveConnectionDetails('clickup', {
+    await provider.saveConnectionDetails('clickup', {
+      ...currentDetails,
       'connected': true,
-      'user_id': _clickupService.currentUserId,
       'team_id': teamId,
       'team_name': teamName,
+      'space_id': null,
+      'space_name': null,
+      'list_id': null,
+      'list_name': null,
     });
 
     await _loadSpaces(teamId);
@@ -122,19 +134,17 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
       _selectedListId = null;
     });
 
-    SharedPreferencesUtil().clickupSpaceId = spaceId;
-    SharedPreferencesUtil().clickupSpaceName = spaceName;
-    SharedPreferencesUtil().clickupListId = null;
-    SharedPreferencesUtil().clickupListName = null;
+    // Get current integration details and update with new space
+    final provider = context.read<TaskIntegrationProvider>();
+    final currentDetails = provider.getConnectionDetails('clickup') ?? {};
 
-    // Save to Firebase
-    await context.read<TaskIntegrationProvider>().saveConnectionDetails('clickup', {
+    await provider.saveConnectionDetails('clickup', {
+      ...currentDetails,
       'connected': true,
-      'user_id': _clickupService.currentUserId,
-      'team_id': _selectedTeamId,
-      'team_name': SharedPreferencesUtil().clickupTeamName,
       'space_id': spaceId,
       'space_name': spaceName,
+      'list_id': null,
+      'list_name': null,
     });
 
     await _loadLists(spaceId);
@@ -148,17 +158,13 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
       _selectedListId = listId;
     });
 
-    SharedPreferencesUtil().clickupListId = listId;
-    SharedPreferencesUtil().clickupListName = listName;
+    // Get current integration details and update with new list
+    final provider = context.read<TaskIntegrationProvider>();
+    final currentDetails = provider.getConnectionDetails('clickup') ?? {};
 
-    // Save to Firebase
-    await context.read<TaskIntegrationProvider>().saveConnectionDetails('clickup', {
+    await provider.saveConnectionDetails('clickup', {
+      ...currentDetails,
       'connected': true,
-      'user_id': _clickupService.currentUserId,
-      'team_id': _selectedTeamId,
-      'team_name': SharedPreferencesUtil().clickupTeamName,
-      'space_id': _selectedSpaceId,
-      'space_name': SharedPreferencesUtil().clickupSpaceName,
       'list_id': listId,
       'list_name': listName,
     });

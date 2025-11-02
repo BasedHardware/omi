@@ -119,3 +119,55 @@ Future<bool> deleteTaskIntegration(String appKey) async {
     return false;
   }
 }
+
+/// Get OAuth URL for a task integration
+Future<String?> getOAuthUrl(String appKey) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations/$appKey/oauth-url',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    return data['auth_url'] as String?;
+  } else {
+    debugPrint('getOAuthUrl error ${response.statusCode}');
+    return null;
+  }
+}
+
+/// Create a task via backend integration API
+Future<Map<String, dynamic>?> createTaskViaIntegration(
+  String appKey, {
+  required String title,
+  String? description,
+  DateTime? dueDate,
+}) async {
+  var requestBody = {
+    'title': title,
+    if (description != null) 'description': description,
+    if (dueDate != null) 'due_date': dueDate.toUtc().toIso8601String(),
+  };
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations/$appKey/tasks',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode(requestBody),
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return jsonDecode(body) as Map<String, dynamic>;
+  } else {
+    debugPrint('createTaskViaIntegration error ${response.statusCode}');
+    return null;
+  }
+}

@@ -38,7 +38,11 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
     setState(() => _isLoadingWorkspaces = true);
 
     final workspaces = await _asanaService.getWorkspaces();
-    final savedWorkspaceGid = SharedPreferencesUtil().asanaWorkspaceGid;
+
+    // Get saved workspace from Firebase (via provider)
+    final provider = context.read<TaskIntegrationProvider>();
+    final asanaDetails = provider.getConnectionDetails('asana');
+    final savedWorkspaceGid = asanaDetails?['workspace_gid'] as String?;
 
     setState(() {
       _workspaces = workspaces;
@@ -59,7 +63,11 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
     setState(() => _isLoadingProjects = true);
 
     final projects = await _asanaService.getProjects(workspaceGid);
-    final savedProjectGid = SharedPreferencesUtil().asanaProjectGid;
+
+    // Get saved project from Firebase (via provider)
+    final provider = context.read<TaskIntegrationProvider>();
+    final asanaDetails = provider.getConnectionDetails('asana');
+    final savedProjectGid = asanaDetails?['project_gid'] as String?;
 
     setState(() {
       _projects = projects;
@@ -77,17 +85,17 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       _selectedProjectGid = null; // Clear project when workspace changes
     });
 
-    SharedPreferencesUtil().asanaWorkspaceGid = workspaceGid;
-    SharedPreferencesUtil().asanaWorkspaceName = workspaceName;
-    SharedPreferencesUtil().asanaProjectGid = null;
-    SharedPreferencesUtil().asanaProjectName = null;
+    // Get current integration details and update with new workspace
+    final provider = context.read<TaskIntegrationProvider>();
+    final currentDetails = provider.getConnectionDetails('asana') ?? {};
 
-    // Save to Firebase
-    await context.read<TaskIntegrationProvider>().saveConnectionDetails('asana', {
+    await provider.saveConnectionDetails('asana', {
+      ...currentDetails,
       'connected': true,
-      'user_gid': _asanaService.currentUserGid,
       'workspace_gid': workspaceGid,
       'workspace_name': workspaceName,
+      'project_gid': null,
+      'project_name': null,
     });
 
     await _loadProjects(workspaceGid);
@@ -101,15 +109,13 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       _selectedProjectGid = projectGid;
     });
 
-    SharedPreferencesUtil().asanaProjectGid = projectGid;
-    SharedPreferencesUtil().asanaProjectName = projectName;
+    // Get current integration details and update with new project
+    final provider = context.read<TaskIntegrationProvider>();
+    final currentDetails = provider.getConnectionDetails('asana') ?? {};
 
-    // Save to Firebase
-    await context.read<TaskIntegrationProvider>().saveConnectionDetails('asana', {
+    await provider.saveConnectionDetails('asana', {
+      ...currentDetails,
       'connected': true,
-      'user_gid': _asanaService.currentUserGid,
-      'workspace_gid': _selectedWorkspaceGid,
-      'workspace_name': SharedPreferencesUtil().asanaWorkspaceName,
       'project_gid': projectGid,
       'project_name': projectName,
     });
@@ -120,15 +126,15 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       _selectedProjectGid = null;
     });
 
-    SharedPreferencesUtil().asanaProjectGid = null;
-    SharedPreferencesUtil().asanaProjectName = null;
+    // Get current integration details and clear project
+    final provider = context.read<TaskIntegrationProvider>();
+    final currentDetails = provider.getConnectionDetails('asana') ?? {};
 
-    // Save to Firebase
-    await context.read<TaskIntegrationProvider>().saveConnectionDetails('asana', {
+    await provider.saveConnectionDetails('asana', {
+      ...currentDetails,
       'connected': true,
-      'user_gid': _asanaService.currentUserGid,
-      'workspace_gid': _selectedWorkspaceGid,
-      'workspace_name': SharedPreferencesUtil().asanaWorkspaceName,
+      'project_gid': null,
+      'project_name': null,
     });
   }
 
