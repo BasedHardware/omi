@@ -11,7 +11,7 @@ abstract class Env {
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
-  static String? get apiBaseUrl => _instance.apiBaseUrl;
+  static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 
@@ -36,6 +36,14 @@ abstract class Env {
   static String? get asanaClientId => _instance.asanaClientId;
 
   static String? get asanaClientSecret => _instance.asanaClientSecret;
+
+  static String? get googleTasksClientId => _instance.googleTasksClientId;
+
+  static String? get googleTasksClientSecret => _instance.googleTasksClientSecret;
+
+  static String? get clickupClientId => _instance.clickupClientId;
+
+  static String? get clickupClientSecret => _instance.clickupClientSecret;
 }
 
 abstract class EnvFields {
@@ -68,4 +76,12 @@ abstract class EnvFields {
   String? get asanaClientId;
 
   String? get asanaClientSecret;
+
+  String? get googleTasksClientId;
+
+  String? get googleTasksClientSecret;
+
+  String? get clickupClientId;
+
+  String? get clickupClientSecret;
 }
