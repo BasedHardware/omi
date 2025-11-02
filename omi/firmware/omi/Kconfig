@@ -14,6 +14,29 @@ config OMI_ENABLE_OFFLINE_STORAGE
         "Enable the offline storage support. Requires a SD Card."
 	default n
 
+config OMI_STORAGE_SKIP_WHEN_CONNECTED
+    bool "Skip SD writes while BLE is connected"
+    depends on OMI_ENABLE_OFFLINE_STORAGE
+    help
+        "Avoid powering the SD card when a BLE link is active and storage data is not being transferred."
+    default y
+
+config OMI_SD_IDLE_TIMEOUT_MS
+    int "SD card idle power-down delay (ms)"
+    depends on OMI_ENABLE_OFFLINE_STORAGE
+    range 50 60000
+    help
+        "Time in milliseconds to keep the SD card powered after the last read/write before automatically suspending the interface."
+    default 750
+
+config OMI_STORAGE_WRITE_CHUNKS
+    int "Number of SD blocks to batch per write"
+    depends on OMI_ENABLE_OFFLINE_STORAGE
+    range 1 8
+    help
+        "Aggregate this many 440-byte blocks before committing data to the SD card to reduce power-draining write bursts."
+    default 4
+
 config OMI_ENABLE_ACCELEROMETER
     bool "Accelerometer Support"
     help

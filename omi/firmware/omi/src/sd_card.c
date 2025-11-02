@@ -1,5 +1,6 @@
 #include "lib/core/sd_card.h"
 
+#include <errno.h>
 #include <ff.h>
 #include <string.h>
 #include <zephyr/device.h>
@@ -11,6 +12,7 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/sys/check.h>
+#include <zephyr/sys/util.h>
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -32,6 +34,17 @@ static const char *disk_mount_pt = "/SD:/";
 static bool is_mounted = false;
 static bool sd_enabled = false;
 
+#ifdef CONFIG_OMI_SD_IDLE_TIMEOUT_MS
+#define SD_IDLE_TIMEOUT_MS CONFIG_OMI_SD_IDLE_TIMEOUT_MS
+#else
+#define SD_IDLE_TIMEOUT_MS 1000
+#endif
+
+static K_MUTEX_DEFINE(sd_state_lock);
+
+static void sd_idle_powerdown_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(sd_idle_work, sd_idle_powerdown_handler);
+
 // Get the device pointer for the SDHC SPI slot from the device tree
 static const struct device *const sd_dev = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
 static const struct gpio_dt_spec sd_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sdcard_en_pin), gpios, {0});
@@ -47,32 +60,90 @@ static char write_buffer[MAX_PATH_LENGTH];
 
 static int sd_enable_power(bool enable)
 {
-    int ret;
-    gpio_pin_configure_dt(&sd_en, GPIO_OUTPUT);
+    int ret = 0;
+
+    if (!device_is_ready(sd_dev)) {
+        LOG_ERR("SD host controller is not ready");
+        return -ENODEV;
+    }
+
+    if (sd_en.port != NULL) {
+        int cfg_ret = gpio_pin_configure_dt(&sd_en, GPIO_OUTPUT_INACTIVE);
+        if (cfg_ret != 0 && cfg_ret != -EALREADY && cfg_ret != -EBUSY) {
+            LOG_ERR("Failed to configure SD enable pin (%d)", cfg_ret);
+            return cfg_ret;
+        }
+    }
+
     if (enable) {
-        ret = gpio_pin_set_dt(&sd_en, 1);
-        pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+        if (sd_en.port != NULL) {
+            ret = gpio_pin_set_dt(&sd_en, 1);
+            if (ret) {
+                LOG_ERR("Failed to drive SD enable high (%d)", ret);
+                return ret;
+            }
+        }
+
+        int pm_ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+        if (pm_ret != 0 && pm_ret != -ENOTSUP && pm_ret != -EALREADY) {
+            LOG_ERR("Failed to resume SD device (%d)", pm_ret);
+            if (sd_en.port != NULL) {
+                gpio_pin_set_dt(&sd_en, 0);
+            }
+            return pm_ret;
+        }
+
         sd_enabled = true;
-    } else {
-        ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
-        // gpio_pin_set_dt(&sd_en, 0);
+        return 0;
+    }
+
+    int pm_ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
+    if (pm_ret != 0 && pm_ret != -ENOTSUP && pm_ret != -EALREADY) {
+        LOG_ERR("Failed to suspend SD device (%d)", pm_ret);
+        ret = pm_ret;
+    }
+
+    if (sd_en.port != NULL) {
+        int gpio_ret = gpio_pin_set_dt(&sd_en, 0);
+        if (gpio_ret) {
+            LOG_ERR("Failed to drive SD enable low (%d)", gpio_ret);
+            if (ret == 0) {
+                ret = gpio_ret;
+            }
+        }
+    }
+
+    if (ret == 0) {
         sd_enabled = false;
     }
+
     return ret;
 }
 
-static int sd_unmount()
+static int sd_unmount(void)
 {
-    int ret;
-    ret = fs_unmount(&mp);
+    if (!is_mounted) {
+        if (sd_enabled) {
+            return sd_enable_power(false);
+        }
+        return 0;
+    }
+
+    int ret = fs_unmount(&mp);
     if (ret) {
-        LOG_INF("Disk unmounted error (%d) .", ret);
+        LOG_INF("Disk unmount error (%d)", ret);
         return ret;
     }
 
-    LOG_INF("Disk unmounted.");
+    LOG_INF("Disk unmounted");
     is_mounted = false;
-    sd_enable_power(false);
+
+    ret = sd_enable_power(false);
+    if (ret) {
+        LOG_ERR("Failed to power down SD card after unmount (%d)", ret);
+        return ret;
+    }
+
     return 0;
 }
 
@@ -148,6 +219,62 @@ static int sd_mount()
     return ret;
 }
 
+static int sd_runtime_acquire(void)
+{
+    int ret = 0;
+
+    k_mutex_lock(&sd_state_lock, K_FOREVER);
+    k_work_cancel_delayable(&sd_idle_work);
+
+    if (!sd_enabled || !is_mounted) {
+        ret = sd_mount();
+    }
+
+    k_mutex_unlock(&sd_state_lock);
+    return ret;
+}
+
+static void sd_runtime_release(void)
+{
+    k_mutex_lock(&sd_state_lock, K_FOREVER);
+
+    if (!is_mounted && !sd_enabled) {
+        k_mutex_unlock(&sd_state_lock);
+        return;
+    }
+
+    if (SD_IDLE_TIMEOUT_MS <= 0) {
+        int ret = sd_unmount();
+        if (ret) {
+            LOG_DBG("Failed to power down SD card immediately (%d)", ret);
+        }
+        k_mutex_unlock(&sd_state_lock);
+        return;
+    }
+
+    k_work_reschedule(&sd_idle_work, K_MSEC(SD_IDLE_TIMEOUT_MS));
+    k_mutex_unlock(&sd_state_lock);
+}
+
+static void sd_idle_powerdown_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    k_mutex_lock(&sd_state_lock, K_FOREVER);
+
+    if (!is_mounted && !sd_enabled) {
+        k_mutex_unlock(&sd_state_lock);
+        return;
+    }
+
+    int ret = sd_unmount();
+    if (ret && ret != -ENODEV) {
+        LOG_DBG("Idle power-down skipped (%d)", ret);
+    }
+
+    k_mutex_unlock(&sd_state_lock);
+}
+
 static int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry)
 {
     if (zdp->mp->fs->readdir(zdp, entry)) {
@@ -179,10 +306,15 @@ static int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry)
 
 int app_sd_init(void)
 {
-    int ret = sd_mount();
+    int ret = sd_runtime_acquire();
     if (ret != 0) {
         return ret;
     }
+
+    bool dir_opened = false;
+    struct fs_dir_t audio_dir_entry;
+    fs_dir_t_init(&audio_dir_entry);
+
     LOG_INF("SD card module initialized (Device: %s)", sd_dev->name);
 
     // Initialize audio file management
@@ -192,18 +324,18 @@ int app_sd_init(void)
         initialize_audio_file(1);
     } else if (ret == FR_EXIST) {
         LOG_INF("audio directory already exists");
-    } else {
+    } else if (ret) {
         LOG_INF("audio directory creation failed: %d", ret);
     }
 
     // Scan existing audio files
-    struct fs_dir_t audio_dir_entry;
-    fs_dir_t_init(&audio_dir_entry);
     int err = fs_opendir(&audio_dir_entry, "/SD:/audio");
     if (err) {
         LOG_ERR("error while opening directory %d", err);
-        return err;
+        ret = err;
+        goto out;
     }
+    dir_opened = true;
     LOG_INF("result of opendir: %d", err);
 
     initialize_audio_file(1);
@@ -211,7 +343,8 @@ int app_sd_init(void)
     int found_files = get_file_contents(&audio_dir_entry, &file_count_entry);
     if (found_files < 0) {
         LOG_ERR("error getting file count");
-        return -1;
+        ret = -EIO;
+        goto out;
     }
 
     // If files exist but don't match our naming scheme, start fresh
@@ -220,19 +353,18 @@ int app_sd_init(void)
     }
     file_count = 1;
 
-    fs_closedir(&audio_dir_entry);
     LOG_INF("new num files: %d", file_count);
 
     ret = move_write_pointer(file_count);
     if (ret) {
         LOG_ERR("error while moving the write pointer");
-        return ret;
+        goto out;
     }
 
     ret = move_read_pointer(file_count);
     if (ret) {
         LOG_ERR("error while moving the reader pointer");
-        return ret;
+        goto out;
     }
     LOG_INF("file count: %d", file_count);
 
@@ -242,12 +374,21 @@ int app_sd_init(void)
     ret = fs_stat(info_path, &info_file_entry);
     if (ret) {
         ret = create_file("info.txt");
-        save_offset(0);
+        if (!ret) {
+            save_offset(0);
+        }
         LOG_INF("result of info.txt creation: %d ", ret);
     }
     LOG_INF("result of check: %d", ret);
 
-    return 0;
+    ret = 0;
+
+out:
+    if (dir_opened) {
+        fs_closedir(&audio_dir_entry);
+    }
+    sd_runtime_release();
+    return ret;
 }
 
 char *generate_new_audio_header(uint8_t num)
@@ -278,17 +419,27 @@ char *generate_new_audio_header(uint8_t num)
 
 int create_file(const char *file_path)
 {
-    int ret = 0;
+    int ret = sd_runtime_acquire();
+    if (ret) {
+        return ret;
+    }
+
+    ret = 0;
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, file_path);
     struct fs_file_t data_file;
     fs_file_t_init(&data_file);
     ret = fs_open(&data_file, current_full_path, FS_O_WRITE | FS_O_CREATE);
     if (ret) {
         LOG_ERR("File creation failed %d", ret);
-        return -2;
+        ret = -2;
+        goto out;
     }
     fs_close(&data_file);
-    return 0;
+    ret = 0;
+
+out:
+    sd_runtime_release();
+    return ret;
 }
 
 int initialize_audio_file(uint8_t num)
@@ -304,8 +455,16 @@ int initialize_audio_file(uint8_t num)
 
 uint32_t get_file_size(uint8_t num)
 {
+    uint32_t size = 0;
+    int ret = sd_runtime_acquire();
+    if (ret) {
+        LOG_ERR("Failed to prepare SD card for get_file_size (%d)", ret);
+        return 0;
+    }
+
     char *ptr = generate_new_audio_header(num);
     if (ptr == NULL) {
+        sd_runtime_release();
         return 0;
     }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
@@ -314,15 +473,26 @@ uint32_t get_file_size(uint8_t num)
     int res = fs_stat(current_full_path, &entry);
     if (res) {
         LOG_ERR("invalid file in get file size");
-        return 0;
+        goto out;
     }
-    return (uint32_t) entry.size;
+    size = (uint32_t) entry.size;
+
+out:
+    sd_runtime_release();
+    return size;
 }
 
 int move_read_pointer(uint8_t num)
 {
+    int status = sd_runtime_acquire();
+    if (status) {
+        LOG_ERR("Failed to prepare SD card for move_read_pointer (%d)", status);
+        return status;
+    }
+
     char *read_ptr = generate_new_audio_header(num);
     if (read_ptr == NULL) {
+        sd_runtime_release();
         return -1;
     }
     snprintf(read_buffer, sizeof(read_buffer), "%s%s", disk_mount_pt, read_ptr);
@@ -331,15 +501,23 @@ int move_read_pointer(uint8_t num)
     int res = fs_stat(read_buffer, &entry);
     if (res) {
         LOG_ERR("invalid file in move read ptr");
-        return -1;
+        status = -1;
     }
-    return 0;
+    sd_runtime_release();
+    return status;
 }
 
 int move_write_pointer(uint8_t num)
 {
+    int status = sd_runtime_acquire();
+    if (status) {
+        LOG_ERR("Failed to prepare SD card for move_write_pointer (%d)", status);
+        return status;
+    }
+
     char *write_ptr = generate_new_audio_header(num);
     if (write_ptr == NULL) {
+        sd_runtime_release();
         return -1;
     }
     snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, write_ptr);
@@ -348,53 +526,89 @@ int move_write_pointer(uint8_t num)
     int res = fs_stat(write_buffer, &entry);
     if (res) {
         LOG_ERR("invalid file in move write pointer");
-        return -1;
+        status = -1;
     }
-    return 0;
+    sd_runtime_release();
+    return status;
 }
 
 int read_audio_data(uint8_t *buf, int amount, int offset)
 {
+    int rc = sd_runtime_acquire();
+    if (rc) {
+        return rc;
+    }
+
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
     uint8_t *temp_ptr = buf;
+    bool file_open = false;
 
-    int rc = fs_open(&read_file, read_buffer, FS_O_READ | FS_O_RDWR);
+    rc = fs_open(&read_file, read_buffer, FS_O_READ | FS_O_RDWR);
     if (rc < 0) {
         LOG_ERR("Failed to open file for reading: %d", rc);
-        return rc;
+        goto out;
     }
+    file_open = true;
     rc = fs_seek(&read_file, offset, FS_SEEK_SET);
     if (rc < 0) {
         LOG_ERR("Failed to seek file: %d", rc);
-        fs_close(&read_file);
-        return rc;
+        goto out;
     }
     rc = fs_read(&read_file, temp_ptr, amount);
-    fs_close(&read_file);
+    if (rc < 0) {
+        LOG_ERR("Failed to read audio data: %d", rc);
+    }
 
+out:
+    if (file_open) {
+        fs_close(&read_file);
+    }
+    sd_runtime_release();
     return rc;
 }
 
 int write_to_file(uint8_t *data, uint32_t length)
 {
+    int ret = sd_runtime_acquire();
+    if (ret) {
+        return ret;
+    }
+
     struct fs_file_t write_file;
     fs_file_t_init(&write_file);
     uint8_t *write_ptr = data;
-    int ret = fs_open(&write_file, write_buffer, FS_O_WRITE | FS_O_APPEND);
+    bool file_open = false;
+
+    ret = fs_open(&write_file, write_buffer, FS_O_WRITE | FS_O_APPEND);
     if (ret < 0) {
         LOG_ERR("Failed to open file for writing: %d", ret);
-        return ret;
+        goto out;
     }
+    file_open = true;
     ret = fs_write(&write_file, write_ptr, length);
-    fs_close(&write_file);
+    if (ret < 0) {
+        LOG_ERR("Failed to write audio data: %d", ret);
+    }
+
+out:
+    if (file_open) {
+        fs_close(&write_file);
+    }
+    sd_runtime_release();
     return ret;
 }
 
 int clear_audio_file(uint8_t num)
 {
+    int status = sd_runtime_acquire();
+    if (status) {
+        return status;
+    }
+
     char *clear_header = generate_new_audio_header(num);
     if (clear_header == NULL) {
+        sd_runtime_release();
         return -1;
     }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, clear_header);
@@ -402,28 +616,38 @@ int clear_audio_file(uint8_t num)
     int res = fs_unlink(current_full_path);
     if (res) {
         LOG_ERR("error deleting file");
-        return -1;
+        status = -1;
+        goto out;
     }
 
     char *create_file_header = generate_new_audio_header(num);
     if (create_file_header == NULL) {
-        return -1;
+        status = -1;
+        goto out;
     }
     k_msleep(10);
     res = create_file(create_file_header);
     k_free(create_file_header);
     if (res) {
         LOG_ERR("error creating file");
-        return -1;
+        status = -1;
     }
 
-    return 0;
+out:
+    sd_runtime_release();
+    return status;
 }
 
 static int delete_audio_file(uint8_t num)
 {
+    int status = sd_runtime_acquire();
+    if (status) {
+        return status;
+    }
+
     char *ptr = generate_new_audio_header(num);
     if (ptr == NULL) {
+        sd_runtime_release();
         return -1;
     }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
@@ -431,15 +655,21 @@ static int delete_audio_file(uint8_t num)
     int res = fs_unlink(current_full_path);
     if (res) {
         LOG_PRINTK("error deleting file in delete\n");
-        return -1;
+        status = -1;
     }
-
-    return 0;
+    sd_runtime_release();
+    return status;
 }
 
 int clear_audio_directory(void)
 {
+    int status = sd_runtime_acquire();
+    if (status) {
+        return status;
+    }
+
     if (file_count == 1) {
+        sd_runtime_release();
         return 0;
     }
 
@@ -449,90 +679,133 @@ int clear_audio_directory(void)
         k_msleep(10);
         if (res) {
             LOG_PRINTK("error on %d\n", i);
-            return -1;
+            status = -1;
+            goto out;
         }
     }
     res = fs_unlink("/SD:/audio");
     if (res) {
         LOG_ERR("error deleting directory");
-        return -1;
+        status = -1;
+        goto out;
     }
     res = fs_mkdir("/SD:/audio");
     if (res) {
         LOG_ERR("failed to make directory");
-        return -1;
+        status = -1;
+        goto out;
     }
     res = create_file("audio/a01.txt");
     if (res) {
         LOG_ERR("failed to make new file in directory files");
-        return -1;
+        status = -1;
+        goto out;
     }
     LOG_INF("done with clearing");
 
     file_count = 1;
     move_write_pointer(1);
-    return 0;
+    status = 0;
+
+out:
+    sd_runtime_release();
+    return status;
 }
 
 int save_offset(uint32_t offset)
 {
+    int res = sd_runtime_acquire();
+    if (res) {
+        return res;
+    }
+
     uint8_t buf[4] = {offset & 0xFF, (offset >> 8) & 0xFF, (offset >> 16) & 0xFF, (offset >> 24) & 0xFF};
 
     struct fs_file_t write_file;
     fs_file_t_init(&write_file);
-    int res = fs_open(&write_file, "/SD:/info.txt", FS_O_WRITE | FS_O_CREATE);
+    bool file_open = false;
+
+    res = fs_open(&write_file, "/SD:/info.txt", FS_O_WRITE | FS_O_CREATE);
     if (res) {
         LOG_ERR("error opening file %d", res);
-        return -1;
+        res = -1;
+        goto out;
     }
+    file_open = true;
     res = fs_write(&write_file, &buf, 4);
     if (res < 0) {
         LOG_ERR("error writing file %d", res);
-        fs_close(&write_file);
-        return -1;
+        res = -1;
+        goto out;
     }
-    fs_close(&write_file);
-    return 0;
+    res = 0;
+
+out:
+    if (file_open) {
+        fs_close(&write_file);
+    }
+    sd_runtime_release();
+    return res;
 }
 
 int get_offset(void)
 {
+    int rc = sd_runtime_acquire();
+    if (rc) {
+        return rc;
+    }
+
     uint8_t buf[4];
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
-    int rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
+    bool file_open = false;
+
+    rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
     if (rc < 0) {
         LOG_ERR("error opening file %d", rc);
-        return -1;
+        rc = -1;
+        goto out;
     }
+    file_open = true;
     rc = fs_seek(&read_file, 0, FS_SEEK_SET);
     if (rc < 0) {
         LOG_ERR("error seeking file %d", rc);
-        fs_close(&read_file);
-        return -1;
+        rc = -1;
+        goto out;
     }
     rc = fs_read(&read_file, &buf, 4);
     if (rc < 0) {
         LOG_ERR("error reading file %d", rc);
-        fs_close(&read_file);
-        return -1;
+        rc = -1;
+        goto out;
     }
     fs_close(&read_file);
+    file_open = false;
     uint32_t *offset_ptr = (uint32_t *) buf;
     LOG_INF("get offset is %d", offset_ptr[0]);
+    rc = (int) offset_ptr[0];
 
-    return offset_ptr[0];
+out:
+    if (file_open) {
+        fs_close(&read_file);
+    }
+    sd_runtime_release();
+    return rc;
 }
 
 int app_sd_off(void)
 {
-    if (is_mounted) {
-        sd_unmount();
-    } else {
-        sd_enable_power(false);
-        sd_enabled = false;
+    int ret = 0;
+
+    k_mutex_lock(&sd_state_lock, K_FOREVER);
+    k_work_cancel_delayable(&sd_idle_work);
+
+    if (is_mounted || sd_enabled) {
+        ret = sd_unmount();
     }
-    return 0;
+
+    k_mutex_unlock(&sd_state_lock);
+    return ret;
 }
 
 bool is_sd_on(void)

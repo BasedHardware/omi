@@ -85,8 +85,10 @@ bool storage_is_on = false;
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
 
-    storage_is_on = true;
-    if (value == BT_GATT_CCC_NOTIFY) {
+    bool enabled = (value == BT_GATT_CCC_NOTIFY);
+    storage_is_on = enabled;
+
+    if (enabled) {
         LOG_INF("Client subscribed for notifications");
     } else if (value == 0) {
         LOG_INF("Client unsubscribed from notifications");

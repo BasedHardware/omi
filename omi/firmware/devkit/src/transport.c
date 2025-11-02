@@ -612,7 +612,14 @@ static bool push_to_gatt(struct bt_conn *conn)
 }
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
-#define MAX_WRITE_SIZE 440
+#ifdef CONFIG_OMI_STORAGE_WRITE_CHUNKS
+#define STORAGE_WRITE_CHUNK_COUNT CONFIG_OMI_STORAGE_WRITE_CHUNKS
+#else
+#define STORAGE_WRITE_CHUNK_COUNT 1
+#endif
+
+#define STORAGE_CHUNK_BYTES 440
+#define MAX_WRITE_SIZE (STORAGE_CHUNK_BYTES * STORAGE_WRITE_CHUNK_COUNT)
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
@@ -640,10 +647,15 @@ static uint16_t buffer_offset = 0;
 //     return true;
 // }
 // for improving ble bandwidth
-bool write_to_storage(void)
+bool write_to_storage(bool drop_only)
 { // max possible packing
     if (!read_from_tx_queue()) {
         return false;
+    }
+
+    if (drop_only) {
+        buffer_offset = 0;
+        return true;
     }
 
     uint8_t *buffer = tx_buffer + 2;
@@ -731,7 +743,7 @@ void pusher(void)
             if (file_num_array[1] < MAX_STORAGE_BYTES) {
                 k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
                 if (is_sd_on()) {
-                    result = write_to_storage();
+                    result = write_to_storage(false);
                 }
                 k_mutex_unlock(&write_sdcard_mutex);
             }

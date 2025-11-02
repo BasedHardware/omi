@@ -464,6 +464,13 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 #endif
 
     is_connected = true;
+
+#if IS_ENABLED(CONFIG_OMI_ENABLE_OFFLINE_STORAGE) && IS_ENABLED(CONFIG_OMI_STORAGE_SKIP_WHEN_CONNECTED)
+    int sd_ret = app_sd_off();
+    if (sd_ret) {
+        LOG_DBG("SD power-down on connect skipped (%d)", sd_ret);
+    }
+#endif
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
@@ -711,7 +718,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
-#define MAX_WRITE_SIZE 440
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void)
@@ -739,15 +745,30 @@ static uint16_t buffer_offset = 0;
 // }
 // for improving ble bandwidth
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+#ifdef CONFIG_OMI_STORAGE_WRITE_CHUNKS
+#define STORAGE_WRITE_CHUNK_COUNT CONFIG_OMI_STORAGE_WRITE_CHUNKS
+#else
+#define STORAGE_WRITE_CHUNK_COUNT 1
+#endif
+
+#define STORAGE_CHUNK_BYTES 440
+#define MAX_WRITE_SIZE (STORAGE_CHUNK_BYTES * STORAGE_WRITE_CHUNK_COUNT)
+
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-bool write_to_storage(void)
+bool write_to_storage(bool drop_only)
 { // max possible packing
     if (!read_from_tx_queue()) {
         return false;
     }
 
+    if (drop_only) {
+        buffer_offset = 0;
+        return true;
+    }
+
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
+    bool persisted = false;
 
     // buffer_offset = buffer_offset+amount_to_fill;
     // check if adding the new packet will cause a overflow
@@ -755,7 +776,12 @@ bool write_to_storage(void)
 
         storage_temp_data[buffer_offset] = tx_buffer_size;
         uint8_t *write_ptr = storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+        int rc = write_to_file(write_ptr, MAX_WRITE_SIZE);
+        if (rc >= 0) {
+            persisted = true;
+        } else {
+            LOG_ERR("Failed to flush offline storage chunk: %d", rc);
+        }
 
         buffer_offset = packet_size;
         storage_temp_data[0] = tx_buffer_size;
@@ -767,14 +793,21 @@ bool write_to_storage(void)
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
         buffer_offset = 0;
         uint8_t *write_ptr = (uint8_t *) storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+        int rc = write_to_file(write_ptr, MAX_WRITE_SIZE);
+        if (rc >= 0) {
+            persisted = true;
+        } else {
+            LOG_ERR("Failed to flush aligned offline storage chunk: %d", rc);
+        }
     } else {
         storage_temp_data[buffer_offset] = tx_buffer_size;
         memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
         buffer_offset = buffer_offset + packet_size;
     }
 
-    monitor_inc_storage_write();
+    if (persisted) {
+        monitor_inc_storage_write();
+    }
     return true;
 }
 #endif
@@ -864,22 +897,32 @@ void pusher(void)
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
         if (!valid && !storage_is_on) {
-            bool result = false;
-            if (file_num_array[1] < MAX_STORAGE_BYTES) {
-                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-                if (is_sd_on()) {
-                    result = write_to_storage();
-                }
-                k_mutex_unlock(&write_sdcard_mutex);
+            bool drop_only = false;
+#if IS_ENABLED(CONFIG_OMI_STORAGE_SKIP_WHEN_CONNECTED)
+            drop_only = (conn != NULL);
+#endif
+            if (!drop_only && file_num_array[1] >= MAX_STORAGE_BYTES) {
+                drop_only = true;
             }
-            if (result) {
+
+            bool result = false;
+            k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+            result = write_to_storage(drop_only);
+            k_mutex_unlock(&write_sdcard_mutex);
+
+#if IS_ENABLED(CONFIG_OMI_STORAGE_SKIP_WHEN_CONNECTED)
+            if (drop_only && conn != NULL && result && is_sd_on()) {
+                app_sd_off();
+            }
+#endif
+
+            if (!drop_only && result) {
                 heartbeat_count++;
                 if (heartbeat_count == 255) {
                     update_file_size();
                     heartbeat_count = 0;
                     LOG_PRINTK("drawing\n");
                 }
-            } else {
             }
         }
 #endif
