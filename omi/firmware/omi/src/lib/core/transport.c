@@ -3,6 +3,7 @@
 #include <hal/nrf_power.h>
 #include <math.h> // For float conversion in logs
 #include <stdint.h>
+#include <string.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
@@ -93,6 +94,17 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
                                               void *buf,
                                               uint16_t len,
                                               uint16_t offset);
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags);
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
@@ -159,6 +171,8 @@ static struct bt_uuid_128 settings_dim_ratio_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10011, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_device_name_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -173,6 +187,12 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            settings_mic_gain_read_handler,
                            settings_mic_gain_write_handler,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&settings_device_name_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_device_name_read_handler,
+                           settings_device_name_write_handler,
                            NULL),
 };
 
@@ -334,6 +354,48 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
     uint8_t current_gain = app_settings_get_mic_gain();
     LOG_INF("Reading mic gain: %u", current_gain);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_gain, sizeof(current_gain));
+}
+
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags)
+{
+    if (len == 0 || len > 8) {
+        LOG_WRN("Invalid length for device name write: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    char name_buffer[9] = {0};
+    memcpy(name_buffer, buf, len);
+    name_buffer[len] = '\0';
+
+    LOG_INF("Received new device name: %s", name_buffer);
+    int err = app_settings_save_device_name(name_buffer);
+    if (err) {
+        LOG_ERR("Failed to save device name setting: %d", err);
+    }
+
+    return len;
+}
+
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset)
+{
+    char name_buffer[9] = {0};
+    int err = app_settings_get_device_name(name_buffer, sizeof(name_buffer));
+    if (err) {
+        LOG_ERR("Failed to read device name: %d", err);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+    
+    LOG_INF("Reading device name: %s", name_buffer);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, name_buffer, strlen(name_buffer));
 }
 
 static ssize_t

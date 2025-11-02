@@ -1,6 +1,7 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 /**
