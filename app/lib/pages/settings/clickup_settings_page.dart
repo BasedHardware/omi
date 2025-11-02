@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -101,6 +102,14 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     SharedPreferencesUtil().clickupListId = null;
     SharedPreferencesUtil().clickupListName = null;
 
+    // Save to Firebase
+    await context.read<TaskIntegrationProvider>().saveConnectionDetails('clickup', {
+      'connected': true,
+      'user_id': _clickupService.currentUserId,
+      'team_id': teamId,
+      'team_name': teamName,
+    });
+
     await _loadSpaces(teamId);
   }
 
@@ -118,10 +127,20 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     SharedPreferencesUtil().clickupListId = null;
     SharedPreferencesUtil().clickupListName = null;
 
+    // Save to Firebase
+    await context.read<TaskIntegrationProvider>().saveConnectionDetails('clickup', {
+      'connected': true,
+      'user_id': _clickupService.currentUserId,
+      'team_id': _selectedTeamId,
+      'team_name': SharedPreferencesUtil().clickupTeamName,
+      'space_id': spaceId,
+      'space_name': spaceName,
+    });
+
     await _loadLists(spaceId);
   }
 
-  void _selectList(Map<String, dynamic> list) {
+  void _selectList(Map<String, dynamic> list) async {
     final listId = list['id'].toString();
     final listName = list['name'] as String;
 
@@ -131,6 +150,18 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
 
     SharedPreferencesUtil().clickupListId = listId;
     SharedPreferencesUtil().clickupListName = listName;
+
+    // Save to Firebase
+    await context.read<TaskIntegrationProvider>().saveConnectionDetails('clickup', {
+      'connected': true,
+      'user_id': _clickupService.currentUserId,
+      'team_id': _selectedTeamId,
+      'team_name': SharedPreferencesUtil().clickupTeamName,
+      'space_id': _selectedSpaceId,
+      'space_name': SharedPreferencesUtil().clickupSpaceName,
+      'list_id': listId,
+      'list_name': listName,
+    });
   }
 
   Future<void> _disconnectClickUp() async {
@@ -174,14 +205,21 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
       await _clickupService.disconnect();
 
       if (mounted) {
-        if (SharedPreferencesUtil().selectedTaskIntegration == 'clickup') {
+        // Delete connection from Firebase
+        await context.read<TaskIntegrationProvider>().deleteConnection('clickup');
+
+        // Also clear from task integrations if ClickUp was selected
+        final provider = context.read<TaskIntegrationProvider>();
+        if (provider.selectedApp.key == 'clickup') {
           // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-          final defaultApp = PlatformService.isApple ? 'apple_reminders' : 'google_tasks';
-          SharedPreferencesUtil().selectedTaskIntegration = defaultApp;
-          debugPrint('✓ Task integration disabled: ClickUp - switched to $defaultApp');
+          final defaultApp = PlatformService.isApple
+              ? TaskIntegrationApp.appleReminders
+              : TaskIntegrationApp.googleTasks;
+          await provider.setSelectedApp(defaultApp);
+          debugPrint('✓ Task integration disabled: ClickUp - switched to ${defaultApp.key}');
         }
 
-        context.read<TaskIntegrationProvider>().refresh();
+        provider.refresh();
         Navigator.of(context).pop();
 
         ScaffoldMessenger.of(context).showSnackBar(

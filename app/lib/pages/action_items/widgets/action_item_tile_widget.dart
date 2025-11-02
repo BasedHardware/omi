@@ -3,10 +3,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
@@ -15,6 +17,7 @@ import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:provider/provider.dart';
 
 import 'action_item_form_sheet.dart';
 
@@ -218,16 +221,25 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
   }
 
   Widget _buildTaskExportIcon(BuildContext context) {
-    final selectedTaskIntegration = SharedPreferencesUtil().selectedTaskIntegration;
-    final taskApp = TaskIntegrationApp.values.firstWhere(
-      (app) => app.key == selectedTaskIntegration,
-      orElse: () => TaskIntegrationApp.appleReminders,
-    );
-
-    final isExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
+    // If already exported, show the export platform logo
+    // Otherwise, show the currently selected task app
+    TaskIntegrationApp displayApp;
+    bool isExported = widget.actionItem.exported;
+    
+    if (isExported && widget.actionItem.exportPlatform != null) {
+      // Show the platform it was exported to
+      displayApp = TaskIntegrationApp.values.firstWhere(
+        (app) => app.key == widget.actionItem.exportPlatform,
+        orElse: () => TaskIntegrationApp.appleReminders,
+      );
+    } else {
+      // Show the currently selected app for export
+      final provider = context.watch<TaskIntegrationProvider>();
+      displayApp = provider.selectedApp;
+    }
 
     return GestureDetector(
-      onTap: () => _handleTaskExport(context, taskApp),
+      onTap: isExported ? null : () => _handleTaskExport(context, displayApp),
       child: Container(
         width: 32,
         height: 32,
@@ -238,11 +250,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           alignment: Alignment.center,
           children: [
             // Task app logo or icon
-            taskApp.logoPath != null
+            displayApp.logoPath != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: Image.asset(
-                      taskApp.logoPath!,
+                      displayApp.logoPath!,
                       width: 24,
                       height: 24,
                       fit: BoxFit.contain,
@@ -253,11 +265,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                     height: 24,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(6),
-                      color: taskApp.iconColor.withOpacity(0.2),
+                      color: displayApp.iconColor.withOpacity(0.2),
                     ),
                     child: Icon(
-                      taskApp.icon,
-                      color: taskApp.iconColor,
+                      displayApp.icon,
+                      color: displayApp.iconColor,
                       size: 16,
                     ),
                   ),
@@ -325,6 +337,26 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
     final service = TodoistService();
 
+    // Check if already exported
+    if (widget.actionItem.exported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('Already exported to ${widget.actionItem.exportPlatform ?? "another platform"}'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
     // Check if authenticated
     if (!service.isAuthenticated) {
       if (context.mounted) {
@@ -339,28 +371,6 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
             ),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Check if already exported (using the same set for now)
-    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
-
-    if (isAlreadyExported) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text('Already added to Todoist'),
-              ],
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
           ),
         );
       }
@@ -418,8 +428,14 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       );
 
-      // If successful, update the exported list
+      // If successful, update the action item with export metadata
       if (success) {
+        await updateActionItem(
+          widget.actionItem.id,
+          exported: true,
+          exportDate: DateTime.now(),
+          exportPlatform: 'todoist',
+        );
         widget.onExportedToAppleReminders?.call();
       }
     }
@@ -429,6 +445,26 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     HapticFeedback.mediumImpact();
 
     final service = AsanaService();
+
+    // Check if already exported
+    if (widget.actionItem.exported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('Already exported to ${widget.actionItem.exportPlatform ?? "another platform"}'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
 
     // Check if authenticated
     if (!service.isAuthenticated) {
@@ -444,28 +480,6 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
             ),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Check if already exported (using the same set for now)
-    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
-
-    if (isAlreadyExported) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text('Already added to Asana'),
-              ],
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
           ),
         );
       }
@@ -522,8 +536,14 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       );
 
-      // If successful, update the exported list
+      // If successful, update the action item with export metadata
       if (success) {
+        await updateActionItem(
+          widget.actionItem.id,
+          exported: true,
+          exportDate: DateTime.now(),
+          exportPlatform: 'asana',
+        );
         widget.onExportedToAppleReminders?.call();
       }
     }
@@ -533,6 +553,26 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     HapticFeedback.mediumImpact();
 
     final service = GoogleTasksService();
+
+    // Check if already exported
+    if (widget.actionItem.exported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('Already exported to ${widget.actionItem.exportPlatform ?? "another platform"}'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
 
     // Check if authenticated
     if (!service.isAuthenticated) {
@@ -548,28 +588,6 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
             ),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Check if already exported
-    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
-
-    if (isAlreadyExported) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text('Already added to Google Tasks'),
-              ],
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
           ),
         );
       }
@@ -626,14 +644,20 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       );
 
-      // If successful, update the exported list
+      // If successful, update the action item with export metadata
       if (success) {
+        await updateActionItem(
+          widget.actionItem.id,
+          exported: true,
+          exportDate: DateTime.now(),
+          exportPlatform: 'google_tasks',
+        );
         widget.onExportedToAppleReminders?.call();
       }
     }
   }
 
-  Future<void> _handleClickUpExport(BuildContext context) async {
+  Future<void> _handleClickUpExport(BuildContext context) async{
     HapticFeedback.mediumImpact();
 
     final service = ClickUpService();
@@ -750,8 +774,14 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       );
 
-      // If successful, update the exported list
+      // If successful, update the action item with export metadata
       if (success) {
+        await updateActionItem(
+          widget.actionItem.id,
+          exported: true,
+          exportDate: DateTime.now(),
+          exportPlatform: 'clickup',
+        );
         widget.onExportedToAppleReminders?.call();
       }
     }
@@ -763,22 +793,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     HapticFeedback.mediumImpact();
 
     final service = AppleRemindersService();
-    final isAlreadyExported = widget.exportedToAppleReminders?.contains(widget.actionItem.description) ?? false;
 
-    if (isAlreadyExported) {
-      // Show message that it's already exported
+    // Check if already exported
+    if (widget.actionItem.exported) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text('Already added to Apple Reminders'),
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('Already exported to ${widget.actionItem.exportPlatform ?? "another platform"}'),
               ],
             ),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -863,8 +892,14 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       );
 
-      // If successful, update the exported list
+      // If successful, update the action item with export metadata
       if (success) {
+        await updateActionItem(
+          widget.actionItem.id,
+          exported: true,
+          exportDate: DateTime.now(),
+          exportPlatform: 'apple_reminders',
+        );
         widget.onExportedToAppleReminders?.call();
       }
     }

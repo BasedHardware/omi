@@ -1,20 +1,17 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class TodoistService {
   static const String _authUrl = 'https://todoist.com/oauth/authorize';
-  static const String _tokenUrl = 'https://todoist.com/oauth/access_token';
   static const String _apiBaseUrl = 'https://api.todoist.com/rest/v2';
 
-  // Note: OAuth redirect URL needs to be configured in Todoist app settings
-  // For production, this should be set to: omi://todoist/callback
-  // and deep linking needs to be implemented to handle the callback
-  // ignore: unused_field
-  static const String _redirectUri = 'omi://todoist/callback';
+  // Todoist OAuth redirect URL (backend handles token exchange)
+  static final String _redirectUri = '${Env.apiBaseUrl}v2/integrations/todoist/callback';
 
   static final TodoistService _instance = TodoistService._internal();
   factory TodoistService() => _instance;
@@ -35,11 +32,11 @@ class TodoistService {
         return false;
       }
 
-      // Note: Todoist doesn't require redirect_uri in the auth URL if it's configured in the app console
       final authUri = Uri.parse(_authUrl).replace(queryParameters: {
         'client_id': clientId,
         'scope': 'data:read_write',
         'state': _generateState(),
+        'redirect_uri': _redirectUri,
       });
 
       debugPrint('Opening Todoist auth URL: $authUri');
@@ -62,40 +59,25 @@ class TodoistService {
     }
   }
 
-  /// Handle OAuth callback and exchange code for access token
-  Future<bool> handleCallback(String code) async {
+  /// Handle OAuth callback and receive token from backend
+  Future<bool> handleCallback(String accessToken) async {
     try {
-      final clientId = Env.todoistClientId;
-      final clientSecret = Env.todoistClientSecret;
-
-      if (clientId == null || clientSecret == null) {
-        debugPrint('Todoist credentials not configured');
+      if (accessToken.isEmpty) {
+        debugPrint('Todoist: No access token received');
         return false;
       }
 
-      final response = await http.post(
-        Uri.parse(_tokenUrl),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'code': code,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final accessToken = data['access_token'] as String?;
-
-        if (accessToken != null) {
-          SharedPreferencesUtil().todoistAccessToken = accessToken;
-          debugPrint('Todoist authentication successful');
-          return true;
-        }
-      }
-
-      debugPrint('Failed to exchange code for token: ${response.statusCode} ${response.body}');
-      return false;
+      // Save token
+      SharedPreferencesUtil().todoistAccessToken = accessToken;
+      debugPrint('Todoist authentication successful');
+      
+      // Save connection to Firebase
+      await saveTaskIntegration('todoist', {
+        'connected': true,
+      });
+      debugPrint('✓ Saved Todoist connection to Firebase');
+      
+      return true;
     } catch (e) {
       debugPrint('Error handling Todoist callback: $e');
       return false;
@@ -153,6 +135,14 @@ class TodoistService {
   /// Disconnect from Todoist (clear stored token)
   Future<void> disconnect() async {
     SharedPreferencesUtil().todoistAccessToken = null;
+    
+    // Remove connection from Firebase
+    try {
+      await deleteTaskIntegration('todoist');
+      debugPrint('✓ Removed Todoist connection from Firebase');
+    } catch (e) {
+      debugPrint('Error removing Todoist connection from Firebase: $e');
+    }
   }
 
   /// Generate random state for OAuth

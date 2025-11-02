@@ -64,23 +64,17 @@ final class ProdEnv implements EnvFields {
   @EnviedField(varName: 'ASANA_CLIENT_ID', obfuscate: true)
   final String? asanaClientId = _ProdEnv.asanaClientId;
 
-  @override
-  @EnviedField(varName: 'ASANA_CLIENT_SECRET', obfuscate: true)
-  final String? asanaClientSecret = _ProdEnv.asanaClientSecret;
+  // Asana client secret moved to backend environment
 
   @override
   @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_ID', obfuscate: true)
   final String? googleTasksClientId = _ProdEnv.googleTasksClientId;
 
-  @override
-  @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_SECRET', obfuscate: true)
-  final String? googleTasksClientSecret = _ProdEnv.googleTasksClientSecret;
+  // Google Tasks client secret moved to backend environment
 
   @override
   @EnviedField(varName: 'CLICKUP_CLIENT_ID', obfuscate: true)
   final String? clickupClientId = _ProdEnv.clickupClientId;
 
-  @override
-  @EnviedField(varName: 'CLICKUP_CLIENT_SECRET', obfuscate: true)
-  final String? clickupClientSecret = _ProdEnv.clickupClientSecret;
+  // ClickUp client secret moved to backend environment
 }

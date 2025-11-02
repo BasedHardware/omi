@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -81,10 +82,18 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
     SharedPreferencesUtil().asanaProjectGid = null;
     SharedPreferencesUtil().asanaProjectName = null;
 
+    // Save to Firebase
+    await context.read<TaskIntegrationProvider>().saveConnectionDetails('asana', {
+      'connected': true,
+      'user_gid': _asanaService.currentUserGid,
+      'workspace_gid': workspaceGid,
+      'workspace_name': workspaceName,
+    });
+
     await _loadProjects(workspaceGid);
   }
 
-  void _selectProject(Map<String, dynamic> project) {
+  void _selectProject(Map<String, dynamic> project) async {
     final projectGid = project['gid'] as String;
     final projectName = project['name'] as String;
 
@@ -94,15 +103,33 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
 
     SharedPreferencesUtil().asanaProjectGid = projectGid;
     SharedPreferencesUtil().asanaProjectName = projectName;
+
+    // Save to Firebase
+    await context.read<TaskIntegrationProvider>().saveConnectionDetails('asana', {
+      'connected': true,
+      'user_gid': _asanaService.currentUserGid,
+      'workspace_gid': _selectedWorkspaceGid,
+      'workspace_name': SharedPreferencesUtil().asanaWorkspaceName,
+      'project_gid': projectGid,
+      'project_name': projectName,
+    });
   }
 
-  void _clearProject() {
+  void _clearProject() async {
     setState(() {
       _selectedProjectGid = null;
     });
 
     SharedPreferencesUtil().asanaProjectGid = null;
     SharedPreferencesUtil().asanaProjectName = null;
+
+    // Save to Firebase
+    await context.read<TaskIntegrationProvider>().saveConnectionDetails('asana', {
+      'connected': true,
+      'user_gid': _asanaService.currentUserGid,
+      'workspace_gid': _selectedWorkspaceGid,
+      'workspace_name': SharedPreferencesUtil().asanaWorkspaceName,
+    });
   }
 
   Future<void> _disconnectAsana() async {
@@ -146,16 +173,22 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       await _asanaService.disconnect();
 
       if (mounted) {
+        // Delete connection from Firebase
+        await context.read<TaskIntegrationProvider>().deleteConnection('asana');
+
         // Also clear from task integrations if Asana was selected
-        if (SharedPreferencesUtil().selectedTaskIntegration == 'asana') {
+        final provider = context.read<TaskIntegrationProvider>();
+        if (provider.selectedApp.key == 'asana') {
           // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-          final defaultApp = PlatformService.isApple ? 'apple_reminders' : 'google_tasks';
-          SharedPreferencesUtil().selectedTaskIntegration = defaultApp;
-          debugPrint('✓ Task integration disabled: Asana - switched to $defaultApp');
+          final defaultApp = PlatformService.isApple
+              ? TaskIntegrationApp.appleReminders
+              : TaskIntegrationApp.googleTasks;
+          await provider.setSelectedApp(defaultApp);
+          debugPrint('✓ Task integration disabled: Asana - switched to ${defaultApp.key}');
         }
 
         // Trigger provider refresh to update UI
-        context.read<TaskIntegrationProvider>().refresh();
+        provider.refresh();
 
         Navigator.of(context).pop(); // Go back to task integrations
 

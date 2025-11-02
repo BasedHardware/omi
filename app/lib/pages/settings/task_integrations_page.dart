@@ -139,21 +139,42 @@ class TaskIntegrationsPage extends StatefulWidget {
   State<TaskIntegrationsPage> createState() => _TaskIntegrationsPageState();
 }
 
-class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
-  late TaskIntegrationApp _selectedApp;
+class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with WidgetsBindingObserver {
+  TaskIntegrationApp _selectedApp = PlatformService.isApple 
+      ? TaskIntegrationApp.appleReminders 
+      : TaskIntegrationApp.googleTasks;
 
   @override
   void initState() {
     super.initState();
-    _loadSelectedApp();
+    WidgetsBinding.instance.addObserver(this);
+    // Schedule loading for after the first frame to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadFromBackend();
+    });
   }
 
-  void _loadSelectedApp() {
-    final selectedKey = SharedPreferencesUtil().selectedTaskIntegration;
-    _selectedApp = TaskIntegrationApp.values.firstWhere(
-      (app) => app.key == selectedKey,
-      orElse: () => PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
-    );
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh when app comes back from background (e.g., after OAuth)
+      _loadFromBackend();
+    }
+  }
+
+  Future<void> _loadFromBackend() async {
+    await context.read<TaskIntegrationProvider>().loadFromBackend();
+    if (mounted) {
+      setState(() {
+        _selectedApp = context.read<TaskIntegrationProvider>().selectedApp;
+      });
+    }
   }
 
   bool _shouldShowSettingsIcon() {
@@ -204,7 +225,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
             setState(() {
               _selectedApp = app;
             });
-            SharedPreferencesUtil().selectedTaskIntegration = app.key;
+            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            // Note: OAuth callback will save connection to Firebase
+            // Provider will refresh when user returns to this page
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             if (mounted) {
@@ -241,7 +264,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
             setState(() {
               _selectedApp = app;
             });
-            SharedPreferencesUtil().selectedTaskIntegration = app.key;
+            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             if (mounted) {
@@ -278,7 +301,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
             setState(() {
               _selectedApp = app;
             });
-            SharedPreferencesUtil().selectedTaskIntegration = app.key;
+            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             if (mounted) {
@@ -315,7 +338,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
             setState(() {
               _selectedApp = app;
             });
-            SharedPreferencesUtil().selectedTaskIntegration = app.key;
+            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             if (mounted) {
@@ -336,7 +359,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
     setState(() {
       _selectedApp = app;
     });
-    SharedPreferencesUtil().selectedTaskIntegration = app.key;
+    
+    // Save to backend via provider
+    await context.read<TaskIntegrationProvider>().setSelectedApp(app);
 
     // Log app selection
     debugPrint('✓ Task integration selected: ${app.displayName} (${app.key})');

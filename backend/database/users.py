@@ -407,3 +407,121 @@ def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
 
     # Fallback to default basic subscription
     return get_default_basic_subscription()
+
+
+# **************************************
+# ******** Task Integrations ***********
+# **************************************
+
+
+def get_task_integrations(uid: str) -> dict:
+    """
+    Get all task integration connections for a user.
+
+    Args:
+        uid: User ID
+
+    Returns:
+        Dictionary with app_key as keys and connection details as values
+    """
+    user_ref = db.collection('users').document(uid)
+    integrations_ref = user_ref.collection('task_integrations')
+
+    integrations = {}
+    for doc in integrations_ref.stream():
+        integrations[doc.id] = doc.to_dict()
+
+    return integrations
+
+
+def get_task_integration(uid: str, app_key: str) -> Optional[dict]:
+    """
+    Get a specific task integration connection.
+
+    Args:
+        uid: User ID
+        app_key: Task integration app key (e.g., 'asana', 'todoist')
+
+    Returns:
+        Connection details or None if not found
+    """
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('task_integrations').document(app_key)
+    doc = integration_ref.get()
+
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
+
+def set_task_integration(uid: str, app_key: str, data: dict) -> None:
+    """
+    Save or update a task integration connection.
+
+    Args:
+        uid: User ID
+        app_key: Task integration app key (e.g., 'asana', 'todoist')
+        data: Connection details to save
+    """
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('task_integrations').document(app_key)
+
+    # Add timestamp
+    data['updated_at'] = datetime.now(timezone.utc)
+    if not integration_ref.get().exists:
+        data['created_at'] = datetime.now(timezone.utc)
+
+    integration_ref.set(data, merge=True)
+
+
+def delete_task_integration(uid: str, app_key: str) -> bool:
+    """
+    Delete a task integration connection.
+
+    Args:
+        uid: User ID
+        app_key: Task integration app key
+
+    Returns:
+        True if deleted, False if not found
+    """
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('task_integrations').document(app_key)
+
+    if not integration_ref.get().exists:
+        return False
+
+    integration_ref.delete()
+    return True
+
+
+def get_default_task_integration(uid: str) -> Optional[str]:
+    """
+    Get the user's default task integration app.
+
+    Args:
+        uid: User ID
+
+    Returns:
+        App key of default integration or None
+    """
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('default_task_integration')
+
+    return None
+
+
+def set_default_task_integration(uid: str, app_key: str) -> None:
+    """
+    Set the user's default task integration app.
+
+    Args:
+        uid: User ID
+        app_key: Task integration app key to set as default
+    """
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'default_task_integration': app_key}, merge=True)

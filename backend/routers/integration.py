@@ -553,6 +553,199 @@ async def send_notification_via_integration(
 
 
 @router.get(
+    '/v2/integrations/todoist/callback',
+    response_class=HTMLResponse,
+    tags=['integration', 'oauth'],
+)
+async def todoist_oauth_callback(
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+):
+    """
+    OAuth callback endpoint for Todoist integration.
+    Exchanges the authorization code for tokens and redirects back to the app with tokens.
+    """
+    if not code:
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Todoist Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #E44332 0%, #DB4035 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Authentication Error</h2>
+                    <p>No authorization code received from Todoist.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=400,
+        )
+
+    # Exchange code for tokens using backend credentials
+    import requests
+    import os
+
+    client_id = os.getenv('TODOIST_CLIENT_ID')
+    client_secret = os.getenv('TODOIST_CLIENT_SECRET')
+
+    if not all([client_id, client_secret]):
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Todoist Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #E44332 0%, #DB4035 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Configuration Error</h2>
+                    <p>Todoist OAuth not properly configured.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=500,
+        )
+
+    try:
+        # Exchange code for tokens
+        token_response = requests.post(
+            'https://todoist.com/oauth/access_token',
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            data={
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'code': code,
+            },
+        )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            access_token = token_data.get('access_token', '')
+
+            # Create deep link with token
+            from urllib.parse import quote
+
+            deep_link = f'omi://todoist/callback?access_token={quote(access_token)}&state={state or ""}'
+        else:
+            # Failed to exchange, return error
+            deep_link = f'omi://todoist/callback?error=token_exchange_failed&state={state or ""}'
+    except Exception as e:
+        print(f'Error exchanging Todoist code: {e}')
+        deep_link = f'omi://todoist/callback?error=server_error&state={state or ""}'
+
+    # Return HTML that redirects to the app
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Todoist Auth - Omi</title>
+        <meta charset="UTF-8">
+        <meta http-equiv="refresh" content="1;url={deep_link}">
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: linear-gradient(135deg, #E44332 0%, #DB4035 100%);
+                color: white;
+            }}
+            .container {{
+                text-align: center;
+                padding: 2rem;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+            }}
+            h2 {{ margin: 0 0 1rem 0; }}
+            .spinner {{
+                border: 3px solid rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                border-top: 3px solid white;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 20px auto;
+            }}
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+            a {{
+                color: white;
+                text-decoration: underline;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>✓ Authentication Successful!</h2>
+            <div class="spinner"></div>
+            <p>Redirecting back to Omi...</p>
+            <p style="font-size: 0.9em; margin-top: 20px;">
+                If you're not redirected automatically, 
+                <a href="{deep_link}">click here</a>
+            </p>
+        </div>
+        <script>
+            setTimeout(function() {{
+                window.location.href = '{deep_link}';
+            }}, 1000);
+        </script>
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(content=html_content)
+
+
+@router.get(
     '/v2/integrations/asana/callback',
     response_class=HTMLResponse,
     tags=['integration', 'oauth'],
@@ -563,7 +756,7 @@ async def asana_oauth_callback(
 ):
     """
     OAuth callback endpoint for Asana integration.
-    Receives the authorization code from Asana and redirects back to the app.
+    Exchanges the authorization code for tokens and redirects back to the app with tokens.
     """
     if not code:
         return HTMLResponse(
@@ -604,8 +797,84 @@ async def asana_oauth_callback(
             status_code=400,
         )
 
-    # Create deep link back to the app
-    deep_link = f'omi://asana/callback?code={code}&state={state or ""}'
+    # Exchange code for tokens using backend credentials
+    import requests
+    import os
+
+    client_id = os.getenv('ASANA_CLIENT_ID')
+    client_secret = os.getenv('ASANA_CLIENT_SECRET')
+    base_url = os.getenv('BASE_API_URL')
+
+    if not all([client_id, client_secret, base_url]):
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Asana Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Configuration Error</h2>
+                    <p>Asana OAuth not properly configured.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=500,
+        )
+
+    redirect_uri = f'{base_url}v2/integrations/asana/callback'
+
+    try:
+        # Exchange code for tokens
+        token_response = requests.post(
+            'https://app.asana.com/-/oauth_token',
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            data={
+                'grant_type': 'authorization_code',
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri,
+                'code': code,
+            },
+        )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            access_token = token_data.get('access_token', '')
+            refresh_token = token_data.get('refresh_token', '')
+
+            # Create deep link with tokens
+            from urllib.parse import quote
+
+            deep_link = f'omi://asana/callback?access_token={quote(access_token)}&refresh_token={quote(refresh_token)}&state={state or ""}'
+        else:
+            # Failed to exchange, return error
+            deep_link = f'omi://asana/callback?error=token_exchange_failed&state={state or ""}'
+    except Exception as e:
+        print(f'Error exchanging Asana code: {e}')
+        deep_link = f'omi://asana/callback?error=server_error&state={state or ""}'
 
     # Return HTML that redirects to the app
     html_content = f"""
@@ -686,7 +955,7 @@ async def clickup_oauth_callback(
 ):
     """
     OAuth callback endpoint for ClickUp integration.
-    Receives the authorization code from ClickUp and redirects back to the app.
+    Exchanges the authorization code for tokens and redirects back to the app with tokens.
     """
     if not code:
         return HTMLResponse(
@@ -727,8 +996,81 @@ async def clickup_oauth_callback(
             status_code=400,
         )
 
-    # Create deep link back to the app
-    deep_link = f'omi://clickup/callback?code={code}&state={state or ""}'
+    # Exchange code for tokens using backend credentials
+    import requests
+    import os
+    import json as json_module
+
+    client_id = os.getenv('CLICKUP_CLIENT_ID')
+    client_secret = os.getenv('CLICKUP_CLIENT_SECRET')
+
+    if not all([client_id, client_secret]):
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>ClickUp Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #7B68EE 0%, #9B59B6 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Configuration Error</h2>
+                    <p>ClickUp OAuth not properly configured.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=500,
+        )
+
+    try:
+        # Exchange code for tokens
+        token_response = requests.post(
+            'https://api.clickup.com/api/v2/oauth/token',
+            headers={'Content-Type': 'application/json'},
+            data=json_module.dumps(
+                {
+                    'client_id': client_id,
+                    'client_secret': client_secret,
+                    'code': code,
+                }
+            ),
+        )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            access_token = token_data.get('access_token', '')
+
+            # Create deep link with token
+            from urllib.parse import quote
+
+            deep_link = f'omi://clickup/callback?access_token={quote(access_token)}&state={state or ""}'
+        else:
+            # Failed to exchange, return error
+            deep_link = f'omi://clickup/callback?error=token_exchange_failed&state={state or ""}'
+    except Exception as e:
+        print(f'Error exchanging ClickUp code: {e}')
+        deep_link = f'omi://clickup/callback?error=server_error&state={state or ""}'
 
     # Return HTML that redirects to the app
     html_content = f"""
@@ -809,7 +1151,7 @@ async def google_tasks_oauth_callback(
 ):
     """
     OAuth callback endpoint for Google Tasks integration.
-    Receives the authorization code from Google and redirects back to the app.
+    Exchanges the authorization code for tokens and redirects back to the app with tokens.
     """
     if not code:
         return HTMLResponse(
@@ -850,8 +1192,84 @@ async def google_tasks_oauth_callback(
             status_code=400,
         )
 
-    # Create deep link back to the app
-    deep_link = f'omi://google-tasks/callback?code={code}&state={state or ""}'
+    # Exchange code for tokens using backend credentials
+    import requests
+    import os
+
+    client_id = os.getenv('GOOGLE_TASKS_CLIENT_ID')
+    client_secret = os.getenv('GOOGLE_TASKS_CLIENT_SECRET')
+    base_url = os.getenv('BASE_API_URL')
+
+    if not all([client_id, client_secret, base_url]):
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Google Tasks Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #4285F4 0%, #34A853 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Configuration Error</h2>
+                    <p>Google Tasks OAuth not properly configured.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=500,
+        )
+
+    redirect_uri = f'{base_url}v2/integrations/google-tasks/callback'
+
+    try:
+        # Exchange code for tokens
+        token_response = requests.post(
+            'https://oauth2.googleapis.com/token',
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            data={
+                'code': code,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri,
+                'grant_type': 'authorization_code',
+            },
+        )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            access_token = token_data.get('access_token', '')
+            refresh_token = token_data.get('refresh_token', '')
+
+            # Create deep link with tokens
+            from urllib.parse import quote
+
+            deep_link = f'omi://google-tasks/callback?access_token={quote(access_token)}&refresh_token={quote(refresh_token)}&state={state or ""}'
+        else:
+            # Failed to exchange, return error
+            deep_link = f'omi://google-tasks/callback?error=token_exchange_failed&state={state or ""}'
+    except Exception as e:
+        print(f'Error exchanging Google Tasks code: {e}')
+        deep_link = f'omi://google-tasks/callback?error=server_error&state={state or ""}'
 
     # Return HTML that redirects to the app
     html_content = f"""
@@ -870,129 +1288,6 @@ async def google_tasks_oauth_callback(
                 height: 100vh;
                 margin: 0;
                 background: linear-gradient(135deg, #4285F4 0%, #34A853 100%);
-                color: white;
-            }}
-            .container {{
-                text-align: center;
-                padding: 2rem;
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 20px;
-                backdrop-filter: blur(10px);
-            }}
-            h2 {{ margin: 0 0 1rem 0; }}
-            .spinner {{
-                border: 3px solid rgba(255, 255, 255, 0.3);
-                border-radius: 50%;
-                border-top: 3px solid white;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-                margin: 20px auto;
-            }}
-            @keyframes spin {{
-                0% {{ transform: rotate(0deg); }}
-                100% {{ transform: rotate(360deg); }}
-            }}
-            a {{
-                color: white;
-                text-decoration: underline;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>✓ Authentication Successful!</h2>
-            <div class="spinner"></div>
-            <p>Redirecting back to Omi...</p>
-            <p style="font-size: 0.9em; margin-top: 20px;">
-                If you're not redirected automatically, 
-                <a href="{deep_link}">click here</a>
-            </p>
-        </div>
-        <script>
-            setTimeout(function() {{
-                window.location.href = '{deep_link}';
-            }}, 1000);
-        </script>
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(content=html_content)
-
-
-@router.get(
-    '/v2/integrations/clickup/callback',
-    response_class=HTMLResponse,
-    tags=['integration', 'oauth'],
-)
-async def clickup_oauth_callback(
-    code: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
-):
-    """
-    OAuth callback endpoint for ClickUp integration.
-    Receives the authorization code from ClickUp and redirects back to the app.
-    """
-    if not code:
-        return HTMLResponse(
-            content="""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>ClickUp Auth Error - Omi</title>
-                <meta charset="UTF-8">
-                <style>
-                    body {
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        height: 100vh;
-                        margin: 0;
-                        background: linear-gradient(135deg, #7B68EE 0%, #9B59B6 100%);
-                        color: white;
-                    }
-                    .container {
-                        text-align: center;
-                        padding: 2rem;
-                        background: rgba(255, 255, 255, 0.1);
-                        border-radius: 20px;
-                        backdrop-filter: blur(10px);
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h2>❌ Authentication Error</h2>
-                    <p>No authorization code received from ClickUp.</p>
-                </div>
-            </body>
-            </html>
-            """,
-            status_code=400,
-        )
-
-    # Create deep link back to the app
-    deep_link = f'omi://clickup/callback?code={code}&state={state or ""}'
-
-    # Return HTML that redirects to the app
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>ClickUp Auth - Omi</title>
-        <meta charset="UTF-8">
-        <meta http-equiv="refresh" content="1;url={deep_link}">
-        <style>
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                background: linear-gradient(135deg, #7B68EE 0%, #9B59B6 100%);
                 color: white;
             }}
             .container {{

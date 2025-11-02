@@ -64,48 +64,78 @@ class _AppShellState extends State<AppShell> {
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback
-      final code = uri.queryParameters['code'];
-      if (code != null) {
-        debugPrint('Received Todoist OAuth code: ${code.substring(0, 10)}...');
-        _handleTodoistCallback(code);
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('Todoist OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to Todoist');
+        return;
+      }
+      
+      final accessToken = uri.queryParameters['access_token'];
+      if (accessToken != null) {
+        debugPrint('Received Todoist OAuth token');
+        _handleTodoistCallback(accessToken);
       } else {
-        debugPrint('Todoist callback received but no code found');
+        debugPrint('Todoist callback received but no token found');
       }
     } else if (uri.host == 'asana' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Asana OAuth callback
-      final code = uri.queryParameters['code'];
-      if (code != null) {
-        debugPrint('Received Asana OAuth code: ${code.substring(0, 10)}...');
-        _handleAsanaCallback(code);
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('Asana OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to Asana');
+        return;
+      }
+      
+      final accessToken = uri.queryParameters['access_token'];
+      final refreshToken = uri.queryParameters['refresh_token'];
+      if (accessToken != null) {
+        debugPrint('Received Asana OAuth tokens');
+        _handleAsanaCallback(accessToken, refreshToken);
       } else {
-        debugPrint('Asana callback received but no code found');
+        debugPrint('Asana callback received but no token found');
       }
     } else if (uri.host == 'google-tasks' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Google Tasks OAuth callback
-      final code = uri.queryParameters['code'];
-      if (code != null) {
-        debugPrint('Received Google Tasks OAuth code: ${code.substring(0, 10)}...');
-        _handleGoogleTasksCallback(code);
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('Google Tasks OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to Google Tasks');
+        return;
+      }
+      
+      final accessToken = uri.queryParameters['access_token'];
+      final refreshToken = uri.queryParameters['refresh_token'];
+      if (accessToken != null) {
+        debugPrint('Received Google Tasks OAuth tokens');
+        _handleGoogleTasksCallback(accessToken, refreshToken);
       } else {
-        debugPrint('Google Tasks callback received but no code found');
+        debugPrint('Google Tasks callback received but no token found');
       }
     } else if (uri.host == 'clickup' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle ClickUp OAuth callback
-      final code = uri.queryParameters['code'];
-      if (code != null) {
-        debugPrint('Received ClickUp OAuth code: ${code.substring(0, 10)}...');
-        _handleClickUpCallback(code);
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('ClickUp OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to ClickUp');
+        return;
+      }
+      
+      final accessToken = uri.queryParameters['access_token'];
+      if (accessToken != null) {
+        debugPrint('Received ClickUp OAuth token');
+        _handleClickUpCallback(accessToken);
       } else {
-        debugPrint('ClickUp callback received but no code found');
+        debugPrint('ClickUp callback received but no token found');
       }
     } else {
       debugPrint('Unknown link: $uri');
     }
   }
 
-  Future<void> _handleTodoistCallback(String code) async {
+  Future<void> _handleTodoistCallback(String accessToken) async {
     final todoistService = TodoistService();
-    final success = await todoistService.handleCallback(code);
+    final success = await todoistService.handleCallback(accessToken);
 
     if (!mounted) return;
 
@@ -122,9 +152,9 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleAsanaCallback(String code) async {
+  Future<void> _handleAsanaCallback(String accessToken, String? refreshToken) async {
     final asanaService = AsanaService();
-    final success = await asanaService.handleCallback(code);
+    final success = await asanaService.handleCallback(accessToken, refreshToken);
 
     if (!mounted) return;
 
@@ -141,9 +171,9 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleGoogleTasksCallback(String code) async {
+  Future<void> _handleGoogleTasksCallback(String accessToken, String? refreshToken) async {
     final googleTasksService = GoogleTasksService();
-    final success = await googleTasksService.handleCallback(code);
+    final success = await googleTasksService.handleCallback(accessToken, refreshToken);
 
     if (!mounted) return;
 
@@ -160,9 +190,9 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleClickUpCallback(String code) async {
+  Future<void> _handleClickUpCallback(String accessToken) async {
     final clickupService = ClickUpService();
-    final success = await clickupService.handleCallback(code);
+    final success = await clickupService.handleCallback(accessToken);
 
     if (!mounted) return;
 

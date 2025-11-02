@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -65,54 +66,27 @@ class GoogleTasksService {
     }
   }
 
-  /// Handle OAuth callback and exchange code for access token
-  Future<bool> handleCallback(String code) async {
+  /// Handle OAuth callback and receive tokens from backend
+  Future<bool> handleCallback(String accessToken, String? refreshToken) async {
     try {
-      final clientId = Env.googleTasksClientId;
-      final clientSecret = Env.googleTasksClientSecret;
-
-      if (clientId == null || clientSecret == null) {
-        debugPrint('Google Tasks credentials not configured');
+      if (accessToken.isEmpty) {
+        debugPrint('Google Tasks: No access token received');
         return false;
       }
 
-      final response = await http.post(
-        Uri.parse(_tokenUrl),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'code': code,
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'redirect_uri': _redirectUri,
-          'grant_type': 'authorization_code',
-        },
-      );
-
-      debugPrint('Google Tasks token response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final accessToken = data['access_token'] as String?;
-        final refreshToken = data['refresh_token'] as String?;
-
-        if (accessToken != null) {
-          await SharedPreferencesUtil().saveString('googleTasksAccessToken', accessToken);
-          if (refreshToken != null) {
-            await SharedPreferencesUtil().saveString('googleTasksRefreshToken', refreshToken);
-          }
-
-          debugPrint('✓ Google Tasks tokens saved');
-
-          // Fetch and store default task list
-          await _fetchAndStoreDefaultTaskList();
-
-          debugPrint('✓ Google Tasks authentication successful');
-          return true;
-        }
+      // Save tokens
+      await SharedPreferencesUtil().saveString('googleTasksAccessToken', accessToken);
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await SharedPreferencesUtil().saveString('googleTasksRefreshToken', refreshToken);
       }
 
-      debugPrint('❌ Failed to exchange code for token: ${response.statusCode} ${response.body}');
-      return false;
+      debugPrint('✓ Google Tasks tokens saved');
+
+      // Fetch and store default task list
+      await _fetchAndStoreDefaultTaskList();
+
+      debugPrint('✓ Google Tasks authentication successful');
+      return true;
     } catch (e) {
       debugPrint('❌ Error handling Google Tasks callback: $e');
       return false;
@@ -151,6 +125,14 @@ class GoogleTasksService {
           SharedPreferencesUtil().googleTasksDefaultListTitle = listTitle;
 
           debugPrint('✓ Default task list: $listTitle ($listId)');
+          
+          // Save connection to Firebase
+          await saveTaskIntegration('google_tasks', {
+            'connected': true,
+            'default_list_id': listId,
+            'default_list_title': listTitle,
+          });
+          debugPrint('✓ Saved Google Tasks connection to Firebase');
         }
       }
     } catch (e) {
@@ -260,40 +242,24 @@ class GoogleTasksService {
   }
 
   /// Refresh the access token using refresh token
+  /// Note: Token refresh requires client secret which is now in backend
+  /// If token is expired, user will need to re-authenticate
   Future<bool> _refreshAccessToken() async {
     try {
       final refreshToken = SharedPreferencesUtil().googleTasksRefreshToken;
-      final clientId = Env.googleTasksClientId;
-      final clientSecret = Env.googleTasksClientSecret;
 
-      if (refreshToken == null || clientId == null || clientSecret == null) {
-        debugPrint('Cannot refresh token: missing credentials');
+      if (refreshToken == null) {
+        debugPrint('Cannot refresh token: no refresh token available');
         return false;
       }
 
-      final response = await http.post(
-        Uri.parse(_tokenUrl),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'refresh_token': refreshToken,
-          'grant_type': 'refresh_token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final newAccessToken = data['access_token'] as String?;
-
-        if (newAccessToken != null) {
-          await SharedPreferencesUtil().saveString('googleTasksAccessToken', newAccessToken);
-          debugPrint('✓ Access token refreshed');
-          return true;
-        }
-      }
-
-      debugPrint('❌ Failed to refresh access token: ${response.statusCode}');
+      // TODO: Create backend endpoint for token refresh
+      // For now, if token expires, user needs to re-authenticate
+      debugPrint('Token refresh requires backend endpoint (not yet implemented)');
+      debugPrint('User will need to re-authenticate if token expired');
+      
+      // Clear tokens to force re-auth
+      await disconnect();
       return false;
     } catch (e) {
       debugPrint('❌ Error refreshing access token: $e');
@@ -307,6 +273,14 @@ class GoogleTasksService {
     SharedPreferencesUtil().googleTasksRefreshToken = null;
     SharedPreferencesUtil().googleTasksDefaultListId = null;
     SharedPreferencesUtil().googleTasksDefaultListTitle = null;
+    
+    // Remove connection from Firebase
+    try {
+      await deleteTaskIntegration('google_tasks');
+      debugPrint('✓ Removed Google Tasks connection from Firebase');
+    } catch (e) {
+      debugPrint('Error removing Google Tasks connection from Firebase: $e');
+    }
   }
 
   /// Generate random state for OAuth

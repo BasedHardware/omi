@@ -64,23 +64,17 @@ final class DevEnv implements EnvFields {
   @EnviedField(varName: 'ASANA_CLIENT_ID', obfuscate: true)
   final String? asanaClientId = _DevEnv.asanaClientId;
 
-  @override
-  @EnviedField(varName: 'ASANA_CLIENT_SECRET', obfuscate: true)
-  final String? asanaClientSecret = _DevEnv.asanaClientSecret;
+  // Asana client secret moved to backend environment
 
   @override
   @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_ID', obfuscate: true)
   final String? googleTasksClientId = _DevEnv.googleTasksClientId;
 
-  @override
-  @EnviedField(varName: 'GOOGLE_TASKS_CLIENT_SECRET', obfuscate: true)
-  final String? googleTasksClientSecret = _DevEnv.googleTasksClientSecret;
+  // Google Tasks client secret moved to backend environment
 
   @override
   @EnviedField(varName: 'CLICKUP_CLIENT_ID', obfuscate: true)
   final String? clickupClientId = _DevEnv.clickupClientId;
 
-  @override
-  @EnviedField(varName: 'CLICKUP_CLIENT_SECRET', obfuscate: true)
-  final String? clickupClientSecret = _DevEnv.clickupClientSecret;
+  // ClickUp client secret moved to backend environment
 }

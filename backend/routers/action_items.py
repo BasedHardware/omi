@@ -28,6 +28,9 @@ class UpdateActionItemRequest(BaseModel):
     description: Optional[str] = Field(default=None, description="Updated description")
     completed: Optional[bool] = Field(default=None, description="Updated completion status")
     due_at: Optional[datetime] = Field(default=None, description="Updated due date")
+    exported: Optional[bool] = Field(default=None, description="Whether the item has been exported")
+    export_date: Optional[datetime] = Field(default=None, description="When the item was exported")
+    export_platform: Optional[str] = Field(default=None, description="Platform the item was exported to")
 
 
 class ActionItemResponse(BaseModel):
@@ -40,6 +43,9 @@ class ActionItemResponse(BaseModel):
     completed_at: Optional[datetime] = None
     conversation_id: Optional[str] = None
     is_locked: bool = False
+    exported: bool = False
+    export_date: Optional[datetime] = None
+    export_platform: Optional[str] = None
 
 
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
@@ -169,6 +175,12 @@ def update_action_item(
             update_data['completed_at'] = None
     if request.due_at is not None:
         update_data['due_at'] = request.due_at
+    if request.exported is not None:
+        update_data['exported'] = request.exported
+    if request.export_date is not None:
+        update_data['export_date'] = request.export_date
+    if request.export_platform is not None:
+        update_data['export_platform'] = request.export_platform
 
     # Update the action item
     success = action_items_db.update_action_item(uid, action_item_id, update_data)

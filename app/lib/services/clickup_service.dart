@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -60,48 +61,24 @@ class ClickUpService {
     }
   }
 
-  /// Handle OAuth callback and exchange code for access token
-  Future<bool> handleCallback(String code) async {
+  /// Handle OAuth callback and receive token from backend
+  Future<bool> handleCallback(String accessToken) async {
     try {
-      final clientId = Env.clickupClientId;
-      final clientSecret = Env.clickupClientSecret;
-
-      if (clientId == null || clientSecret == null) {
-        debugPrint('ClickUp credentials not configured');
+      if (accessToken.isEmpty) {
+        debugPrint('ClickUp: No access token received');
         return false;
       }
 
-      final response = await http.post(
-        Uri.parse(_tokenUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'code': code,
-        }),
-      );
+      // Save token
+      await SharedPreferencesUtil().saveString('clickupAccessToken', accessToken);
 
-      debugPrint('ClickUp token response: ${response.statusCode}');
+      debugPrint('✓ ClickUp tokens saved');
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final accessToken = data['access_token'] as String?;
+      // Fetch and store current user info
+      await _fetchAndStoreCurrentUser();
 
-        if (accessToken != null) {
-          await SharedPreferencesUtil().saveString('clickupAccessToken', accessToken);
-
-          debugPrint('✓ ClickUp tokens saved');
-
-          // Fetch and store current user info
-          await _fetchAndStoreCurrentUser();
-
-          debugPrint('✓ ClickUp authentication successful');
-          return true;
-        }
-      }
-
-      debugPrint('❌ Failed to exchange code for token: ${response.statusCode} ${response.body}');
-      return false;
+      debugPrint('✓ ClickUp authentication successful');
+      return true;
     } catch (e) {
       debugPrint('❌ Error handling ClickUp callback: $e');
       return false;
@@ -134,6 +111,13 @@ class ClickUpService {
         if (userId.isNotEmpty) {
           await SharedPreferencesUtil().saveString('clickupUserId', userId);
           debugPrint('✓ Stored ClickUp user ID: $userId');
+          
+          // Save connection to Firebase
+          await saveTaskIntegration('clickup', {
+            'connected': true,
+            'user_id': userId,
+          });
+          debugPrint('✓ Saved ClickUp connection to Firebase');
         }
       } else {
         debugPrint('❌ Failed to fetch user info: ${response.statusCode} - ${response.body}');
@@ -320,5 +304,13 @@ class ClickUpService {
     SharedPreferencesUtil().clickupSpaceName = null;
     SharedPreferencesUtil().clickupListId = null;
     SharedPreferencesUtil().clickupListName = null;
+    
+    // Remove connection from Firebase
+    try {
+      await deleteTaskIntegration('clickup');
+      debugPrint('✓ Removed ClickUp connection from Firebase');
+    } catch (e) {
+      debugPrint('Error removing ClickUp connection from Firebase: $e');
+    }
   }
 }

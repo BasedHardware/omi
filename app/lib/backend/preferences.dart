@@ -231,17 +231,9 @@ class SharedPreferencesUtil {
 
   set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
 
-  // Task Integration Settings
-  String get selectedTaskIntegration {
-    final saved = getString('selectedTaskIntegration');
-    if (saved != null) return saved;
-
-    // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-    return PlatformService.isApple ? 'apple_reminders' : 'google_tasks';
-  }
-
-  set selectedTaskIntegration(String value) => saveString('selectedTaskIntegration', value);
-
+  // Task Integration OAuth Tokens (kept local for security)
+  // Note: Connection details (workspace/project/list selections) are now stored in Firebase
+  
   // Todoist Integration
   String? get todoistAccessToken => getString('todoistAccessToken');
 

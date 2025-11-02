@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -65,53 +66,27 @@ class AsanaService {
     }
   }
 
-  /// Handle OAuth callback and exchange code for access token
-  Future<bool> handleCallback(String code) async {
+  /// Handle OAuth callback and receive tokens from backend
+  Future<bool> handleCallback(String accessToken, String? refreshToken) async {
     try {
-      final clientId = Env.asanaClientId;
-      final clientSecret = Env.asanaClientSecret;
-
-      if (clientId == null || clientSecret == null) {
-        debugPrint('Asana credentials not configured');
+      if (accessToken.isEmpty) {
+        debugPrint('Asana: No access token received');
         return false;
       }
 
-      final response = await http.post(
-        Uri.parse(_tokenUrl),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'grant_type': 'authorization_code',
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'redirect_uri': _redirectUri,
-          'code': code,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final accessToken = data['access_token'] as String?;
-        final refreshToken = data['refresh_token'] as String?;
-
-        if (accessToken != null) {
-          // Save tokens first
-          await SharedPreferencesUtil().saveString('asanaAccessToken', accessToken);
-          if (refreshToken != null) {
-            await SharedPreferencesUtil().saveString('asanaRefreshToken', refreshToken);
-          }
-
-          debugPrint('✓ Tokens saved, fetching user info...');
-
-          // Fetch and store current user info
-          await _fetchAndStoreCurrentUser();
-
-          debugPrint('✓ Asana authentication successful');
-          return true;
-        }
+      // Save tokens
+      await SharedPreferencesUtil().saveString('asanaAccessToken', accessToken);
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await SharedPreferencesUtil().saveString('asanaRefreshToken', refreshToken);
       }
 
-      debugPrint('Failed to exchange code for token: ${response.statusCode} ${response.body}');
-      return false;
+      debugPrint('✓ Tokens saved, fetching user info...');
+
+      // Fetch and store current user info
+      await _fetchAndStoreCurrentUser();
+
+      debugPrint('✓ Asana authentication successful');
+      return true;
     } catch (e) {
       debugPrint('Error handling Asana callback: $e');
       return false;
@@ -144,6 +119,13 @@ class AsanaService {
         if (userGid != null && userGid.isNotEmpty) {
           await SharedPreferencesUtil().saveString('asanaUserGid', userGid);
           debugPrint('✓ Stored Asana user GID: $userGid');
+          
+          // Save connection to Firebase
+          await saveTaskIntegration('asana', {
+            'connected': true,
+            'user_gid': userGid,
+          });
+          debugPrint('✓ Saved Asana connection to Firebase');
         } else {
           debugPrint('❌ No GID found in user data');
         }
@@ -324,6 +306,14 @@ class AsanaService {
     SharedPreferencesUtil().asanaWorkspaceName = null;
     SharedPreferencesUtil().asanaProjectGid = null;
     SharedPreferencesUtil().asanaProjectName = null;
+    
+    // Remove connection from Firebase
+    try {
+      await deleteTaskIntegration('asana');
+      debugPrint('✓ Removed Asana connection from Firebase');
+    } catch (e) {
+      debugPrint('Error removing Asana connection from Firebase: $e');
+    }
   }
 
   /// Generate random state for OAuth
