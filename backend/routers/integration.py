@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple, Union
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse
 
 import database.apps as apps_db
 import database.conversations as conversations_db
