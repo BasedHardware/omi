@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple, Union
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 import database.apps as apps_db
 import database.conversations as conversations_db
@@ -550,3 +550,126 @@ async def send_notification_via_integration(
     token = notification_db.get_token_only(uid)
     send_app_notification(token, app.name, app.id, message)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
+
+
+@router.get(
+    '/v2/integrations/asana/callback',
+    response_class=HTMLResponse,
+    tags=['integration', 'oauth'],
+)
+async def asana_oauth_callback(
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+):
+    """
+    OAuth callback endpoint for Asana integration.
+    Receives the authorization code from Asana and redirects back to the app.
+    """
+    if not code:
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Asana Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Authentication Error</h2>
+                    <p>No authorization code received from Asana.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=400,
+        )
+
+    # Create deep link back to the app
+    deep_link = f'omi://asana/callback?code={code}&state={state or ""}'
+
+    # Return HTML that redirects to the app
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Asana Auth - Omi</title>
+        <meta charset="UTF-8">
+        <meta http-equiv="refresh" content="1;url={deep_link}">
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }}
+            .container {{
+                text-align: center;
+                padding: 2rem;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+            }}
+            h2 {{ margin: 0 0 1rem 0; }}
+            .spinner {{
+                border: 3px solid rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                border-top: 3px solid white;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 20px auto;
+            }}
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+            a {{
+                color: white;
+                text-decoration: underline;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>✓ Authentication Successful!</h2>
+            <div class="spinner"></div>
+            <p>Redirecting back to Omi...</p>
+            <p style="font-size: 0.9em; margin-top: 20px;">
+                If you're not redirected automatically, 
+                <a href="{deep_link}">click here</a>
+            </p>
+        </div>
+        <script>
+            setTimeout(function() {{
+                window.location.href = '{deep_link}';
+            }}, 1000);
+        </script>
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(content=html_content)
