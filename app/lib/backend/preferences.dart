@@ -231,6 +231,93 @@ class SharedPreferencesUtil {
 
   set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
 
+  // Task Integration Settings
+  String get selectedTaskIntegration => getString('selectedTaskIntegration') ?? 'apple_reminders';
+
+  set selectedTaskIntegration(String value) => saveString('selectedTaskIntegration', value);
+
+  // Todoist Integration
+  String? get todoistAccessToken => getString('todoistAccessToken');
+
+  set todoistAccessToken(String? value) {
+    if (value != null) {
+      saveString('todoistAccessToken', value);
+    } else {
+      remove('todoistAccessToken');
+    }
+  }
+
+  // Asana Integration
+  String? get asanaAccessToken => getString('asanaAccessToken');
+
+  set asanaAccessToken(String? value) {
+    if (value != null) {
+      saveString('asanaAccessToken', value);
+    } else {
+      remove('asanaAccessToken');
+    }
+  }
+
+  String? get asanaRefreshToken => getString('asanaRefreshToken');
+
+  set asanaRefreshToken(String? value) {
+    if (value != null) {
+      saveString('asanaRefreshToken', value);
+    } else {
+      remove('asanaRefreshToken');
+    }
+  }
+
+  String? get asanaUserGid => getString('asanaUserGid');
+
+  set asanaUserGid(String? value) {
+    if (value != null) {
+      saveString('asanaUserGid', value);
+    } else {
+      remove('asanaUserGid');
+    }
+  }
+
+  String? get asanaWorkspaceGid => getString('asanaWorkspaceGid');
+
+  set asanaWorkspaceGid(String? value) {
+    if (value != null) {
+      saveString('asanaWorkspaceGid', value);
+    } else {
+      remove('asanaWorkspaceGid');
+    }
+  }
+
+  String? get asanaWorkspaceName => getString('asanaWorkspaceName');
+
+  set asanaWorkspaceName(String? value) {
+    if (value != null) {
+      saveString('asanaWorkspaceName', value);
+    } else {
+      remove('asanaWorkspaceName');
+    }
+  }
+
+  String? get asanaProjectGid => getString('asanaProjectGid');
+
+  set asanaProjectGid(String? value) {
+    if (value != null) {
+      saveString('asanaProjectGid', value);
+    } else {
+      remove('asanaProjectGid');
+    }
+  }
+
+  String? get asanaProjectName => getString('asanaProjectName');
+
+  set asanaProjectName(String? value) {
+    if (value != null) {
+      saveString('asanaProjectName', value);
+    } else {
+      remove('asanaProjectName');
+    }
+  }
+
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());
