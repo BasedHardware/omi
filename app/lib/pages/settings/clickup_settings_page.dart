@@ -312,7 +312,7 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Debug info
-                    if (SharedPreferencesUtil().clickupUserId != null)
+                    if (_clickupService.currentUserId != null)
                       Container(
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
@@ -327,7 +327,7 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Connected as user: ${SharedPreferencesUtil().clickupUserId}',
+                                'Connected as user: ${_clickupService.currentUserId}',
                                 style: const TextStyle(
                                   color: Colors.green,
                                   fontSize: 12,

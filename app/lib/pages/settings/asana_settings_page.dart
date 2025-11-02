@@ -29,8 +29,7 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
   }
 
   Future<void> _initializeAsana() async {
-    // Ensure user info is fetched
-    await _asanaService.refreshCurrentUser();
+    // Load workspaces (user info is in Firebase)
     await _loadWorkspaces();
   }
 
@@ -244,7 +243,7 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Debug info
-                    if (SharedPreferencesUtil().asanaUserGid != null)
+                    if (_asanaService.currentUserGid != null)
                       Container(
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
@@ -259,7 +258,7 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Connected as user: ${SharedPreferencesUtil().asanaUserGid}',
+                                'Connected as user: ${_asanaService.currentUserGid}',
                                 style: const TextStyle(
                                   color: Colors.green,
                                   fontSize: 12,

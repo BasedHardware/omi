@@ -76,7 +76,7 @@ class ClickUpService {
 
       final response = await http.get(
         Uri.parse('https://api.clickup.com/api/v2/team'),
-        headers = {'Authorization': accessToken},
+        headers: {'Authorization': accessToken},
       );
 
       if (response.statusCode == 200) {
@@ -107,7 +107,7 @@ class ClickUpService {
 
       final response = await http.get(
         Uri.parse('https://api.clickup.com/api/v2/team/$teamId/space?archived=false'),
-        headers = {'Authorization': accessToken},
+        headers: {'Authorization': accessToken},
       );
 
       if (response.statusCode == 200) {
@@ -138,7 +138,7 @@ class ClickUpService {
 
       final response = await http.get(
         Uri.parse('https://api.clickup.com/api/v2/space/$spaceId/list?archived=false'),
-        headers = {'Authorization': accessToken},
+        headers: {'Authorization': accessToken},
       );
 
       if (response.statusCode == 200) {
