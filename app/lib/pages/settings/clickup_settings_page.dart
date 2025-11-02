@@ -212,9 +212,8 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
         final provider = context.read<TaskIntegrationProvider>();
         if (provider.selectedApp.key == 'clickup') {
           // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-          final defaultApp = PlatformService.isApple
-              ? TaskIntegrationApp.appleReminders
-              : TaskIntegrationApp.googleTasks;
+          final defaultApp =
+              PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
           await provider.setSelectedApp(defaultApp);
           debugPrint('✓ Task integration disabled: ClickUp - switched to ${defaultApp.key}');
         }

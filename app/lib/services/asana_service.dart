@@ -119,7 +119,7 @@ class AsanaService {
         if (userGid != null && userGid.isNotEmpty) {
           await SharedPreferencesUtil().saveString('asanaUserGid', userGid);
           debugPrint('✓ Stored Asana user GID: $userGid');
-          
+
           // Save connection to Firebase
           await saveTaskIntegration('asana', {
             'connected': true,
@@ -306,7 +306,7 @@ class AsanaService {
     SharedPreferencesUtil().asanaWorkspaceName = null;
     SharedPreferencesUtil().asanaProjectGid = null;
     SharedPreferencesUtil().asanaProjectName = null;
-    
+
     // Remove connection from Firebase
     try {
       await deleteTaskIntegration('asana');

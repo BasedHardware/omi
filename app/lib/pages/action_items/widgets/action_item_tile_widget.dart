@@ -225,7 +225,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     // Otherwise, show the currently selected task app
     TaskIntegrationApp displayApp;
     bool isExported = widget.actionItem.exported;
-    
+
     if (isExported && widget.actionItem.exportPlatform != null) {
       // Show the platform it was exported to
       displayApp = TaskIntegrationApp.values.firstWhere(
@@ -657,7 +657,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     }
   }
 
-  Future<void> _handleClickUpExport(BuildContext context) async{
+  Future<void> _handleClickUpExport(BuildContext context) async {
     HapticFeedback.mediumImpact();
 
     final service = ClickUpService();

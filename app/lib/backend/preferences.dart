@@ -233,7 +233,7 @@ class SharedPreferencesUtil {
 
   // Task Integration OAuth Tokens (kept local for security)
   // Note: Connection details (workspace/project/list selections) are now stored in Firebase
-  
+
   // Todoist Integration
   String? get todoistAccessToken => getString('todoistAccessToken');
 

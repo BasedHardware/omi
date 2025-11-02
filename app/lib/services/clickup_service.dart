@@ -111,7 +111,7 @@ class ClickUpService {
         if (userId.isNotEmpty) {
           await SharedPreferencesUtil().saveString('clickupUserId', userId);
           debugPrint('✓ Stored ClickUp user ID: $userId');
-          
+
           // Save connection to Firebase
           await saveTaskIntegration('clickup', {
             'connected': true,
@@ -304,7 +304,7 @@ class ClickUpService {
     SharedPreferencesUtil().clickupSpaceName = null;
     SharedPreferencesUtil().clickupListId = null;
     SharedPreferencesUtil().clickupListName = null;
-    
+
     // Remove connection from Firebase
     try {
       await deleteTaskIntegration('clickup');

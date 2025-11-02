@@ -140,9 +140,8 @@ class TaskIntegrationsPage extends StatefulWidget {
 }
 
 class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with WidgetsBindingObserver {
-  TaskIntegrationApp _selectedApp = PlatformService.isApple 
-      ? TaskIntegrationApp.appleReminders 
-      : TaskIntegrationApp.googleTasks;
+  TaskIntegrationApp _selectedApp =
+      PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   @override
   void initState() {
@@ -359,7 +358,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     setState(() {
       _selectedApp = app;
     });
-    
+
     // Save to backend via provider
     await context.read<TaskIntegrationProvider>().setSelectedApp(app);
 

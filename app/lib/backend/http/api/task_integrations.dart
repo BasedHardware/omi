@@ -119,4 +119,3 @@ Future<bool> deleteTaskIntegration(String appKey) async {
     return false;
   }
 }
-

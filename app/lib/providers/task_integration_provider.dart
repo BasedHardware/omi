@@ -23,7 +23,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   Future<void> loadFromBackend() async {
     _isLoading = true;
     // Don't notify listeners immediately to avoid setState during build
-    
+
     try {
       final response = await getTaskIntegrations();
       if (response != null) {

@@ -180,9 +180,8 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
         final provider = context.read<TaskIntegrationProvider>();
         if (provider.selectedApp.key == 'asana') {
           // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-          final defaultApp = PlatformService.isApple
-              ? TaskIntegrationApp.appleReminders
-              : TaskIntegrationApp.googleTasks;
+          final defaultApp =
+              PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
           await provider.setSelectedApp(defaultApp);
           debugPrint('✓ Task integration disabled: Asana - switched to ${defaultApp.key}');
         }
