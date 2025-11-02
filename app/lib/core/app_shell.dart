@@ -11,9 +11,12 @@ import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -39,6 +42,11 @@ class _AppShellState extends State<AppShell> {
   }
 
   void openAppLink(Uri uri) async {
+    if (uri.pathSegments.isEmpty) {
+      debugPrint('No path segments in URI: $uri');
+      return;
+    }
+
     if (uri.pathSegments.first == 'apps') {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
@@ -52,8 +60,64 @@ class _AppShellState extends State<AppShell> {
           AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
         }
       }
+    } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Todoist OAuth callback
+      final code = uri.queryParameters['code'];
+      if (code != null) {
+        debugPrint('Received Todoist OAuth code: ${code.substring(0, 10)}...');
+        _handleTodoistCallback(code);
+      } else {
+        debugPrint('Todoist callback received but no code found');
+      }
+    } else if (uri.host == 'asana' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Asana OAuth callback
+      final code = uri.queryParameters['code'];
+      if (code != null) {
+        debugPrint('Received Asana OAuth code: ${code.substring(0, 10)}...');
+        _handleAsanaCallback(code);
+      } else {
+        debugPrint('Asana callback received but no code found');
+      }
     } else {
       debugPrint('Unknown link: $uri');
+    }
+  }
+
+  Future<void> _handleTodoistCallback(String code) async {
+    final todoistService = TodoistService();
+    final success = await todoistService.handleCallback(code);
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ Todoist authentication completed successfully');
+      debugPrint('✓ Task integration enabled: Todoist - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to Todoist!');
+
+      // Notify task integration provider to refresh UI
+      context.read<TaskIntegrationProvider>().refresh();
+    } else {
+      debugPrint('Failed to complete Todoist authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to Todoist. Please try again.');
+    }
+  }
+
+  Future<void> _handleAsanaCallback(String code) async {
+    final asanaService = AsanaService();
+    final success = await asanaService.handleCallback(code);
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ Asana authentication completed successfully');
+      debugPrint('✓ Task integration enabled: Asana - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to Asana!');
+
+      // Notify task integration provider to refresh UI
+      context.read<TaskIntegrationProvider>().refresh();
+    } else {
+      debugPrint('Failed to complete Asana authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to Asana. Please try again.');
     }
   }
 

@@ -26,6 +26,16 @@ abstract class Env {
   static String? get googleClientId => _instance.googleClientId;
 
   static String? get googleClientSecret => _instance.googleClientSecret;
+
+  static String? get todoistClientId => _instance.todoistClientId;
+
+  static String? get todoistClientSecret => _instance.todoistClientSecret;
+
+  static String? get todoistVerificationToken => _instance.todoistVerificationToken;
+
+  static String? get asanaClientId => _instance.asanaClientId;
+
+  static String? get asanaClientSecret => _instance.asanaClientSecret;
 }
 
 abstract class EnvFields {
@@ -48,4 +58,14 @@ abstract class EnvFields {
   String? get googleClientId;
 
   String? get googleClientSecret;
+
+  String? get todoistClientId;
+
+  String? get todoistClientSecret;
+
+  String? get todoistVerificationToken;
+
+  String? get asanaClientId;
+
+  String? get asanaClientSecret;
 }

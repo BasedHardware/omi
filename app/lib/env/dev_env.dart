@@ -47,4 +47,24 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_CLIENT_SECRET', obfuscate: true)
   final String? googleClientSecret = _DevEnv.googleClientSecret;
+
+  @override
+  @EnviedField(varName: 'TODOIST_CLIENT_ID', obfuscate: true)
+  final String? todoistClientId = _DevEnv.todoistClientId;
+
+  @override
+  @EnviedField(varName: 'TODOIST_CLIENT_SECRET', obfuscate: true)
+  final String? todoistClientSecret = _DevEnv.todoistClientSecret;
+
+  @override
+  @EnviedField(varName: 'TODOIST_VERIFICATION_TOKEN', obfuscate: true)
+  final String? todoistVerificationToken = _DevEnv.todoistVerificationToken;
+
+  @override
+  @EnviedField(varName: 'ASANA_CLIENT_ID', obfuscate: true)
+  final String? asanaClientId = _DevEnv.asanaClientId;
+
+  @override
+  @EnviedField(varName: 'ASANA_CLIENT_SECRET', obfuscate: true)
+  final String? asanaClientSecret = _DevEnv.asanaClientSecret;
 }
