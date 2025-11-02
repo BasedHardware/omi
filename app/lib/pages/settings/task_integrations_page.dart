@@ -416,6 +416,21 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
     return context.read<TaskIntegrationProvider>().isAppConnected(app);
   }
 
+  String _getHeroTag(TaskIntegrationApp app) {
+    // Return Hero tag for apps shown in the banner
+    switch (app) {
+      case TaskIntegrationApp.todoist:
+        return 'task_integration_todoist_icon';
+      case TaskIntegrationApp.clickup:
+        return 'task_integration_clickup_icon';
+      case TaskIntegrationApp.asana:
+        return 'task_integration_asana_icon';
+      default:
+        // Unique tag for apps not in banner
+        return 'task_integration_${app.key}_icon';
+    }
+  }
+
   Widget _buildAppTile(TaskIntegrationApp app) {
     final isSelected = _selectedApp == app;
     final isAvailable = app.isAvailable;
@@ -446,34 +461,37 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
         child: Row(
           children: [
-            // App Icon
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: app.logoPath != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.asset(
-                        app.logoPath!,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.contain,
-                      ),
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+            // App Icon (with Hero animation for banner icons)
+            Hero(
+              tag: _getHeroTag(app),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: app.logoPath != null
+                    ? ClipRRect(
                         borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          app.logoPath!,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : Container(
+                        decoration: BoxDecoration(
+                          color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          app.icon,
+                          color: isAvailable ? app.iconColor : Colors.grey,
+                          size: 24,
+                        ),
                       ),
-                      child: Icon(
-                        app.icon,
-                        color: isAvailable ? app.iconColor : Colors.grey,
-                        size: 24,
-                      ),
-                    ),
+              ),
             ),
             const SizedBox(width: 16),
             // App Name and Status

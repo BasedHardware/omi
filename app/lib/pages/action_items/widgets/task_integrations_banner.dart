@@ -43,28 +43,37 @@ class TaskIntegrationsBanner extends StatelessWidget {
               height: 28,
               child: Stack(
                 children: [
-                  // First logo (Apple Reminders or Todoist if not Apple)
+                  // First logo - Todoist
                   Positioned(
                     left: 0,
-                    child: _buildOverlappingLogo(
-                      Assets.integrationAppLogos.todoistLogo.path,
-                      28,
+                    child: Hero(
+                      tag: 'task_integration_todoist_icon',
+                      child: _buildOverlappingLogo(
+                        Assets.integrationAppLogos.todoistLogo.path,
+                        28,
+                      ),
                     ),
                   ),
-                  // Second logo (Todoist)
+                  // Second logo - ClickUp
                   Positioned(
                     left: 22,
-                    child: _buildOverlappingLogo(
-                      Assets.integrationAppLogos.clickupLogo.path,
-                      28,
+                    child: Hero(
+                      tag: 'task_integration_clickup_icon',
+                      child: _buildOverlappingLogo(
+                        Assets.integrationAppLogos.clickupLogo.path,
+                        28,
+                      ),
                     ),
                   ),
-                  // Third logo (ClickUp)
+                  // Third logo - Asana
                   Positioned(
                     left: 44,
-                    child: _buildOverlappingLogo(
-                      Assets.integrationAppLogos.asanaLogo.path,
-                      28,
+                    child: Hero(
+                      tag: 'task_integration_asana_icon',
+                      child: _buildOverlappingLogo(
+                        Assets.integrationAppLogos.asanaLogo.path,
+                        28,
+                      ),
                     ),
                   ),
                 ],
