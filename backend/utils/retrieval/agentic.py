@@ -96,7 +96,9 @@ def _messages_to_langchain(messages: List[Message]) -> List:
                     {"type": "text", "text": msg.text},
                 ]
                 for file in msg.files:
-                    if file.is_image():
+                    if file.mime_type == "application/pdf":
+                        content.append({"type": "file", "file": {"file_id": file.openai_file_id}})
+                    elif file.is_image():
                         # Not implemented yet:
                         # 1. Can be added by image_url - need to update storage/filechat
                         # content.append({"type": "image_url", "image_url": {"url": file.thumbnail}})
@@ -105,7 +107,8 @@ def _messages_to_langchain(messages: List[Message]) -> List:
                         # Retrieve image content from OpenAI and encode as base64
                         pass
                     else:
-                        content.append({"type": "file", "file": {"file_id": file.openai_file_id}})
+                        # Unsupported file type
+                        pass
             else:
                 content = msg.text
             lc_messages.append(HumanMessage(content=content))
