@@ -90,7 +90,25 @@ def _messages_to_langchain(messages: List[Message]) -> List:
         if msg.sender == 'ai':
             lc_messages.append(AIMessage(content=msg.text))
         else:
-            lc_messages.append(HumanMessage(content=msg.text))
+            if msg.files:
+                # https://platform.openai.com/docs/guides/pdf-files?api-mode=responses
+                content = [
+                    {"type": "text", "text": msg.text},
+                ]
+                for file in msg.files:
+                    if file.is_image():
+                        # Not implemented yet:
+                        # 1. Can be added by image_url - need to update storage/filechat
+                        # content.append({"type": "image_url", "image_url": {"url": file.thumbnail}})
+                        # 2. Can be added by base64 - need to update storage
+                        #    openai: Not allowed to download files of purpose: user_data
+                        # Retrieve image content from OpenAI and encode as base64
+                        pass
+                    else:
+                        content.append({"type": "file", "file": {"file_id": file.openai_file_id}})
+            else:
+                content = msg.text
+            lc_messages.append(HumanMessage(content=content))
 
     return lc_messages
 
