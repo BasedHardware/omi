@@ -680,7 +680,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               SizedBox(
                                                 height: 44,
                                                 child: SearchBar(
-                                                  hintText: 'Search 1000+ Apps',
+                                                  hintText: 'Search 1500+ Apps',
                                                   leading: const Padding(
                                                     padding: EdgeInsets.only(left: 6.0),
                                                     child: Icon(FontAwesomeIcons.magnifyingGlass,
