@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
@@ -12,6 +13,7 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   static const int packetFooterSize = 5;
   static const int packetSize = 95;
   static const int lc3DataSize = 90; // 3 frames of 30 bytes each
+  static const int lc3FrameSize = 30; // Single LC3 frame size
 
   final _audioController = StreamController<List<int>>.broadcast();
   StreamSubscription? _audioSub;
@@ -32,7 +34,14 @@ class FriendPendantDeviceConnection extends DeviceConnection {
         .listen((data) {
       final payload = _processAudioPacket(data);
       if (payload != null && payload.isNotEmpty) {
-        _audioController.add(payload);
+        // Split 90-byte payload into 30-byte LC3 frames and add each separately
+        for (int i = 0; i < payload.length; i += lc3FrameSize) {
+          final end = (i + lc3FrameSize <= payload.length) ? i + lc3FrameSize : payload.length;
+          final chunk = payload.sublist(i, end);
+          if (chunk.length == lc3FrameSize) {
+            _audioController.add(chunk);
+          }
+        }
       }
     });
   }
