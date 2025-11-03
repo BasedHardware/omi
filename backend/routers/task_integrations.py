@@ -18,8 +18,7 @@ router = APIRouter()
 # OAuth state management
 OAUTH_STATE_EXPIRY = 600  # 10 minutes
 
-# HTTP client for external API calls
-http_client = httpx.AsyncClient(timeout=10.0)
+http_client: Optional[httpx.AsyncClient] = None
 
 # Templates
 templates = Jinja2Templates(directory="templates")
@@ -31,6 +30,22 @@ OAUTH_CONFIGS = {
     'google_tasks': {'name': 'Google Tasks'},
     'clickup': {'name': 'ClickUp'},
 }
+
+
+def get_http_client() -> httpx.AsyncClient:
+    """Get or create the HTTP client instance."""
+    global http_client
+    if http_client is None:
+        http_client = httpx.AsyncClient(timeout=10.0)
+    return http_client
+
+
+async def close_http_client():
+    """Close the HTTP client and cleanup resources."""
+    global http_client
+    if http_client is not None:
+        await http_client.aclose()
+        http_client = None
 
 
 def render_oauth_response(
@@ -344,7 +359,8 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 body['due_string'] = due.strftime('%Y-%m-%d')
 
-            response = await http_client.post(
+            client = get_http_client()
+            response = await client.post(
                 'https://api.todoist.com/rest/v2/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json=body,
@@ -379,7 +395,8 @@ async def create_task_via_integration(
             if project_gid:
                 task_data['projects'] = [project_gid]
 
-            response = await http_client.post(
+            client = get_http_client()
+            response = await client.post(
                 'https://app.asana.com/api/1.0/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json={'data': task_data},
@@ -404,7 +421,8 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 task_data['due'] = due.strftime('%Y-%m-%dT00:00:00.000Z')
 
-            response = await http_client.post(
+            client = get_http_client()
+            response = await client.post(
                 f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json=task_data,
@@ -429,7 +447,8 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 task_data['due_date'] = int(due.timestamp() * 1000)
 
-            response = await http_client.post(
+            client = get_http_client()
+            response = await client.post(
                 f'https://api.clickup.com/api/v2/list/{list_id}/task',
                 headers={'Authorization': access_token, 'Content-Type': 'application/json'},
                 json=task_data,
@@ -491,7 +510,8 @@ async def todoist_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = await http_client.post(
+        client = get_http_client()
+        token_response = await client.post(
             'https://todoist.com/oauth/access_token',
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
             data={
@@ -572,7 +592,8 @@ async def asana_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = await http_client.post(
+        client = get_http_client()
+        token_response = await client.post(
             'https://app.asana.com/-/oauth_token',
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
             data={
@@ -593,7 +614,7 @@ async def asana_oauth_callback(
             if access_token and uid:
                 try:
                     # Fetch user GID from Asana
-                    user_response = await http_client.get(
+                    user_response = await client.get(
                         'https://app.asana.com/api/1.0/users/me', headers={'Authorization': f'Bearer {access_token}'}
                     )
                     user_gid = None
@@ -668,7 +689,8 @@ async def google_tasks_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = await http_client.post(
+        client = get_http_client()
+        token_response = await client.post(
             'https://oauth2.googleapis.com/token',
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
             data={
@@ -689,7 +711,7 @@ async def google_tasks_oauth_callback(
             if access_token and uid:
                 try:
                     # Fetch default task list
-                    lists_response = await http_client.get(
+                    lists_response = await client.get(
                         'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
                         headers={'Authorization': f'Bearer {access_token}'},
                     )
@@ -767,7 +789,8 @@ async def clickup_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = await http_client.post(
+        client = get_http_client()
+        token_response = await client.post(
             'https://api.clickup.com/api/v2/oauth/token',
             params={
                 'client_id': client_id,
@@ -805,3 +828,9 @@ async def clickup_oauth_callback(
         deep_link = f'omi://{app_key}/callback?error=server_error'
 
     return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+
+
+@router.on_event("shutdown")
+async def shutdown_http_client():
+    """Cleanup HTTP client on app shutdown."""
+    await close_http_client()
