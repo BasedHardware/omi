@@ -130,6 +130,9 @@ class _FoundDevicesState extends State<FoundDevices> {
       provider.deviceName = (customName != null && customName.isNotEmpty) ? customName : device.name;
 
       SharedPreferencesUtil().deviceName = provider.deviceName;
+      if (customName != null && customName.isNotEmpty) {
+        SharedPreferencesUtil().setCustomDeviceName(device.id, customName);
+      }
 
       provider.isConnected = true;
       provider.isClicked = false;
