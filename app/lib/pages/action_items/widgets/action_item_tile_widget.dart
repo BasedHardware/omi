@@ -403,7 +403,6 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       content: widget.actionItem.description,
       description: 'From Omi',
       dueDate: widget.actionItem.dueAt,
-      priority: 2, // Priority 2 = normal priority in Todoist
     );
 
     if (context.mounted) {
