@@ -543,7 +543,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 controller: widget.scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 4)),
                   SliverToBoxAdapter(
                     child: state.isLoading
                         ? _buildShimmerCreateButton()
@@ -618,7 +618,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                     child: state.isLoading
                         ? _buildShimmerSearchBar()
                         : Container(
-                            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
