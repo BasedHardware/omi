@@ -22,7 +22,7 @@ class ConnectedDevice extends StatefulWidget {
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
   String? _customDeviceName;
-  
+
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -34,11 +34,20 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   void initState() {
+    super.initState();
+
+    final deviceProvider = context.read<DeviceProvider>();
+    if (deviceProvider.pairedDevice != null) {
+      final customName = SharedPreferencesUtil().getCustomDeviceName(deviceProvider.pairedDevice!.id);
+      if (customName.isNotEmpty) {
+        _customDeviceName = customName;
+      }
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<DeviceProvider>().getDeviceInfo();
       await _loadCustomDeviceName();
     });
-    super.initState();
   }
 
   Future<void> _loadCustomDeviceName() async {
@@ -48,9 +57,12 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       if (connection != null) {
         String? customName = await connection.getDeviceName();
         if (mounted && customName != null && customName.isNotEmpty) {
-          setState(() {
-            _customDeviceName = customName;
-          });
+          if (customName != _customDeviceName) {
+            setState(() {
+              _customDeviceName = customName;
+            });
+          }
+          SharedPreferencesUtil().setCustomDeviceName(deviceProvider.pairedDevice!.id, customName);
         }
       }
     }

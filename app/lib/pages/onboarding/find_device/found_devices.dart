@@ -51,6 +51,14 @@ class _FoundDevicesState extends State<FoundDevices> {
     return Assets.images.omiWithoutRope.path;
   }
 
+  String _getDisplayName(String deviceId, String deviceName) {
+    final customName = SharedPreferencesUtil().getCustomDeviceName(deviceId);
+    final displayName = customName.isNotEmpty ? customName : deviceName;
+    return displayName == 'Omi' 
+        ? '$displayName (${BtDevice.shortId(deviceId)})' 
+        : displayName;
+  }
+
   Future<void> _handleAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
     try {
       // First check if the watch is reachable
@@ -204,7 +212,7 @@ class _FoundDevicesState extends State<FoundDevices> {
             if (!provider.isConnected) ..._devicesList(provider),
             if (provider.isConnected)
               Text(
-                '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})',
+                _getDisplayName(provider.deviceId, provider.deviceName),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
@@ -280,7 +288,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '${device.name} (${device.getShortId()})',
+                              _getDisplayName(device.id, device.name),
                               textAlign: TextAlign.left,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w500,
