@@ -469,8 +469,278 @@ async def create_task_via_integration(
 
 
 # *****************************
+# ****** Data Fetching APIs ****
+# *****************************
+
+
+@router.get("/v1/task-integrations/asana/workspaces", tags=['task-integrations'])
+async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
+    """Get user's Asana workspaces"""
+    user_ref = db.collection('users').document(uid)
+    task_integrations = user_ref.collection('task_integrations').document('asana').get()
+
+    if not task_integrations.exists:
+        raise HTTPException(status_code=404, detail="Asana integration not found")
+
+    data = task_integrations.to_dict()
+    access_token = data.get('access_token')
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Asana not authenticated")
+
+    try:
+        client = get_http_client()
+        response = await client.get(
+            'https://app.asana.com/api/1.0/workspaces',
+            headers={'Authorization': f'Bearer {access_token}'},
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {'workspaces': result.get('data', [])}
+        else:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana workspaces")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
+
+
+@router.get("/v1/task-integrations/asana/projects/{workspace_gid}", tags=['task-integrations'])
+async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get projects in an Asana workspace"""
+    user_ref = db.collection('users').document(uid)
+    task_integrations = user_ref.collection('task_integrations').document('asana').get()
+
+    if not task_integrations.exists:
+        raise HTTPException(status_code=404, detail="Asana integration not found")
+
+    data = task_integrations.to_dict()
+    access_token = data.get('access_token')
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Asana not authenticated")
+
+    try:
+        client = get_http_client()
+        response = await client.get(
+            f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
+            headers={'Authorization': f'Bearer {access_token}'},
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {'projects': result.get('data', [])}
+        else:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana projects")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
+
+
+@router.get("/v1/task-integrations/clickup/teams", tags=['task-integrations'])
+async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
+    """Get user's ClickUp teams"""
+    user_ref = db.collection('users').document(uid)
+    task_integrations = user_ref.collection('task_integrations').document('clickup').get()
+
+    if not task_integrations.exists:
+        raise HTTPException(status_code=404, detail="ClickUp integration not found")
+
+    data = task_integrations.to_dict()
+    access_token = data.get('access_token')
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="ClickUp not authenticated")
+
+    try:
+        client = get_http_client()
+        response = await client.get(
+            'https://api.clickup.com/api/v2/team',
+            headers={'Authorization': access_token},
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {'teams': result.get('teams', [])}
+        else:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp teams")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
+
+
+@router.get("/v1/task-integrations/clickup/spaces/{team_id}", tags=['task-integrations'])
+async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get spaces in a ClickUp team"""
+    user_ref = db.collection('users').document(uid)
+    task_integrations = user_ref.collection('task_integrations').document('clickup').get()
+
+    if not task_integrations.exists:
+        raise HTTPException(status_code=404, detail="ClickUp integration not found")
+
+    data = task_integrations.to_dict()
+    access_token = data.get('access_token')
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="ClickUp not authenticated")
+
+    try:
+        client = get_http_client()
+        response = await client.get(
+            f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false',
+            headers={'Authorization': access_token},
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {'spaces': result.get('spaces', [])}
+        else:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp spaces")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
+
+
+@router.get("/v1/task-integrations/clickup/lists/{space_id}", tags=['task-integrations'])
+async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get lists in a ClickUp space"""
+    user_ref = db.collection('users').document(uid)
+    task_integrations = user_ref.collection('task_integrations').document('clickup').get()
+
+    if not task_integrations.exists:
+        raise HTTPException(status_code=404, detail="ClickUp integration not found")
+
+    data = task_integrations.to_dict()
+    access_token = data.get('access_token')
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="ClickUp not authenticated")
+
+    try:
+        client = get_http_client()
+        response = await client.get(
+            f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false',
+            headers={'Authorization': access_token},
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {'lists': result.get('lists', [])}
+        else:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp lists")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching lists: {str(e)}")
+
+
+# *****************************
 # ******* OAuth Callbacks *****
 # *****************************
+
+
+class OAuthProviderConfig(BaseModel):
+    """Configuration for OAuth provider-specific logic"""
+
+    token_endpoint: str
+    token_request_type: str = "form"
+    token_request_data: Dict[str, Any]
+    additional_headers: Dict[str, str] = {}
+
+    async def fetch_additional_data(self, client: httpx.AsyncClient, access_token: str) -> Dict[str, Any]:
+        """Hook for fetching provider-specific data after token exchange"""
+        return {}
+
+
+async def handle_oauth_callback(
+    request: Request,
+    app_key: str,
+    code: Optional[str],
+    state: Optional[str],
+    provider_config: OAuthProviderConfig,
+) -> HTMLResponse:
+    """
+    Generic OAuth callback handler that works for all providers.
+
+    Args:
+        request: FastAPI request object
+        app_key: Integration app key (todoist, asana, google_tasks, clickup)
+        code: Authorization code from OAuth provider
+        state: State token for CSRF protection
+        provider_config: Provider-specific configuration
+
+    Returns:
+        HTMLResponse with OAuth callback page
+    """
+    if not code or not state:
+        return render_oauth_response(request, app_key, success=False, error_type='missing_code')
+
+    # Validate state token
+    state_data = validate_and_consume_oauth_state(state)
+    if not state_data or state_data.get('app_key') != app_key:
+        return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
+
+    uid = state_data['uid']
+
+    try:
+        client = get_http_client()
+
+        if provider_config.token_request_type == "form":
+            token_response = await client.post(
+                provider_config.token_endpoint,
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    **provider_config.additional_headers,
+                },
+                data=provider_config.token_request_data,
+            )
+        else:  # params
+            token_response = await client.post(
+                provider_config.token_endpoint,
+                params=provider_config.token_request_data,
+                headers=provider_config.additional_headers,
+            )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            access_token = token_data.get('access_token', '')
+            refresh_token = token_data.get('refresh_token')
+
+            if not access_token:
+                print(f'{app_key}: No access token received in response')
+                deep_link = f'omi://{app_key}/callback?error=no_access_token'
+                return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+
+            integration_data = {
+                'connected': True,
+                'access_token': access_token,
+            }
+
+            if refresh_token:
+                integration_data['refresh_token'] = refresh_token
+
+            try:
+                additional_data = await provider_config.fetch_additional_data(client, access_token)
+                integration_data.update(additional_data)
+            except Exception as e:
+                print(f'{app_key}: Error fetching additional data: {e}')
+
+            # Store in Firebase
+            try:
+                users_db.set_task_integration(uid, app_key, integration_data)
+                print(f'{app_key}: Successfully stored tokens for user {uid}')
+            except Exception as e:
+                print(f'{app_key}: Error storing tokens in Firebase: {e}')
+                deep_link = f'omi://{app_key}/callback?error=storage_failed'
+                return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+
+            requires_setup = 'requires_setup=true' if app_key in ['asana', 'clickup'] else ''
+            deep_link = f'omi://{app_key}/callback?success=true{"&" + requires_setup if requires_setup else ""}'
+
+            return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+        else:
+            print(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
+            deep_link = f'omi://{app_key}/callback?error=token_exchange_failed'
+            return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+
+    except Exception as e:
+        print(f'{app_key}: Unexpected error during OAuth callback: {e}')
+        deep_link = f'omi://{app_key}/callback?error=server_error'
+        return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
 
 @router.get(
@@ -483,73 +753,24 @@ async def todoist_oauth_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
 ):
-    """
-    OAuth callback endpoint for Todoist integration.
-    Exchanges the authorization code for tokens and redirects back to the app with tokens.
-    """
-    app_key = 'todoist'
-
-    if not code or not state:
-        return render_oauth_response(request, app_key, success=False, error_type='missing_code')
-
-    # Validate state token
-    state_data = validate_and_consume_oauth_state(state)
-    if not state_data or state_data.get('app_key') != app_key:
-        return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
-
-    uid = state_data['uid']
-
-    # Exchange code for tokens using backend credentials
-    import requests
-
+    """OAuth callback endpoint for Todoist integration."""
     client_id = os.getenv('TODOIST_CLIENT_ID')
     client_secret = os.getenv('TODOIST_CLIENT_SECRET')
 
     if not all([client_id, client_secret]):
-        return render_oauth_response(request, app_key, success=False, error_type='config_error')
+        return render_oauth_response(request, 'todoist', success=False, error_type='config_error')
 
-    try:
-        # Exchange code for tokens
-        client = get_http_client()
-        token_response = await client.post(
-            'https://todoist.com/oauth/access_token',
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            data={
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'code': code,
-            },
-        )
+    config = OAuthProviderConfig(
+        token_endpoint='https://todoist.com/oauth/access_token',
+        token_request_type='form',
+        token_request_data={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'code': code,
+        },
+    )
 
-        if token_response.status_code == 200:
-            token_data = token_response.json()
-            access_token = token_data.get('access_token', '')
-
-            # Store token in Firebase
-            if access_token and uid:
-                try:
-                    users_db.set_task_integration(
-                        uid,
-                        app_key,
-                        {
-                            'connected': True,
-                            'access_token': access_token,
-                        },
-                    )
-                    print(f'✓ Stored {app_key} token in Firebase for user {uid}')
-                except Exception as e:
-                    print(f'Error storing {app_key} token: {e}')
-
-            # Create deep link for success (no token in URL)
-            deep_link = f'omi://{app_key}/callback?success=true'
-        else:
-            # Failed to exchange, return error
-            deep_link = f'omi://{app_key}/callback?error=token_exchange_failed'
-    except Exception as e:
-        print(f'Error exchanging {app_key} code: {e}')
-        deep_link = f'omi://{app_key}/callback?error=server_error'
-
-    return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+    return await handle_oauth_callback(request, 'todoist', code, state, config)
 
 
 @router.get(
@@ -562,91 +783,45 @@ async def asana_oauth_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
 ):
-    """
-    OAuth callback endpoint for Asana integration.
-    Exchanges the authorization code for tokens and redirects back to the app with tokens.
-    """
-    app_key = 'asana'
-
-    if not code or not state:
-        return render_oauth_response(request, app_key, success=False, error_type='missing_code')
-
-    # Validate state token
-    state_data = validate_and_consume_oauth_state(state)
-    if not state_data or state_data.get('app_key') != app_key:
-        return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
-
-    uid = state_data['uid']
-
-    # Exchange code for tokens using backend credentials
-    import requests
-
+    """OAuth callback endpoint for Asana integration."""
     client_id = os.getenv('ASANA_CLIENT_ID')
     client_secret = os.getenv('ASANA_CLIENT_SECRET')
     base_url = os.getenv('BASE_API_URL')
 
     if not all([client_id, client_secret, base_url]):
-        return render_oauth_response(request, app_key, success=False, error_type='config_error')
+        return render_oauth_response(request, 'asana', success=False, error_type='config_error')
 
     redirect_uri = f'{base_url}v2/integrations/asana/callback'
 
-    try:
-        # Exchange code for tokens
-        client = get_http_client()
-        token_response = await client.post(
-            'https://app.asana.com/-/oauth_token',
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            data={
-                'grant_type': 'authorization_code',
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'redirect_uri': redirect_uri,
-                'code': code,
-            },
-        )
+    class AsanaConfig(OAuthProviderConfig):
+        async def fetch_additional_data(self, client: httpx.AsyncClient, access_token: str) -> Dict[str, Any]:
+            """Fetch Asana user GID"""
+            try:
+                user_response = await client.get(
+                    'https://app.asana.com/api/1.0/users/me',
+                    headers={'Authorization': f'Bearer {access_token}'},
+                )
+                if user_response.status_code == 200:
+                    user_data = user_response.json()
+                    user_gid = user_data.get('data', {}).get('gid')
+                    return {'user_gid': user_gid} if user_gid else {}
+            except Exception as e:
+                print(f'asana: Failed to fetch user GID: {e}')
+            return {}
 
-        if token_response.status_code == 200:
-            token_data = token_response.json()
-            access_token = token_data.get('access_token', '')
-            refresh_token = token_data.get('refresh_token', '')
+    config = AsanaConfig(
+        token_endpoint='https://app.asana.com/-/oauth_token',
+        token_request_type='form',
+        token_request_data={
+            'grant_type': 'authorization_code',
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'code': code,
+        },
+    )
 
-            # Fetch user info and store everything in Firebase
-            if access_token and uid:
-                try:
-                    # Fetch user GID from Asana
-                    user_response = await client.get(
-                        'https://app.asana.com/api/1.0/users/me', headers={'Authorization': f'Bearer {access_token}'}
-                    )
-                    user_gid = None
-                    if user_response.status_code == 200:
-                        user_data = user_response.json()
-                        user_gid = user_data.get('data', {}).get('gid')
-
-                    # Store in Firebase
-                    users_db.set_task_integration(
-                        uid,
-                        app_key,
-                        {
-                            'connected': True,
-                            'access_token': access_token,
-                            'refresh_token': refresh_token,
-                            'user_gid': user_gid,
-                        },
-                    )
-                    print(f'✓ Stored {app_key} tokens in Firebase for user {uid}')
-                except Exception as e:
-                    print(f'Error storing {app_key} tokens: {e}')
-
-            # Create deep link for success (no tokens in URL)
-            deep_link = f'omi://{app_key}/callback?success=true&requires_setup=true'
-        else:
-            # Failed to exchange, return error
-            deep_link = f'omi://{app_key}/callback?error=token_exchange_failed'
-    except Exception as e:
-        print(f'Error exchanging {app_key} code: {e}')
-        deep_link = f'omi://{app_key}/callback?error=server_error'
-
-    return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+    return await handle_oauth_callback(request, 'asana', code, state, config)
 
 
 @router.get(
@@ -659,97 +834,49 @@ async def google_tasks_oauth_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
 ):
-    """
-    OAuth callback endpoint for Google Tasks integration.
-    Exchanges the authorization code for tokens and redirects back to the app with tokens.
-    """
-    app_key = 'google_tasks'
-
-    if not code or not state:
-        return render_oauth_response(request, app_key, success=False, error_type='missing_code')
-
-    # Validate state token
-    state_data = validate_and_consume_oauth_state(state)
-    if not state_data or state_data.get('app_key') != app_key:
-        return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
-
-    uid = state_data['uid']
-
-    # Exchange code for tokens using backend credentials
-    import requests
-
+    """OAuth callback endpoint for Google Tasks integration."""
     client_id = os.getenv('GOOGLE_TASKS_CLIENT_ID')
     client_secret = os.getenv('GOOGLE_TASKS_CLIENT_SECRET')
     base_url = os.getenv('BASE_API_URL')
 
     if not all([client_id, client_secret, base_url]):
-        return render_oauth_response(request, app_key, success=False, error_type='config_error')
+        return render_oauth_response(request, 'google_tasks', success=False, error_type='config_error')
 
     redirect_uri = f'{base_url}v2/integrations/google-tasks/callback'
 
-    try:
-        # Exchange code for tokens
-        client = get_http_client()
-        token_response = await client.post(
-            'https://oauth2.googleapis.com/token',
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            data={
-                'code': code,
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'redirect_uri': redirect_uri,
-                'grant_type': 'authorization_code',
-            },
-        )
+    class GoogleTasksConfig(OAuthProviderConfig):
+        async def fetch_additional_data(self, client: httpx.AsyncClient, access_token: str) -> Dict[str, Any]:
+            """Fetch default Google Tasks list"""
+            try:
+                lists_response = await client.get(
+                    'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
+                    headers={'Authorization': f'Bearer {access_token}'},
+                )
+                if lists_response.status_code == 200:
+                    lists_data = lists_response.json()
+                    items = lists_data.get('items', [])
+                    if items:
+                        return {
+                            'default_list_id': items[0].get('id'),
+                            'default_list_title': items[0].get('title'),
+                        }
+            except Exception as e:
+                print(f'google_tasks: Failed to fetch task lists: {e}')
+            return {}
 
-        if token_response.status_code == 200:
-            token_data = token_response.json()
-            access_token = token_data.get('access_token', '')
-            refresh_token = token_data.get('refresh_token', '')
+    config = GoogleTasksConfig(
+        token_endpoint='https://oauth2.googleapis.com/token',
+        token_request_type='form',
+        token_request_data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        },
+    )
 
-            # Fetch task lists and store in Firebase
-            if access_token and uid:
-                try:
-                    # Fetch default task list
-                    lists_response = await client.get(
-                        'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
-                        headers={'Authorization': f'Bearer {access_token}'},
-                    )
-                    default_list_id = None
-                    default_list_title = None
-                    if lists_response.status_code == 200:
-                        lists_data = lists_response.json()
-                        items = lists_data.get('items', [])
-                        if items:
-                            default_list_id = items[0].get('id')
-                            default_list_title = items[0].get('title')
-
-                    # Store in Firebase
-                    users_db.set_task_integration(
-                        uid,
-                        app_key,
-                        {
-                            'connected': True,
-                            'access_token': access_token,
-                            'refresh_token': refresh_token,
-                            'default_list_id': default_list_id,
-                            'default_list_title': default_list_title,
-                        },
-                    )
-                    print(f'✓ Stored {app_key} tokens in Firebase for user {uid}')
-                except Exception as e:
-                    print(f'Error storing {app_key} tokens: {e}')
-
-            # Create deep link for success (no tokens in URL)
-            deep_link = 'omi://google-tasks/callback?success=true'
-        else:
-            # Failed to exchange, return error
-            deep_link = 'omi://google-tasks/callback?error=token_exchange_failed'
-    except Exception as e:
-        print(f'Error exchanging {app_key} code: {e}')
-        deep_link = 'omi://google-tasks/callback?error=server_error'
-
-    return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+    return await handle_oauth_callback(request, 'google_tasks', code, state, config)
 
 
 @router.get(
@@ -762,72 +889,24 @@ async def clickup_oauth_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
 ):
-    """
-    OAuth callback endpoint for ClickUp integration.
-    Exchanges the authorization code for tokens and redirects back to the app with tokens.
-    """
-    app_key = 'clickup'
-
-    if not code or not state:
-        return render_oauth_response(request, app_key, success=False, error_type='missing_code')
-
-    # Validate state token
-    state_data = validate_and_consume_oauth_state(state)
-    if not state_data or state_data.get('app_key') != app_key:
-        return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
-
-    uid = state_data['uid']
-
-    # Exchange code for tokens using backend credentials
-    import requests
-
+    """OAuth callback endpoint for ClickUp integration."""
     client_id = os.getenv('CLICKUP_CLIENT_ID')
     client_secret = os.getenv('CLICKUP_CLIENT_SECRET')
 
     if not all([client_id, client_secret]):
-        return render_oauth_response(request, app_key, success=False, error_type='config_error')
+        return render_oauth_response(request, 'clickup', success=False, error_type='config_error')
 
-    try:
-        # Exchange code for tokens
-        client = get_http_client()
-        token_response = await client.post(
-            'https://api.clickup.com/api/v2/oauth/token',
-            params={
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'code': code,
-            },
-        )
+    config = OAuthProviderConfig(
+        token_endpoint='https://api.clickup.com/api/v2/oauth/token',
+        token_request_type='params',
+        token_request_data={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'code': code,
+        },
+    )
 
-        if token_response.status_code == 200:
-            token_data = token_response.json()
-            access_token = token_data.get('access_token', '')
-
-            # Store token in Firebase
-            if access_token and uid:
-                try:
-                    users_db.set_task_integration(
-                        uid,
-                        app_key,
-                        {
-                            'connected': True,
-                            'access_token': access_token,
-                        },
-                    )
-                    print(f'✓ Stored {app_key} token in Firebase for user {uid}')
-                except Exception as e:
-                    print(f'Error storing {app_key} token: {e}')
-
-            # Create deep link for success (no token in URL)
-            deep_link = f'omi://{app_key}/callback?success=true&requires_setup=true'
-        else:
-            # Failed to exchange, return error
-            deep_link = f'omi://{app_key}/callback?error=token_exchange_failed'
-    except Exception as e:
-        print(f'Error exchanging {app_key} code: {e}')
-        deep_link = f'omi://{app_key}/callback?error=server_error'
-
-    return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+    return await handle_oauth_callback(request, 'clickup', code, state, config)
 
 
 @router.on_event("shutdown")

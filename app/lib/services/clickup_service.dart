@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class ClickUpService {
   static final ClickUpService _instance = ClickUpService._internal();
@@ -52,7 +50,7 @@ class ClickUpService {
     }
   }
 
-  /// Handle OAuth callback (tokens stored in backend Firebase)
+  /// Handle OAuth callback
   Future<bool> handleCallback({String? userId}) async {
     _isAuthenticated = true;
     _userId = userId;
@@ -60,100 +58,40 @@ class ClickUpService {
     return true;
   }
 
-  /// Get user's workspaces/teams (via backend stored token)
+  /// Get user's workspaces/teams
   Future<List<Map<String, dynamic>>> getWorkspaces() async {
     try {
-      // Get integration from backend to access token
-      final integrations = await getTaskIntegrations();
-      if (integrations == null) return [];
-
-      final clickupIntegration = integrations.integrations['clickup'];
-      if (clickupIntegration == null) return [];
-
-      final accessToken = clickupIntegration['access_token'];
-      if (accessToken == null) return [];
-
-      final response = await http.get(
-        Uri.parse('https://api.clickup.com/api/v2/team'),
-        headers: {'Authorization': accessToken},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> teams = data['teams'];
-        return teams.cast<Map<String, dynamic>>();
-      }
-
-      return [];
+      final teams = await getClickUpTeams();
+      return teams ?? [];
     } catch (e) {
       debugPrint('Error fetching ClickUp workspaces: $e');
       return [];
     }
   }
 
-  /// Get spaces in a team (via backend stored token)
+  /// Get spaces in a team
   Future<List<Map<String, dynamic>>> getSpaces(String teamId) async {
     try {
-      // Get integration from backend to access token
-      final integrations = await getTaskIntegrations();
-      if (integrations == null) return [];
-
-      final clickupIntegration = integrations.integrations['clickup'];
-      if (clickupIntegration == null) return [];
-
-      final accessToken = clickupIntegration['access_token'];
-      if (accessToken == null) return [];
-
-      final response = await http.get(
-        Uri.parse('https://api.clickup.com/api/v2/team/$teamId/space?archived=false'),
-        headers: {'Authorization': accessToken},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> spaces = data['spaces'];
-        return spaces.cast<Map<String, dynamic>>();
-      }
-
-      return [];
+      final spaces = await getClickUpSpaces(teamId);
+      return spaces ?? [];
     } catch (e) {
       debugPrint('Error fetching ClickUp spaces: $e');
       return [];
     }
   }
 
-  /// Get lists in a space (via backend stored token)
+  /// Get lists in a space
   Future<List<Map<String, dynamic>>> getLists(String spaceId) async {
     try {
-      // Get integration from backend to access token
-      final integrations = await getTaskIntegrations();
-      if (integrations == null) return [];
-
-      final clickupIntegration = integrations.integrations['clickup'];
-      if (clickupIntegration == null) return [];
-
-      final accessToken = clickupIntegration['access_token'];
-      if (accessToken == null) return [];
-
-      final response = await http.get(
-        Uri.parse('https://api.clickup.com/api/v2/space/$spaceId/list?archived=false'),
-        headers: {'Authorization': accessToken},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> lists = data['lists'];
-        return lists.cast<Map<String, dynamic>>();
-      }
-
-      return [];
+      final lists = await getClickUpLists(spaceId);
+      return lists ?? [];
     } catch (e) {
       debugPrint('Error fetching ClickUp lists: $e');
       return [];
     }
   }
 
-  /// Create a task in ClickUp (via backend API)
+  /// Create a task in ClickUp
   Future<bool> createTask({
     required String name,
     String? description,
@@ -168,11 +106,11 @@ class ClickUpService {
       );
 
       if (result != null && result['success'] == true) {
-        debugPrint('✓ Task created successfully in ClickUp');
+        debugPrint('Task created successfully in ClickUp');
         return true;
       }
 
-      debugPrint('❌ Failed to create task in ClickUp: ${result?['error']}');
+      debugPrint('Failed to create task in ClickUp: ${result?['error']}');
       return false;
     } catch (e) {
       debugPrint('Error creating task in ClickUp: $e');
@@ -180,13 +118,13 @@ class ClickUpService {
     }
   }
 
-  /// Disconnect from ClickUp (remove from Firebase)
+  /// Disconnect from ClickUp
   Future<void> disconnect() async {
     try {
       await deleteTaskIntegration('clickup');
       _isAuthenticated = false;
       _userId = null;
-      debugPrint('✓ Disconnected from ClickUp');
+      debugPrint('Disconnected from ClickUp');
     } catch (e) {
       debugPrint('Error disconnecting from ClickUp: $e');
     }

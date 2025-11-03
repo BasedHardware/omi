@@ -171,3 +171,108 @@ Future<Map<String, dynamic>?> createTaskViaIntegration(
     return null;
   }
 }
+
+/// Get Asana workspaces
+Future<List<Map<String, dynamic>>?> getAsanaWorkspaces() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations/asana/workspaces',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    return (data['workspaces'] as List).cast<Map<String, dynamic>>();
+  } else {
+    debugPrint('getAsanaWorkspaces error ${response.statusCode}');
+    return null;
+  }
+}
+
+/// Get Asana projects
+Future<List<Map<String, dynamic>>?> getAsanaProjects(String workspaceGid) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations/asana/projects/$workspaceGid',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    return (data['projects'] as List).cast<Map<String, dynamic>>();
+  } else {
+    debugPrint('getAsanaProjects error ${response.statusCode}');
+    return null;
+  }
+}
+
+/// Get ClickUp teams
+Future<List<Map<String, dynamic>>?> getClickUpTeams() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations/clickup/teams',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    return (data['teams'] as List).cast<Map<String, dynamic>>();
+  } else {
+    debugPrint('getClickUpTeams error ${response.statusCode}');
+    return null;
+  }
+}
+
+/// Get ClickUp spaces
+Future<List<Map<String, dynamic>>?> getClickUpSpaces(String teamId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations/clickup/spaces/$teamId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    return (data['spaces'] as List).cast<Map<String, dynamic>>();
+  } else {
+    debugPrint('getClickUpSpaces error ${response.statusCode}');
+    return null;
+  }
+}
+
+/// Get ClickUp lists
+Future<List<Map<String, dynamic>>?> getClickUpLists(String spaceId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations/clickup/lists/$spaceId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    return (data['lists'] as List).cast<Map<String, dynamic>>();
+  } else {
+    debugPrint('getClickUpLists error ${response.statusCode}');
+    return null;
+  }
+}
