@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -170,7 +171,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<DeviceProvider>(builder: (context, provider, child) {
+    return Consumer2<DeviceProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
@@ -403,6 +404,46 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       ],
                     ),
                   ),
+
+                  // Streaming Metrics Section - Bottom
+                  if (provider.connectedDevice != null && captureProvider.havingRecordingDevice) ...[
+                    const SizedBox(height: 32),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const FaIcon(
+                            FontAwesomeIcons.bluetooth,
+                            color: Colors.grey,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${captureProvider.bleReceiveRateKbps.toStringAsFixed(1)} kbps',
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          const FaIcon(
+                            FontAwesomeIcons.signal,
+                            color: Colors.grey,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${captureProvider.wsSendRateKbps.toStringAsFixed(1)} kbps',
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 64), // Extra padding to ensure scrollable content
                 ],

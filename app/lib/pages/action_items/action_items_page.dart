@@ -137,6 +137,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: provider.isSelectionMode ? _buildSelectionAppBar(provider, currentTabItems) : null,
+          floatingActionButton: provider.isSelectionMode
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: 60.0),
+                  child: FloatingActionButton(
+                    onPressed: _showCreateActionItemSheet,
+                    backgroundColor: Colors.deepPurpleAccent,
+                    child: const Icon(
+                      Icons.add,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
           body: RefreshIndicator(
             onRefresh: () async {
               HapticFeedback.mediumImpact();
@@ -203,45 +216,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header with subheading and add button
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Action Items',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Tap to edit • Long press to select • Swipe for actions',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Create icon
-                              IconButton(
-                                onPressed: _showCreateActionItemSheet,
-                                icon: const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
                           // Segmented Control - Full width like action items
                           Container(
                             width: double.infinity,
@@ -528,7 +502,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  PreferredSizeWidget _buildSelectionAppBar(ActionItemsProvider provider, List<ActionItemWithMetadata> currentTabItems) {
+  PreferredSizeWidget _buildSelectionAppBar(
+      ActionItemsProvider provider, List<ActionItemWithMetadata> currentTabItems) {
     return AppBar(
       backgroundColor: Colors.black.withValues(alpha: 0.05),
       elevation: 0,

@@ -623,8 +623,10 @@ class OmiDeviceConnection extends DeviceConnection {
 
       // Check if device has image streaming capability (for OpenGlass/OmiGlass detection)
       try {
-        await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
-        deviceInfo['hasImageStream'] = 'true';
+        final chars = await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
+        if (chars.isNotEmpty) {
+          deviceInfo['hasImageStream'] = 'true';
+        }
       } catch (e) {
         deviceInfo['hasImageStream'] = 'false';
       }

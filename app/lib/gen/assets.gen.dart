@@ -109,6 +109,10 @@ class $AssetsImagesGen {
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
 
+  /// File path: assets/images/bee_device.webp
+  AssetGenImage get beeDevice =>
+      const AssetGenImage('assets/images/bee_device.webp');
+
   /// File path: assets/images/blob.webp
   AssetGenImage get blob => const AssetGenImage('assets/images/blob.webp');
 
@@ -133,6 +137,9 @@ class $AssetsImagesGen {
   /// File path: assets/images/facebook_logo.png
   AssetGenImage get facebookLogo =>
       const AssetGenImage('assets/images/facebook_logo.png');
+
+  /// File path: assets/images/fieldy.webp
+  AssetGenImage get fieldy => const AssetGenImage('assets/images/fieldy.webp');
 
   /// File path: assets/images/google_logo.png
   AssetGenImage get googleLogo =>
@@ -253,6 +260,10 @@ class $AssetsImagesGen {
   /// File path: assets/images/onboarding.mp4
   String get onboarding => 'assets/images/onboarding.mp4';
 
+  /// File path: assets/images/plaud_note_pin.webp
+  AssetGenImage get plaudNotePin =>
+      const AssetGenImage('assets/images/plaud_note_pin.webp');
+
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
       const AssetGenImage('assets/images/recording_green_circle_icon.png');
@@ -315,6 +326,7 @@ class $AssetsImagesGen {
     appleLogo,
     appleWatch,
     background,
+    beeDevice,
     blob,
     calendarLogo,
     checkbox,
@@ -322,6 +334,7 @@ class $AssetsImagesGen {
     emailLogo,
     emotionalFeedback1,
     facebookLogo,
+    fieldy,
     googleLogo,
     gradientCard,
     herologo,
@@ -354,6 +367,7 @@ class $AssetsImagesGen {
     onboardingBg52,
     onboardingBg6,
     onboarding,
+    plaudNotePin,
     recordingGreenCircleIcon,
     slackLogo,
     speaker0Icon,

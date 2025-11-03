@@ -41,7 +41,7 @@ async def _websocket_util_trigger(
 
     # audio bytes
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
-    audio_bytes_trigger_delay_seconds = 5
+    audio_bytes_trigger_delay_seconds = 4
     has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
     private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
     private_cloud_sync_delay_seconds = 5
