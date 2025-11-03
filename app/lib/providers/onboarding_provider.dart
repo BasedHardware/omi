@@ -407,14 +407,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
       connectingToDeviceId = device.id;
       notifyListeners();
-      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       debugPrint('Connected to device: ${device.name}');
       deviceId = device.id;
 
-      // Try to get custom device name, fallback to device.name
-      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      // Try to get custom device name
       String? customName = await connection?.getDeviceName();
-      deviceName = customName ?? device.name;
+      deviceName = (customName != null && customName.isNotEmpty) ? customName : device.name;
 
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {

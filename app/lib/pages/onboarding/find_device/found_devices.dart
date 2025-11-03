@@ -139,7 +139,7 @@ class _FoundDevicesState extends State<FoundDevices> {
 
       final connection = await ServiceManager.instance().device.ensureConnection(device.id);
       String? customName = await connection?.getDeviceName();
-      provider.deviceName = customName ?? device.name;
+      provider.deviceName = (customName != null && customName.isNotEmpty) ? customName : device.name;
 
       SharedPreferencesUtil().deviceName = provider.deviceName;
 

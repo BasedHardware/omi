@@ -363,12 +363,12 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
                                                   uint16_t offset,
                                                   uint8_t flags)
 {
-    if (len == 0 || len > 8) {
+    if (len == 0 || len > MAX_DEVICE_NAME_LENGTH) {
         LOG_WRN("Invalid length for device name write: %u", len);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
 
-    char name_buffer[9] = {0};
+    char name_buffer[MAX_DEVICE_NAME_LENGTH + 1] = {0};
     memcpy(name_buffer, buf, len);
     name_buffer[len] = '\0';
 
@@ -387,7 +387,7 @@ static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
                                                  uint16_t len,
                                                  uint16_t offset)
 {
-    char name_buffer[9] = {0};
+    char name_buffer[MAX_DEVICE_NAME_LENGTH + 1] = {0};
     int err = app_settings_get_device_name(name_buffer, sizeof(name_buffer));
     if (err) {
         LOG_ERR("Failed to read device name: %d", err);

@@ -5,6 +5,11 @@
 #include <stdint.h>
 
 /**
+ * @brief Maximum length of device name in characters.
+ */
+#define MAX_DEVICE_NAME_LENGTH 10
+
+/**
  * @brief Initialize the settings subsystem.
  *
  * This loads any persisted settings from flash into memory.

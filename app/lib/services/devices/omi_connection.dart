@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -550,7 +551,7 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<void> performSetDeviceName(String name) async {
     try {
-      final nameBytes = name.codeUnits;
+      final nameBytes = utf8.encode(name);
       await transport.writeCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid, nameBytes);
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error setting device name: $e');
@@ -562,7 +563,7 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       final value = await transport.readCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid);
       if (value.isNotEmpty) {
-        return String.fromCharCodes(value);
+        return utf8.decode(value);
       }
       return null;
     } catch (e) {
