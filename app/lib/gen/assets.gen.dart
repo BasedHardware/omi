@@ -141,6 +141,10 @@ class $AssetsImagesGen {
   /// File path: assets/images/fieldy.webp
   AssetGenImage get fieldy => const AssetGenImage('assets/images/fieldy.webp');
 
+  /// File path: assets/images/friend-pendant.webp
+  AssetGenImage get friendPendant =>
+      const AssetGenImage('assets/images/friend-pendant.webp');
+
   /// File path: assets/images/google_logo.png
   AssetGenImage get googleLogo =>
       const AssetGenImage('assets/images/google_logo.png');
@@ -220,6 +224,10 @@ class $AssetsImagesGen {
   /// File path: assets/images/omi-glass.png
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
+
+  /// File path: assets/images/omi-with-rope.webp
+  AssetGenImage get omiWithRope =>
+      const AssetGenImage('assets/images/omi-with-rope.webp');
 
   /// File path: assets/images/omi-without-rope-turned-off.webp
   AssetGenImage get omiWithoutRopeTurnedOff =>
@@ -335,6 +343,7 @@ class $AssetsImagesGen {
     emotionalFeedback1,
     facebookLogo,
     fieldy,
+    friendPendant,
     googleLogo,
     gradientCard,
     herologo,
@@ -357,6 +366,7 @@ class $AssetsImagesGen {
     notionLogo,
     omiDevkitWithoutRope,
     omiGlass,
+    omiWithRope,
     omiWithoutRopeTurnedOff,
     omiWithoutRope,
     onboardingBg1,
