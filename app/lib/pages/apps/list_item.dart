@@ -37,9 +37,7 @@ class AppListItem extends StatelessWidget {
         return GestureDetector(
           onTap: () async {
             MixpanelManager().pageOpened('App Detail');
-            final appProvider = context.read<AppProvider>();
             await routeToPage(context, AppDetailPage(app: app));
-            appProvider.setApps();
           },
           child: Container(
             padding: const EdgeInsets.all(16),
