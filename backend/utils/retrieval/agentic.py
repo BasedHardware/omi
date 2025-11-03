@@ -5,12 +5,14 @@ This module implements a tool-calling agent that autonomously decides which tool
 to use to gather context and answer user questions. Unlike the previous graph-based
 approach, this lets the LLM make decisions about what information it needs.
 """
-
+import base64
 import re
 import uuid
 import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional, AsyncGenerator, Tuple
+
+import openai
 
 import database.notifications as notification_db
 
@@ -99,12 +101,21 @@ def _messages_to_langchain(messages: List[Message]) -> List:
                     if file.mime_type == "application/pdf":
                         content.append({"type": "file", "file": {"file_id": file.openai_file_id}})
                     elif file.is_image():
-                        # Not implemented yet:
                         # 1. Can be added by image_url - need to update storage/filechat
                         # content.append({"type": "image_url", "image_url": {"url": file.thumbnail}})
                         # 2. Can be added by base64 - need to update storage
                         #    openai: Not allowed to download files of purpose: user_data
+
                         # Retrieve image content from OpenAI and encode as base64
+                        try:
+                            file_response = openai.files.content(file.openai_file_id)
+                            base64_data = base64.b64encode(file_response.content).decode('utf-8')
+                            content.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{file.mime_type};base64,{base64_data}"}
+                            })
+                        except Exception as e:
+                            print(f"Failed to retrieve image {file.openai_file_id}: {e}")
                         pass
                     else:
                         # Unsupported file type
