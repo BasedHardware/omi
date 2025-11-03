@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -164,7 +166,17 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: widget.onTap,
+                    onTap: () {
+                      if (widget.conversation.isLocked) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const UsagePage(showUpgradeDialog: true),
+                          ),
+                        );
+                        return;
+                      }
+                      widget.onTap();
+                    },
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
                       width: double.maxFinite,
@@ -605,54 +617,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Lock indicator - show first if locked
-        if (widget.conversation.isLocked) ...[
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const UsagePage(showUpgradeDialog: true),
-                  ),
-                );
-              },
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.lock,
-                      size: 12,
-                      color: ResponsiveHelper.purplePrimary,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Upgrade to Unlock',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: ResponsiveHelper.purplePrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-
         // Category chip
         if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded) ...[
           OmiBadge(label: widget.conversation.getTag()),
@@ -679,6 +643,31 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
     );
   }
 
+  Widget _buildLockedOverlay(BuildContext context) {
+    return Positioned.fill(
+      child: ClipRRect(
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.01),
+            ),
+            child: const Text(
+              'Upgrade to unlimited',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildContentSection() {
     if (widget.conversation.discarded) {
       return Text(
@@ -693,15 +682,20 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
       );
     }
 
-    return Text(
-      widget.conversation.structured.overview.decodeString,
-      style: const TextStyle(
-        fontSize: 14,
-        color: ResponsiveHelper.textSecondary,
-        height: 1.5,
-      ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
+    return Stack(
+      children: [
+        Text(
+          widget.conversation.structured.overview.decodeString,
+          style: const TextStyle(
+            fontSize: 14,
+            color: ResponsiveHelper.textSecondary,
+            height: 1.5,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (widget.conversation.isLocked) _buildLockedOverlay(context),
+      ],
     );
   }
 

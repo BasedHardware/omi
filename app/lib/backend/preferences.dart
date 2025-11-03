@@ -231,6 +231,10 @@ class SharedPreferencesUtil {
 
   set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
 
+  bool get showGetOmiCard => getBool('showGetOmiCard') ?? true;
+
+  set showGetOmiCard(bool value) => saveBool('showGetOmiCard', value);
+
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());

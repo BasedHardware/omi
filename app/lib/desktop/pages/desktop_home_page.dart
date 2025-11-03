@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -8,6 +9,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/desktop/pages/settings/desktop_about_page.dart';
 import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
 import 'package:omi/services/auth_service.dart';
@@ -139,9 +141,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   PageController? _controller;
   late AnimationController _sidebarAnimationController;
   late Animation<double> _sidebarSlideAnimation;
+  late AnimationController _subscribeButtonAnimationController;
   final GlobalKey _profileCardKey = GlobalKey();
 
-  bool _isRecordingMinimized = false;
+  // State for Get Omi Widget
+  late PageController _omiImagePageController;
+  Timer? _omiImageScrollTimer;
+  int _currentOmiImagePage = 0;
+  bool _showGetOmiWidget = true;
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -177,7 +184,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
   @override
   void initState() {
+    super.initState();
     SharedPreferencesUtil().onboardingCompleted = true;
+    _showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
 
     // Initialize animations
     _sidebarAnimationController = AnimationController(
@@ -187,6 +196,13 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     _sidebarSlideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _sidebarAnimationController, curve: Curves.easeOutCubic),
     );
+    _subscribeButtonAnimationController = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
+    )..repeat();
+
+    // Initialize page controller for Get Omi Widget
+    _omiImagePageController = PageController();
 
     // Navigate uri
     Uri? navigateToUri;
@@ -268,11 +284,35 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
       // Start sidebar animation
       _sidebarAnimationController.forward();
+      _startOmiImageSlider();
     });
 
     _listenToMessagesFromNotification();
+  }
 
-    super.initState();
+  void _startOmiImageSlider() {
+    final imageCount = [
+      Assets.images.onboardingBg1,
+      Assets.images.onboardingBg2,
+      Assets.images.onboardingBg3,
+      Assets.images.onboardingBg4,
+      Assets.images.onboardingBg6,
+    ].length;
+
+    _omiImageScrollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_omiImagePageController.hasClients) {
+        _currentOmiImagePage = (_currentOmiImagePage + 1) % imageCount;
+        _omiImagePageController.animateToPage(
+          _currentOmiImagePage,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    });
   }
 
   void _listenToMessagesFromNotification() {
@@ -532,17 +572,18 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                             onTap: () => _navigateToIndex(4, homeProvider),
                           ),
 
-                          const SizedBox(height: 24),
+                          const Spacer(),
 
                           // Subscription upgrade banner
                           _buildSubscriptionBanner(),
 
+                          // Get Omi Device widget and spacer
+                          if (_showGetOmiWidget) ...[
+                            const SizedBox(height: 12),
+                            _buildGetOmiWidget(),
+                          ],
+
                           const SizedBox(height: 12),
-
-                          // Get Omi Device widget
-                          _buildGetOmiWidget(),
-
-                          const Spacer(),
 
                           // Profile card at bottom
                           _buildProfileCard(),
@@ -781,7 +822,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         }
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
+          margin: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -789,25 +830,36 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 MixpanelManager().pageOpened('Plan & Usage');
                 routeToPage(context, const UsagePage(showUpgradeDialog: true));
               },
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.6),
-                    width: 1.5,
-                  ),
-                ),
-                child: const Center(
-                  child: Text(
-                    'Subscribe',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: ResponsiveHelper.textPrimary,
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedBuilder(
+                animation: _subscribeButtonAnimationController,
+                builder: (context, child) {
+                  return Ink(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
+                    child: child,
+                  );
+                },
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      FontAwesomeIcons.crown,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      'Upgrade to Unlimited',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -818,67 +870,164 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   }
 
   Widget _buildGetOmiWidget() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () async {
-            MixpanelManager().track('Get Omi Device Clicked');
-            final url = Uri.parse('https://www.omi.me');
-            if (await canLaunchUrl(url)) {
-              await launchUrl(url, mode: LaunchMode.externalApplication);
-            }
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  ResponsiveHelper.backgroundTertiary.withOpacity(0.8),
-                  ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
+    return Consumer<UsageProvider>(
+      builder: (context, usageProvider, child) {
+        final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+
+        if (!_showGetOmiWidget) {
+          return const SizedBox.shrink();
+        }
+
+        final List<AssetGenImage> omiImages = [
+          Assets.images.onboardingBg1,
+          Assets.images.onboardingBg2,
+          Assets.images.onboardingBg3,
+          Assets.images.onboardingBg4,
+          Assets.images.onboardingBg6,
+        ];
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: AspectRatio(
+            aspectRatio: 720 / 1280,
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
-                width: 1,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () async {
+                    MixpanelManager().track('Get Omi Device Clicked');
+                    final url = Uri.parse('https://www.omi.me');
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Image slider
+                      PageView.builder(
+                        controller: _omiImagePageController,
+                        itemCount: omiImages.length,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentOmiImagePage = index;
+                          });
+                        },
+                        itemBuilder: (context, index) {
+                          return omiImages[index].image(
+                            fit: BoxFit.cover,
+                            // Add a subtle animation for image transition
+                            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                              if (wasSynchronouslyLoaded) return child;
+                              return AnimatedOpacity(
+                                opacity: frame == null ? 0 : 1,
+                                duration: const Duration(seconds: 1),
+                                curve: Curves.easeOut,
+                                child: child,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      // Gradient overlay for text readability
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.black.withOpacity(0.6),
+                              Colors.black.withOpacity(0.1),
+                              Colors.transparent,
+                            ],
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                          ),
+                        ),
+                      ),
+                      // Content on top
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        right: 16,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Text(
+                                'Get omi with you',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
+                      ),
+                      // Page indicators
+                      Positioned(
+                        bottom: 8,
+                        left: 0,
+                        right: 0,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(omiImages.length, (index) {
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              height: 6,
+                              width: _currentOmiImagePage == index ? 20 : 6,
+                              decoration: BoxDecoration(
+                                color: _currentOmiImagePage == index ? Colors.white : Colors.white.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                      // Close button
+                      if (isUnlimited)
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black.withOpacity(0.3),
+                              padding: EdgeInsets.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _showGetOmiWidget = false;
+                              });
+                              SharedPreferencesUtil().showGetOmiCard = false;
+                            },
+                            tooltip: 'Hide this card',
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            child: Column(
-              children: [
-                // Large device icon at top-center
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.watch,
-                    color: ResponsiveHelper.purplePrimary,
-                    size: 48,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Text below
-                const Text(
-                  'Get omi with you',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: ResponsiveHelper.textPrimary,
-                  ),
-                ),
-              ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -906,33 +1055,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             ),
             child: Row(
               children: [
-                // Profile picture
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                      style: const TextStyle(
-                        color: ResponsiveHelper.purplePrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // User info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1068,33 +1190,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          // Profile picture
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                width: 2,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                style: const TextStyle(
-                  color: ResponsiveHelper.purplePrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // User info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1256,6 +1351,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     ForegroundUtil.stopForegroundTask();
     _sidebarAnimationController.dispose();
+    _subscribeButtonAnimationController.dispose();
+    _omiImageScrollTimer?.cancel();
+    _omiImagePageController.dispose();
     if (_controller != null) {
       _controller!.dispose();
       _controller = null;

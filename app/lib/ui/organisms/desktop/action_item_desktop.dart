@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
@@ -74,6 +76,15 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   }
 
   void _startEditing() {
+    if (widget.actionItem.isLocked) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const UsagePage(showUpgradeDialog: true),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isEditing = true;
       _textController.text = widget.actionItem.description;
@@ -330,6 +341,31 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     }
   }
 
+  Widget _buildLockedOverlay(BuildContext context) {
+    return Positioned.fill(
+      child: ClipRRect(
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.01),
+            ),
+            child: const Text(
+              'Upgrade to unlimited',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -412,52 +448,6 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Show "Upgrade to Unlock" badge if locked
-                    if (widget.actionItem.isLocked)
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => const UsagePage(showUpgradeDialog: true),
-                              ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.lock,
-                                  size: 12,
-                                  color: ResponsiveHelper.purplePrimary,
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Upgrade to Unlock',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: ResponsiveHelper.purplePrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
                     _isEditing
                         ? TextField(
                             controller: _textController,
@@ -476,22 +466,27 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                           )
                         : GestureDetector(
                             onTap: _startEditing,
-                            child: AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 250),
-                              curve: Curves.easeInOut,
-                              style: TextStyle(
-                                color: widget.actionItem.completed
-                                    ? ResponsiveHelper.textTertiary
-                                    : ResponsiveHelper.textPrimary,
-                                decoration:
-                                    widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
-                                decorationColor: ResponsiveHelper.textTertiary,
-                                decorationThickness: 1.5,
-                                fontSize: 15,
-                                height: 1.4,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              child: Text(widget.actionItem.description),
+                            child: Stack(
+                              children: [
+                                AnimatedDefaultTextStyle(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeInOut,
+                                  style: TextStyle(
+                                    color: widget.actionItem.completed
+                                        ? ResponsiveHelper.textTertiary
+                                        : ResponsiveHelper.textPrimary,
+                                    decoration:
+                                        widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
+                                    decorationColor: ResponsiveHelper.textTertiary,
+                                    decorationThickness: 1.5,
+                                    fontSize: 15,
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  child: Text(widget.actionItem.description),
+                                ),
+                                if (widget.actionItem.isLocked) _buildLockedOverlay(context),
+                              ],
                             ),
                           ),
                     const SizedBox(height: 8),
