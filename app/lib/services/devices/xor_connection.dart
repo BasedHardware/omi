@@ -313,6 +313,18 @@ class XorDeviceConnection extends DeviceConnection {
   @override
   Future<int?> performGetMicGain() async => null;
 
+  @override
+  Future<void> performSetDeviceName(String name) async {
+    // Device name setting not supported
+    return;
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    // Device name setting not supported
+    return null;
+  }
+
   Future<Map<String, String>> getDeviceInfo() async {
     return {
       'modelNumber': 'PLAUD NotePin',

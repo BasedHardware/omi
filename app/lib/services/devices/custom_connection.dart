@@ -184,6 +184,18 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   @override
   Future<int?> performGetMicGain() async => null;
 
+  @override
+  Future<void> performSetDeviceName(String name) async {
+    // Device name setting not supported
+    return;
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    // Device name setting not supported
+    return null;
+  }
+
   List<int> encodeCommand(int commandCode, List<int> data) {
     return [commandCode & 0xFF, (commandCode >> 8) & 0xFF, ...data];
   }
