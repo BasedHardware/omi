@@ -244,6 +244,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             floatingActionButton: Padding(
               padding: const EdgeInsets.only(bottom: 60.0),
               child: FloatingActionButton(
+                heroTag: 'memories_fab',
                 onPressed: () {
                   showMemoryDialog(context, provider);
                   MixpanelManager().memoriesPageCreateMemoryBtn();
