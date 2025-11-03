@@ -38,6 +38,8 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
 
     final workspaces = await _asanaService.getWorkspaces();
 
+    if (!mounted) return;
+
     // Get saved workspace from Firebase (via provider)
     final provider = context.read<TaskIntegrationProvider>();
     final asanaDetails = provider.getConnectionDetails('asana');
@@ -62,6 +64,8 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
     setState(() => _isLoadingProjects = true);
 
     final projects = await _asanaService.getProjects(workspaceGid);
+
+    if (!mounted) return;
 
     // Get saved project from Firebase (via provider)
     final provider = context.read<TaskIntegrationProvider>();
@@ -96,6 +100,8 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       'project_gid': null,
       'project_name': null,
     });
+
+    if (!mounted) return;
 
     await _loadProjects(workspaceGid);
   }

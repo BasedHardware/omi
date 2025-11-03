@@ -649,7 +649,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           exportDate: DateTime.now(),
           exportPlatform: 'google_tasks',
         );
-        widget.onExportedToAppleReminders?.call();
+        widget.onRefresh?.call();
       }
     }
   }
@@ -978,11 +978,9 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                       ],
                     ),
                   ),
-                  // Task export icon (currently only available on Apple platforms)
-                  if (PlatformService.isApple) ...[
-                    const SizedBox(width: 12),
-                    _buildTaskExportIcon(context),
-                  ],
+                  // Task export icon
+                  const SizedBox(width: 12),
+                  _buildTaskExportIcon(context),
                 ],
               ),
               if (widget.actionItem.isLocked)

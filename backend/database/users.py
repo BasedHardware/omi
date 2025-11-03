@@ -477,6 +477,7 @@ def set_task_integration(uid: str, app_key: str, data: dict) -> None:
 def delete_task_integration(uid: str, app_key: str) -> bool:
     """
     Delete a task integration connection.
+    Also clears default_task_integration if it matches the deleted app.
 
     Args:
         uid: User ID
@@ -491,7 +492,20 @@ def delete_task_integration(uid: str, app_key: str) -> bool:
     if not integration_ref.get().exists:
         return False
 
+    # Check if this is the default integration
+    user_doc = user_ref.get()
+    is_default = False
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        is_default = user_data.get('default_task_integration') == app_key
+
+    # Delete integration
     integration_ref.delete()
+
+    # Clear default if needed
+    if is_default:
+        user_ref.update({'default_task_integration': firestore.DELETE_FIELD})
+
     return True
 
 

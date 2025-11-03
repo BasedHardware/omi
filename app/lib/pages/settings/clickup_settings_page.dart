@@ -40,6 +40,8 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
 
     final teams = await _clickupService.getWorkspaces();
 
+    if (!mounted) return;
+
     // Get saved team from Firebase (via provider)
     final provider = context.read<TaskIntegrationProvider>();
     final clickupDetails = provider.getConnectionDetails('clickup');
@@ -63,6 +65,8 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
 
     final spaces = await _clickupService.getSpaces(teamId);
 
+    if (!mounted) return;
+
     // Get saved space from Firebase (via provider)
     final provider = context.read<TaskIntegrationProvider>();
     final clickupDetails = provider.getConnectionDetails('clickup');
@@ -83,6 +87,8 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     setState(() => _isLoadingLists = true);
 
     final lists = await _clickupService.getLists(spaceId);
+
+    if (!mounted) return;
 
     // Get saved list from Firebase (via provider)
     final provider = context.read<TaskIntegrationProvider>();
@@ -224,14 +230,16 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
         }
 
         provider.refresh();
-        Navigator.of(context).pop();
 
+        // Show snackbar before popping to avoid using deactivated context
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Disconnected from ClickUp'),
             duration: Duration(seconds: 2),
           ),
         );
+
+        Navigator.of(context).pop();
       }
     }
   }

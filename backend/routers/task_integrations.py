@@ -3,11 +3,51 @@ from fastapi.responses import HTMLResponse
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 import os
+import secrets
+from datetime import datetime, timedelta, timezone
+import httpx
 
 import database.users as users_db
+import database.redis_db as redis_db
 from utils.other import endpoints as auth
 
 router = APIRouter()
+
+# OAuth state management
+OAUTH_STATE_EXPIRY = 600  # 10 minutes
+
+# HTTP client for external API calls
+http_client = httpx.AsyncClient(timeout=10.0)
+
+
+def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dict[str, str]]:
+    """
+    Validate OAuth state token and return associated data.
+    Deletes the state token after validation to prevent replay attacks.
+
+    Returns:
+        Dict with 'uid' and 'app_key' if valid, None if invalid/expired
+    """
+    if not state_token:
+        return None
+
+    state_key = f"oauth_state:{state_token}"
+    state_data_str = redis_db.r.get(state_key)
+
+    if not state_data_str:
+        return None
+
+    # Delete immediately to prevent replay
+    redis_db.r.delete(state_key)
+
+    try:
+        import ast
+
+        state_data = ast.literal_eval(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
+        return state_data
+    except Exception as e:
+        print(f"Error parsing state data: {e}")
+        return None
 
 
 # Request/Response models
@@ -130,10 +170,19 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Get OAuth authorization URL for a task integration.
     Frontend opens this URL in browser to start OAuth flow.
+    Uses secure random state tokens to prevent CSRF attacks.
     """
     base_url = os.getenv('BASE_API_URL')
     if not base_url:
         raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
+
+    # Generate cryptographically secure random state token
+    state_token = secrets.token_urlsafe(32)
+
+    # Store state mapping in Redis with expiry
+    state_key = f"oauth_state:{state_token}"
+    state_data = {'uid': uid, 'app_key': app_key, 'created_at': datetime.now(timezone.utc).isoformat()}
+    redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, str(state_data))
 
     if app_key == 'todoist':
         client_id = os.getenv('TODOIST_CLIENT_ID')
@@ -141,7 +190,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
             raise HTTPException(status_code=500, detail="Todoist not configured")
 
         redirect_uri = f'{base_url}v2/integrations/todoist/callback'
-        auth_url = f'https://todoist.com/oauth/authorize?client_id={client_id}&scope=data:read_write&state={uid}&redirect_uri={redirect_uri}'
+        auth_url = f'https://todoist.com/oauth/authorize?client_id={client_id}&scope=data:read_write&state={state_token}&redirect_uri={redirect_uri}'
 
     elif app_key == 'asana':
         client_id = os.getenv('ASANA_CLIENT_ID')
@@ -152,7 +201,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         scopes = 'tasks:read tasks:write workspaces:read projects:read users:read'
         from urllib.parse import quote
 
-        auth_url = f'https://app.asana.com/-/oauth_authorize?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&state={uid}&scope={quote(scopes)}'
+        auth_url = f'https://app.asana.com/-/oauth_authorize?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&state={state_token}&scope={quote(scopes)}'
 
     elif app_key == 'google_tasks':
         client_id = os.getenv('GOOGLE_TASKS_CLIENT_ID')
@@ -163,7 +212,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         scope = 'https://www.googleapis.com/auth/tasks'
         from urllib.parse import quote
 
-        auth_url = f'https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&scope={quote(scope)}&access_type=offline&prompt=consent&state={uid}'
+        auth_url = f'https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&scope={quote(scope)}&access_type=offline&prompt=consent&state={state_token}'
 
     elif app_key == 'clickup':
         client_id = os.getenv('CLICKUP_CLIENT_ID')
@@ -173,7 +222,9 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         redirect_uri = f'{base_url}v2/integrations/clickup/callback'
         from urllib.parse import quote
 
-        auth_url = f'https://app.clickup.com/api?client_id={client_id}&redirect_uri={quote(redirect_uri)}&state={uid}'
+        auth_url = (
+            f'https://app.clickup.com/api?client_id={client_id}&redirect_uri={quote(redirect_uri)}&state={state_token}'
+        )
 
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
@@ -207,7 +258,6 @@ async def create_task_via_integration(
     app_key: str, request: CreateTaskRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Create a task in the specified integration using stored credentials."""
-    import requests
     from datetime import datetime
 
     # Get integration details
@@ -232,7 +282,7 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 body['due_string'] = due.strftime('%Y-%m-%d')
 
-            response = requests.post(
+            response = await http_client.post(
                 'https://api.todoist.com/rest/v2/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json=body,
@@ -267,7 +317,7 @@ async def create_task_via_integration(
             if project_gid:
                 task_data['projects'] = [project_gid]
 
-            response = requests.post(
+            response = await http_client.post(
                 'https://app.asana.com/api/1.0/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json={'data': task_data},
@@ -292,7 +342,7 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 task_data['due'] = due.strftime('%Y-%m-%dT00:00:00.000Z')
 
-            response = requests.post(
+            response = await http_client.post(
                 f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
                 headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
                 json=task_data,
@@ -317,7 +367,7 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 task_data['due_date'] = int(due.timestamp() * 1000)
 
-            response = requests.post(
+            response = await http_client.post(
                 f'https://api.clickup.com/api/v2/list/{list_id}/task',
                 headers={'Authorization': access_token, 'Content-Type': 'application/json'},
                 json=task_data,
@@ -355,7 +405,7 @@ async def todoist_oauth_callback(
     OAuth callback endpoint for Todoist integration.
     Exchanges the authorization code for tokens and redirects back to the app with tokens.
     """
-    if not code:
+    if not code or not state:
         return HTMLResponse(
             content="""
             <!DOCTYPE html>
@@ -393,6 +443,49 @@ async def todoist_oauth_callback(
             """,
             status_code=400,
         )
+
+    # Validate state token
+    state_data = validate_and_consume_oauth_state(state)
+    if not state_data or state_data.get('app_key') != 'todoist':
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Todoist Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #E44332 0%, #DB4035 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Security Error</h2>
+                    <p>Invalid or expired authentication request.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=403,
+        )
+
+    uid = state_data['uid']
 
     # Exchange code for tokens using backend credentials
     import requests
@@ -441,7 +534,7 @@ async def todoist_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = requests.post(
+        token_response = await http_client.post(
             'https://todoist.com/oauth/access_token',
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
             data={
@@ -456,28 +549,28 @@ async def todoist_oauth_callback(
             access_token = token_data.get('access_token', '')
 
             # Store token in Firebase
-            if access_token and state:
+            if access_token and uid:
                 try:
                     users_db.set_task_integration(
-                        state,
+                        uid,
                         'todoist',
                         {
                             'connected': True,
                             'access_token': access_token,
                         },
                     )
-                    print(f'✓ Stored Todoist token in Firebase for user {state}')
+                    print(f'✓ Stored Todoist token in Firebase for user {uid}')
                 except Exception as e:
                     print(f'Error storing Todoist token: {e}')
 
             # Create deep link for success (no token in URL)
-            deep_link = f'omi://todoist/callback?success=true&state={state or ""}'
+            deep_link = 'omi://todoist/callback?success=true'
         else:
             # Failed to exchange, return error
-            deep_link = f'omi://todoist/callback?error=token_exchange_failed&state={state or ""}'
+            deep_link = 'omi://todoist/callback?error=token_exchange_failed'
     except Exception as e:
         print(f'Error exchanging Todoist code: {e}')
-        deep_link = f'omi://todoist/callback?error=server_error&state={state or ""}'
+        deep_link = 'omi://todoist/callback?error=server_error'
 
     # Return HTML that redirects to the app
     html_content = f"""
@@ -560,7 +653,7 @@ async def asana_oauth_callback(
     OAuth callback endpoint for Asana integration.
     Exchanges the authorization code for tokens and redirects back to the app with tokens.
     """
-    if not code:
+    if not code or not state:
         return HTMLResponse(
             content="""
             <!DOCTYPE html>
@@ -598,6 +691,49 @@ async def asana_oauth_callback(
             """,
             status_code=400,
         )
+
+    # Validate state token
+    state_data = validate_and_consume_oauth_state(state)
+    if not state_data or state_data.get('app_key') != 'asana':
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Asana Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Security Error</h2>
+                    <p>Invalid or expired authentication request.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=403,
+        )
+
+    uid = state_data['uid']
 
     # Exchange code for tokens using backend credentials
     import requests
@@ -649,7 +785,7 @@ async def asana_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = requests.post(
+        token_response = await http_client.post(
             'https://app.asana.com/-/oauth_token',
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
             data={
@@ -667,10 +803,10 @@ async def asana_oauth_callback(
             refresh_token = token_data.get('refresh_token', '')
 
             # Fetch user info and store everything in Firebase
-            if access_token and state:
+            if access_token and uid:
                 try:
                     # Fetch user GID from Asana
-                    user_response = requests.get(
+                    user_response = await http_client.get(
                         'https://app.asana.com/api/1.0/users/me', headers={'Authorization': f'Bearer {access_token}'}
                     )
                     user_gid = None
@@ -680,7 +816,7 @@ async def asana_oauth_callback(
 
                     # Store in Firebase
                     users_db.set_task_integration(
-                        state,
+                        uid,
                         'asana',
                         {
                             'connected': True,
@@ -689,18 +825,18 @@ async def asana_oauth_callback(
                             'user_gid': user_gid,
                         },
                     )
-                    print(f'✓ Stored Asana tokens in Firebase for user {state}')
+                    print(f'✓ Stored Asana tokens in Firebase for user {uid}')
                 except Exception as e:
                     print(f'Error storing Asana tokens: {e}')
 
             # Create deep link for success (no tokens in URL)
-            deep_link = f'omi://asana/callback?success=true&requires_setup=true&state={state or ""}'
+            deep_link = 'omi://asana/callback?success=true&requires_setup=true'
         else:
             # Failed to exchange, return error
-            deep_link = f'omi://asana/callback?error=token_exchange_failed&state={state or ""}'
+            deep_link = 'omi://asana/callback?error=token_exchange_failed'
     except Exception as e:
         print(f'Error exchanging Asana code: {e}')
-        deep_link = f'omi://asana/callback?error=server_error&state={state or ""}'
+        deep_link = 'omi://asana/callback?error=server_error'
 
     # Return HTML that redirects to the app
     html_content = f"""
@@ -783,7 +919,7 @@ async def google_tasks_oauth_callback(
     OAuth callback endpoint for Google Tasks integration.
     Exchanges the authorization code for tokens and redirects back to the app with tokens.
     """
-    if not code:
+    if not code or not state:
         return HTMLResponse(
             content="""
             <!DOCTYPE html>
@@ -821,6 +957,49 @@ async def google_tasks_oauth_callback(
             """,
             status_code=400,
         )
+
+    # Validate state token
+    state_data = validate_and_consume_oauth_state(state)
+    if not state_data or state_data.get('app_key') != 'google_tasks':
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Google Tasks Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #4285F4 0%, #34A853 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Security Error</h2>
+                    <p>Invalid or expired authentication request.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=403,
+        )
+
+    uid = state_data['uid']
 
     # Exchange code for tokens using backend credentials
     import requests
@@ -872,7 +1051,7 @@ async def google_tasks_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = requests.post(
+        token_response = await http_client.post(
             'https://oauth2.googleapis.com/token',
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
             data={
@@ -890,10 +1069,10 @@ async def google_tasks_oauth_callback(
             refresh_token = token_data.get('refresh_token', '')
 
             # Fetch task lists and store in Firebase
-            if access_token and state:
+            if access_token and uid:
                 try:
                     # Fetch default task list
-                    lists_response = requests.get(
+                    lists_response = await http_client.get(
                         'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
                         headers={'Authorization': f'Bearer {access_token}'},
                     )
@@ -908,7 +1087,7 @@ async def google_tasks_oauth_callback(
 
                     # Store in Firebase
                     users_db.set_task_integration(
-                        state,
+                        uid,
                         'google_tasks',
                         {
                             'connected': True,
@@ -918,18 +1097,18 @@ async def google_tasks_oauth_callback(
                             'default_list_title': default_list_title,
                         },
                     )
-                    print(f'✓ Stored Google Tasks tokens in Firebase for user {state}')
+                    print(f'✓ Stored Google Tasks tokens in Firebase for user {uid}')
                 except Exception as e:
                     print(f'Error storing Google Tasks tokens: {e}')
 
             # Create deep link for success (no tokens in URL)
-            deep_link = f'omi://google-tasks/callback?success=true&state={state or ""}'
+            deep_link = 'omi://google-tasks/callback?success=true'
         else:
             # Failed to exchange, return error
-            deep_link = f'omi://google-tasks/callback?error=token_exchange_failed&state={state or ""}'
+            deep_link = 'omi://google-tasks/callback?error=token_exchange_failed'
     except Exception as e:
         print(f'Error exchanging Google Tasks code: {e}')
-        deep_link = f'omi://google-tasks/callback?error=server_error&state={state or ""}'
+        deep_link = 'omi://google-tasks/callback?error=server_error'
 
     # Return HTML that redirects to the app
     html_content = f"""
@@ -1012,7 +1191,7 @@ async def clickup_oauth_callback(
     OAuth callback endpoint for ClickUp integration.
     Exchanges the authorization code for tokens and redirects back to the app with tokens.
     """
-    if not code:
+    if not code or not state:
         return HTMLResponse(
             content="""
             <!DOCTYPE html>
@@ -1050,6 +1229,49 @@ async def clickup_oauth_callback(
             """,
             status_code=400,
         )
+
+    # Validate state token
+    state_data = validate_and_consume_oauth_state(state)
+    if not state_data or state_data.get('app_key') != 'clickup':
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>ClickUp Auth Error - Omi</title>
+                <meta charset="UTF-8">
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: linear-gradient(135deg, #7B68EE 0%, #9B59B6 100%);
+                        color: white;
+                    }
+                    .container {
+                        text-align: center;
+                        padding: 2rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 20px;
+                        backdrop-filter: blur(10px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2>❌ Security Error</h2>
+                    <p>Invalid or expired authentication request.</p>
+                </div>
+            </body>
+            </html>
+            """,
+            status_code=403,
+        )
+
+    uid = state_data['uid']
 
     # Exchange code for tokens using backend credentials
     import requests
@@ -1099,16 +1321,14 @@ async def clickup_oauth_callback(
 
     try:
         # Exchange code for tokens
-        token_response = requests.post(
+        token_response = await http_client.post(
             'https://api.clickup.com/api/v2/oauth/token',
             headers={'Content-Type': 'application/json'},
-            data=json_module.dumps(
-                {
-                    'client_id': client_id,
-                    'client_secret': client_secret,
-                    'code': code,
-                }
-            ),
+            json={
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'code': code,
+            },
         )
 
         if token_response.status_code == 200:
@@ -1116,10 +1336,10 @@ async def clickup_oauth_callback(
             access_token = token_data.get('access_token', '')
 
             # Fetch user info and store in Firebase
-            if access_token and state:
+            if access_token and uid:
                 try:
                     # Fetch user ID from ClickUp
-                    user_response = requests.get(
+                    user_response = await http_client.get(
                         'https://api.clickup.com/api/v2/user', headers={'Authorization': access_token}
                     )
                     user_id = None
@@ -1129,7 +1349,7 @@ async def clickup_oauth_callback(
 
                     # Store in Firebase
                     users_db.set_task_integration(
-                        state,
+                        uid,
                         'clickup',
                         {
                             'connected': True,
@@ -1137,18 +1357,18 @@ async def clickup_oauth_callback(
                             'user_id': user_id,
                         },
                     )
-                    print(f'✓ Stored ClickUp token in Firebase for user {state}')
+                    print(f'✓ Stored ClickUp token in Firebase for user {uid}')
                 except Exception as e:
                     print(f'Error storing ClickUp token: {e}')
 
             # Create deep link for success (no token in URL)
-            deep_link = f'omi://clickup/callback?success=true&requires_setup=true&state={state or ""}'
+            deep_link = 'omi://clickup/callback?success=true&requires_setup=true'
         else:
             # Failed to exchange, return error
-            deep_link = f'omi://clickup/callback?error=token_exchange_failed&state={state or ""}'
+            deep_link = 'omi://clickup/callback?error=token_exchange_failed'
     except Exception as e:
         print(f'Error exchanging ClickUp code: {e}')
-        deep_link = f'omi://clickup/callback?error=server_error&state={state or ""}'
+        deep_link = 'omi://clickup/callback?error=server_error'
 
     # Return HTML that redirects to the app
     html_content = f"""

@@ -58,7 +58,6 @@ class TodoistService {
     required String content,
     String? description,
     DateTime? dueDate,
-    int priority = 1,
   }) async {
     try {
       final result = await createTaskViaIntegration(
