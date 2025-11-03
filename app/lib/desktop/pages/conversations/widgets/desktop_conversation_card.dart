@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -604,6 +605,54 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Lock indicator - show first if locked
+        if (widget.conversation.isLocked) ...[
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const UsagePage(showUpgradeDialog: true),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.lock,
+                      size: 12,
+                      color: ResponsiveHelper.purplePrimary,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Upgrade to Unlock',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: ResponsiveHelper.purplePrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+
         // Category chip
         if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded) ...[
           OmiBadge(label: widget.conversation.getTag()),

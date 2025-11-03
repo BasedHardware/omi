@@ -12,6 +12,10 @@ import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'apps/desktop_apps_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'conversations/desktop_conversations_page.dart';
@@ -528,6 +532,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                             onTap: () => _navigateToIndex(4, homeProvider),
                           ),
 
+                          const SizedBox(height: 24),
+
+                          // Subscription upgrade banner
+                          _buildSubscriptionBanner(),
+
+                          const SizedBox(height: 12),
+
+                          // Get Omi Device widget
+                          _buildGetOmiWidget(),
+
                           const Spacer(),
 
                           // Profile card at bottom
@@ -752,6 +766,122 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
+  Widget _buildSubscriptionBanner() {
+    return Consumer<UsageProvider>(
+      builder: (context, usageProvider, child) {
+        // Don't show if subscription UI is hidden or user is already on unlimited
+        if (usageProvider.subscription?.showSubscriptionUi != true) {
+          return const SizedBox.shrink();
+        }
+
+        final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+
+        if (isUnlimited) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                MixpanelManager().pageOpened('Plan & Usage');
+                routeToPage(context, const UsagePage(showUpgradeDialog: true));
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: ResponsiveHelper.purplePrimary.withOpacity(0.6),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    'Subscribe',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: ResponsiveHelper.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGetOmiWidget() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            MixpanelManager().track('Get Omi Device Clicked');
+            final url = Uri.parse('https://www.omi.me');
+            if (await canLaunchUrl(url)) {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            }
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  ResponsiveHelper.backgroundTertiary.withOpacity(0.8),
+                  ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              children: [
+                // Large device icon at top-center
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.watch,
+                    color: ResponsiveHelper.purplePrimary,
+                    size: 48,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Text below
+                const Text(
+                  'Get omi with you',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: ResponsiveHelper.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProfileCard() {
     final userName = SharedPreferencesUtil().givenName;
     final userEmail = SharedPreferencesUtil().email;
@@ -903,6 +1033,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
         // Settings options
         _buildPopupMenuItem('profile', Icons.person, 'Profile', profileCardWidth),
+        _buildPopupMenuItem('usage', FontAwesomeIcons.chartBar, 'Plan & Usage', profileCardWidth),
         _buildPopupMenuItem('device', Icons.bluetooth_connected, 'Device Settings', profileCardWidth),
         _buildPopupMenuItem('developer', Icons.code, 'Developer Mode', profileCardWidth),
         _buildPopupMenuItem('about', Icons.info_outline, 'About Omi', profileCardWidth),
@@ -1033,6 +1164,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       case 'profile':
         MixpanelManager().pageOpened('Settings');
         routeToPage(context, const DesktopProfilePage());
+        break;
+      case 'usage':
+        MixpanelManager().pageOpened('Plan & Usage');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const UsagePage(),
+          ),
+        );
         break;
       case 'device':
         Navigator.of(context).push(
