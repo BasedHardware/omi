@@ -360,7 +360,7 @@ class AppProvider extends BaseProvider {
       }
 
       // Fetch fresh grouped data from server (first page per category)
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: false);
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
       groupedApps = groups;
       // Flatten for search/filter views
       final List<App> flat = [];
@@ -509,7 +509,7 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       debugPrint('Refreshing apps after installation/change...');
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: false);
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
       groupedApps = groups;
       final List<App> flat = [];
       for (final g in groups) {

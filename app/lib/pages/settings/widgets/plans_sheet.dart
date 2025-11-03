@@ -953,7 +953,6 @@ class _PlansSheetState extends State<PlansSheet> {
                           final shouldShowTrainingOption = _showTrainingDataOptIn &&
                               !usageProvider.isLoadingPlans &&
                               usageProvider.availablePlans != null;
-                          debugPrint("xzy ${shouldShowTrainingOption}");
 
                           if (!shouldShowTrainingOption) {
                             return const SizedBox.shrink();

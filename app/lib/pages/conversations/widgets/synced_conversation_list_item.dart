@@ -179,7 +179,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  dateTimeFormat('MMM d, h:mm a', conversation.startedAt ?? conversation.createdAt),
+                  dateTimeFormat('h:mm a', conversation.startedAt ?? conversation.createdAt),
                   style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                   maxLines: 1,
                   textAlign: TextAlign.end,

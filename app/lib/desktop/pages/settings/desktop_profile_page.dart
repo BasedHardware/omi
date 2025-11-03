@@ -198,15 +198,6 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
   Widget _buildProfileInfoCard(ResponsiveHelper responsive, String userName, String userEmail) {
     return OmiInfoCard(
       children: [
-        // Large profile avatar
-        OmiProfileAvatar(
-          size: 120,
-          fallbackText: userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-        ),
-
-        const SizedBox(height: 24),
-
-        // User name
         Text(
           userName.isNotEmpty ? userName : 'User',
           style: responsive.headlineMedium.copyWith(

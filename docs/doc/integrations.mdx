@@ -1,0 +1,252 @@
+---
+title: "Integrating Third-Party Wearables"
+description: "A guide to integrating any wearable device, like Plaud, Limitless, or your own custom hardware, with the Omi open-source ecosystem."
+---
+
+<div style={{ textAlign: 'center', marginBottom: '20px' }}>
+  <img src="/images/docs/get_started/images/omibanner.png" alt="Omi Banner" style={{ width: '100%', maxWidth: '1200px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)' }} />
+</div>
+
+Omi is the world's most advanced open-source AI wearable platform. Our mission is to build an open ecosystem for seamless communication, and that includes enabling a wide range of hardware.
+
+This guide will walk you through integrating third-party wearable devices—like Plaud AI, Limitless, or your own custom hardware—into the Omi app. By doing so, you can leverage Omi's powerful features, including high-quality transcription, conversation memory, and a growing app marketplace, for any device.
+
+---
+
+## The Integration Workflow
+
+Integrating a new device involves two main phases:
+
+1.  **Reverse Engineering:** Understanding how the device communicates. This typically means capturing and analyzing its Bluetooth Low Energy (BLE) traffic to decode its protocol for commands and data streaming.
+2.  **Software Integration:** Writing code within the Omi mobile app to manage the connection, communication, and data processing for the new device.
+
+This guide focuses on devices that stream audio data, but the principles apply to other data types as well.
+
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following:
+
+- [ ] **The Hardware:** The third-party device you want to integrate.
+- [ ] **An Android Phone:** Highly recommended for its superior BLE traffic capturing capabilities.
+- [ ] **Wireshark:** The essential tool for analyzing captured network traffic.
+- [ ] **Omi App Codebase:** A local development setup of the Omi app.
+- [ ] **Technical Knowledge:**
+    -   Basic understanding of Bluetooth Low Energy (BLE) concepts (Services, Characteristics, UUIDs).
+    -   Familiarity with Dart/Flutter.
+    -   (Optional) Python for writing verification scripts.
+
+---
+
+## Part 1: Reverse Engineering the Device Protocol
+
+Your first goal is to become a detective. You need to learn the device's language, which for most wearables is spoken over Bluetooth Low Energy (BLE).
+
+### Step 1.1: Capture BLE Traffic
+
+The most effective way to learn the protocol is to capture the communication between the device and its official app.
+
+#### Using Android (Recommended)
+
+1.  **Enable Developer Options:** Go to `Settings > About phone` and tap `Build number` seven times.
+2.  **Enable ADB & Snoop Log:** Go to `Settings > System > Developer options`. Enable `USB debugging` and `Enable Bluetooth HCI snoop log`.
+3.  **Restart Bluetooth:** Turn Bluetooth off and on again for the change to take effect.
+4.  **Generate Traffic:** Use the official vendor app to connect to your device. Perform key operations like starting and stopping a recording, changing settings, etc.
+
+> **Pro Tip:** Record a video of your phone's screen while you perform actions in the vendor app. This will be invaluable later when you're in Wireshark, as you can match the timestamps from your video to the packet timestamps to see exactly which action generated which BLE command.
+
+5.  **Retrieve the Log:** After capturing, disable the snoop log.
+    *   **Non-Rooted Devices:** Generate a bug report from `Developer options`. The log file, `btsnoop_hci.log`, will be in the resulting ZIP archive under `FS/data/misc/bluetooth/logs/`.
+    *   **Rooted Devices:** Pull the file directly using ADB: `adb pull /data/misc/bluetooth/logs/btsnoop_hci.log`
+6.  **Analyze:** Open the `btsnoop_hci.log` file in [Wireshark](https://www.wireshark.org/).
+
+> **Tip:** To find your device's address and other details, you can run: `adb shell dumpsys bluetooth_manager`
+
+#### Using iOS
+
+Capturing traffic on iOS is more challenging. Apps like [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nrf-connect-for-mobile) or [LightBlue](https://apps.apple.com/us/app/lightblue-explorer/id557428110) allow you to manually explore your device's services and characteristics. This process requires more trial and error but can still reveal the necessary information.
+
+### Step 1.2: Analyze Traffic in Wireshark
+
+With your log file open, it's time to find the important packets.
+
+-   **Filter by Device:** Find your device's address and apply a display filter (e.g., `btle.master_bd_addr == your_phone_addr and btle.slave_bd_addr == your_device_addr`) to isolate its traffic.
+-   **Look for Patterns:** If the device streams audio, you should see a large number of packets of a similar size being sent rapidly from the device to the phone.
+-   **Inspect Packet Details:** Click on a packet to see its details. Look for the GATT Service UUID, Characteristic UUID, and the raw data payload (Opcode: `ATT_HANDLE_VALUE_NTF`).
+
+> #### Key Information to Find
+>
+> Your goal is to create a "map" of the device's BLE services. You are looking for:
+>
+> -   **Service UUIDs:** The high-level containers for functionality (e.g., "Audio Service", "Device Information Service").
+> -   **Characteristic UUIDs:** The specific endpoints for data (e.g., "Audio Stream Data", "Battery Level", "Button Press").
+> -   **Data Format:** The encoding of the data payload (e.g., Opus, PCM, simple byte commands).
+
+### Step 1.3: Decode the Data Payload
+
+The data payload is a hexadecimal string. Your task is to figure out its structure. For audio, common codecs include **Opus, PCM, µ-law, and AAC**.
+
+#### Example: Identifying Opus Frames
+
+Let's say you capture several 240-byte data packets. You notice the first byte is always `b8`, and this byte reappears every 40 bytes within the same packet. This is a strong clue. The Opus audio codec uses a Table of Contents (TOC) byte at the start of each frame. The repeating `b8` byte suggests the packet contains six 40-byte Opus frames.
+
+### Step 1.4: Verify Your Findings
+
+Before integrating, write a small standalone script (e.g., using Python and the [Bleak](https://bleak.readthedocs.io/en/latest/) library) to confirm your assumptions. Your script should connect, subscribe to the audio characteristic, receive data, decode it, and save it as a `.wav` file. If you can play it back, you've cracked the code!
+
+---
+
+## Part 2: Integrating with the Omi App
+
+Now, let's integrate your device into the Omi app's modular architecture.
+
+### Understanding Omi's Device Architecture
+
+-   **`DeviceConnection`:** An abstract class in `.../device_connection.dart` that defines the standard interface for all devices (e.g., `connect()`, `getAudioCodec()`, `retrieveBatteryLevel()`). Your new class will extend this.
+-   **`DeviceTransport`:** A low-level communication handler. For BLE devices, you'll use `BleTransport` (`.../transports/ble_transport.dart`), which handles the raw reading and writing to characteristics. You typically don't need to modify this.
+-   **`DeviceConnectionFactory`:** A class in `.../device_connection.dart` that constructs the correct `DeviceConnection` object based on the `DeviceType`. You will register your new device here.
+
+### Step 2.1: Add a New `DeviceType`
+
+First, make the app aware of your new device. Open `app/lib/backend/schema/bt_device/bt_device.dart` and add your device to the `DeviceType` enum.
+
+```dart
+// app/lib/backend/schema/bt_device/bt_device.dart
+enum DeviceType {
+  omi,
+  openglass,
+  frame,
+  appleWatch,
+  xor,
+  xyz, // Add your new device type here
+}
+```
+
+You must also update the `getTypeOfBluetoothDevice` function and create a helper (e.g., `isXyzDevice`) to identify your device during a Bluetooth scan, typically by checking for a specific service UUID or name pattern.
+
+### Step 2.2: Create Your Device Connection Class
+
+In `app/lib/services/devices/`, create a new file (e.g., `xyz_connection.dart`). Inside, create a class that extends `DeviceConnection`. This is the heart of your integration.
+
+```dart
+// app/lib/services/devices/xyz_connection.dart
+import 'dart:async';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/models.dart';
+
+// Define your device's specific UUIDs here
+const String xyzAudioServiceUuid = '0000...';
+const String xyzAudioStreamUuid = '0000...';
+const String xyzButtonUuid = '0000...';
+
+class XyzConnection extends DeviceConnection {
+  XyzConnection(super.device, super.transport);
+
+  @override
+  Future<BleAudioCodec> performGetAudioCodec() async {
+    // Return the audio codec your device uses.
+    // If it's fixed, just return it. If you need to read it from a
+    // characteristic, do that here using `transport.readCharacteristic(...)`.
+    return BleAudioCodec.opus;
+  }
+
+  @override
+  Future<StreamSubscription?> performGetBleAudioBytesListener({
+    required void Function(List<int> p1) onAudioBytesReceived,
+  }) async {
+    // Subscribe to your device's audio characteristic and forward the data.
+    final stream = transport.getCharacteristicStream(xyzAudioServiceUuid, xyzAudioStreamUuid);
+    return stream.listen(onAudioBytesReceived);
+  }
+
+  @override
+  Future<int> performRetrieveBatteryLevel() async {
+    // Implement battery level reading. Most devices use the standard BLE
+    // Battery Service, so you can often call the superclass method.
+    return super.performRetrieveBatteryLevel();
+  }
+
+  // --- Optional Features ---
+
+  @override
+  Future<StreamSubscription?> performGetBleButtonListener({
+    required void Function(List<int> p1) onButtonReceived,
+  }) async {
+    // If your device has a button, subscribe to its characteristic here.
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<int>> performGetButtonState() async {
+    // If your device has a button, implement its state retrieval here.
+    throw UnimplementedError();
+  }
+
+  // If a feature is not supported, you can simply throw an UnimplementedError
+  // or return a default value.
+}
+```
+
+### Step 2.3: Implement the Core `perform...` Methods
+
+Your `XyzConnection` class must provide concrete implementations for the abstract `perform...` methods. This is where you'll use the `transport` object to interact with the BLE characteristics you discovered in Part 1.
+
+Refer to `app/lib/services/devices/omi_connection.dart` for a complete example of a complex device.
+
+### Step 2.4: Register Your Device in the Factory
+
+Finally, tell the Omi app how to create an instance of your new connection class. Open `app/lib/services/devices/device_connection.dart` and find the `DeviceConnectionFactory`.
+
+Add a new case to the `switch` statement for your device type.
+
+```dart
+// app/lib/services/devices/device_connection.dart
+class DeviceConnectionFactory {
+  static DeviceConnection? create(BtDevice device) {
+    // ... existing code ...
+
+    switch (device.type) {
+      // ... other cases
+      case DeviceType.appleWatch:
+        return AppleWatchDeviceConnection(device, transport);
+      
+      // Add your new case
+      case DeviceType.xyz:
+        return XyzConnection(device, transport);
+    }
+  }
+}
+```
+
+With these changes, the Omi app can now connect to and manage your custom device!
+
+---
+
+## Part 3: Testing and Contribution
+
+### Testing Your Integration
+
+Thoroughly test your integration within the Omi app:
+
+- [ ] Can you successfully discover and connect to the device?
+- [ ] Does live transcription work as expected?
+- [ ] Is the battery level displayed correctly?
+- [ ] Is the connection stable? Does it handle reconnection gracefully?
+
+### Troubleshooting Common Issues
+
+-   **Connection Fails:** Double-check your Service and Characteristic UUIDs. Ensure the device is not connected to its official app or another phone.
+-   **Audio is Garbled:** Your `BleAudioCodec` in `performGetAudioCodec` is likely incorrect. Verify the codec and its parameters (sample rate, bit depth).
+-   **No Data Received:** Confirm you are subscribing to the correct characteristic for notifications. Check in Wireshark if the device is actually sending data after you connect.
+
+### Contributing Your Work
+
+Omi is built by the community. If you've integrated a new device, we strongly encourage you to contribute it back to the project!
+
+1.  **Check our [Contribution Guide](https://docs.omi.me/doc/developer/Contribution/)**.
+2.  **Open a Pull Request** on the [Omi GitHub repository](https://github.com/BasedHardware/omi).
+3.  **Join our [Discord](http://discord.omi.me)** to discuss your integration with the team and community.
+
+We also offer [paid bounties 🤑](https://omi.me/bounties) for specific features and integrations. Check them out!

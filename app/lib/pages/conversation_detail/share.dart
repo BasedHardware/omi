@@ -225,32 +225,32 @@ void showShareBottomSheet(
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Card(
-                    shape: conversation.discarded
-                        ? null
-                        : const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                    child: Column(
-                      children: [
-                        _buildListTile(
-                          context,
-                          title: 'Export Transcript',
-                          icon: Icons.description,
-                          onTap: () {
-                            updateView(BottomSheetView.exportTranscript);
-                          },
-                        ),
-                        conversation.discarded
-                            ? const SizedBox.shrink()
-                            : _buildListTile(
-                                context,
-                                title: 'Export Summary',
-                                icon: Icons.summarize,
-                                onTap: () => updateView(BottomSheetView.exportSummary),
-                              ),
-                      ],
-                    ),
-                  ),
+                  // const SizedBox(height: 8),
+                  // Card(
+                  //   shape: conversation.discarded
+                  //       ? null
+                  //       : const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                  //   child: Column(
+                  //     children: [
+                  //       _buildListTile(
+                  //         context,
+                  //         title: 'Export Transcript',
+                  //         icon: Icons.description,
+                  //         onTap: () {
+                  //           updateView(BottomSheetView.exportTranscript);
+                  //         },
+                  //       ),
+                  //       conversation.discarded
+                  //           ? const SizedBox.shrink()
+                  //           : _buildListTile(
+                  //               context,
+                  //               title: 'Export Summary',
+                  //               icon: Icons.summarize,
+                  //               onTap: () => updateView(BottomSheetView.exportSummary),
+                  //             ),
+                  //     ],
+                  //   ),
+                  // ),
                   const SizedBox(height: 10)
                 ] else if (currentView == BottomSheetView.exportTranscript) ...[
                   Row(

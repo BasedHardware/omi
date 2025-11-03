@@ -299,6 +299,7 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       var value = await _getBleButtonState(deviceId);
+      if (value.isEmpty || value.length < 4) return;
       var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("watch device button $buttonState");
 

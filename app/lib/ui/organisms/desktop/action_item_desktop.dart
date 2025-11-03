@@ -1,8 +1,11 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -73,6 +76,15 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   }
 
   void _startEditing() {
+    if (widget.actionItem.isLocked) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const UsagePage(showUpgradeDialog: true),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isEditing = true;
       _textController.text = widget.actionItem.description;
@@ -329,6 +341,31 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     }
   }
 
+  Widget _buildLockedOverlay(BuildContext context) {
+    return Positioned.fill(
+      child: ClipRRect(
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.01),
+            ),
+            child: const Text(
+              'Upgrade to unlimited',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -356,8 +393,24 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Lock indicator or checkbox
+              if (widget.actionItem.isLocked)
+                // Show lock icon if locked
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.lock,
+                    color: ResponsiveHelper.purplePrimary,
+                    size: 12,
+                  ),
+                )
               // Selection checkbox when in selection mode
-              if (widget.isSelectionMode)
+              else if (widget.isSelectionMode)
                 GestureDetector(
                   onTap: widget.onSelectionToggle,
                   child: Container(
@@ -413,22 +466,27 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                           )
                         : GestureDetector(
                             onTap: _startEditing,
-                            child: AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 250),
-                              curve: Curves.easeInOut,
-                              style: TextStyle(
-                                color: widget.actionItem.completed
-                                    ? ResponsiveHelper.textTertiary
-                                    : ResponsiveHelper.textPrimary,
-                                decoration:
-                                    widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
-                                decorationColor: ResponsiveHelper.textTertiary,
-                                decorationThickness: 1.5,
-                                fontSize: 15,
-                                height: 1.4,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              child: Text(widget.actionItem.description),
+                            child: Stack(
+                              children: [
+                                AnimatedDefaultTextStyle(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeInOut,
+                                  style: TextStyle(
+                                    color: widget.actionItem.completed
+                                        ? ResponsiveHelper.textTertiary
+                                        : ResponsiveHelper.textPrimary,
+                                    decoration:
+                                        widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
+                                    decorationColor: ResponsiveHelper.textTertiary,
+                                    decorationThickness: 1.5,
+                                    fontSize: 15,
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  child: Text(widget.actionItem.description),
+                                ),
+                                if (widget.actionItem.isLocked) _buildLockedOverlay(context),
+                              ],
                             ),
                           ),
                     const SizedBox(height: 8),
