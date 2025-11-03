@@ -530,7 +530,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       );
                     },
                   ),
-            context.watch<AppProvider>().isAppOwner
+            appProvider.isAppOwner
                 ? (isLoading
                     ? const SizedBox.shrink()
                     : Container(
@@ -793,11 +793,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               )),
 
                 // Cancel Subscription
-                !isLoading &&
-                        !app.private &&
-                        app.isPaid &&
-                        _hasActiveSubscription() &&
-                        !context.watch<AppProvider>().isAppOwner
+                !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
                     ? Padding(
                         padding: const EdgeInsets.only(top: 16),
                         child: InkWell(
