@@ -831,9 +831,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               size: 16,
                                               color: Colors.white,
                                             ),
-                                            label: const Text(
-                                              'Installed Apps',
-                                              style: TextStyle(
+                                            label: Text(
+                                              (state.visibleFilterCount > 0 && !state.isSearchActive)
+                                                  ? 'Installed'
+                                                  : 'Installed Apps',
+                                              style: const TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,
@@ -904,11 +906,9 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               size: 16,
                                               color: Colors.white,
                                             ),
-                                            label: Text(
-                                              state.visibleFilterCount == 1
-                                                  ? state.firstFilterText ?? 'Filter'
-                                                  : 'Multiple Filters',
-                                              style: const TextStyle(
+                                            label: const Text(
+                                              'Filters',
+                                              style: TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,
