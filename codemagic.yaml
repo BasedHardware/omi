@@ -341,13 +341,19 @@ workflows:
 
           echo "Using installer certificate: $INSTALLER_CERT"
 
-          # Unlock keychain to allow signing
-          keychain use-login
+          # Find the Codemagic keychain
+          KEYCHAIN_PATH=$(find ~/Library/codemagic-cli-tools/keychains -name "*.keychain-db" | head -1)
+          echo "Keychain path: $KEYCHAIN_PATH"
+
+          # Unlock and set partition list to allow codesigning tools to access the keychain
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH"
 
           # Create pkg installer
           xcrun productbuild \
             --component "$APP_PATH" /Applications/ \
             --sign "$INSTALLER_CERT" \
+            --keychain "$KEYCHAIN_PATH" \
             $(pwd)/build/macos/$PACKAGE_NAME
 
     artifacts:
