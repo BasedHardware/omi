@@ -311,8 +311,8 @@ workflows:
       - name: Flutter build macOS
         script: |
           # Build
-          BUILD_NAME=1.0.76
-          BUILD_NUMBER=453
+          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
