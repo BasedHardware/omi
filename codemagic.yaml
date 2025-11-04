@@ -330,7 +330,7 @@ workflows:
 
           # Find the Mac Installer Distribution certificate
           # Extract just the common name value from the certificate
-          INSTALLER_CERT=$(keychain list-certificates | grep "3rd Party Mac Developer Installer" | grep -o "3rd Party Mac Developer Installer: [^,]*" | head -1)
+          INSTALLER_CERT=$(keychain list-certificates | grep "3rd Party Mac Developer Installer" | sed -n 's/.*3rd Party Mac Developer Installer: \([^"]*\).*/3rd Party Mac Developer Installer: \1/p' | head -1)
 
           if [ -z "$INSTALLER_CERT" ]; then
             echo "ERROR: No Mac Installer Distribution certificate found in keychain"
