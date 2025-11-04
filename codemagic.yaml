@@ -327,11 +327,13 @@ workflows:
           APP_NAME=$(find $(pwd) -name "Omi.app" | head -1)
           echo "Found app at: $APP_NAME"
 
-          cd $(dirname "$APP_NAME")
+          # Set output directory
+          OUTPUT_DIR="$(pwd)/build/macos"
+          mkdir -p "$OUTPUT_DIR"
 
           # Create unsigned package
-          PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
-          xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
+          PACKAGE_NAME="Omi.pkg"
+          xcrun productbuild --component "$APP_NAME" /Applications/ "$OUTPUT_DIR/unsigned.pkg"
 
           # Find the installer certificate common name in keychain
           INSTALLER_CERT_NAME=$(keychain list-certificates \
@@ -348,10 +350,12 @@ workflows:
           echo "Using installer certificate: $INSTALLER_CERT_NAME"
 
           # Sign the package
-          xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME"
+          xcrun productsign --sign "$INSTALLER_CERT_NAME" "$OUTPUT_DIR/unsigned.pkg" "$OUTPUT_DIR/$PACKAGE_NAME"
 
           # Clean up
-          rm -f unsigned.pkg
+          rm -f "$OUTPUT_DIR/unsigned.pkg"
+
+          echo "Package created at: $OUTPUT_DIR/$PACKAGE_NAME"
 
     artifacts:
       - build/macos/*.pkg
