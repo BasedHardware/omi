@@ -45,10 +45,11 @@ class BatteryInfoWidget extends StatelessWidget {
                 if (level > 20) return Colors.yellow.shade700;
                 return Colors.red;
               }
+
               final indicatorColor = hasBattery ? _baseColor(displayLevel!) : Colors.grey;
               final displayColor = hasBattery
-                  ? (isFresh ? indicatorColor : indicatorColor.withOpacity(0.7))
-                  : indicatorColor;
+                  ? (awaitingFresh ? indicatorColor.withOpacity(0.7) : indicatorColor)
+                  : indicatorColor.withOpacity(0.7);
 
               return GestureDetector(
                 onTap: () {
@@ -108,9 +109,7 @@ class BatteryInfoWidget extends StatelessWidget {
                           Text(
                             hasBattery ? '${displayLevel}%' : '—',
                             style: TextStyle(
-                              color: hasBattery
-                                  ? (isFresh ? Colors.white : Colors.white70)
-                                  : Colors.white,
+                              color: hasBattery ? (awaitingFresh ? Colors.white70 : Colors.white) : Colors.white70,
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),

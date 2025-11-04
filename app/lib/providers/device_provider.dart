@@ -303,9 +303,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }());
 
     if (_batteryEventCount % _metricsLogEvery == 0) {
-      final avgSeconds = _batteryEventCount <= 1
-          ? 0
-          : (_batteryIntervalSumMs / (_batteryEventCount - 1)) / 1000;
+      final avgSeconds = _batteryEventCount <= 1 ? 0 : (_batteryIntervalSumMs / (_batteryEventCount - 1)) / 1000;
       Logger.debug(
           'Battery cadence: events=$_batteryEventCount avg=${avgSeconds.toStringAsFixed(1)}s maxStreak=$_maxSameValueStreak');
     }
@@ -463,42 +461,42 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           if (_noRiseUntil != null && now.isBefore(_noRiseUntil!)) {
             return false;
           }
-        // Potential rise while not charging.
-        if (rawValue <= baseline + _nonChargingRiseSoftCap) {
-          nextValue = rawValue;
-          _ncStableStart = null;
-          _ncStableMin = null;
-          _ncStableMax = null;
-          _resetChargingMonitor();
-        } else {
-          // Require a long, stable plateau before accepting a larger rise.
-          if (_chargingLikely) {
-            nextValue = math.min(rawValue, baseline + _firstRiseCap);
+          // Potential rise while not charging.
+          if (rawValue <= baseline + _nonChargingRiseSoftCap) {
+            nextValue = rawValue;
             _ncStableStart = null;
             _ncStableMin = null;
             _ncStableMax = null;
             _resetChargingMonitor();
-          } else if (_ncStableStart == null) {
-            _ncStableStart = now;
-            _ncStableMin = rawValue;
-            _ncStableMax = rawValue;
-            return false;
           } else {
-            _ncStableMin = (_ncStableMin == null) ? rawValue : math.min(_ncStableMin!, rawValue);
-            _ncStableMax = (_ncStableMax == null) ? rawValue : math.max(_ncStableMax!, rawValue);
-            final elapsed = now.difference(_ncStableStart!);
-            final jitter = (_ncStableMax! - _ncStableMin!).abs();
-            if (elapsed >= _nonChargingStableWindow && jitter <= 1) {
+            // Require a long, stable plateau before accepting a larger rise.
+            if (_chargingLikely) {
               nextValue = math.min(rawValue, baseline + _firstRiseCap);
               _ncStableStart = null;
               _ncStableMin = null;
               _ncStableMax = null;
               _resetChargingMonitor();
-            } else {
+            } else if (_ncStableStart == null) {
+              _ncStableStart = now;
+              _ncStableMin = rawValue;
+              _ncStableMax = rawValue;
               return false;
+            } else {
+              _ncStableMin = (_ncStableMin == null) ? rawValue : math.min(_ncStableMin!, rawValue);
+              _ncStableMax = (_ncStableMax == null) ? rawValue : math.max(_ncStableMax!, rawValue);
+              final elapsed = now.difference(_ncStableStart!);
+              final jitter = (_ncStableMax! - _ncStableMin!).abs();
+              if (elapsed >= _nonChargingStableWindow && jitter <= 1) {
+                nextValue = math.min(rawValue, baseline + _firstRiseCap);
+                _ncStableStart = null;
+                _ncStableMin = null;
+                _ncStableMax = null;
+                _resetChargingMonitor();
+              } else {
+                return false;
+              }
             }
           }
-        }
         }
       } else {
         // rawValue <= baseline but greater than display; accept but clamp naturally by value.
@@ -603,8 +601,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool _finalizeAndApply(int acceptedValue, DateTime timestamp) {
     _awaitingFreshBattery = false;
-    final previousDisplayed = batteryLevel;
-    final previousBaseline = _baselineBeforeReconnect;
     _baselineBeforeReconnect = acceptedValue;
     _riseWindowStart = null;
     _riseWindowMinValue = null;
@@ -618,22 +614,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _lastRawSample = acceptedValue;
     _sameValueStreak = 1;
     _maxSameValueStreak = math.max(_maxSameValueStreak, 1);
-
-    assert(() {
-      final durationMs = _lastBatteryEventAt == null
-          ? 0
-          : timestamp.difference(_lastBatteryEventAt!).inMilliseconds;
-      final summary = StringBuffer('Battery accepted: $acceptedValue%');
-      if (previousDisplayed != null && previousDisplayed >= 0) {
-        summary.write(' (prev ${previousDisplayed}%)');
-      }
-      if (previousBaseline != null) {
-        summary.write(' baseline was ${previousBaseline}%');
-      }
-      summary.write(' streak=$_sameValueStreak duration=${durationMs / 1000.0}s');
-      Logger.debug(summary.toString());
-      return true;
-    }());
 
     if (batteryLevel != acceptedValue) {
       batteryLevel = acceptedValue;
