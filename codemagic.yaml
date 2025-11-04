@@ -341,6 +341,9 @@ workflows:
 
           echo "Using installer certificate: $INSTALLER_CERT"
 
+          # Unlock keychain to allow signing
+          keychain use-login
+
           # Create pkg installer
           xcrun productbuild \
             --component "$APP_PATH" /Applications/ \
