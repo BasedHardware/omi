@@ -234,6 +234,18 @@ workflows:
             --macos-target="Runner" \
             --yes
 
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_dev.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
+            --macos-out=macos/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --macos-target="Runner" \
+            --yes
+
       - name: Set up App .env
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
