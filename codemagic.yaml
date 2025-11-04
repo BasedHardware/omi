@@ -228,7 +228,7 @@ workflows:
             --platforms="macos" \
             --out=lib/firebase_options_prod.dart \
             --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/Config/Prod/ \
+            --macos-out=macos/ \
             --service-account="./firebase_key.json" \
             --project="based-hardware" \
             --macos-target="Runner" \
