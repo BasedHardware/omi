@@ -60,11 +60,11 @@ class DeviceUtils {
       if (upperModel.contains('PLAUD')) {
         return Assets.images.plaudNotePin.path;
       }
-      if (upperModel.contains('OMI DEVKIT 2')) {
-        return Assets.images.omiDevkitWithoutRope.path;
-      }
       if (upperModel.contains('FRIEND PENDANT')) {
         return Assets.images.friendPendant.path;
+      }
+      if (upperModel.contains('OMI DEVKIT 2') || upperModel.contains('FRIEND')) {
+        return Assets.images.omiDevkitWithoutRope.path;
       }
       if (upperModel.contains('GLASS')) {
         return Assets.images.omiGlass.path;
@@ -93,7 +93,7 @@ class DeviceUtils {
       if (upperName.contains('GLASS')) {
         return Assets.images.omiGlass.path;
       }
-      if (upperName.contains('OMI DEVKIT') || upperName.contains('OMI DEV')) {
+      if (upperName.contains('OMI DEVKIT') || upperName.contains('OMI DEV') || upperName.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
       }
       if (upperName.startsWith('FRIEND_')) {
