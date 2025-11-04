@@ -203,7 +203,7 @@ workflows:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
       flutter: 3.35.3
-      xcode: 16.4
+      xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -286,8 +286,8 @@ workflows:
       - name: Flutter build macOS
         script: |
           # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          BUILD_NAME=1.0.76
+          BUILD_NUMBER=453
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
