@@ -329,7 +329,16 @@ workflows:
           echo "Found app at: $APP_PATH"
 
           # Find the Mac Installer Distribution certificate
-          INSTALLER_CERT=$(keychain list-certificates | grep "3rd Party Mac Developer Installer" | head -1 | xargs)
+          # Extract just the common name value from the certificate
+          INSTALLER_CERT=$(keychain list-certificates | grep "3rd Party Mac Developer Installer" | grep -o "3rd Party Mac Developer Installer: [^,]*" | head -1)
+
+          if [ -z "$INSTALLER_CERT" ]; then
+            echo "ERROR: No Mac Installer Distribution certificate found in keychain"
+            echo "Available certificates:"
+            keychain list-certificates
+            exit 1
+          fi
+
           echo "Using installer certificate: $INSTALLER_CERT"
 
           # Create pkg installer
