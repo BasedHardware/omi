@@ -230,6 +230,7 @@ workflows:
             --macos-out=macos/Config/Prod/ \
             --service-account="./firebase_key.json" \
             --project="based-hardware" \
+            --macos-target="Runner" \
             --yes
 
       - name: Set up App .env
