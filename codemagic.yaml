@@ -228,7 +228,7 @@ workflows:
             --platforms="macos" \
             --out=lib/firebase_options_prod.dart \
             --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/ \
+            --macos-out=macos/Config/Prod \
             --service-account="./firebase_key.json" \
             --project="based-hardware" \
             --macos-target="Runner" \
@@ -245,6 +245,11 @@ workflows:
             --project="based-hardware-dev" \
             --macos-target="Runner" \
             --yes
+
+      - name: Set up Google Service Info
+        script: |
+          # Copy GoogleService-Info.plist
+          cp macos/Config/Prod/GoogleService-Info.plist macos/GoogleService-Info.plist
 
       - name: Set up App .env
         script: |
