@@ -153,6 +153,31 @@ class CaptureProvider extends ChangeNotifier
   }
 
   BtDevice? _recordingDevice;
+
+  String? _getConversationSourceFromDevice() {
+    if (_recordingDevice == null) {
+      return null;
+    }
+    switch (_recordingDevice!.type) {
+      case DeviceType.friendPendant:
+        return 'friend_com';
+      case DeviceType.omi:
+        return 'omi';
+      case DeviceType.openglass:
+        return 'openglass';
+      case DeviceType.fieldy:
+        return 'fieldy';
+      case DeviceType.bee:
+        return 'bee';
+      case DeviceType.xor:
+        return 'xor';
+      case DeviceType.frame:
+        return 'frame';
+      case DeviceType.appleWatch:
+        return 'apple_watch';
+    }
+  }
+
   ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
@@ -231,9 +256,11 @@ class CaptureProvider extends ChangeNotifier
     int? sampleRate,
     int? channels,
     bool? isPcm,
+    String? source,
   }) async {
     await _resetState();
-    await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm);
+    await _initiateWebsocket(
+        audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm, source: source);
   }
 
   Future<void> _initiateWebsocket({
@@ -242,6 +269,7 @@ class CaptureProvider extends ChangeNotifier
     int? channels,
     bool? isPcm,
     bool force = false,
+    String? source,
   }) async {
     Logger.debug('initiateWebsocket in capture_provider');
 
@@ -258,7 +286,7 @@ class CaptureProvider extends ChangeNotifier
 
     _socket = await ServiceManager.instance()
         .socket
-        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
+        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force, source: source);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -468,7 +496,7 @@ class CaptureProvider extends ChangeNotifier
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
-      await _initiateWebsocket(audioCodec: codec, force: true);
+      await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }
 
@@ -924,16 +952,16 @@ class CaptureProvider extends ChangeNotifier
 
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-        await _initiateWebsocket(audioCodec: codec);
+        await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
         return;
       }
       if (recordingState == RecordingState.record) {
-        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: 'phone');
         return;
       }
       if (recordingState == RecordingState.systemAudioRecord && PlatformService.isDesktop) {
         debugPrint("System audio socket disconnected, reconnecting...");
-        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: 'desktop');
         return;
       }
     });
