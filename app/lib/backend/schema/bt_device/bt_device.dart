@@ -44,7 +44,6 @@ enum BleAudioCodec {
   opus,
   opusFS320,
   aac,
-  lc3,
   lc3FS1030,
   unknown;
 
@@ -67,8 +66,6 @@ enum BleAudioCodec {
         return 'PCM (8kHz)';
       case BleAudioCodec.aac:
         return 'AAC';
-      case BleAudioCodec.lc3:
-        return 'LC3 (16kHz)';
       case BleAudioCodec.lc3FS1030:
         return 'LC3 (10ms/30B)';
       default:
@@ -102,8 +99,6 @@ String mapCodecToName(BleAudioCodec codec) {
       return 'pcm8';
     case BleAudioCodec.aac:
       return 'aac';
-    case BleAudioCodec.lc3:
-      return 'lc3';
     case BleAudioCodec.lc3FS1030:
       return 'lc3_fs1030';
     default:
@@ -123,8 +118,6 @@ BleAudioCodec mapNameToCodec(String codec) {
       return BleAudioCodec.pcm8;
     case 'aac':
       return BleAudioCodec.aac;
-    case 'lc3':
-      return BleAudioCodec.lc3;
     case 'lc3_fs1030':
       return BleAudioCodec.lc3FS1030;
     default:
@@ -141,8 +134,6 @@ int mapCodecToSampleRate(BleAudioCodec codec) {
     case BleAudioCodec.pcm16:
       return 16000;
     case BleAudioCodec.pcm8:
-      return 16000;
-    case BleAudioCodec.lc3:
       return 16000;
     case BleAudioCodec.lc3FS1030:
       return 16000;
@@ -161,8 +152,6 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
       return 16;
     case BleAudioCodec.pcm8:
       return 8;
-    case BleAudioCodec.lc3:
-      return 16;
     case BleAudioCodec.lc3FS1030:
       return 16;
     default:
