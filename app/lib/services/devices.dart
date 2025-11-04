@@ -148,8 +148,20 @@ class DeviceService implements IDeviceService {
       }
     }
 
-    _connection = DeviceConnectionFactory.create(device);
+    _connection = await DeviceConnectionFactory.create(device);
     if (_connection != null) {
+      // Update device with potentially re-detected type
+      device = _connection!.device;
+      debugPrint('Device after connection: id=${device.id}, type=${device.type}, name=${device.name}');
+      debugPrint('Stored device: id=${SharedPreferencesUtil().btDevice.id}, type=${SharedPreferencesUtil().btDevice.type}');
+      
+      // Save updated device to preferences if it's the paired device
+      if (device.id == SharedPreferencesUtil().btDevice.id) {
+        SharedPreferencesUtil().btDevice = device;
+        debugPrint('✅ Updated stored device type to: ${device.type}');
+      } else {
+        debugPrint('❌ Device IDs do not match - not updating preferences');
+      }
       await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
       debugPrint("Failed to create device connection for ${device.id}");

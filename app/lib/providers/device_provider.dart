@@ -58,10 +58,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void setConnectedDevice(BtDevice? device) async {
+    // Fix device type if it's a Pocket device but not marked as such
+    if (device != null && device.name.toUpperCase().contains('PKT01') && device.type != DeviceType.pocket) {
+      Logger.debug('Fixing device type from ${device.type} to Pocket for ${device.name}');
+      device = BtDevice(
+        id: device.id,
+        name: device.name,
+        type: DeviceType.pocket,
+        rssi: device.rssi,
+        locator: device.locator,
+      );
+      // Save to preferences
+      if (device.id == SharedPreferencesUtil().btDevice.id) {
+        SharedPreferencesUtil().btDevice = device;
+      }
+    }
+    
     connectedDevice = device;
     pairedDevice = device;
     await getDeviceInfo();
-    Logger.debug('setConnectedDevice: $device');
+    Logger.debug('setConnectedDevice: $device, type: ${device?.type}, name: ${device?.name}');
     notifyListeners();
   }
 

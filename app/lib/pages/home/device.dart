@@ -10,6 +10,8 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/services/devices/pocket_connection.dart';
+import 'package:omi/pages/pocket/pocket_device_page.dart';
 
 import '../conversations/sync_page.dart';
 import 'firmware_update.dart';
@@ -258,6 +260,44 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                             ),
                           ),
                         if (provider.connectedDevice != null) const SizedBox(height: 20),
+
+                        // Pocket Recordings Section (if Pocket device)
+                        if (provider.connectedDevice != null &&
+                            (provider.connectedDevice!.type == DeviceType.pocket ||
+                                provider.connectedDevice!.name.toUpperCase().contains('PKT01')))
+                          Builder(
+                            builder: (context) {
+                              debugPrint('Showing Pocket Recordings button for device: ${provider.connectedDevice?.name}, type: ${provider.connectedDevice?.type}');
+                              return Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 20),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1F1F25),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: _buildSectionRow(
+                                  'Pocket Recordings',
+                                  'Download recordings from device',
+                                  hasArrow: true,
+                                  isFirst: true,
+                                  onTap: () async {
+                                    debugPrint('Opening Pocket Recordings for device type: ${provider.connectedDevice?.type}');
+                                    final connection = await ServiceManager.instance().device.ensureConnection(provider.connectedDevice!.id);
+                                    if (connection != null && mounted) {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (context) => PocketDevicePage(
+                                            device: provider.connectedDevice!,
+                                            connection: connection as PocketDeviceConnection,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                          ),
 
                         // Controllable Items Section
                         Container(

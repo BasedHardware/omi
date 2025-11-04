@@ -175,6 +175,8 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
     deviceType = DeviceType.fieldy;
   } else if (BtDevice.isFriendPendantDeviceFromDevice(device)) {
     deviceType = DeviceType.friendPendant;
+  } else if (BtDevice.isPocketDeviceFromDevice(device)) {
+    deviceType = DeviceType.pocket;
   } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
@@ -200,6 +202,7 @@ enum DeviceType {
   bee,
   fieldy,
   friendPendant,
+  pocket,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -589,12 +592,14 @@ class BtDevice {
 
   // Check if a scan result is from a supported device
   static bool isSupportedDevice(ScanResult result) {
+    debugPrint("${result.device.name}");
     return isBeeDevice(result) ||
         isPlaudDevice(result) ||
         isFieldyDevice(result) ||
         isFriendPendantDevice(result) ||
         isOmiDevice(result) ||
-        isFrameDevice(result);
+        isFrameDevice(result) ||
+        isPocketDevice(result);
   }
 
   static bool isBeeDevice(ScanResult result) {
@@ -684,6 +689,16 @@ class BtDevice {
     return device.servicesList.any((s) => s.uuid == Guid(frameServiceUuid));
   }
 
+  static bool isPocketDevice(ScanResult result) {
+    return result.advertisementData.serviceUuids.contains(Guid(pocketServiceUuid)) ||
+        result.device.platformName.toUpperCase().startsWith('PKT01');
+  }
+
+  static bool isPocketDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid == Guid(pocketServiceUuid)) ||
+        device.platformName.toUpperCase().startsWith('PKT01');
+  }
+
   // from ScanResult
   static fromScanResult(ScanResult result) {
     DeviceType? deviceType;
@@ -700,6 +715,8 @@ class BtDevice {
       deviceType = DeviceType.omi;
     } else if (isFrameDevice(result)) {
       deviceType = DeviceType.frame;
+    } else if (isPocketDevice(result)) {
+      deviceType = DeviceType.pocket;
     }
     if (deviceType != null) {
       cachedDevicesMap[result.device.remoteId.toString()] = deviceType;

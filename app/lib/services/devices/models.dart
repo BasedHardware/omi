@@ -50,6 +50,16 @@ const String plaudServiceUuid = "00001910-0000-1000-8000-00805f9b34fb";
 const String plaudWriteCharUuid = "00002bb1-0000-1000-8000-00805f9b34fb";
 const String plaudNotifyCharUuid = "00002bb0-0000-1000-8000-00805f9b34fb";
 
+const String xorServiceUuid = "00001910-0000-1000-8000-00805f9b34fb";
+const String xorWriteCharUuid = "00002bb1-0000-1000-8000-00805f9b34fb";
+const String xorNotifyCharUuid = "00002bb0-0000-1000-8000-00805f9b34fb";
+
+// Pocket device UUIDs
+const String pocketServiceUuid = "001120a0-2233-4455-6677-889912345678";
+const String pocketCommandCharacteristicUuid = "001120a2-2233-4455-6677-889912345678";
+const String pocketResponseCharacteristicUuid = "001120a1-2233-4455-6677-889912345678";
+const String pocketStatusCharacteristicUuid = "001120a3-2233-4455-6677-889912345678";
+
 const String beeServiceUuid = "03d5d5c4-a86c-11ee-9d89-8f2089a49e7e";
 
 const String fieldyServiceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
