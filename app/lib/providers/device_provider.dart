@@ -90,9 +90,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   // Telemetry and charging detection
   static const int _metricsLogEvery = 12;
-  static const int _chargingRiseMinSamples = 3;
+  static const int _chargingRiseMinSamples = 2;
   static const int _chargingRiseMinDelta = 3;
   static const Duration _chargingObservationWindow = Duration(minutes: 2);
+  static const int _chargingLargeJumpThreshold = 4;
   static const int _defaultStableStreakThreshold = 20;
   DateTime? _lastBatteryEventAt;
   int _batteryEventCount = 0;
@@ -350,10 +351,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     final window = _chargingWindowStart == null ? Duration.zero : now.difference(_chargingWindowStart!);
-    if (_chargingRiseSamples >= _chargingRiseMinSamples &&
-        (rawValue - baseline) >= _chargingRiseMinDelta &&
+    final riseDelta = rawValue - baseline;
+    if (!_chargingLikely &&
+        _chargingRiseSamples >= _chargingRiseMinSamples &&
+        riseDelta >= _chargingRiseMinDelta &&
         window <= _chargingObservationWindow) {
       _chargingLikely = true;
+      assert(() {
+        Logger.debug(
+            'Charging likely: baseline=$baseline raw=$rawValue samples=$_chargingRiseSamples delta=$riseDelta window=${window.inSeconds}s');
+        return true;
+      }());
     }
 
     _chargingLastRaw = rawValue;
@@ -389,6 +397,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _recordBatteryMetrics(rawValue, now);
     final baselineCandidate = _baselineBeforeReconnect ?? _lastPersistedBattery;
     final hasBaseline = baselineCandidate != null;
+    final displayReference = batteryLevel >= 0 ? batteryLevel : (_lastPersistedBattery ?? rawValue);
+    final jumpFromDisplayInitial = displayReference >= 0 ? rawValue - displayReference : 0;
+    final isLargeJump = jumpFromDisplayInitial >= _chargingLargeJumpThreshold;
     final attachElapsed = now.difference(_appStartedAt);
 
     // First ever reading: accept immediately
@@ -399,9 +410,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (hasBaseline) {
       final baselineAge = _batteryLastUpdatedAt == null ? Duration.zero : now.difference(_batteryLastUpdatedAt!);
       final baselineStale = baselineAge > _baselineStaleThreshold;
-      if (!baselineStale && rawValue > baselineCandidate! + _riseIncreaseThreshold) {
+
+      if (rawValue > baselineCandidate!) {
+        _updateChargingMonitor(rawValue, baselineCandidate, now);
+      }
+
+      if (!baselineStale && rawValue > baselineCandidate + _riseIncreaseThreshold) {
         final allowEarlyAttach = _awaitingFreshBattery && attachElapsed <= _earlyAttachWindow;
-        if (!allowEarlyAttach) {
+        final allowChargingSpike = _chargingLikely || isLargeJump;
+        if (!allowEarlyAttach && !allowChargingSpike) {
           if (!_isPrimingBattery) {
             _primeBatteryLevel();
           }
@@ -412,7 +429,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     if (!_awaitingFreshBattery) {
       // Ongoing mode: conservative acceptance when not charging.
-      final display = batteryLevel >= 0 ? batteryLevel : (_lastPersistedBattery ?? rawValue);
+      final display = displayReference;
       final baseline = _baselineBeforeReconnect ?? _lastPersistedBattery ?? display;
 
       int nextValue;
@@ -449,19 +466,27 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (_earlyAttachSamples.isNotEmpty) {
           _earlyAttachSamples.clear();
         }
+        final jumpFromDisplay = rawValue - display;
         _updateChargingMonitor(rawValue, baseline, now);
-        if (_shouldAcceptStableRise(rawValue, baseline)) {
+
+        if (_chargingLikely && jumpFromDisplay >= _chargingLargeJumpThreshold && rawValue <= baseline + _firstRiseCap) {
+          nextValue = math.min(rawValue, baseline + _firstRiseCap);
+          _noRiseUntil = null;
+          _ncStableStart = null;
+          _ncStableMin = null;
+          _ncStableMax = null;
+          _resetChargingMonitor();
+        } else if (_shouldAcceptStableRise(rawValue, baseline)) {
           nextValue = math.min(rawValue, baseline + _firstRiseCap);
           _ncStableStart = null;
           _ncStableMin = null;
           _ncStableMax = null;
           _resetChargingMonitor();
         } else {
-          // Suppress initial rises for a short window after reconnect; always accept drops earlier.
           if (_noRiseUntil != null && now.isBefore(_noRiseUntil!)) {
             return false;
           }
-          // Potential rise while not charging.
+
           if (rawValue <= baseline + _nonChargingRiseSoftCap) {
             nextValue = rawValue;
             _ncStableStart = null;
@@ -469,13 +494,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             _ncStableMax = null;
             _resetChargingMonitor();
           } else {
-            // Require a long, stable plateau before accepting a larger rise.
-            if (_chargingLikely) {
+            if (_chargingLikely && rawValue <= baseline + _firstRiseCap) {
               nextValue = math.min(rawValue, baseline + _firstRiseCap);
               _ncStableStart = null;
               _ncStableMin = null;
               _ncStableMax = null;
               _resetChargingMonitor();
+            } else if (_chargingLikely) {
+              return false;
             } else if (_ncStableStart == null) {
               _ncStableStart = now;
               _ncStableMin = rawValue;
@@ -518,10 +544,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _persistBatteryLevel(nextValue, now);
       }
 
-      // Baseline: only decrease; allow promotion when we deliberately accept a stabilized rise.
+      // Baseline: only decrease; allow promotion when we deliberately accept a stabilized rise or confirmed charging jump.
+      final jumpFromDisplayFinal = nextValue - display;
+      final acceptedChargingRise =
+          nextValue > baseline && (_chargingLikely || jumpFromDisplayFinal >= _chargingLargeJumpThreshold);
       if (_baselineBeforeReconnect == null || nextValue <= _baselineBeforeReconnect!) {
         _baselineBeforeReconnect = nextValue;
-      } else if (attachElapsed <= _earlyAttachWindow) {
+      } else if (attachElapsed <= _earlyAttachWindow || acceptedChargingRise) {
         _baselineBeforeReconnect = nextValue;
       }
       return true;
