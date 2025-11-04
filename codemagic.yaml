@@ -291,8 +291,14 @@ workflows:
 
       - name: Fetch Mac Installer Distribution certificates
         script: |
-          app-store-connect certificates list --type MAC_INSTALLER_DISTRIBUTION --save || \
-          app-store-connect certificates create --type MAC_INSTALLER_DISTRIBUTION --save
+          # Try to find an existing certificate with our private key
+          echo "Checking for existing Mac Installer Distribution certificate with our private key..."
+          if app-store-connect certificates list --type MAC_INSTALLER_DISTRIBUTION --save 2>&1 | grep -q "Saved Signing Certificate"; then
+            echo "Found existing certificate with matching private key"
+          else
+            echo "No matching certificate found, creating new one for Codemagic..."
+            app-store-connect certificates create --type MAC_INSTALLER_DISTRIBUTION --save
+          fi
 
       - name: Add certificates to keychain
         script: |
