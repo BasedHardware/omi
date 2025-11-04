@@ -144,6 +144,7 @@ async def _listen(
     include_speech_profile: bool = True,
     stt_service: Optional[STTService] = None,
     conversation_timeout: int = 120,
+    source: Optional[str] = None,
 ):
     session_id = str(uuid.uuid4())
     print(
@@ -411,6 +412,14 @@ async def _listen(
         nonlocal seconds_to_add
         nonlocal current_conversation_id
 
+        conversation_source = ConversationSource.omi
+        if source:
+            try:
+                conversation_source = ConversationSource(source)
+            except ValueError:
+                print(f"Invalid conversation source '{source}', defaulting to 'omi'", uid, session_id)
+                conversation_source = ConversationSource.omi
+
         new_conversation_id = str(uuid.uuid4())
         stub_conversation = Conversation(
             id=new_conversation_id,
@@ -422,7 +431,7 @@ async def _listen(
             transcript_segments=[],
             photos=[],
             status=ConversationStatus.in_progress,
-            source=ConversationSource.omi,
+            source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
         )
         conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
@@ -1335,6 +1344,7 @@ async def listen_handler(
     include_speech_profile: bool = True,
     stt_service: Optional[STTService] = None,
     conversation_timeout: int = 120,
+    source: Optional[str] = None,
 ):
     await _listen(
         websocket,
@@ -1346,4 +1356,5 @@ async def listen_handler(
         include_speech_profile,
         None,
         conversation_timeout=conversation_timeout,
+        source=source,
     )

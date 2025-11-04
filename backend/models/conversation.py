@@ -215,6 +215,11 @@ class Geolocation(BaseModel):
 class ConversationSource(str, Enum):
     friend = 'friend'
     omi = 'omi'
+    fieldy = 'fieldy'
+    bee = 'bee'
+    xor = 'xor'
+    frame = 'frame'
+    friend_com = 'friend_com'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'
