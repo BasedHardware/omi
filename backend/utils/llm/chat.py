@@ -2,17 +2,15 @@ from .clients import llm_mini, llm_mini_stream, llm_medium_stream, llm_medium
 import json
 import re
 import os
-import base64
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 from pydantic import BaseModel, Field, ValidationError
-import openai
 
 import database.users as users_db
 from database.redis_db import add_filter_category_item
 from models.app import App
-from models.chat import Message, MessageSender, FileChat
+from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -378,7 +376,7 @@ def qa_rag(
     return llm_medium.invoke(prompt).content
 
 
-async def qa_rag_stream(
+def qa_rag_stream(
     uid: str,
     question: str,
     context: str,
@@ -388,100 +386,9 @@ async def qa_rag_stream(
     tz: Optional[str] = "UTC",
     callbacks=[],
 ) -> str:
-    print("qa_rag_stream START")
-    print(f"qa_rag_stream: received {len(messages)} messages")
-    
-    # Check if the last message has images
-    has_images = False
-    image_files = []
-    if messages and len(messages) > 0:
-        last_message = messages[-1]
-        print(f"qa_rag_stream: last message ID={last_message.id}, sender={last_message.sender}")
-        print(f"qa_rag_stream: last message has 'files' attr={hasattr(last_message, 'files')}")
-        print(f"qa_rag_stream: last message has 'files_id' attr={hasattr(last_message, 'files_id')}")
-        
-        if hasattr(last_message, 'files_id'):
-            print(f"qa_rag_stream: files_id = {last_message.files_id}")
-        
-        if hasattr(last_message, 'files'):
-            print(f"qa_rag_stream: files = {last_message.files}")
-            print(f"qa_rag_stream: last message has {len(last_message.files)} files")
-            if last_message.files:
-                for idx, f in enumerate(last_message.files):
-                    print(f"qa_rag_stream: file {idx}: name={f.name if f else 'None'}, is_image={f.is_image() if f else 'N/A'}, openai_file_id={f.openai_file_id if f else 'None'}")
-                image_files = [f for f in last_message.files if f and f.is_image()]
-                has_images = len(image_files) > 0
-                print(f"qa_rag_stream: found {len(image_files)} image files")
-        else:
-            print("qa_rag_stream: NO 'files' attribute on last message")
-    
-    if has_images:
-        print(f"qa_rag_stream: Found {len(image_files)} images in message")
-        # Use vision API with images - use a simple, direct prompt for vision
-        content = []
-        
-        # Simple vision prompt that explicitly asks AI to look at the image
-        vision_prompt = f"""Look at the image(s) provided and answer this question: {question}
-
-Be specific and detailed about what you see in the image."""
-        
-        content.append({"type": "text", "text": vision_prompt})
-        
-        # Read images from local storage and add to content
-        for img_file in image_files[:3]:  # Limit to 3 images
-            try:
-                # openai_file_id for images is actually the local file path
-                local_file_path = img_file.openai_file_id
-                print(f"qa_rag_stream: Reading image from {local_file_path}")
-                
-                with open(local_file_path, 'rb') as f:
-                    image_data = f.read()
-                
-                print(f"qa_rag_stream: Read {len(image_data)} bytes")
-                base64_image = base64.b64encode(image_data).decode('utf-8')
-                print(f"qa_rag_stream: Base64 length: {len(base64_image)}, first 100 chars: {base64_image[:100]}")
-                image_url = f"data:{img_file.mime_type};base64,{base64_image}"
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": image_url}
-                })
-                print(f"qa_rag_stream: Added image to content, URL length: {len(image_url)}")
-            except Exception as e:
-                print(f"qa_rag_stream: Failed to read image {img_file.openai_file_id}: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # Use chat format with images
-        from langchain_core.messages import HumanMessage
-        message = HumanMessage(content=content)
-        print(f"qa_rag_stream: Calling OpenAI with {len(content)} content items")
-        response = await llm_medium_stream.ainvoke([message], {'callbacks': callbacks})
-        print(f"qa_rag_stream: OpenAI responded with vision, response length: {len(response.content)}")
-        print(f"qa_rag_stream: Response preview: {response.content[:200]}")
-        return response.content
-    else:
-        # No images, use regular text prompt
-        prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-        print(f"qa_rag_stream: calling OpenAI with prompt length={len(prompt)}")
-        print("=" * 100)
-        print("FULL PROMPT:")
-        print(prompt)
-        print("=" * 100)
-        print(f"CONTEXT LENGTH: {len(context)}")
-        print(f"QUESTION: {question}")
-        print(f"UID: {uid}")
-        print("=" * 100)
-        try:
-            response = await llm_medium_stream.ainvoke(prompt, {'callbacks': callbacks})
-            print("qa_rag_stream: OpenAI responded")
-            print(f"RESPONSE: {response.content}")
-            print("=" * 100)
-            return response.content
-        except Exception as e:
-            print(f"qa_rag_stream ERROR: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
 # **************************************************

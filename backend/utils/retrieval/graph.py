@@ -136,20 +136,8 @@ def determine_conversation_type(
     # chat with files by attachments on the last message
     print("determine_conversation_type")
     messages = state.get("messages", [])
-    has_images = False
     if len(messages) > 0 and len(messages[-1].files_id) > 0:
-        # Check if files are images (vision) or documents (assistants API)
-        last_message = messages[-1]
-        has_non_image_files = False
-        if hasattr(last_message, 'files') and last_message.files:
-            has_non_image_files = any(not f.is_image() for f in last_message.files)
-            has_images = any(f.is_image() for f in last_message.files)
-        
-        # Only use file_chat_question for non-image files (PDFs, docs, etc)
-        # Images will be handled by qa_handler with vision API
-        if has_non_image_files:
-            return "file_chat_question"
-        # Images detected - will force to context_dependent_conversation to use vision
+        return "file_chat_question"
 
     # persona
     app: App = state.get("plugin_selected")
@@ -172,12 +160,6 @@ def determine_conversation_type(
     is_file_question = retrieve_is_file_question(question)
     if is_file_question:
         return "file_chat_question"
-
-    # If there are images, force context_dependent to use vision in qa_handler
-    # This takes precedence over other routing decisions
-    if has_images:
-        print("determine_conversation_type: has_images=True, routing to context_dependent_conversation")
-        return "context_dependent_conversation"
 
     is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
@@ -336,8 +318,7 @@ def query_vectors(state: GraphState):
     return {"memories_found": memories}
 
 
-async def qa_handler(state: GraphState):
-    print("qa_handler START")
+def qa_handler(state: GraphState):
     uid = state.get("uid")
     memories = state.get("memories_found", [])
 
@@ -355,25 +336,18 @@ async def qa_handler(state: GraphState):
     # streaming
     streaming = state.get("streaming")
     if streaming:
-        print("qa_handler: calling qa_rag_stream")
-        try:
-            response: str = await qa_rag_stream(
-                uid,
-                state.get("parsed_question"),
-                Conversation.conversations_to_string(memories, False, people=people),
-                state.get("plugin_selected"),
-                cited=state.get("cited"),
-                messages=state.get("messages"),
-                tz=state.get("tz"),
-                callbacks=[state.get('callback')],
-            )
-            print("qa_handler: qa_rag_stream completed")
-            return {"answer": response, "ask_for_nps": True}
-        except Exception as e:
-            print(f"qa_handler ERROR: {e}")
-            import traceback
-            traceback.print_exc()
-            return {"answer": f"Error: {str(e)}", "ask_for_nps": False}
+        # state['callback'].put_thought_nowait("Reasoning")
+        response: str = qa_rag_stream(
+            uid,
+            state.get("parsed_question"),
+            Conversation.conversations_to_string(memories, False, people=people),
+            state.get("plugin_selected"),
+            cited=state.get("cited"),
+            messages=state.get("messages"),
+            tz=state.get("tz"),
+            callbacks=[state.get('callback')],
+        )
+        return {"answer": response, "ask_for_nps": True}
 
     # no streaming
     response: str = qa_rag(
