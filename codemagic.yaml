@@ -321,40 +321,37 @@ workflows:
 
       - name: Package application for App Store
         script: |
-          APP_NAME="Omi.app"
-          PACKAGE_NAME="Omi.pkg"
+          set -x
 
           # Find the app bundle
-          APP_PATH=$(find $(pwd) -name "$APP_NAME" | head -1)
-          echo "Found app at: $APP_PATH"
+          APP_NAME=$(find $(pwd) -name "Omi.app" | head -1)
+          echo "Found app at: $APP_NAME"
 
-          # Find the Mac Installer Distribution certificate
-          # Extract just the common name value from the certificate
-          INSTALLER_CERT=$(keychain list-certificates | grep "3rd Party Mac Developer Installer" | sed -n 's/.*3rd Party Mac Developer Installer: \([^"]*\).*/3rd Party Mac Developer Installer: \1/p' | head -1)
+          cd $(dirname "$APP_NAME")
 
-          if [ -z "$INSTALLER_CERT" ]; then
-            echo "ERROR: No Mac Installer Distribution certificate found in keychain"
+          # Create unsigned package
+          PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
+          xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
+
+          # Find the installer certificate common name in keychain
+          INSTALLER_CERT_NAME=$(keychain list-certificates \
+            | jq -r '.[] | select(.common_name | contains("3rd Party Mac Developer Installer")) | .common_name' \
+            | head -1)
+
+          if [ -z "$INSTALLER_CERT_NAME" ]; then
+            echo "ERROR: No Mac Installer Distribution certificate found"
             echo "Available certificates:"
-            keychain list-certificates
+            keychain list-certificates | jq -r '.[].common_name'
             exit 1
           fi
 
-          echo "Using installer certificate: $INSTALLER_CERT"
+          echo "Using installer certificate: $INSTALLER_CERT_NAME"
 
-          # Find the Codemagic keychain
-          KEYCHAIN_PATH=$(find ~/Library/codemagic-cli-tools/keychains -name "*.keychain-db" | head -1)
-          echo "Keychain path: $KEYCHAIN_PATH"
+          # Sign the package
+          xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME"
 
-          # Unlock and set partition list to allow codesigning tools to access the keychain
-          security unlock-keychain -p "" "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH"
-
-          # Create pkg installer
-          xcrun productbuild \
-            --component "$APP_PATH" /Applications/ \
-            --sign "$INSTALLER_CERT" \
-            --keychain "$KEYCHAIN_PATH" \
-            $(pwd)/build/macos/$PACKAGE_NAME
+          # Clean up
+          rm -f unsigned.pkg
 
     artifacts:
       - build/macos/*.pkg
