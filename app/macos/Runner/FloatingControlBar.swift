@@ -28,7 +28,7 @@ private struct KeyView: View {
     var body: some View {
         let keyContent = Text(key)
             .font(.system(size: 12, weight: .regular))
-            .foregroundColor(.primary)
+            .foregroundColor(.white)
             .padding(.horizontal, 6)
             .frame(height: 24)
             .frame(minWidth: 24)
@@ -36,7 +36,7 @@ private struct KeyView: View {
         keyContent
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 0.5)
+                    .strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5)
             )
     }
 }
@@ -62,27 +62,22 @@ private struct CommandButton: View {
     @State private var isHovered = false
 
     var body: some View {
-        let button = Button(action: action) {
+        Button(action: action) {
             HStack(spacing: 4) {
                 Text(title)
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.primary)
+                    .foregroundColor(.white)
 
                 ForEach(keys, id: \.self) { key in
                     KeyView(key: key)
                 }
             }
         }
+        .buttonStyle(CommandButtonStyle())
         .scaleEffect(isHovered ? 1.05 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
-        }
-
-        if #available(macOS 26.0, *) {
-            button.buttonStyle(.plain)
-        } else {
-            button.buttonStyle(CommandButtonStyle())
         }
     }
 }
@@ -122,15 +117,12 @@ private struct MainBackgroundStyle: ViewModifier {
     let cornerRadius: CGFloat
 
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect(in: RoundedRectangle(cornerRadius: cornerRadius))
-        } else {
-            content
-                .background(
-                    ControlBarVisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                )
-                .cornerRadius(cornerRadius)
-        }
+        content
+            .background(
+                ControlBarVisualEffectView(material: .menu, blendingMode: .withinWindow)
+                    .opacity(0.7)
+                    .cornerRadius(cornerRadius)
+            )
     }
 }
 
@@ -157,53 +149,31 @@ private struct FloatingControlBarView: View {
         HStack(spacing: 12) {
             // Recording status
             HStack(spacing: 8) {
-                if #available(macOS 26.0, *) {
-                    Button(action: onPlayPause) {
-                        Group {
-                            if state.isInitialising {
-                                SpinnerView()
-                                    .frame(width: 28, height: 28)
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                            } else {
-                                Image(systemName: playPauseIcon)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .frame(width: 28, height: 28)
-                                    .foregroundColor(.black)
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                                    .scaleEffect(state.isRecording && !state.isPaused ? 1.0 : 0.9)
-                            }
+                Button(action: onPlayPause) {
+                    Group {
+                        if state.isInitialising {
+                            SpinnerView()
+                                .frame(width: 28, height: 28)
+                                .background(Color.white)
+                                .clipShape(Circle())
+                        } else {
+                            Image(systemName: playPauseIcon)
+                                .font(.system(size: 12, weight: .bold))
+                                .frame(width: 28, height: 28)
+                                .foregroundColor(.black)
+                                .background(Color.white)
+                                .clipShape(Circle())
+                                .scaleEffect(state.isRecording && !state.isPaused ? 1.0 : 0.9)
                         }
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    Button(action: onPlayPause) {
-                        Group {
-                            if state.isInitialising {
-                                SpinnerView()
-                                    .frame(width: 28, height: 28)
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                            } else {
-                                Image(systemName: playPauseIcon)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(.black)
-                                    .frame(width: 28, height: 28)
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                                    .scaleEffect(state.isRecording && !state.isPaused ? 1.0 : 0.9)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
+                .buttonStyle(.plain)
 
                 // Animated timer with smooth transitions
                 if state.isRecording {
                     Text(formattedDuration)
                         .font(.system(size: 14, weight: .regular).monospacedDigit())
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
                         .transition(
                             .asymmetric(
                                 insertion: .scale(scale: 0.8).combined(with: .opacity),
@@ -216,7 +186,7 @@ private struct FloatingControlBarView: View {
 
             Separator()
 
-            CommandButton(title: "Ask AI", keys: ["⌘", "\u{21A9}"], action: onAskAI)
+            CommandButton(title: "Ask Omi", keys: ["⌘", "K"], action: onAskAI)
 
             Separator()
 
