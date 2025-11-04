@@ -199,6 +199,7 @@ workflows:
       groups:
         - app_env
         - firebase
+        - appstore_credentials
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
