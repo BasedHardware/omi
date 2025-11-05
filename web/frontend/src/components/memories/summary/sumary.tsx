@@ -16,15 +16,15 @@ export default function Summary({ memory }: SummaryProps) {
         </div>
       )}
 
-      {memory?.structured?.action_items?.length > 0 && (
-        <div className="px-6 md:px-12">
-          <ActionItems items={memory.structured.action_items} />
-        </div>
-      )}
-
       {memory?.structured?.events?.length > 0 && (
         <div className="px-6 md:px-12">
           <MemoryEvents events={memory.structured.events} />
+        </div>
+      )}
+
+      {memory?.structured?.action_items?.length > 0 && (
+        <div className="px-6 md:px-12">
+          <ActionItems items={memory.structured.action_items} />
         </div>
       )}
     </div>

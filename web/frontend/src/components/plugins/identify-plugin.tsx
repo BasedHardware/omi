@@ -53,21 +53,21 @@ function IdentifyPlugin({ pluginId }: IdentifyPluginProps) {
   const content = (
     <>
       <Image
-        className="h-10 w-10 min-w-[40px] rounded-lg object-cover"
+        className="h-8 w-8 min-w-[32px] rounded-lg object-cover"
         src={pluginCommunity?.image}
         alt={pluginCommunity?.name}
-        width={50}
-        height={50}
+        width={32}
+        height={32}
       />
       <div className="flex-1">
-        <h3 className="text-lg font-semibold text-white">
+        <h3 className="text-base font-semibold text-white">
           {pluginCommunity?.name}
         </h3>
-        <p className="line-clamp-1 text-sm text-zinc-400">
+        <p className="line-clamp-1 text-xs text-zinc-400">
           {pluginCommunity.description}
         </p>
       </div>
-      {isPublic && <NavArrowRight className="h-5 w-5 text-zinc-500" />}
+      {isPublic && <NavArrowRight className="h-4 w-4 text-zinc-500" />}
     </>
   );
 
