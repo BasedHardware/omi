@@ -19,6 +19,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -696,6 +697,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               Container(
                 width: 36,
                 height: 36,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF6B6457),
+                      Color(0xFF7A7365),
+                      Color(0xFF6B6457),
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.amber.withOpacity(0.1),
+                      blurRadius: 4,
+                      spreadRadius: 0.3,
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(
+                    FontAwesomeIcons.gift,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    MixpanelManager().pageOpened('Referral Program');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ReferralPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 36,
+                height: 36,
                 decoration: const BoxDecoration(
                   color: Color(0xFF1F1F25),
                   shape: BoxShape.circle,
@@ -778,7 +821,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               ),
                               SizedBox(width: 6),
                               Text(
-                                'Ask',
+                                'Chat',
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 14,
