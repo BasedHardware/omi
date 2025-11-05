@@ -179,8 +179,13 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
           device: widget.device,
         );
         
-        // Add WALs to the service
+        // Save WALs to file
         await PocketWalService.addWalsToService(wals);
+        
+        // Force reload WALs in the phone sync service
+        final walService = ServiceManager.instance().wal;
+        await walService.getSyncs().phone.initializeWals();
+        debugPrint('Reloaded WALs in phone sync service');
         
         if (!mounted) return;
         

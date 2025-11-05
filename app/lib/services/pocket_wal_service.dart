@@ -27,12 +27,12 @@ class PocketWalService {
     final directory = await getApplicationDocumentsDirectory();
     final cleanDeviceId = device.id.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase();
     final mp3Filename = 'pocket_${cleanDeviceId}_$timerStart.mp3';
-    final filePath = '${directory.path}/$mp3Filename';
+    final fullPath = '${directory.path}/$mp3Filename';
     
-    final file = File(filePath);
+    final file = File(fullPath);
     await file.writeAsBytes(mp3Data);
     
-    debugPrint('Saved Pocket MP3: $filePath');
+    debugPrint('Saved Pocket MP3: $fullPath');
     
     // Create WAL object
     // Note: We use opus codec as a placeholder since the backend will handle MP3
@@ -44,8 +44,8 @@ class PocketWalService {
       sampleRate: 16000, // Standard sample rate
       channel: 1, // Mono
       status: WalStatus.miss, // Mark as missing/ready to sync
-      storage: WalStorage.sdcard, // Mark as external source (like SD card)
-      filePath: filePath,
+      storage: WalStorage.disk, // Store as phone storage (not SD card)
+      filePath: mp3Filename, // Store only filename, not full path
       device: device.id,
       deviceModel: 'Pocket',
       storageOffset: 0,
@@ -85,26 +85,32 @@ class PocketWalService {
   
   /// Add WAL files to the WAL service for syncing
   static Future<void> addWalsToService(List<Wal> wals) async {
+    debugPrint('addWalsToService: Adding ${wals.length} WALs');
+    
     // Load existing WALs
     final existingWals = await WalFileManager.loadWals();
+    debugPrint('addWalsToService: Loaded ${existingWals.length} existing WALs');
     
     // Add new WALs (avoid duplicates by checking timerStart and device)
     final updatedWals = List<Wal>.from(existingWals);
+    int addedCount = 0;
     for (final wal in wals) {
       final isDuplicate = existingWals.any(
         (existing) => existing.device == wal.device && existing.timerStart == wal.timerStart,
       );
       if (!isDuplicate) {
         updatedWals.add(wal);
-        debugPrint('Added Pocket WAL to service: ${wal.id}');
+        addedCount++;
+        debugPrint('Added Pocket WAL: device=${wal.device}, timerStart=${wal.timerStart}, filePath=${wal.filePath}');
       } else {
-        debugPrint('Skipped duplicate Pocket WAL: ${wal.id}');
+        debugPrint('Skipped duplicate Pocket WAL: device=${wal.device}, timerStart=${wal.timerStart}');
       }
     }
     
     // Save updated WALs
+    debugPrint('addWalsToService: Saving ${updatedWals.length} total WALs (added $addedCount new)');
     await WalFileManager.saveWals(updatedWals);
-    debugPrint('Saved ${wals.length} Pocket WALs to service');
+    debugPrint('addWalsToService: Successfully saved WALs');
   }
   
   /// Parse timestamp from Pocket recording format (YYYYMMDDHHMMSS)

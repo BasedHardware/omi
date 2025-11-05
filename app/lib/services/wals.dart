@@ -676,11 +676,16 @@ class LocalWalSync implements IWalSync {
     });
   }
 
-  Future<void> _initializeWals() async {
+  Future<void> initializeWals() async {
     await WalFileManager.init();
     _wals = await WalFileManager.loadWals();
     debugPrint("wal service start: ${_wals.length}");
     listener.onWalUpdated();
+  }
+  
+  // Keep old private method for backward compatibility
+  Future<void> _initializeWals() async {
+    await initializeWals();
   }
 
   @override
