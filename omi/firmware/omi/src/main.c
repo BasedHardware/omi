@@ -87,18 +87,17 @@ static void boot_ready_sequence(void)
 
 void set_led_state()
 {
+    // If device is off, turn off all LEDs immediately
+    if (is_off) {
+        led_off();
+        return;
+    }
+
     // Set LED state based on connection and charging status
     if (is_charging) {
         set_led_green(true);
     } else {
         set_led_green(false);
-    }
-
-    // If device is off, turn off all status LEDs except charging indicator
-    if (is_off) {
-        set_led_red(false);
-        set_led_blue(false);
-        return;
     }
 
     if (is_connected) {
@@ -107,7 +106,6 @@ void set_led_state()
         return;
     }
 
-    // Not connected - RED
     if (!is_connected) {
         set_led_red(true);
         set_led_blue(false);
@@ -131,7 +129,8 @@ int main(void)
 
     printk("Starting omi ...\n");
 
-    // Initialize Haptic driver first; this is building up for future of omi turn on sequence - long press to turn on instead of short press
+    // Initialize Haptic driver first; this is building up for future of omi turn on sequence - long press to turn on
+    // instead of short press
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
     ret = haptic_init();
     if (ret) {
@@ -268,9 +267,6 @@ int main(void)
     }
 
     LOG_INF("Device initialized successfully\n");
-
-    // Show ready sequence
-    // boot_ready_sequence();
 
     while (1) {
         monitor_log_metrics();
