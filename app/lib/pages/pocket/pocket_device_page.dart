@@ -2,8 +2,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/pocket/pocket_models.dart';
-import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/pocket_connection.dart';
+import 'package:omi/services/pocket_wal_service.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/wals.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 
 class PocketDevicePage extends StatefulWidget {
   final BtDevice device;
@@ -24,9 +28,13 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
   List<PocketRecording> _recordings = [];
   Set<String> _selectedRecordings = {};
   bool _isLoading = true; // Start with loading state
+  bool _isDownloading = false;
   bool _isSyncing = false;
   String? _errorMessage;
   String? _successMessage;
+  double _downloadProgress = 0.0;
+  int _currentDownloadIndex = 0;
+  int _totalDownloads = 0;
 
   @override
   void initState() {
@@ -80,7 +88,7 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
     }
   }
 
-  Future<void> _downloadRecordings() async {
+  Future<void> _downloadAndSyncRecordings() async {
     if (_selectedRecordings.isEmpty && _recordings.isNotEmpty) {
       // Ask if user wants to download all
       final confirm = await showDialog<bool>(
@@ -105,31 +113,47 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
     }
 
     setState(() {
-      _isSyncing = true;
+      _isDownloading = true;
+      _isSyncing = false;
       _errorMessage = null;
       _successMessage = null;
+      _downloadProgress = 0.0;
+      _currentDownloadIndex = 0;
     });
 
     final recordingsToDownload = _selectedRecordings.isEmpty
         ? _recordings
         : _recordings.where((r) => _selectedRecordings.contains(r.recordingId)).toList();
 
-    int successCount = 0;
+    _totalDownloads = recordingsToDownload.length;
+    
+    final downloadedRecordings = <PocketRecording>[];
+    final downloadedData = <Uint8List>[];
     int failCount = 0;
 
-    for (final recording in recordingsToDownload) {
+    // Step 1: Download all recordings
+    for (int i = 0; i < recordingsToDownload.length; i++) {
+      final recording = recordingsToDownload[i];
+      
+      if (mounted) {
+        setState(() {
+          _currentDownloadIndex = i + 1;
+          _downloadProgress = (i + 1) / _totalDownloads;
+        });
+      }
+      
       try {
-        debugPrint('Downloading ${recording.filename}...');
+        debugPrint('Downloading ${recording.filename} (${i + 1}/$_totalDownloads)...');
         
         final mp3Data = await widget.connection.downloadRecording(recording);
 
-        if (mp3Data != null) {
-          // TODO: Save MP3 and create conversation
-          // For now, just count as success
-          successCount++;
+        if (mp3Data != null && mp3Data.isNotEmpty) {
+          downloadedRecordings.add(recording);
+          downloadedData.add(mp3Data);
           debugPrint('Downloaded ${recording.filename}: ${mp3Data.length} bytes');
         } else {
           failCount++;
+          debugPrint('Failed to download ${recording.filename}: empty data');
         }
       } catch (e) {
         debugPrint('Failed to download ${recording.filename}: $e');
@@ -137,21 +161,93 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
       }
     }
 
-    if (mounted) {
-      setState(() {
-        _isSyncing = false;
-        _successMessage = 'Downloaded $successCount recordings';
-        if (failCount > 0) {
-          _errorMessage = '$failCount recordings failed';
-        }
-        _selectedRecordings.clear();
-      });
+    if (!mounted) return;
 
-      if (successCount > 0) {
+    // Step 2: Convert to WAL files
+    if (downloadedRecordings.isNotEmpty) {
+      setState(() {
+        _isDownloading = false;
+        _isSyncing = true;
+      });
+      
+      try {
+        debugPrint('Creating WAL files from ${downloadedRecordings.length} recordings...');
+        
+        final wals = await PocketWalService.createWalsFromPocketRecordings(
+          recordings: downloadedRecordings,
+          mp3DataList: downloadedData,
+          device: widget.device,
+        );
+        
+        // Add WALs to the service
+        await PocketWalService.addWalsToService(wals);
+        
+        if (!mounted) return;
+        
+        // Step 3: Trigger sync
+        final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+        await syncProvider.refreshWals();
+        
+        // Auto-sync the new WALs
+        debugPrint('Starting sync for ${wals.length} Pocket recordings...');
+        await syncProvider.syncWals();
+        
+        if (!mounted) return;
+        
+        setState(() {
+          _isSyncing = false;
+          _successMessage = 'Successfully processed ${downloadedRecordings.length} recording${downloadedRecordings.length > 1 ? "s" : ""}';
+          if (failCount > 0) {
+            _errorMessage = '$failCount recording${failCount > 1 ? "s" : ""} failed to download';
+          }
+          _selectedRecordings.clear();
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ $_successMessage'),
             backgroundColor: Colors.green,
+          ),
+        );
+        
+        if (failCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ $_errorMessage'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Error processing recordings: $e');
+        if (mounted) {
+          setState(() {
+            _isSyncing = false;
+            _isDownloading = false;
+            _errorMessage = 'Failed to process recordings: $e';
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ $_errorMessage'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } else {
+      // No successful downloads
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _isSyncing = false;
+          _errorMessage = 'All downloads failed';
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Failed to download any recordings'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -359,14 +455,14 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton.icon(
-                  onPressed: _isLoading || _isSyncing || _recordings.isEmpty
+                  onPressed: _isLoading || _isDownloading || _isSyncing || _recordings.isEmpty
                       ? null
-                      : _downloadRecordings,
+                      : _downloadAndSyncRecordings,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
                   ),
-                  icon: _isSyncing
+                  icon: _isDownloading || _isSyncing
                       ? const SizedBox(
                           height: 20,
                           width: 20,
@@ -374,9 +470,13 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
                         )
                       : const Icon(Icons.download),
                   label: Text(
-                    _selectedRecordings.isEmpty
-                        ? 'Download All (${_recordings.length})'
-                        : 'Download Selected (${_selectedRecordings.length})',
+                    _isDownloading
+                        ? 'Downloading ($_currentDownloadIndex/$_totalDownloads)'
+                        : _isSyncing
+                            ? 'Processing...'
+                            : _selectedRecordings.isEmpty
+                                ? 'Download All (${_recordings.length})'
+                                : 'Download Selected (${_selectedRecordings.length})',
                   ),
                 ),
               ),
