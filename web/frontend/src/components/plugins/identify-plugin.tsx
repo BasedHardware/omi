@@ -4,6 +4,7 @@ import { getCommunityPlugin } from '@/src/actions/plugins/get-community-plugins'
 import { CommunityPlugin } from '@/src/types/plugins/plugins.types';
 import Image from 'next/image';
 import { Fragment, useEffect, useState, memo } from 'react';
+import { NavArrowRight } from 'iconoir-react';
 import ErrorIdentifyPlugin from './error-identify-plugin';
 import IdentifyPluginLoader from './identify-plugin-loader';
 import { getPluginFromCache, setPluginInCache, hasPluginInCache } from './plugin-cache';
@@ -46,25 +47,46 @@ function IdentifyPlugin({ pluginId }: IdentifyPluginProps) {
     return <ErrorIdentifyPlugin />;
   }
 
+  const isPublic = !pluginCommunity.private;
+  const pluginUrl = `https://h.omi.me/apps/${pluginId}`;
+
+  const content = (
+    <>
+      <Image
+        className="h-10 w-10 min-w-[40px] rounded-lg object-cover"
+        src={pluginCommunity?.image}
+        alt={pluginCommunity?.name}
+        width={50}
+        height={50}
+      />
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-white">
+          {pluginCommunity?.name}
+        </h3>
+        <p className="line-clamp-1 text-sm text-zinc-400">
+          {pluginCommunity.description}
+        </p>
+      </div>
+      {isPublic && <NavArrowRight className="h-5 w-5 text-zinc-500" />}
+    </>
+  );
+
   return (
     <Fragment>
-      <div className="sticky top-[4rem] z-[50] mb-3 flex items-center gap-2 border-b border-solid border-zinc-900 bg-bg-color bg-opacity-90 px-4 py-3 shadow-sm backdrop-blur-sm md:px-12">
-        <Image
-          className="grid h-9 w-9 min-w-[36px] place-items-center rounded-full bg-zinc-700"
-          src={pluginCommunity?.image}
-          alt={pluginCommunity?.name}
-          width={50}
-          height={50}
-        />
-        <div>
-          <h3 className="text-base font-semibold md:text-base">
-            {pluginCommunity?.name}
-          </h3>
-          <p className="line-clamp-1 text-sm text-gray-500 md:text-base">
-            {pluginCommunity.description}
-          </p>
+      {isPublic ? (
+        <a
+          href={pluginUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mb-4 flex items-center gap-3 transition-opacity hover:opacity-80"
+        >
+          {content}
+        </a>
+      ) : (
+        <div className="mb-4 flex items-center gap-3">
+          {content}
         </div>
-      </div>
+      )}
     </Fragment>
   );
 }
