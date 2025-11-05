@@ -132,6 +132,32 @@ async def send_silent_user_notification(user_id: str):
     print(f"Silent user notification sent to user {user_id}")
 
 
+def send_training_data_submitted_notification(user_id: str):
+    """Send a notification when user submits their training data opt-in request."""
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    # Get user name from Firebase Auth
+    try:
+        user = auth.get_user(user_id)
+        name = user.display_name
+        if not name and user.email:
+            name = user.email.split('@')[0].capitalize()
+        if not name:
+            name = "there"
+    except Exception as e:
+        print(f"Error getting user info from Firebase Auth: {e}")
+        name = "there"
+
+    title = "omi"
+    body = f"Hey {name}! Thanks for your interest in our training data program. We've received your request and our team will review it shortly. We'll notify you as soon as it's approved!"
+
+    send_notification(token, title, body)
+    print(f"Training data submitted notification sent to user {user_id}")
+
+
 async def send_bulk_notification(user_tokens: list, title: str, body: str):
     try:
         batch_size = 500
@@ -188,3 +214,183 @@ def send_new_app_review_notification(
     body = review_body
     data = {'app_id': app_id, 'type': 'new_app_review', 'navigate_to': f'/apps/{app_id}'}
     send_notification(token, title, body, data)
+
+
+def send_action_item_data_message(user_id: str, action_item_id: str, description: str, due_at: str):
+    """
+    Sends a data-only FCM message for action item reminder scheduling.
+    The app receives this in the background and schedules a local notification.
+
+    Args:
+        user_id: The user's Firebase UID
+        action_item_id: The action item ID
+        description: The action item description
+        due_at: ISO format datetime string for when the action item is due
+    """
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    # Data-only message
+    # This allows the app to handle it in background and schedule local notification
+    data = {
+        'type': 'action_item_reminder',
+        'action_item_id': action_item_id,
+        'description': description,
+        'due_at': due_at,
+    }
+
+    message = messaging.Message(
+        data=data,
+        token=token,
+        # Set high priority to ensure delivery even when app is in background
+        android=messaging.AndroidConfig(priority='high'),
+        # iOS requires specific headers for background data-only messages
+        apns=messaging.APNSConfig(
+            headers={
+                'apns-push-type': 'background',
+                'apns-priority': '5',
+                'apns-topic': 'com.friend-app-with-wearable.ios12',
+            },
+            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+        ),
+    )
+
+    try:
+        response = messaging.send(message)
+    except Exception as e:
+        error_message = str(e)
+        if "Requested entity was not found" in error_message:
+            notification_db.remove_token(token)
+        print(f'Failed to send action item data message: {e}')
+
+
+def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):
+    """
+    Sends a data-only FCM message when an action item is updated.
+    The app receives this and reschedules the local notification.
+    """
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    data = {
+        'type': 'action_item_update',
+        'action_item_id': action_item_id,
+        'description': description,
+        'due_at': due_at,
+    }
+
+    message = messaging.Message(
+        data=data,
+        token=token,
+        android=messaging.AndroidConfig(priority='high'),
+        # iOS requires specific headers for background data-only messages
+        apns=messaging.APNSConfig(
+            headers={
+                'apns-push-type': 'background',
+                'apns-priority': '5',
+                'apns-topic': 'com.friend-app-with-wearable.ios12',
+            },
+            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+        ),
+    )
+
+    try:
+        response = messaging.send(message)
+    except Exception as e:
+        error_message = str(e)
+        if "Requested entity was not found" in error_message:
+            notification_db.remove_token(token)
+        print(f'Failed to send action item update message: {e}')
+
+
+def send_action_item_deletion_message(user_id: str, action_item_id: str):
+    """
+    Sends a data-only FCM message when an action item is deleted.
+    The app receives this and cancels the scheduled local notification.
+    """
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    data = {
+        'type': 'action_item_delete',
+        'action_item_id': action_item_id,
+    }
+
+    message = messaging.Message(
+        data=data,
+        token=token,
+        android=messaging.AndroidConfig(priority='high'),
+        # iOS requires specific headers for background data-only messages
+        apns=messaging.APNSConfig(
+            headers={
+                'apns-push-type': 'background',
+                'apns-priority': '5',
+                'apns-topic': 'com.friend-app-with-wearable.ios12',
+            },
+            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+        ),
+    )
+
+    try:
+        response = messaging.send(message)
+    except Exception as e:
+        error_message = str(e)
+        if "Requested entity was not found" in error_message:
+            notification_db.remove_token(token)
+        print(f'Failed to send action item deletion message: {e}')
+
+
+def send_action_item_created_notification(user_id: str, action_item_description: str):
+    """
+    Sends a notification when a new action item is created via the agentic chat.
+    This provides confirmation that the task was successfully added.
+    """
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    # Truncate description if too long
+    max_length = 60
+    display_description = (
+        action_item_description[:max_length] + '...'
+        if len(action_item_description) > max_length
+        else action_item_description
+    )
+
+    title = "Task Added"
+    body = display_description
+
+    send_notification(token, title, body)
+    print(f"Action item created notification sent to user {user_id}")
+
+
+def send_action_item_completed_notification(user_id: str, action_item_description: str):
+    """
+    Sends a notification when a user completes an action item via the agentic chat.
+    This provides positive feedback and confirmation of task completion.
+    """
+    token = notification_db.get_token_only(user_id)
+    if not token:
+        print(f"No notification token found for user {user_id}")
+        return
+
+    # Truncate description if too long
+    max_length = 60
+    display_description = (
+        action_item_description[:max_length] + '...'
+        if len(action_item_description) > max_length
+        else action_item_description
+    )
+
+    title = "Task Complete! 🎉"
+    body = display_description
+
+    send_notification(token, title, body)
+    print(f"Action item completed notification sent to user {user_id}")

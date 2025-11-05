@@ -9,7 +9,12 @@ from utils.other.endpoints import timeit
 
 @timeit
 def fal_whisperx(
-    audio_url: str, speakers_count: int = None, attempts: int = 0, return_language: bool = False
+    audio_url: str,
+    speakers_count: int = None,
+    attempts: int = 0,
+    return_language: bool = False,
+    diarize: bool = True,
+    chunk_level: str = 'word',
 ) -> List[dict]:
     print('fal_whisperx', audio_url, speakers_count, attempts)
 
@@ -19,8 +24,8 @@ def fal_whisperx(
             arguments={
                 "audio_url": audio_url,
                 'task': 'transcribe',
-                'diarize': True,
-                'chunk_level': 'word',
+                'diarize': diarize,
+                'chunk_level': chunk_level,
                 'version': '3',
                 'batch_size': 64,
                 'num_speakers': speakers_count,
@@ -32,7 +37,9 @@ def fal_whisperx(
         if not words:
             raise Exception('No chunks found')
         if return_language:
-            return words, result.get('inferred_languages', ['en'])[0]
+            languages = result.get('inferred_languages', ['en'])
+            language = languages[0] if languages else 'en'
+            return words, language
         return words
     except Exception as e:
         print(e)

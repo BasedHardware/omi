@@ -12,6 +12,7 @@ from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+import pathlib
 import firebase_admin.auth
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
 
@@ -19,6 +20,10 @@ router = APIRouter(
     prefix="/v1/auth",
     tags=["authentication"],
 )
+
+# Set up Jinja2 templates
+templates_path = pathlib.Path(__file__).parent.parent / "templates"
+templates = Jinja2Templates(directory=str(templates_path))
 
 
 @router.get("/authorize")
@@ -79,9 +84,16 @@ async def auth_callback_google(
     auth_code = str(uuid.uuid4())
     set_auth_code(auth_code, oauth_credentials, 300)
 
-    # Redirect back to app
-    redirect_url = f"{session_data['redirect_uri']}?code={auth_code}&state={session_data['state'] or ''}"
-    return RedirectResponse(url=redirect_url)
+    # Redirect to HTML page that will handle custom scheme redirect
+    # This avoids browser security issues with backend->custom scheme redirects
+    return templates.TemplateResponse(
+        "auth_callback.html",
+        {
+            "request": request,
+            "code": auth_code,
+            "state": session_data['state'] or '',
+        },
+    )
 
 
 @router.post("/callback/apple")
@@ -110,9 +122,16 @@ async def auth_callback_apple_post(
     auth_code = str(uuid.uuid4())
     set_auth_code(auth_code, oauth_credentials, 300)
 
-    # Redirect back to app
-    redirect_url = f"{session_data['redirect_uri']}?code={auth_code}&state={session_data['state'] or ''}"
-    return RedirectResponse(url=redirect_url)
+    # Redirect to HTML page that will handle custom scheme redirect
+    # This avoids browser security issues with backend->custom scheme redirects
+    return templates.TemplateResponse(
+        "auth_callback.html",
+        {
+            "request": request,
+            "code": auth_code,
+            "state": session_data['state'] or '',
+        },
+    )
 
 
 @router.post("/token")

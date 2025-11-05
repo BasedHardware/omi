@@ -1,4 +1,4 @@
-#include "lib/dk2/haptic.h"
+#include "lib/core/haptic.h"
 
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>

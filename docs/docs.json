@@ -67,7 +67,8 @@
             "group": "APIs & Integrations",
             "pages": [
               "doc/developer/api",
-              "doc/developer/MCP"
+              "doc/developer/MCP",
+              "doc/integrations"
             ]
           },
           {

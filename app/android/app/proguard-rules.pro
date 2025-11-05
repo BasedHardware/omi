@@ -51,3 +51,8 @@
 -keep class com.builttoroam.devicecalendar.** { *; }
 
 -keep class com.pravera.flutter_foreground_task.service.** { *; }
+
+# Lombok annotations
+-dontwarn lombok.Generated
+-dontwarn lombok.**
+-keep class lombok.** { *; }

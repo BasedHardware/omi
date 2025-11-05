@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -42,6 +43,9 @@ class MessageProvider extends ChangeNotifier {
 
   String firstTimeLoadingText = '';
 
+  List<App> chatApps = [];
+  bool isLoadingChatApps = false;
+
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
@@ -50,6 +54,28 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  Future<void> fetchChatApps() async {
+    if (isLoadingChatApps) return;
+
+    isLoadingChatApps = true;
+    notifyListeners();
+
+    try {
+      final result = await retrieveAppsSearch(
+        installedApps: true,
+        limit: 50,
+      );
+
+      chatApps = result.apps.where((app) => app.worksWithChat()).toList();
+    } catch (e) {
+      debugPrint('Error fetching chat apps: $e');
+      chatApps = [];
+    } finally {
+      isLoadingChatApps = false;
+      notifyListeners();
+    }
   }
 
   void setNextMessageOriginIsVoice(bool isVoice) {
@@ -262,7 +288,6 @@ class MessageProvider extends ChangeNotifier {
       var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
         uploadedFiles.addAll(res);
-        return res;
       } else {
         clearSelectedFiles();
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');

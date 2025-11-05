@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -17,8 +16,6 @@ import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -29,7 +26,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 
 import 'maps_util.dart';
-import 'share.dart';
 
 // Highlight search matches with current result highlighting
 List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int currentResultIndex = -1}) {
@@ -80,9 +76,7 @@ class GetSummaryWidgets extends StatelessWidget {
   const GetSummaryWidgets({super.key, this.searchQuery = ''});
 
   String setTime(DateTime? startedAt, DateTime createdAt, DateTime? finishedAt) {
-    return startedAt == null
-        ? dateTimeFormat('h:mm a', createdAt)
-        : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
+    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : dateTimeFormat('h:mm a', startedAt);
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
@@ -98,6 +92,23 @@ class GetSummaryWidgets extends StatelessWidget {
     return secondsToHumanReadable(durationSeconds);
   }
 
+  String _getDateFormat(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else if (date.year == now.year) {
+      return dateTimeFormat('MMM d', date);
+    } else {
+      return dateTimeFormat('MMM d, yyyy', date);
+    }
+  }
+
   Widget _buildInfoChips(ServerConversation conversation) {
     return Wrap(
       spacing: 8,
@@ -105,7 +116,7 @@ class GetSummaryWidgets extends StatelessWidget {
       children: [
         // Date chip
         _buildChip(
-          label: dateTimeFormat('MMM d, yyyy', conversation.createdAt),
+          label: _getDateFormat(conversation.createdAt),
           icon: Icons.calendar_today,
         ),
         // Time chip
@@ -610,31 +621,9 @@ class GetAppsWidgets extends StatelessWidget {
               : [
                   // Show the summarized app
                   if (!provider.conversation.discarded) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Summary',
-                          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-                          textAlign: TextAlign.start,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                          onPressed: () {
-                            final String content = summarizedApp.content.decodeString;
-                            Clipboard.setData(ClipboardData(text: content));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Summary copied to clipboard'),
-                              duration: Duration(seconds: 1),
-                            ));
-                            MixpanelManager().copiedConversationDetails(provider.conversation, source: 'App Response');
-                          },
-                        ),
-                      ],
-                    ),
                     AppResultDetailWidget(
                       appResponse: summarizedApp,
-                      app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
+                      app: provider.findAppById(summarizedApp.appId),
                       conversation: provider.conversation,
                       searchQuery: searchQuery,
                       currentResultIndex: currentResultIndex,
@@ -940,6 +929,10 @@ class _GetShareOptionsState extends State<GetShareOptions> {
   bool loadingShareTranscript = false;
   bool loadingShareSummary = false;
 
+  final GlobalKey _shareUrlKey = GlobalKey();
+  final GlobalKey _shareTranscriptKey = GlobalKey();
+  final GlobalKey _shareSummaryKey = GlobalKey();
+
   void changeLoadingShareConversationViaURL(bool value) {
     setState(() {
       loadingShareConversationViaURL = value;
@@ -965,6 +958,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
         Card(
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
           child: ListTile(
+            key: _shareUrlKey,
             title: const Text('Send web url'),
             leading: loadingShareConversationViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
             onTap: () async {
@@ -980,7 +974,17 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               String content =
                   '''https://h.omi.me/conversations/${widget.conversation.id}'''.replaceAll('  ', '').trim();
               print(content);
-              await Share.share(content);
+              final RenderBox? box = _shareUrlKey.currentContext?.findRenderObject() as RenderBox?;
+              if (box != null) {
+                final Offset position = box.localToGlobal(Offset.zero);
+                final Size size = box.size;
+                await Share.share(
+                  content,
+                  sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                );
+              } else {
+                await Share.share(content);
+              }
               changeLoadingShareConversationViaURL(false);
             },
           ),
@@ -991,6 +995,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           child: Column(
             children: [
               ListTile(
+                key: _shareTranscriptKey,
                 title: const Text('Send Transcript'),
                 leading: loadingShareTranscript ? _getLoadingIndicator() : const Icon(Icons.description),
                 onTap: () async {
@@ -1004,20 +1009,41 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       .replaceAll('  ', '')
                       .trim();
                   // TODO: Deeplink that let people download the app.
-                  await Share.share(content);
+                  final RenderBox? box = _shareTranscriptKey.currentContext?.findRenderObject() as RenderBox?;
+                  if (box != null) {
+                    final Offset position = box.localToGlobal(Offset.zero);
+                    final Size size = box.size;
+                    await Share.share(
+                      content,
+                      sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                    );
+                  } else {
+                    await Share.share(content);
+                  }
                   changeLoadingShareTranscript(false);
                 },
               ),
               widget.conversation.discarded
                   ? const SizedBox()
                   : ListTile(
+                      key: _shareSummaryKey,
                       title: const Text('Send Summary'),
                       leading: loadingShareSummary ? _getLoadingIndicator() : const Icon(Icons.summarize),
                       onTap: () async {
                         if (loadingShareSummary) return;
                         changeLoadingShareSummary(true);
                         String content = widget.conversation.structured.toString().replaceAll('  ', '').trim();
-                        await Share.share(content);
+                        final RenderBox? box = _shareSummaryKey.currentContext?.findRenderObject() as RenderBox?;
+                        if (box != null) {
+                          final Offset position = box.localToGlobal(Offset.zero);
+                          final Size size = box.size;
+                          await Share.share(
+                            content,
+                            sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                          );
+                        } else {
+                          await Share.share(content);
+                        }
                         changeLoadingShareSummary(false);
                       },
                     )

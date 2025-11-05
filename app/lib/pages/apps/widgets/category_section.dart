@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -31,7 +32,7 @@ class CategorySection extends StatelessWidget {
 
     // Sort apps by downloads (most downloaded first) and show max 9 apps
     final sortedApps = List<App>.from(apps);
-    sortedApps.sort((a, b) => (b.installs ?? 0).compareTo(a.installs ?? 0));
+    sortedApps.sort((a, b) => b.installs.compareTo(a.installs));
     final displayedApps = sortedApps.take(9).toList();
 
     // --- Configuration Constants ---
@@ -205,7 +206,7 @@ class SectionAppItemCard extends StatelessWidget {
                     children: [
                       Text(
                         app.name,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 17),
                       ),
@@ -218,6 +219,27 @@ class SectionAppItemCard extends StatelessWidget {
                           style: const TextStyle(color: Colors.grey, fontSize: 13),
                         ),
                       ),
+                      if (app.ratingAvg != null) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            FaIcon(
+                              FontAwesomeIcons.solidStar,
+                              color: Color(0xFF8B5CF6),
+                              size: 9,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              app.getRatingAvg()!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

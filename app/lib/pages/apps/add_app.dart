@@ -98,7 +98,7 @@ class _AddAppPageState extends State<AddAppPage> {
                           GestureDetector(
                             onTap: () {
                               MixpanelManager().pageOpened('App Submission Help');
-                              launchUrl(Uri.parse('https://omi.me/apps/introduction'));
+                              launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
                             },
                             child: Container(
                               padding: const EdgeInsets.all(12.0),

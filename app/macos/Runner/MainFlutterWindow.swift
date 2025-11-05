@@ -237,6 +237,19 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     }
                 }
                 
+            case "getAvailableAudioDevices":
+                let devices = self.audioManager.getAvailableAudioDevices()
+                result(devices)
+                
+            case "selectAudioDevice":
+                if let args = call.arguments as? [String: Any],
+                   let deviceId = args["deviceId"] as? String {
+                    let success = self.audioManager.selectAudioDevice(deviceID: deviceId)
+                    result(success)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Device ID is required", details: nil))
+                }
+                
             default:
                 result(FlutterMethodNotImplemented)
             }
@@ -566,6 +579,8 @@ extension MainFlutterWindow {
     @objc private func handleToggleFloatingButtonShortcut() {
         if floatingControlBar?.isVisible ?? false {
             hideFloatingControlBar()
+            // Also hide the AI conversation window when hiding the floating bar
+            FloatingChatWindowManager.shared.clearAndHideAIConversationWindow()
         } else {
             showFloatingControlBar()
         }

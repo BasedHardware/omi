@@ -22,6 +22,7 @@ class ConversationBottomBar extends StatelessWidget {
   final Function(ConversationTab) onTabSelected;
   final VoidCallback onStopPressed;
   final bool hasSegments;
+  final bool hasActionItems;
 
   const ConversationBottomBar({
     super.key,
@@ -30,6 +31,7 @@ class ConversationBottomBar extends StatelessWidget {
     required this.onTabSelected,
     required this.onStopPressed,
     this.hasSegments = true,
+    this.hasActionItems = true,
   });
 
   @override
@@ -51,7 +53,7 @@ class ConversationBottomBar extends StatelessWidget {
       child: Container(
         height: 56,
         width: mode == ConversationBottomBarMode.recording ? 180 : null,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: const Color(0xFF1A0B2E), // Very deep purple
           borderRadius: BorderRadius.circular(28),
@@ -79,10 +81,11 @@ class ConversationBottomBar extends StatelessWidget {
               ConversationBottomBarMode.recording => [_buildStopButton()],
               ConversationBottomBarMode.detail => [
                   _buildSummaryTab(context),
-                  const SizedBox(width: 4),
-                  _buildActionItemsTab(),
+                  if (hasActionItems) ...[
+                    const SizedBox(width: 4),
+                    _buildActionItemsTab(),
+                  ],
                 ],
-              _ => [_buildSummaryTab(context)],
             },
           ],
         ),

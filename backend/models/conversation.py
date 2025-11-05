@@ -1,12 +1,24 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 from models.chat import Message
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
+
+
+class AudioFile(BaseModel):
+    id: str = Field(description="Unique identifier for the audio file")
+    uid: str = Field(description="User ID who owns this audio file")
+    conversation_id: str = Field(description="ID of the conversation this audio belongs to")
+    chunk_timestamps: List[float] = Field(description="List of chunk timestamps (for on-demand merging)")
+    provider: str = Field(default="gcp", description="Storage provider (e.g., 'gcp')")
+    started_at: Optional[datetime] = Field(
+        default=None, description="When this audio file started (absolute timestamp)"
+    )
+    duration: float = Field(description="Duration in seconds")
 
 
 class CategoryEnum(str, Enum):
@@ -102,9 +114,27 @@ class ActionItem(BaseModel):
     def actions_to_string(action_items: List['ActionItem']) -> str:
         if not action_items:
             return 'None'
-        return '\n'.join(
-            [f"- {item.description} ({'completed' if item.completed else 'pending'})" for item in action_items]
-        )
+
+        result = []
+        for item in action_items:
+            status = 'completed' if item.completed else 'pending'
+            line = f"- {item.description} ({status})"
+
+            # Add timestamp information
+            timestamps = []
+            if item.created_at:
+                timestamps.append(f"Created: {item.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            if item.due_at:
+                timestamps.append(f"Due: {item.due_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            if item.completed_at:
+                timestamps.append(f"Completed: {item.completed_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
+            if timestamps:
+                line += f" [{', '.join(timestamps)}]"
+
+            result.append(line)
+
+        return '\n'.join(result)
 
 
 class Event(BaseModel):
@@ -130,6 +160,10 @@ class Event(BaseModel):
                 for event in events
             ]
         )
+
+
+class ActionItemsExtraction(BaseModel):
+    action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
 
 
 class Structured(BaseModel):
@@ -233,6 +267,8 @@ class Conversation(BaseModel):
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
+    audio_files: List[AudioFile] = []
+    private_cloud_sync_enabled: bool = False
 
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
@@ -277,6 +313,21 @@ class Conversation(BaseModel):
             conversation_str = (
                 f"Conversation #{i + 1}\n"
                 f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+            )
+
+            # Add started_at and finished_at if available
+            if conversation.started_at:
+                formatted_started = (
+                    conversation.started_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+                )
+                conversation_str += f"Started: {formatted_started}\n"
+            if conversation.finished_at:
+                formatted_finished = (
+                    conversation.finished_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+                )
+                conversation_str += f"Finished: {formatted_finished}\n"
+
+            conversation_str += (
                 f"{str(conversation.structured.title).capitalize()}\n"
                 f"{str(conversation.structured.overview).capitalize()}\n"
             )

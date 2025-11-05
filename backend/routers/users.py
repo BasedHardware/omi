@@ -12,10 +12,12 @@ from database import (
     memories as memories_db,
     chat as chat_db,
     user_usage as user_usage_db,
+    notifications as notification_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
+    get_cached_user_geolocation,
     set_user_webhook_db,
     get_user_webhook_db,
     disable_user_webhook_db,
@@ -38,6 +40,7 @@ from utils.apps import get_available_app_by_id
 from utils.subscription import get_plan_limits, get_plan_features, get_monthly_usage_for_subscription
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
+from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -86,7 +89,28 @@ def delete_account(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.patch('/v1/users/geolocation', tags=['v1'])
 def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
-    cache_user_geolocation(uid, geolocation.dict())
+    last_location_data = get_cached_user_geolocation(uid)
+    if last_location_data:
+        try:
+            last_location = Geolocation(**last_location_data)
+
+            last_lat = round(last_location.latitude, 4)
+            last_lon = round(last_location.longitude, 4)
+            new_lat = round(geolocation.latitude, 4)
+            new_lon = round(geolocation.longitude, 4)
+
+            # Only update if location has changed up to 4 decimal places
+            if last_lat == new_lat and last_lon == new_lon:
+                return {'status': 'ok', 'message': 'Location not changed significantly.'}
+
+            cache_user_geolocation(uid, geolocation.dict())
+        except Exception as e:
+            print(f"Error processing geolocation update, caching new location anyway. Error: {e}")
+            cache_user_geolocation(uid, geolocation.dict())
+    else:
+        # No previous location, so cache the new one
+        cache_user_geolocation(uid, geolocation.dict())
+
     return {'status': 'ok'}
 
 
@@ -165,6 +189,22 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
     set_user_store_recording_permission(uid, False)
     delete_all_conversation_recordings(uid)
     return {'status': 'ok'}
+
+
+# *************************************************
+# ************* PRIVATE CLOUD SYNC ****************
+# *************************************************
+
+
+@router.post('/v1/users/private-cloud-sync', tags=['v1'])
+def set_private_cloud_sync(value: bool, uid: str = Depends(auth.get_current_user_uid)):
+    set_user_private_cloud_sync_enabled(uid, value)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/private-cloud-sync', tags=['v1'])
+def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
+    return {'private_cloud_sync_enabled': get_user_private_cloud_sync_enabled(uid)}
 
 
 # ****************************************
@@ -434,6 +474,35 @@ def set_preferred_app_for_user(
         raise HTTPException(status_code=500, detail="Failed to store app preference.")
 
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
+
+
+# **************************************
+# *********** Training Data ************
+# **************************************
+
+
+@router.get('/v1/users/training-data-opt-in', tags=['v1'])
+def get_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's training data opt-in status."""
+    opt_in_data = get_user_training_data_opt_in(uid)
+    if not opt_in_data:
+        return {'opted_in': False, 'status': None}
+    return {'opted_in': True, 'status': opt_in_data.get('status')}
+
+
+@router.post('/v1/users/training-data-opt-in', tags=['v1'])
+def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Opt-in for training data program. User's request will be reviewed."""
+    set_user_training_data_opt_in(uid, 'pending_review')
+
+    # Check if private cloud sync is enabled, if not, enable it
+    if not get_user_private_cloud_sync_enabled(uid):
+        set_user_private_cloud_sync_enabled(uid, True)
+
+    # Send notification to user
+    send_training_data_submitted_notification(uid)
+
+    return {'status': 'ok', 'message': 'Your request has been submitted for review. We will let you know soon.'}
 
 
 # **************************************

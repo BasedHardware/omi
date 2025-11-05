@@ -6,7 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from models.app import App
-from models.conversation import Structured, Conversation, ActionItem, Event, ConversationPhoto
+from models.conversation import Structured, Conversation, ActionItem, Event, ConversationPhoto, ActionItemsExtraction
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
 
@@ -83,8 +83,274 @@ Content:
         return False
 
 
+def extract_action_items(
+    transcript: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    photos: List[ConversationPhoto] = None,
+    existing_action_items: List[dict] = None,
+) -> List[ActionItem]:
+    """
+    Dedicated function to extract action items from conversation content.
+
+    Args:
+        transcript: Conversation transcript
+        started_at: When the conversation started
+        language_code: Language code for the conversation
+        tz: User's timezone
+        photos: Optional conversation photos
+        existing_action_items: Recent action items for deduplication (from past 2 days)
+
+    Returns:
+        List of extracted ActionItem objects
+    """
+    context_parts = []
+    if transcript and transcript.strip():
+        context_parts.append(f"Transcript: ```{transcript.strip()}```")
+
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    if not context_parts:
+        return []
+
+    full_context = "\n\n".join(context_parts)
+
+    existing_items_context = ""
+    if existing_action_items:
+        items_list = []
+        for item in existing_action_items:
+            desc = item.get('description', '')
+            due = item.get('due_at')
+            due_str = due.strftime('%Y-%m-%d %H:%M UTC') if due else 'No due date'
+            completed = '✓ Completed' if item.get('completed', False) else 'Pending'
+            items_list.append(f"  • {desc} (Due: {due_str}) [{completed}]")
+
+        existing_items_context = f"\n\nEXISTING ACTION ITEMS FROM PAST 2 DAYS ({len(items_list)} items):\n" + "\n".join(
+            items_list
+        )
+
+    prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract high-quality, actionable tasks from the provided content.
+
+    The content language is {language_code}. Use the same language {language_code} for your response.{existing_items_context}
+
+    CRITICAL DEDUPLICATION RULES (Check BEFORE extracting):
+    • DO NOT extract action items that are >95% similar to existing ones listed above
+    • Check both the description AND the due date/timeframe
+    • Consider semantic similarity, not just exact word matches
+    • Examples of what counts as DUPLICATES (DO NOT extract):
+      - "Call John" vs "Phone John" → DUPLICATE
+      - "Finish report by Friday" (existing) vs "Complete report by end of week" → DUPLICATE
+      - "Buy milk" (existing) vs "Get milk from store" → DUPLICATE
+      - "Email Sarah about meeting" (existing) vs "Send email to Sarah regarding the meeting" → DUPLICATE
+    • Examples of what is NOT duplicate (OK to extract):
+      - "Buy groceries" (existing) vs "Buy milk" → NOT duplicate (different scope)
+      - "Call dentist" (existing) vs "Call plumber" → NOT duplicate (different person/service)
+      - "Submit report by March 1st" (existing) vs "Submit report by March 15th" → NOT duplicate (different deadlines)
+    • If you're unsure whether something is a duplicate, err on the side of treating it as a duplicate (DON'T extract)
+
+    WORKFLOW:
+    1. FIRST: Read the ENTIRE conversation carefully to understand the full context
+    2. SECOND: Identify all topics, people, places, or things being discussed
+    3. THIRD: Filter aggressively - is the user ALREADY doing this? If yes, SKIP IT
+    4. FOURTH: Ask - "Is this truly important enough to remind a busy person?" If no, SKIP IT
+    5. FIFTH: Extract ONLY action items that passed steps 3 & 4, using specific names/details
+    6. SIXTH: Extract timing information separately and put it in the due_at field
+    7. SEVENTH: Clean the description - remove ALL time references and vague words
+    8. EIGHTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+
+    CRITICAL CONTEXT:
+    • These action items are primarily for the PRIMARY USER who is having/recording this conversation
+    • The user is the person wearing the device or initiating the conversation
+    • Focus on tasks the primary user needs to track and act upon
+    • Include tasks for OTHER people ONLY if:
+      - The primary user is dependent on that task being completed
+      - It's super crucial for the primary user to track it
+      - The primary user needs to follow up on it
+
+    QUALITY OVER QUANTITY:
+    • Better to have 0 action items than to flood the user with unnecessary ones
+    • Only extract action items that are truly important and need tracking
+    • When in doubt, DON'T extract - be conservative and selective
+    • Think: "Would a busy person want to be reminded of this?"
+
+    STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:
+
+    1. **Clear Ownership & Relevance to Primary User**:
+       - Identify which speaker is the primary user based on conversational context
+       - Look for cues: who is asking questions, who is receiving advice/tasks, who initiates topics
+       - For tasks assigned to the primary user: phrase them directly (start with verb)
+       - For tasks assigned to others: include them ONLY if primary user is dependent on them or needs to track them
+       - If a person's name is mentioned and there's high confidence (>90%) they are a speaker, use that name
+       - NEVER use "Speaker 0", "Speaker 1", etc. in the final action item description
+       - If unsure about names, use natural phrasing like "Follow up on...", "Ensure...", etc.
+
+    2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
+
+    3. **Timing Signal**: The task includes a timing cue:
+       - Explicit dates or times
+       - Relative timing ("tomorrow", "next week", "by Friday", "this month")
+       - Urgency markers ("urgent", "ASAP", "high priority")
+
+    4. **Real Importance**: The task has genuine consequences if missed:
+       - Financial impact (bills, payments, purchases, invoices)
+       - Health/safety concerns (appointments, medications, safety checks)
+       - Hard deadlines (submissions, filings, registrations)
+       - Explicit stress if missed (stated by speakers)
+       - Critical dependencies (primary user blocked without it)
+       - Commitments to other people (meetings, deliverables, promises)
+
+    5. **NOT Already Being Done**: The user is NOT currently actively working on it:
+       - If user says "I am working on X" or "I am doing X right now" → DON'T extract
+       - If user says "I am in the middle of X" → DON'T extract
+       - If user says "currently doing X" → DON'T extract
+       - Only extract if it's something they NEED TO DO in the future, not something they're ALREADY doing
+
+       Examples of what NOT to extract:
+       - ❌ "I am working on the budget report. Need to finish it by Friday" → User is ALREADY working on it, they know the deadline
+       - ❌ "Currently debugging the login issue" → User is actively doing it
+       - ❌ "I'm preparing for the presentation tomorrow" → User is already aware and doing it
+       - ✅ "Need to call the plumber tomorrow about the leak" → User is NOT doing it yet, needs reminder
+       - ✅ "Have to submit tax documents by March 31st" → Clear future deadline that needs tracking
+       - ✅ "Doctor said to schedule follow-up in 2 weeks" → Easy to forget, needs reminder
+
+    EXCLUDE these types of items (be aggressive about exclusion):
+    • Things user is ALREADY doing or actively working on
+    • Casual mentions or updates ("I'm working on X", "currently doing Y")
+    • Vague suggestions without commitment ("we should grab coffee sometime", "let's meet up soon")
+    • Casual mentions without commitment ("maybe I'll check that out")
+    • General goals without specific next steps ("I need to exercise more")
+    • Past actions being discussed
+    • Hypothetical scenarios ("if we do X, then Y")
+    • Trivial tasks with no real consequences
+    • Tasks assigned to others that don't impact the primary user
+    • Routine daily activities the user already knows about
+    • Things that are obvious or don't need a reminder
+    • Updates or status reports about ongoing work
+
+    FORMAT REQUIREMENTS:
+    • Keep each action item SHORT and concise (maximum 15 words, strict limit)
+    • Use clear, direct language
+    • Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
+    • Include only essential details
+
+    • CRITICAL - Resolve ALL vague references:
+      - Read the ENTIRE conversation to understand what is being discussed
+      - If you see vague references like:
+        * "the feature" → identify WHAT feature from conversation
+        * "this project" → identify WHICH project from conversation
+        * "that task" → identify WHAT task from conversation
+        * "it" → identify what "it" refers to from conversation
+      - Look for keywords, topics, or subjects mentioned earlier in the conversation
+      - Replace ALL vague words with specific names from the conversation context
+      - Examples:
+        * User says: "planning Sarah's birthday party" then later "buy decorations for it"
+          → Extract: "Buy decorations for Sarah's birthday party"
+        * User says: "car making weird noise" then later "take it to mechanic"
+          → Extract: "Take car to mechanic"
+        * User says: "quarterly sales report" then later "send it to the team"
+          → Extract: "Send quarterly sales report to team"
+
+    • CRITICAL - Remove time references from description (they go in due_at field):
+      - NEVER include timing words in the action item description itself
+      - Remove: "by tomorrow", "by evening", "today", "next week", "by Friday", etc.
+      - The timing information is captured in the due_at field separately
+      - Focus ONLY on the action and what needs to be done
+      - Examples:
+        * "buy groceries by tomorrow" → "Buy groceries"
+        * "call dentist by next Monday" → "Call dentist"
+        * "pay electricity bill by Friday" → "Pay electricity bill"
+        * "submit insurance claim today" → "Submit insurance claim"
+        * "book flight tickets by evening" → "Book flight tickets"
+
+    • Remove filler words and unnecessary context
+    • Merge duplicates
+    • Order by: due date → urgency → alphabetical
+
+    DUE DATE EXTRACTION (CRITICAL):
+    IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
+    IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
+
+    Step-by-step date parsing process:
+    1. IDENTIFY THE DATE:
+       - "today" → current date from {started_at}
+       - "tomorrow" → next day from {started_at}
+       - "Monday", "Tuesday", etc. → next occurrence of that weekday
+       - "next week" → same day next week
+       - Specific date (e.g., "March 15") → that date
+
+    2. IDENTIFY THE TIME (if mentioned):
+       - "before 10am", "by 10am", "at 10am" → 10:00 AM
+       - "before 3pm", "by 3pm", "at 3pm" → 3:00 PM
+       - "in the morning" → 9:00 AM
+       - "in the afternoon" → 2:00 PM
+       - "in the evening", "by evening" → 6:00 PM
+       - "at noon" → 12:00 PM
+       - "by midnight", "by end of day" → 11:59 PM
+       - No time mentioned → 11:59 PM (end of day)
+
+    3. COMBINE DATE + TIME in user's timezone ({tz}), then convert to UTC with 'Z' suffix
+
+    Examples of CORRECT date parsing:
+    If {started_at} is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
+    - "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 IST" → Convert to UTC → "2025-10-04T04:30:00Z"
+    - "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 IST" → Convert to UTC → "2025-10-03T12:30:00Z"
+    - "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 IST" → Convert to UTC → "2025-10-04T18:29:00Z"
+    - "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 IST" → Convert to UTC → "2025-10-06T08:30:00Z"
+    - "urgent" or "ASAP" → 2 hours from {started_at} → "2025-10-03T15:25:00Z"
+
+    CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-04T04:30:00Z")
+    DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
+
+    Reference time: {started_at}
+    User timezone: {tz}
+
+    Content:
+    {full_context}
+
+    {format_instructions}'''.replace(
+        '    ', ''
+    ).strip()
+
+    action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | llm_medium_experiment | action_items_parser
+
+    try:
+        response = chain.invoke(
+            {
+                'full_context': full_context,
+                'format_instructions': action_items_parser.get_format_instructions(),
+                'language_code': language_code,
+                'started_at': started_at.isoformat(),
+                'tz': tz,
+                'existing_items_context': existing_items_context,
+            }
+        )
+
+        # Set created_at for action items if not already set
+        now = datetime.now(timezone.utc)
+        for action_item in response.action_items or []:
+            if action_item.created_at is None:
+                action_item.created_at = now
+
+        return response.action_items or []
+
+    except Exception as e:
+        print(f'Error extracting action items: {e}')
+        return []
+
+
 def get_transcript_structure(
-    transcript: str, started_at: datetime, language_code: str, tz: str, photos: List[ConversationPhoto] = None
+    transcript: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    photos: List[ConversationPhoto] = None,
+    existing_action_items: List[dict] = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -106,25 +372,6 @@ def get_transcript_structure(
     For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip")
     For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-
-    For the action items, apply a strict filter and use the format below:  
-    • Include **only** tasks that have  
-      a) a clear owner (named speaker or implied "you"),  
-      b) a concrete next step **and** timing cue (date, "tomorrow", "next week", etc.),  
-      c) real importance (money, health/safety, hard deadline, or explicit stress if missed).  
-    • Exclude vague or trivial remarks ("We should grab lunch sometime").  
-    • Merge duplicates; order by due date → spoken urgency → alphabetical.  
-    • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
-    • IMPORTANT: For each action item, you MUST extract and provide a due_at datetime based on the timing mentioned:
-      - Convert relative times ("tomorrow", "next week") to actual UTC datetime based on {started_at} and {tz}
-      - For "today": use end of day in user's timezone converted to UTC
-      - For "tomorrow": use end of next day in user's timezone converted to UTC  
-      - For "this week": use end of current week (Sunday) in user's timezone converted to UTC
-      - For "next week": use end of next week in user's timezone converted to UTC
-      - For specific dates: convert to end of that day in user's timezone to UTC
-      - For "urgent" or "ASAP": use 2 hours from {started_at}
-      - For "high priority": use end of today
-      - For "when convenient" or no specific time: leave due_at as null
 
     For the category, classify the content into one of the available categories.
 
@@ -176,10 +423,9 @@ def get_transcript_structure(
             event.duration = 180
         event.created = False
 
-    # Set created_at for action items if not already set
-    for action_item in response.action_items or []:
-        if action_item.created_at is None:
-            action_item.created_at = datetime.now(timezone.utc)
+    # Extract action items separately
+    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
+    response.action_items = action_items
 
     return response
 
@@ -191,6 +437,7 @@ def get_reprocess_transcript_structure(
     tz: str,
     title: str,
     photos: List[ConversationPhoto] = None,
+    existing_action_items: List[dict] = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -212,25 +459,6 @@ def get_reprocess_transcript_structure(
     For the title, use ```{title}```, if it is empty, use the main topic of the content.
     For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-
-    For the action items, apply a strict filter and use the format below:  
-    • Include **only** tasks that have  
-      a) a clear owner (named speaker or implied "you"),  
-      b) a concrete next step **and** timing cue (date, "tomorrow", "next week", etc.),  
-      c) real importance (money, health/safety, hard deadline, or explicit stress if missed).  
-    • Exclude vague or trivial remarks ("We should grab lunch sometime").  
-    • Merge duplicates; order by due date → spoken urgency → alphabetical.  
-    • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
-    • IMPORTANT: For each action item, you MUST extract and provide a due_at datetime based on the timing mentioned:
-      - Convert relative times ("tomorrow", "next week") to actual UTC datetime based on {started_at} and {tz}
-      - For "today": use end of day in user's timezone converted to UTC
-      - For "tomorrow": use end of next day in user's timezone converted to UTC  
-      - For "this week": use end of current week (Sunday) in user's timezone converted to UTC
-      - For "next week": use end of next week in user's timezone converted to UTC
-      - For specific dates: convert to end of that day in user's timezone to UTC
-      - For "urgent" or "ASAP": use 2 hours from {started_at}
-      - For "high priority": use end of today
-      - For "when convenient" or no specific time: leave due_at as null
 
     For the category, classify the content into one of the available categories.
 
@@ -282,10 +510,9 @@ def get_reprocess_transcript_structure(
             event.duration = 180
         event.created = False
 
-    # Set created_at for action items if not already set
-    for action_item in response.action_items or []:
-        if action_item.created_at is None:
-            action_item.created_at = datetime.now(timezone.utc)
+    # Extract action items separately
+    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
+    response.action_items = action_items
 
     return response
 

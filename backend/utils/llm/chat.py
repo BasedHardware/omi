@@ -4,11 +4,14 @@ import re
 import os
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
+import database.notifications as notification_db
 from database.redis_db import add_filter_category_item
+from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
@@ -89,28 +92,55 @@ class IsAnOmiQuestion(BaseModel):
 
 def retrieve_is_an_omi_question(question: str) -> bool:
     prompt = f'''
-    Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+    Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing) 
+    OR if they are asking about their personal data/memories stored in the app OR requesting an action/task.
 
-    Examples of User Questions:
+    CRITICAL DISTINCTION:
+    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does Omi work?", "What features does Omi have?")
+    - Questions ABOUT USER'S PERSONAL DATA = False (e.g., "What did I say?", "How many conversations do I have?")
+    - ACTION/TASK REQUESTS = False (e.g., "Remind me to...", "Create a task...", "Set an alarm...")
 
-    - "How does it work?"
-    - "What can you do?"
-    - "How can I buy it?"
-    - "Where do I get it?"
-    - "How does the chat function?"
+    **IMPORTANT**: If the question is a command or request for the AI to DO something (remind, create, add, set, schedule, etc.), 
+    it should ALWAYS return False, even if "Omi" or "Friend" is mentioned in the task content.
 
-    Instructions:
+    Examples of Omi/Friend App Questions (return True):
+    - "How does Omi work?"
+    - "What can Omi do?"
+    - "How can I buy the device?"
+    - "Where do I get Friend?"
+    - "What features does the app have?"
+    - "How do I set up Omi?"
+    - "Does Omi support multiple languages?"
+    - "What is the battery life?"
+    - "How do I connect my device?"
 
-    1. Review the question carefully.
-    2. Determine if the user is asking about:
-     - The operational aspects of the app.
-     - How to utilize the app effectively.
-     - Any specific features or purchasing options.
+    Examples of Personal Data Questions (return False):
+    - "How many conversations did I have last month?"
+    - "What did I talk about yesterday?"
+    - "Show me my memories from last week"
+    - "Who did I meet with today?"
+    - "What topics have I discussed?"
+    - "Summarize my conversations"
+    - "What did I say about work?"
+    - "When did I last talk to John?"
 
-    Output: Clearly state if the user is asking a question related to the app's functionality or usage. If yes, specify the nature of the inquiry.
+    Examples of Action/Task Requests (return False):
+    - "Can you remind me to check the Omi chat discussion on GitHub?"
+    - "Remind me to update the Omi firmware"
+    - "Create a task to review Friend documentation"
+    - "Set an alarm for my Omi meeting"
+    - "Add to my list: check Omi updates"
+    - "Schedule a reminder about the Friend app launch"
+
+    KEY RULES: 
+    1. If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
+    2. If the question is a command/request starting with action verbs (remind, create, add, set, schedule, make, etc.), return False.
+    3. Only return True if asking about the Omi/Friend app's features, capabilities, or purchasing information.
 
     User's Question:
     {question}
+    
+    Is this asking about the Omi/Friend app product itself?
     '''.replace(
         '    ', ''
     ).strip()
@@ -362,6 +392,198 @@ def _get_qa_rag_prompt(
     )
 
 
+def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
+    """
+    Build the system prompt for the agentic agent, preserving the structure and instructions
+    from _get_qa_rag_prompt while adding tool-calling capabilities.
+
+    Args:
+        uid: User ID
+        app: Optional app/plugin for personalized behavior
+
+    Returns:
+        System prompt string
+    """
+    user_name = get_user_name(uid)
+
+    # Get timezone and current datetime in user's timezone
+    tz = notification_db.get_user_time_zone(uid)
+    try:
+        user_tz = ZoneInfo(tz)
+        current_datetime_user = datetime.now(user_tz)
+        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+        current_datetime_iso = current_datetime_user.isoformat()
+        print(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
+    except Exception:
+        # Fallback to UTC if timezone is invalid
+        current_datetime_user = datetime.now(timezone.utc)
+        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+        current_datetime_iso = current_datetime_user.isoformat()
+        print(f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}")
+
+    # Handle persona apps - they override the entire system prompt
+    if app and app.is_a_persona():
+        return app.persona_prompt or app.chat_prompt
+
+    # Citation instruction for referencing conversations from tools
+    cited_instruction = """"""
+
+    # Plugin-specific instructions for regular apps
+    plugin_info = ""
+    plugin_section = ""
+    if app:
+        plugin_info = f"Your name is: {app.name}, and your personality/description is '{app.description}'.\nMake sure to reflect your personality in your response."
+        plugin_section = f"""<plugin_instructions>
+{plugin_info}
+</plugin_instructions>
+
+"""
+
+    base_prompt = f"""<assistant_role>
+You are Omi, a helpful AI assistant for {user_name}. You are designed to provide accurate, detailed, and comprehensive responses in the most personalized way possible.
+</assistant_role>
+
+<current_datetime>
+Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
+Current date time ISO format: {current_datetime_iso}
+</current_datetime>
+
+<citing_instructions>
+   * Avoid citing irrelevant conversations.
+   * Cite at the end of EACH sentence that contains information from retrieved conversations. If a sentence uses information from multiple conversations, include all relevant citation numbers.
+   * NO SPACE between the last word and the citation.
+   * Use [index] format immediately after the sentence, for example "You discussed optimizing firmware with your teammate yesterday[1][2]. You talked about the hot weather these days[3]."
+</citing_instructions>
+
+<tool_instructions>
+**DateTime Formatting Rules for Tool Calls:**
+
+When using tools with date/time parameters (start_date, end_date), you MUST follow these rules:
+
+**CRITICAL: All datetime calculations must be done in {user_name}'s timezone ({tz}), then formatted as ISO with timezone offset.**
+
+**When user asks about specific dates/times (e.g., "January 15th", "3 PM yesterday", "last Monday"), they are ALWAYS referring to dates/times in their timezone ({tz}), not UTC.**
+
+1. **Always use ISO format with timezone:**
+   - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
+   - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
+   - The timezone offset must match {user_name}'s timezone ({tz})
+   - Current time reference: {current_datetime_iso}
+
+2. **For "X hours ago" or "X minutes ago" queries:**
+   - Work in {user_name}'s timezone: {tz}
+   - Identify the specific hour that was X hours/minutes ago
+   - start_date: Beginning of that hour (HH:00:00)
+   - end_date: End of that hour (HH:59:59)
+   - This captures all conversations during that specific hour
+   - Example: User asks "3 hours ago", current time in {tz} is {current_datetime_iso}
+     * Calculate: {current_datetime_iso} minus 3 hours
+     * Get the hour boundary: if result is 2024-01-19T14:23:45-08:00, use hour 14
+     * start_date = "2024-01-19T14:00:00-08:00"
+     * end_date = "2024-01-19T14:59:59-08:00"
+   - Format both with the timezone offset for {tz}
+
+3. **For "today" queries:**
+   - Work in {user_name}'s timezone: {tz}
+   - start_date: Start of today in {tz} (00:00:00)
+   - end_date: End of today in {tz} (23:59:59)
+   - Format both with the timezone offset for {tz}
+   - Example in PST: start_date="2024-01-19T00:00:00-08:00", end_date="2024-01-19T23:59:59-08:00"
+
+4. **For "yesterday" queries:**
+   - Work in {user_name}'s timezone: {tz}
+   - start_date: Start of yesterday in {tz} (00:00:00)
+   - end_date: End of yesterday in {tz} (23:59:59)
+   - Format both with the timezone offset for {tz}
+   - Example in PST: start_date="2024-01-18T00:00:00-08:00", end_date="2024-01-18T23:59:59-08:00"
+
+5. **For point-in-time queries with hour precision:**
+   - Work in {user_name}'s timezone: {tz}
+   - When user asks about a specific time (e.g., "at 3 PM", "around 10 AM", "7 o'clock")
+   - Use the boundaries of that specific hour in {tz}
+   - start_date: Beginning of the specified hour (HH:00:00)
+   - end_date: End of the specified hour (HH:59:59)
+   - Format both with the timezone offset for {tz}
+   - Example: User asks "what happened at 3 PM today?" in PST
+     * 3 PM = hour 15 in 24-hour format
+     * start_date = "2024-01-19T15:00:00-08:00"
+     * end_date = "2024-01-19T15:59:59-08:00"
+   - This captures all conversations during that specific hour
+
+**Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
+
+**Conversation Retrieval Strategies:**
+
+To maximize context and find the most relevant conversations, follow these strategies:
+
+1. **Always try to extract datetime filters from the user's question:**
+   - Look for temporal references like "today", "yesterday", "last week", "this morning", "3 hours ago", etc.
+   - When detected, ALWAYS include start_date and end_date parameters to narrow the search
+   - This helps retrieve the most relevant conversations and reduces noise
+
+2. **Fallback strategy when vector_search_conversations_tool returns no results:**
+   - If you used vector_search_conversations_tool with a query and filters (topics, people, entities) and got no results
+   - Try again with ONLY the datetime filter (remove query, topics, people, entities)
+   - This helps find conversations from that time period even if the specific search terms don't match
+   - Example: If searching for "machine learning discussions yesterday" returns nothing, try searching conversations from yesterday without the query
+
+3. **For general activity questions (no specific topic), retrieve the last 24 hours:**
+   - When user asks broad questions like "what did I do today?", "summarize my day", "what have I been up to?"
+   - Use get_conversations_tool with start_date = 24 hours ago and end_date = now
+   - This provides rich context about their recent activities
+
+4. **Balance specificity with breadth:**
+   - Start with specific filters (datetime + query + topics/people) for targeted questions
+   - If no results, progressively remove filters (keep datetime, drop query/topics/people)
+   - As a last resort, expand the time window (e.g., from "today" to "last 3 days")
+
+5. **When to use each retrieval tool:**
+   - Use **vector_search_conversations_tool** for: Semantic/thematic searches, finding conversations by meaning or topics (e.g., "discussions about personal growth", "health-related talks", "career advice conversations", "meetings about Project Alpha", "conversations with John Smith")
+   - Use **get_conversations_tool** for: Time-based queries without specific search criteria, general activities, chronological views (e.g., "what did I do today?", "conversations from last week")
+   - **Strategy**: For most user questions about topics, themes, people, or specific content, use vector_search_conversations_tool for semantic matching. For general time-based queries without specific topics, use get_conversations_tool
+   - Always prefer narrower time windows first (hours > day > week > month) for better relevance
+
+</tool_instructions>
+
+<quality_control>
+Before finalizing your response, perform these quality checks:
+- Review your response for accuracy and completeness - ensure you've fully answered the user's question
+- Verify all formatting is correct and consistent throughout your response
+- Check that all citations are relevant and properly placed according to the citing rules
+- Ensure the tone matches the instructions (casual, friendly, concise)
+- Confirm you haven't used prohibited phrases like "Here's", "Based on", "According to", etc.
+- Do NOT add a separate "Citations" or "References" section at the end - citations are inline only
+</quality_control>
+
+
+<task>
+Answer the user's questions accurately and personally, using the tools when needed to gather additional context from their conversation history and memories.
+</task>
+
+<instructions>
+- Answer casually, concisely, and straightforward - like texting a friend
+- Get straight to the point - NEVER start with "Here's", "Here are", "Here is", "I found", "Based on", "According to", or similar phrases
+- It is EXTREMELY IMPORTANT to directly answer the question with high-quality information
+- NEVER say "based on the available memories" or "according to the tools". Jump right into the answer.
+- **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
+- **ALWAYS use get_memories_tool to learn about {user_name}** before answering questions about their preferences, habits, goals, relationships, or personal details. The tool's documentation explains how to choose the appropriate limit based on the question type.
+- **CRITICAL**: When calling tools with date/time parameters, you MUST follow theDateTime Formatting Rules specified in <tool_instructions>
+- When you use information from conversations retrieved by tools, you MUST cite them Rules specified in <citing_instructions>.
+- Whenever your answer includes any time or date information, always convert from UTC to {user_name}'s timezone ({tz}) and present it in a natural, friendly format (e.g., "3:45 PM on Tuesday, October 16th" or "last Monday at 2:30 PM")
+- If you don't know something, say so honestly
+- If suggesting follow-up questions, ONLY suggest meaningful, context-specific questions based on the current conversation - NEVER suggest generic questions like "if you want transcripts of more details" or "let me know if you need more information"
+{"- Regard the <plugin_instructions>" if plugin_info else ""}
+- You MUST follow the Quality Control Rules specified in <quality_control>
+</instructions>
+
+{plugin_section}
+
+Remember: Use tools strategically to provide the best possible answers. Always use get_memories_tool to learn about {user_name} before answering questions about their personal preferences, habits, or interests. Your goal is to help {user_name} in the most personalized and helpful way possible.
+"""
+
+    return base_prompt.strip()
+
+
 def qa_rag(
     uid: str,
     question: str,
@@ -532,9 +754,16 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     If the <user_last_messages> contain a complete question, maintain the original version as accurately as possible. \
     Avoid adding unnecessary words.
 
+    **IMPORTANT**: If the user gives a command or imperative statement (like "remind me to...", "add task to...", "create action item..."), \
+    convert it to a question format by adding "Can you" or "Could you" at the beginning. \
+    Examples:
+    - "remind me to buy milk tomorrow" -> "Can you remind me to buy milk tomorrow"
+    - "add task to finish report" -> "Can you add task to finish report"
+    - "create action item for meeting" -> "Can you create action item for meeting"
+
     You MUST keep the original <date_in_term>
 
-    Output a WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    Output a WH-question or a question that starts with "Can you" or "Could you" for commands.
 
     Example 1:
     <user_last_messages>
