@@ -12,6 +12,9 @@ from typing import Dict, List, Optional, Set, Tuple
 import av
 import opuslib  # type: ignore
 import webrtcvad  # type: ignore
+
+import lc3  # lc3py
+
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
@@ -175,9 +178,16 @@ async def _listen(
 
     # Frame size, codec
     frame_size: int = 160
+    lc3_chunk_size: Optional[int] = None
+    lc3_frame_duration_us: Optional[int] = None
+
     if codec == "opus_fs320":
         codec = "opus"
         frame_size = 320
+    elif codec == "lc3_fs1030":
+        codec = "lc3"
+        lc3_chunk_size = 30  # 30 bytes per frame
+        lc3_frame_duration_us = 10000  # 10ms = 10000 microseconds
 
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
@@ -1074,10 +1084,14 @@ async def _listen(
     # Initialize decoders based on codec
     opus_decoder = None
     aac_decoder = None
+    lc3_decoder = None
+
     if codec == 'opus':
         opus_decoder = opuslib.Decoder(sample_rate, 1)
     elif codec == 'aac':
         aac_decoder = AACDecoder(uid=uid, session_id=session_id, sample_rate=sample_rate, channels=channels)
+    elif codec == 'lc3':
+        lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
     async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
@@ -1091,10 +1105,13 @@ async def _listen(
                 last_audio_received_time = time.time()
 
                 if message.get("bytes") is not None:
+                    data = message.get("bytes")
+                    if len(data) <= 2:  # Ping/keepalive, 0x8a 0x00
+                        continue
+
                     if first_audio_byte_timestamp is None:
                         first_audio_byte_timestamp = last_audio_received_time
                         last_usage_record_timestamp = first_audio_byte_timestamp
-                    data = message.get("bytes")
 
                     # Decode based on codec
                     if codec == 'opus' and sample_rate == 16000:
@@ -1112,6 +1129,24 @@ async def _listen(
                                 continue
                         except Exception as e:
                             print(f"[AAC] Decoding error: {e}", uid, session_id)
+                            continue
+                    elif codec == 'lc3':
+                        try:
+                            # Decode LC3 frame to PCM
+                            # lc3.decode returns PCM bytes directly with bit_depth=16
+                            pcm_bytes = lc3_decoder.decode(bytes(data), bit_depth=16)
+                            if not pcm_bytes:
+                                continue
+                            data = pcm_bytes
+                        except Exception as e:
+                            print(
+                                f"[LC3] Decoding error: {e} | "
+                                f"Data size: {len(data)} bytes (expected: {lc3_chunk_size}) | "
+                                f"Frame duration: {lc3_frame_duration_us}μs | "
+                                f"Sample rate: {sample_rate}Hz",
+                                uid,
+                                session_id,
+                            )
                             continue
 
                     if soniox_socket is not None:

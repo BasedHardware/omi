@@ -189,6 +189,195 @@ workflows:
           - Discord Folks
         submit_to_app_store: false
 
+  macos-prod-testflight:
+    name: Release macOS to Testflight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - app_env
+        - firebase
+        - appstore_credentials
+      vars:
+        APP_ID: 6502156163
+        BUNDLE_ID: "com.friend-app-with-wearable.ios12"
+      flutter: 3.35.3
+      xcode: 26.0.1
+      cocoapods: 1.16.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*-mobile-cm"
+          include: true
+    working_directory: app
+    scripts:
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_prod.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
+            --macos-out=macos/Config/Prod \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --macos-target="Runner" \
+            --yes
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_dev.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
+            --macos-out=macos/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --macos-target="Runner" \
+            --yes
+
+      - name: Set up Google Service Info
+        script: |
+          # Copy GoogleService-Info.plist
+          cp macos/Config/Prod/GoogleService-Info.plist macos/GoogleService-Info.plist
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Install pods
+        script: |
+          cd macos && pod install --repo-update
+
+      - name: Set up keychain for code signing
+        script: |
+          keychain initialize
+
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform MAC_OS \
+            --type MAC_APP_STORE \
+            --create
+
+      - name: Fetch Mac Installer Distribution certificates
+        script: |
+          # Try to find an existing certificate with our private key
+          echo "Checking for existing Mac Installer Distribution certificate with our private key..."
+          if app-store-connect certificates list --type MAC_INSTALLER_DISTRIBUTION --save 2>&1 | grep -q "Saved Signing Certificate"; then
+            echo "Found existing certificate with matching private key"
+          else
+            echo "No matching certificate found, creating new one for Codemagic..."
+            app-store-connect certificates create --type MAC_INSTALLER_DISTRIBUTION --save
+          fi
+
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+
+      - name: Set up code signing settings
+        script: |
+          xcode-project use-profiles
+
+      - name: Flutter build macOS
+        script: |
+          # Build
+          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          flutter build macos \
+            --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
+            --flavor prod
+
+      - name: Package application for App Store
+        script: |
+          set -x
+
+          # Find the app bundle
+          APP_NAME=$(find $(pwd) -name "Omi.app" | head -1)
+          echo "Found app at: $APP_NAME"
+
+          # Set output directory
+          OUTPUT_DIR="$(pwd)/build/macos"
+          mkdir -p "$OUTPUT_DIR"
+
+          # Create unsigned package
+          PACKAGE_NAME="Omi.pkg"
+          xcrun productbuild --component "$APP_NAME" /Applications/ "$OUTPUT_DIR/unsigned.pkg"
+
+          # Find the installer certificate common name in keychain
+          INSTALLER_CERT_NAME=$(keychain list-certificates \
+            | jq -r '.[] | select(.common_name | contains("3rd Party Mac Developer Installer")) | .common_name' \
+            | head -1)
+
+          if [ -z "$INSTALLER_CERT_NAME" ]; then
+            echo "ERROR: No Mac Installer Distribution certificate found"
+            echo "Available certificates:"
+            keychain list-certificates | jq -r '.[].common_name'
+            exit 1
+          fi
+
+          echo "Using installer certificate: $INSTALLER_CERT_NAME"
+
+          # Sign the package
+          xcrun productsign --sign "$INSTALLER_CERT_NAME" "$OUTPUT_DIR/unsigned.pkg" "$OUTPUT_DIR/$PACKAGE_NAME"
+
+          # Clean up
+          rm -f "$OUTPUT_DIR/unsigned.pkg"
+
+          echo "Package created at: $OUTPUT_DIR/$PACKAGE_NAME"
+
+    artifacts:
+      - build/macos/*.pkg
+      - build/macos/**/*.app
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal
+          - Discord Folks
+        submit_to_app_store: false
+
   android-prod-internal:
     name: Release Android Internal Production
     instance_type: mac_mini_m2

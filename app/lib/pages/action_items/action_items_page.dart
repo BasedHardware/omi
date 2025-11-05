@@ -142,6 +142,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               : Padding(
                   padding: const EdgeInsets.only(bottom: 60.0),
                   child: FloatingActionButton(
+                    heroTag: 'action_items_fab',
                     onPressed: _showCreateActionItemSheet,
                     backgroundColor: Colors.deepPurpleAccent,
                     child: const Icon(
