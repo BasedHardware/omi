@@ -698,21 +698,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Color(0xFF6B6457),
-                      Color(0xFF7A7365),
-                      Color(0xFF6B6457),
+                      Color(0xFFB8860B).withValues(alpha: 0.5),
+                      Color(0xFFCD853F).withValues(alpha: 0.5),
+                      Color(0xFFB8860B).withValues(alpha: 0.5),
                     ],
                   ),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.amber.withOpacity(0.1),
-                      blurRadius: 4,
-                      spreadRadius: 0.3,
+                      color: Colors.amber.withOpacity(0.15),
+                      blurRadius: 6,
+                      spreadRadius: 0.5,
                     ),
                   ],
                 ),

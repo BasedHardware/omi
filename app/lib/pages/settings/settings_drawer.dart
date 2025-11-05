@@ -352,8 +352,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
-                        Color(0xFF6B6457),
-                        Color(0xFF7A7365),
+                        Color(0xFFB8860B),
+                        Color(0xFFCD853F),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
