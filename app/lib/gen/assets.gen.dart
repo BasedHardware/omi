@@ -225,6 +225,10 @@ class $AssetsImagesGen {
   AssetGenImage get omiGlass =>
       const AssetGenImage('assets/images/omi-glass.png');
 
+  /// File path: assets/images/omi-with-rope-no-padding.webp
+  AssetGenImage get omiWithRopeNoPadding =>
+      const AssetGenImage('assets/images/omi-with-rope-no-padding.webp');
+
   /// File path: assets/images/omi-with-rope.webp
   AssetGenImage get omiWithRope =>
       const AssetGenImage('assets/images/omi-with-rope.webp');
@@ -366,6 +370,7 @@ class $AssetsImagesGen {
     notionLogo,
     omiDevkitWithoutRope,
     omiGlass,
+    omiWithRopeNoPadding,
     omiWithRope,
     omiWithoutRopeTurnedOff,
     omiWithoutRope,
