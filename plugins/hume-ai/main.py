@@ -390,7 +390,14 @@ async def get_emotion_config():
 @app.post("/emotion-config")
 async def update_emotion_config(request: Request):
     """
-    Update emotion notification configuration
+    Update emotion notification configuration (LOCAL DEVELOPMENT ONLY)
+
+    WARNING: This endpoint only works in single-worker deployments.
+    In production with multiple workers, configuration changes will only
+    affect the worker that receives this request, causing inconsistent behavior.
+
+    For production deployments, update the EMOTION_NOTIFICATION_CONFIG
+    environment variable instead and redeploy.
 
     Body (JSON):
     {
@@ -401,6 +408,17 @@ async def update_emotion_config(request: Request):
         }
     }
     """
+    # Check if running in single-worker mode
+    if os.getenv('RENDER') or os.getenv('RAILWAY') or os.getenv('FLY_APP_NAME'):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Runtime configuration updates are disabled in cloud deployments",
+                "message": "Update the EMOTION_NOTIFICATION_CONFIG environment variable and redeploy instead",
+                "documentation": "See README for configuration instructions"
+            }
+        )
+
     global EMOTION_CONFIG
 
     try:
@@ -426,17 +444,18 @@ async def update_emotion_config(request: Request):
         # Update configuration
         EMOTION_CONFIG.update(new_config)
 
-        # Save to file
+        # Save to file (local development only)
         import json
         config_file = Path("emotion_config.json")
         with open(config_file, 'w') as f:
             json.dump(EMOTION_CONFIG, f, indent=2)
 
-        print(f"✓ Updated emotion config: {EMOTION_CONFIG}")
+        print(f"✓ Updated emotion config (local): {EMOTION_CONFIG}")
 
         return {
-            "message": "Configuration updated successfully",
-            "new_config": EMOTION_CONFIG
+            "message": "Configuration updated successfully (local development only)",
+            "new_config": EMOTION_CONFIG,
+            "warning": "Changes will be lost on restart. Use environment variables for persistent config."
         }
 
     except HTTPException:
