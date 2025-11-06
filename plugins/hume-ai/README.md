@@ -499,12 +499,9 @@ Examples:
 All available environment variables:
 
 ```bash
-# Required
 HUME_API_KEY=your_hume_api_key_here          # From platform.hume.ai
 OMI_APP_ID=your_omi_app_id_here              # From Omi mobile app
 OMI_API_KEY=your_omi_api_key_here            # From Omi mobile app
-
-# Optional
 EMOTION_NOTIFICATION_CONFIG={"notification_enabled":true,"emotion_thresholds":{}}  # Emotion notification settings (JSON)
 ```
 
