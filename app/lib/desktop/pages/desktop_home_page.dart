@@ -883,7 +883,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                               child: SizedBox.expand(),
                             ),
                             const Text(
-                              'Get omi\nwith you',
+                              'Wearable ChatGPT',
                               style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w600,
@@ -905,7 +905,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                     borderRadius: BorderRadius.circular(24),
                                   ),
                                   child: const Text(
-                                    'Order omi',
+                                    'Order Now',
                                     style: TextStyle(
                                       color: Colors.black,
                                       fontSize: 14,
@@ -922,7 +922,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       Positioned(
                         right: 0,
                         child: SizedBox(
-                          height: 120,
+                          height: 130,
                           child: Assets.images.omiWithRopeNoPadding.image(
                             fit: BoxFit.contain,
                           ),
