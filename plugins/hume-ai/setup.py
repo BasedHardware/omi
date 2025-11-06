@@ -14,8 +14,8 @@ setup(
     description="Real-time emotion analysis for Omi audio using Hume AI",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-username/audio-sentiment-profiling",
-    py_modules=["main"],
+    url="https://github.com/liviaellen/omi",
+    py_modules=["main", "app"],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

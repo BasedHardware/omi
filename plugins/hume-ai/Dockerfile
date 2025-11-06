@@ -18,6 +18,7 @@ COPY --from=builder /root/.local /root/.local
 COPY main.py .
 COPY app.py .
 COPY emotion_config.json .
+COPY templates/ templates/
 
 # Make sure scripts in .local are usable
 ENV PATH=/root/.local/bin:$PATH
@@ -26,4 +27,4 @@ ENV PATH=/root/.local/bin:$PATH
 EXPOSE 8080
 
 # Run the application
-CMD ["python", "main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -16,6 +16,7 @@ load_dotenv()
 # FastAPI imports
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
 import uvicorn
 
 # Import all helper functions from app.py
@@ -54,6 +55,9 @@ from app import (
 
 # Initialize FastAPI app
 app = FastAPI(title="Omi Audio Streaming Service with Hume AI")
+
+# Initialize Jinja2 templates
+templates = Jinja2Templates(directory="templates")
 
 
 # ============================================================================
@@ -248,13 +252,13 @@ async def handle_audio_stream(
 
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
+async def root(request: Request):
     """Root endpoint with web interface"""
     hume_configured = bool(os.getenv('HUME_API_KEY'))
     omi_configured = bool(os.getenv('OMI_APP_ID') and os.getenv('OMI_API_KEY'))
 
-    # Build emotion statistics HTML
-    emotion_stats_html = ''
+    # Build emotion statistics data
+    emotion_stats = []
     if audio_stats['emotion_counts']:
         sorted_emotions = sorted(
             audio_stats['emotion_counts'].items(),
@@ -268,23 +272,7 @@ async def root():
             percentage = (count / total_count) * 100
             bar_width = int(percentage * 2)
             bar = '█' * bar_width
-            emotion_stats_html += f"""
-                <div style="margin: 10px 0; font-family: monospace;">
-                    <span style="display: inline-block; width: 150px;">{emotion}</span>
-                    <span style="color: #999;">Count: {count} | {percentage:.1f}%</span>
-                    <span style="color: #4CAF50;"> {bar}</span>
-                </div>
-            """
-    else:
-        emotion_stats_html = '<p style="color: #999;">No emotion data yet. Speak into your Omi device!</p>'
-
-    # Build recent emotions display
-    recent_emotions_html = ''
-    if audio_stats.get('recent_emotions'):
-        for emotion in audio_stats['recent_emotions'][:5]:
-            recent_emotions_html += f'<span style="background: #f0f0f0; padding: 5px 10px; margin: 5px; border-radius: 5px; display: inline-block;">{emotion.get("name")} ({emotion.get("score", 0):.2f})</span>'
-    else:
-        recent_emotions_html = '<p style="color: #999;">No recent emotions detected</p>'
+            emotion_stats.append((emotion, count, percentage, bar))
 
     # Rizz meter display
     rizz_score = audio_stats.get("rizz_score", 75)
@@ -292,323 +280,18 @@ async def root():
     rizz_color = "#4CAF50" if rizz_score >= 60 else "#ff9800" if rizz_score >= 40 else "#f44336"
     rizz_bg_color = "#2ecc71" if rizz_score >= 60 else "#f39c12" if rizz_score >= 40 else "#e74c3c"
 
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Omi Audio Emotion Analysis Dashboard</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                max-width: 1000px;
-                margin: 0 auto;
-                padding: 20px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: #333;
-            }}
-            .container {{
-                background: white;
-                border-radius: 15px;
-                padding: 30px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            }}
-            h1 {{
-                color: #667eea;
-                margin: 0 0 10px 0;
-                font-size: 28px;
-            }}
-            .stats {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-                margin: 20px 0;
-            }}
-            .stat-card {{
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 20px;
-                border-radius: 10px;
-                color: white;
-                text-align: center;
-            }}
-            .stat-value {{
-                font-size: 32px;
-                font-weight: bold;
-                margin-bottom: 5px;
-            }}
-            .stat-label {{
-                font-size: 14px;
-                opacity: 0.9;
-            }}
-            .config-section {{
-                background: #f8f9fa;
-                padding: 20px;
-                border-radius: 10px;
-                margin: 20px 0;
-            }}
-            .check {{
-                color: #4CAF50;
-                font-weight: bold;
-            }}
-            .cross {{
-                color: #f44336;
-                font-weight: bold;
-            }}
-            .endpoint {{
-                background: #f0f0f0;
-                padding: 10px;
-                border-radius: 5px;
-                font-family: monospace;
-                font-size: 13px;
-                margin: 10px 0;
-                word-break: break-all;
-            }}
-            .refresh-btn {{
-                background: #667eea;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 14px;
-                font-weight: 600;
-                transition: background 0.3s;
-            }}
-            .refresh-btn:hover {{
-                background: #5568d3;
-            }}
-            .rizz-meter {{
-                background: {rizz_bg_color};
-                height: 30px;
-                border-radius: 15px;
-                position: relative;
-                margin: 20px 0;
-                overflow: hidden;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }}
-            .rizz-indicator {{
-                position: absolute;
-                top: 0;
-                left: {rizz_score}%;
-                width: 4px;
-                height: 100%;
-                background: white;
-                box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            }}
-            .rizz-text {{
-                text-align: center;
-                font-size: 20px;
-                font-weight: bold;
-                color: {rizz_color};
-                margin: 10px 0;
-            }}
-        </style>
-        <script>
-            setTimeout(() => {{
-                window.location.reload();
-            }}, 10000);
-
-            function refreshPage() {{
-                window.location.reload();
-            }}
-
-            async function resetStats() {{
-                if (!confirm('Are you sure you want to reset all statistics?')) {{
-                    return;
-                }}
-
-                try {{
-                    const response = await fetch('/reset-stats', {{
-                        method: 'POST',
-                        headers: {{
-                            'Content-Type': 'application/json'
-                        }},
-                        body: JSON.stringify({{ confirm: true }})
-                    }});
-
-                    if (response.ok) {{
-                        alert('Statistics reset successfully!');
-                        window.location.reload();
-                    }} else {{
-                        alert('Failed to reset statistics');
-                    }}
-                }} catch (error) {{
-                    alert('Error: ' + error.message);
-                }}
-            }}
-
-            async function forceSendNotification() {{
-                const statusEl = document.getElementById('notificationStatus');
-                statusEl.textContent = '🔔 Sending notification...';
-                statusEl.style.color = '#666';
-
-                try {{
-                    const response = await fetch('/force-send-notification', {{
-                        method: 'POST'
-                    }});
-
-                    const data = await response.json();
-
-                    if (response.ok) {{
-                        statusEl.textContent = `✅ Notification sent! "${{data.notification_message}}"`;
-                        statusEl.style.color = '#28a745';
-                        setTimeout(() => {{ statusEl.textContent = ''; }}, 5000);
-                    }} else {{
-                        statusEl.textContent = `❌ ${{data.message || 'Failed to send'}}`;
-                        statusEl.style.color = '#dc3545';
-                    }}
-                }} catch (error) {{
-                    statusEl.textContent = `❌ Error: ${{error.message}}`;
-                    statusEl.style.color = '#dc3545';
-                }}
-            }}
-
-            async function saveEmotionMemory() {{
-                const statusEl = document.getElementById('memoryStatus');
-                statusEl.textContent = '💾 Saving emotion summary to memories...';
-                statusEl.style.color = '#666';
-
-                try {{
-                    const response = await fetch('/save-emotion-memory', {{
-                        method: 'POST'
-                    }});
-
-                    const data = await response.json();
-
-                    if (response.ok) {{
-                        statusEl.textContent = '✅ Emotion summary saved to memories!';
-                        statusEl.style.color = '#28a745';
-                        setTimeout(() => {{ statusEl.textContent = ''; }}, 3000);
-                    }} else {{
-                        statusEl.textContent = `❌ Error: ${{data.error || 'Failed to save'}}`;
-                        statusEl.style.color = '#dc3545';
-                    }}
-                }} catch (error) {{
-                    statusEl.textContent = `❌ Error: ${{error.message}}`;
-                    statusEl.style.color = '#dc3545';
-                }}
-            }}
-        </script>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🎤 Omi Audio Streaming Service ONLINE</h1>
-            <p style="text-align: center; color: #999; font-size: 13px; margin: 0 0 10px 0;">
-                Developer: Livia Ellen
-            </p>
-            <p style="text-align: center; font-size: 13px; margin: 0 0 30px 0;">
-                <a href="https://www.hume.ai/products/speech-prosody-model" target="_blank" style="color: #667eea; text-decoration: none;">
-                    🧠 Learn how we detect rizz + vibe + emotion using Hume AI Speech Prosody →
-                </a>
-            </p>
-
-            <div class="config-section">
-                <h3>⚙️ Configuration Status</h3>
-                <p><span class="{'check' if hume_configured else 'cross'}">{'✓' if hume_configured else '✗'}</span> Hume AI API Key: {'Configured' if hume_configured else 'Not configured'}</p>
-                <p><span class="{'check' if omi_configured else 'cross'}">{'✓' if omi_configured else '✗'}</span> Omi Integration: {'Configured' if omi_configured else 'Not configured'}</p>
-            </div>
-
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-value">{audio_stats['total_requests']}</div>
-                    <div class="stat-label">Total Requests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{audio_stats['successful_analyses']}</div>
-                    <div class="stat-label">Successful</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{audio_stats['failed_analyses']}</div>
-                    <div class="stat-label">Failed</div>
-                </div>
-            </div>
-
-            <div class="config-section">
-                <h3>🎭 Rizz Meter</h3>
-                <div class="rizz-text">{rizz_status}</div>
-                <div class="rizz-meter">
-                    <div class="rizz-indicator"></div>
-                </div>
-                <p style="text-align: center; color: #666; font-size: 14px;">Score: {rizz_score:.0f}/100</p>
-            </div>
-
-            <div class="config-section">
-                <h3>📊 Last Activity</h3>
-                <p><strong>Time:</strong> {audio_stats['last_request_time'] or 'No requests yet'}</p>
-                <p><strong>User ID:</strong> {audio_stats.get('last_uid', 'N/A')}</p>
-                <div style="margin-top: 10px;">
-                    {recent_emotions_html}
-                </div>
-            </div>
-
-            <div class="config-section">
-                <h3>🎭 Emotion Statistics</h3>
-                {emotion_stats_html}
-            </div>
-
-            <div class="config-section">
-                <h3>📱 Configure Your Omi Device</h3>
-                <p style="font-size: 14px; line-height: 1.6; margin-bottom: 15px;">
-                    <strong>Step 1: Enable Audio Streaming</strong>
-                </p>
-                <ol style="line-height: 1.8; margin-bottom: 20px;">
-                    <li>Open the <strong>Omi App</strong></li>
-                    <li>Go to <strong>Settings → Developer Mode</strong></li>
-                    <li>Toggle <strong>Developer Mode ON</strong></li>
-                    <li>Set <strong>"Realtime audio bytes"</strong> to:</li>
-                    <div class="endpoint" id="audioUrl">{os.getenv('NGROK_URL', 'https://your-ngrok-url.ngrok-free.app')}/audio</div>
-                    <li>Set <strong>"Every x seconds"</strong> to <code>5</code></li>
-                </ol>
-
-                <p style="font-size: 14px; line-height: 1.6; margin-bottom: 15px;">
-                    <strong>Step 2: Create Integration App</strong>
-                </p>
-                <ol style="line-height: 1.8; margin-bottom: 20px;">
-                    <li>Go to <strong>Apps</strong> tab → Click <strong>Create App</strong></li>
-                    <li>Select <strong>External Integration</strong></li>
-                    <li>Toggle <strong>"Audio Bytes Trigger"</strong> ON</li>
-                    <li>Toggle <strong>"Create Memories"</strong> ON</li>
-                    <li>Set Webhook URL to the same audio endpoint above</li>
-                    <li>Save and <strong>Install the App</strong></li>
-                </ol>
-
-                <p style="font-size: 14px; line-height: 1.6; margin-bottom: 15px;">
-                    <strong>Step 3: Update Environment Variables</strong>
-                </p>
-                <ol style="line-height: 1.8; margin-bottom: 20px;">
-                    <li>Copy your <strong>App ID</strong> and <strong>API Key</strong> from the app</li>
-                    <li>Go to <strong>Render Dashboard</strong> → Your Service → <strong>Environment</strong></li>
-                    <li>Add/Update these variables:
-                        <div style="background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; font-family: monospace; font-size: 12px;">
-                            HUME_API_KEY=your_hume_api_key<br>
-                            OMI_APP_ID=your_omi_app_id<br>
-                            OMI_API_KEY=your_omi_api_key
-                        </div>
-                    </li>
-                    <li>Save changes and wait for auto-redeploy</li>
-                </ol>
-
-                <p style="font-size: 13px; color: #666; margin-top: 15px;">
-                    📖 For detailed setup instructions, see the
-                    <a href="https://github.com/liviaellen/audio-sentiment-profiling#readme" target="_blank" style="color: #667eea; text-decoration: none;">
-                        project README
-                    </a>
-                </p>
-            </div>
-
-            <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
-                <button class="refresh-btn" onclick="refreshPage()">🔄 Refresh Status</button>
-                <button class="refresh-btn" onclick="forceSendNotification()" style="background: #ff6b35;">🔔 Send Notification</button>
-                <button class="refresh-btn" onclick="resetStats()" style="background: #dc3545;">🗑️ Reset Statistics</button>
-            </div>
-            <p id="notificationStatus" style="color: #666; font-size: 14px; margin-top: 10px;"></p>
-            {'<p style="color: #28a745; font-size: 13px; margin-top: 10px;">✓ User ID: ' + audio_stats.get("last_uid", "Not available") + '</p>' if audio_stats.get("last_uid") else '<p style="color: #ff9800; font-size: 13px; margin-top: 10px;">⚠️ No audio received yet. Speak into your Omi device first.</p>'}
-            <p style="color: #666; font-size: 12px; margin-top: 10px;">Page auto-refreshes every 10 seconds</p>
-        </div>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "hume_configured": hume_configured,
+        "omi_configured": omi_configured,
+        "stats": audio_stats,
+        "emotion_stats": emotion_stats,
+        "rizz_score": rizz_score,
+        "rizz_status": rizz_status,
+        "rizz_color": rizz_color,
+        "rizz_bg_color": rizz_bg_color,
+        "ngrok_url": os.getenv('NGROK_URL', 'https://your-ngrok-url.ngrok-free.app')
+    })
 
 
 @app.get("/status")
