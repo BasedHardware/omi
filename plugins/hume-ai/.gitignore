@@ -1,7 +1,6 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 .Python
 build/
@@ -43,7 +42,6 @@ service-account*.json
 *.swp
 *.swo
 *~
-.DS_Store
 
 # Logs
 *.log
@@ -64,14 +62,9 @@ tmp/
 .AppleDouble
 .LSOverride
 
-# Python cache
-__pycache__/
-*.pyc
-
 # Test outputs
 .pytest_cache/
 .coverage
 
 # Backup files
 *.backup
-main.py.backup
