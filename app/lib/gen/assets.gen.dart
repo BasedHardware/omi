@@ -394,12 +394,52 @@ class $AssetsImagesGen {
   ];
 }
 
+class $AssetsIntegrationAppLogosGen {
+  const $AssetsIntegrationAppLogosGen();
+
+  /// File path: assets/integration_app_logos/asana-logo.png
+  AssetGenImage get asanaLogo =>
+      const AssetGenImage('assets/integration_app_logos/asana-logo.png');
+
+  /// File path: assets/integration_app_logos/clickup-logo.png
+  AssetGenImage get clickupLogo =>
+      const AssetGenImage('assets/integration_app_logos/clickup-logo.png');
+
+  /// File path: assets/integration_app_logos/google-tasks-logo.png
+  AssetGenImage get googleTasksLogo =>
+      const AssetGenImage('assets/integration_app_logos/google-tasks-logo.png');
+
+  /// File path: assets/integration_app_logos/monday-logo.jpeg
+  AssetGenImage get mondayLogo =>
+      const AssetGenImage('assets/integration_app_logos/monday-logo.jpeg');
+
+  /// File path: assets/integration_app_logos/todoist-logo.webp
+  AssetGenImage get todoistLogo =>
+      const AssetGenImage('assets/integration_app_logos/todoist-logo.webp');
+
+  /// File path: assets/integration_app_logos/trello-logo.png
+  AssetGenImage get trelloLogo =>
+      const AssetGenImage('assets/integration_app_logos/trello-logo.png');
+
+  /// List of all assets
+  List<AssetGenImage> get values => [
+    asanaLogo,
+    clickupLogo,
+    googleTasksLogo,
+    mondayLogo,
+    todoistLogo,
+    trelloLogo,
+  ];
+}
+
 class Assets {
   const Assets._();
 
   static const $AssetsDeviceAssetsGen deviceAssets = $AssetsDeviceAssetsGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
+  static const $AssetsIntegrationAppLogosGen integrationAppLogos =
+      $AssetsIntegrationAppLogosGen();
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets
