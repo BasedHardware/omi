@@ -590,7 +590,6 @@ audio-sentiment-profiling/
 │   ├── API Endpoints (/audio, /status, etc.)
 │   └── Dashboard HTML
 ├── emotion_config.json        # Emotion detection configuration
-├── manifest.json              # Omi plugin manifest
 ├── setup.py                   # Python package setup
 ├── requirements.txt           # Python dependencies
 ├── Dockerfile                 # Docker configuration
