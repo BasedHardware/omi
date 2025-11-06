@@ -1,6 +1,6 @@
 """Test script to verify audio chunking works"""
 import asyncio
-from main import analyze_audio_with_hume
+from app import analyze_audio_with_hume
 import sys
 
 async def test_audio_file(file_path):
