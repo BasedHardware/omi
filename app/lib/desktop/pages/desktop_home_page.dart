@@ -183,7 +183,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   void initState() {
     super.initState();
     SharedPreferencesUtil().onboardingCompleted = true;
-    //_showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
+    _showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
 
     // Initialize animations
     _sidebarAnimationController = AnimationController(
