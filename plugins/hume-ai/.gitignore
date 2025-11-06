@@ -29,6 +29,7 @@ env/
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # Credentials (IMPORTANT - never commit these!)
 credentials.json
