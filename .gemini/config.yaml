@@ -41,7 +41,6 @@ review_preferences:
   focus_areas:
     - "correctness"
     - "security"
-    - "maintainability"
 
   # style_guide_path: (string) Path to a custom style guide file (e.g., `.gemini/my_style_guide.md`).
   # If provided, I will use this document as a reference for stylistic and best practice
