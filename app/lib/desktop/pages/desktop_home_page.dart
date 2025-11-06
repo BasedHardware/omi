@@ -141,7 +141,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   PageController? _controller;
   late AnimationController _sidebarAnimationController;
   late Animation<double> _sidebarSlideAnimation;
-  late AnimationController _subscribeButtonAnimationController;
   final GlobalKey _profileCardKey = GlobalKey();
 
   // State for Get Omi Widget
@@ -193,10 +192,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     _sidebarSlideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _sidebarAnimationController, curve: Curves.easeOutCubic),
     );
-    _subscribeButtonAnimationController = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    )..repeat();
 
     // Navigate uri
     Uri? navigateToUri;
@@ -789,47 +784,38 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           return const SizedBox.shrink();
         }
 
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                MixpanelManager().pageOpened('Plan & Usage');
-                routeToPage(context, const UsagePage(showUpgradeDialog: true));
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: AnimatedBuilder(
-                animation: _subscribeButtonAnimationController,
-                builder: (context, child) {
-                  return Ink(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: child,
-                  );
-                },
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      FontAwesomeIcons.crown,
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              MixpanelManager().pageOpened('Plan & Usage');
+              routeToPage(context, const UsagePage(showUpgradeDialog: true));
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Ink(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    FontAwesomeIcons.crown,
+                    color: Colors.black,
+                    size: 14,
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    'Upgrade to Unlimited',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                       color: Colors.black,
-                      size: 14,
                     ),
-                    SizedBox(width: 10),
-                    Text(
-                      'Upgrade to Unlimited',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1280,7 +1266,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     ForegroundUtil.stopForegroundTask();
     _sidebarAnimationController.dispose();
-    _subscribeButtonAnimationController.dispose();
     if (_controller != null) {
       _controller!.dispose();
       _controller = null;
