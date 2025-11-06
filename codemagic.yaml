@@ -214,7 +214,7 @@ workflows:
       events:
         - tag
       tag_patterns:
-        - pattern: "v*-mobile-cm"
+        - pattern: "v*-desktop-cm"
           include: true
     working_directory: app
     scripts:
