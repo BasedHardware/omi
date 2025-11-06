@@ -1,0 +1,23 @@
+{
+  "id": "audio-emotion-analysis",
+  "name": "Audio Emotion Analysis",
+  "author": "Livia Ellen",
+  "description": "Real-time emotion analysis for audio using Hume AI with automatic notifications",
+  "version": "1.0.0",
+  "capabilities": [
+    "audio_streaming",
+    "notifications",
+    "dashboard"
+  ],
+  "external_integration": {
+    "triggers_on": "audio",
+    "webhook_url": "/audio",
+    "setup_completed_url": "/health"
+  },
+  "image": "image/rizzmeter.png",
+  "memory": false,
+  "chat": false,
+  "notification": true,
+  "external_integration_type": "realtime_audio",
+  "category": "productivity"
+}
