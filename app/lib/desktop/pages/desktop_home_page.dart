@@ -145,9 +145,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   final GlobalKey _profileCardKey = GlobalKey();
 
   // State for Get Omi Widget
-  late PageController _omiImagePageController;
-  Timer? _omiImageScrollTimer;
-  int _currentOmiImagePage = 0;
   bool _showGetOmiWidget = true;
 
   void _initiateApps() {
@@ -186,7 +183,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   void initState() {
     super.initState();
     SharedPreferencesUtil().onboardingCompleted = true;
-    _showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
+    //_showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
 
     // Initialize animations
     _sidebarAnimationController = AnimationController(
@@ -200,9 +197,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       duration: const Duration(seconds: 3),
       vsync: this,
     )..repeat();
-
-    // Initialize page controller for Get Omi Widget
-    _omiImagePageController = PageController();
 
     // Navigate uri
     Uri? navigateToUri;
@@ -284,35 +278,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
       // Start sidebar animation
       _sidebarAnimationController.forward();
-      _startOmiImageSlider();
     });
 
     _listenToMessagesFromNotification();
-  }
-
-  void _startOmiImageSlider() {
-    final imageCount = [
-      Assets.images.onboardingBg1,
-      Assets.images.onboardingBg2,
-      Assets.images.onboardingBg3,
-      Assets.images.onboardingBg4,
-      Assets.images.onboardingBg6,
-    ].length;
-
-    _omiImageScrollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_omiImagePageController.hasClients) {
-        _currentOmiImagePage = (_currentOmiImagePage + 1) % imageCount;
-        _omiImagePageController.animateToPage(
-          _currentOmiImagePage,
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.easeInOutCubic,
-        );
-      }
-    });
   }
 
   void _listenToMessagesFromNotification() {
@@ -835,9 +803,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 animation: _subscribeButtonAnimationController,
                 builder: (context, child) {
                   return Ink(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
                     ),
                     child: child,
                   );
@@ -847,7 +816,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   children: [
                     Icon(
                       FontAwesomeIcons.crown,
-                      color: Colors.white,
+                      color: Colors.black,
                       size: 14,
                     ),
                     SizedBox(width: 10),
@@ -855,8 +824,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       'Upgrade to Unlimited',
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
                       ),
                     ),
                   ],
@@ -878,136 +847,96 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           return const SizedBox.shrink();
         }
 
-        final List<AssetGenImage> omiImages = [
-          Assets.images.onboardingBg1,
-          Assets.images.onboardingBg2,
-          Assets.images.onboardingBg3,
-          Assets.images.onboardingBg4,
-          Assets.images.onboardingBg6,
-        ];
-
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: AspectRatio(
-            aspectRatio: 720 / 1280,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () async {
-                    MixpanelManager().track('Get Omi Device Clicked');
-                    final url = Uri.parse('https://www.omi.me');
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                    }
-                  },
+        return AspectRatio(
+          aspectRatio: 3 / 2,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () async {
+                  MixpanelManager().track('Get Omi Device Clicked');
+                  final url = Uri.parse('https://www.omi.me');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
                   child: Stack(
-                    fit: StackFit.expand,
                     children: [
-                      // Image slider
-                      PageView.builder(
-                        controller: _omiImagePageController,
-                        itemCount: omiImages.length,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentOmiImagePage = index;
-                          });
-                        },
-                        itemBuilder: (context, index) {
-                          return omiImages[index].image(
-                            fit: BoxFit.cover,
-                            // Add a subtle animation for image transition
-                            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                              if (wasSynchronouslyLoaded) return child;
-                              return AnimatedOpacity(
-                                opacity: frame == null ? 0 : 1,
-                                duration: const Duration(seconds: 1),
-                                curve: Curves.easeOut,
-                                child: child,
-                              );
-                            },
-                          );
-                        },
-                      ),
-                      // Gradient overlay for text readability
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.black.withOpacity(0.6),
-                              Colors.black.withOpacity(0.1),
-                              Colors.transparent,
-                            ],
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                          ),
-                        ),
-                      ),
-                      // Content on top
-                      Positioned(
-                        bottom: 16,
-                        left: 16,
-                        right: 16,
+                      // Left side - Text and button with padding
+                      Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.max,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(24),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: const Text(
-                                'Get omi with you',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black,
-                                ),
+                            const Expanded(
+                              child: SizedBox.expand(),
+                            ),
+                            const Text(
+                              'Get omi\nwith you',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w600,
+                                color: ResponsiveHelper.textPrimary,
+                                height: 1.2,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 16),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  child: const Text(
+                                    'Order omi',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
-                      // Page indicators
+                      // Right side - Image positioned with no padding
                       Positioned(
-                        bottom: 8,
-                        left: 0,
                         right: 0,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(omiImages.length, (index) {
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              height: 6,
-                              width: _currentOmiImagePage == index ? 20 : 6,
-                              decoration: BoxDecoration(
-                                color: _currentOmiImagePage == index ? Colors.white : Colors.white.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            );
-                          }),
+                        child: SizedBox(
+                          height: 120,
+                          child: Assets.images.omiWithRopeNoPadding.image(
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
-                      // Close button
+                      // Close button for unlimited users
                       if (isUnlimited)
                         Positioned(
-                          top: 4,
-                          right: 4,
+                          top: 0,
+                          right: 0,
                           child: IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                            icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary, size: 18),
                             style: IconButton.styleFrom(
-                              backgroundColor: Colors.black.withOpacity(0.3),
+                              backgroundColor: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
                               padding: EdgeInsets.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
@@ -1352,8 +1281,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     ForegroundUtil.stopForegroundTask();
     _sidebarAnimationController.dispose();
     _subscribeButtonAnimationController.dispose();
-    _omiImageScrollTimer?.cancel();
-    _omiImagePageController.dispose();
     if (_controller != null) {
       _controller!.dispose();
       _controller = null;
