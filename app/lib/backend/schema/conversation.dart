@@ -35,7 +35,9 @@ enum ConversationSource {
   xor,
   frame,
   friend_com,
-  apple_watch
+  apple_watch,
+  phone,
+  desktop,
 }
 
 class ConversationExternalData {

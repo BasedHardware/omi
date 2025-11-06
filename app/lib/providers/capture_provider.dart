@@ -956,12 +956,14 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       if (recordingState == RecordingState.record) {
-        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: 'phone');
+        await _initiateWebsocket(
+            audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: ConversationSource.phone.name);
         return;
       }
       if (recordingState == RecordingState.systemAudioRecord && PlatformService.isDesktop) {
         debugPrint("System audio socket disconnected, reconnecting...");
-        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: 'desktop');
+        await _initiateWebsocket(
+            audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: ConversationSource.desktop.name);
         return;
       }
     });
