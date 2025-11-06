@@ -12,7 +12,7 @@ async def test_now():
 
     omi_app_id = os.getenv('OMI_APP_ID')
     omi_api_key = os.getenv('OMI_API_KEY')
-    test_uid = "XqBKRatqZ5MS4tsX84VfBEne16W2"  # From your logs
+    test_uid = os.getenv("TEST_OMI_UID")  # From your logs
 
     print(f"Testing notification to UID: {test_uid}")
     print(f"App ID: {omi_app_id}")
