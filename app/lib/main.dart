@@ -170,13 +170,17 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
-        windowManager.waitUntilReadyToShow().then((_) async {
+        WindowOptions windowOptions = const WindowOptions(
+          size: Size(1440, 900),
+          minimumSize: Size(1000, 650),
+          center: true,
+          title: "Omi",
+          titleBarStyle: TitleBarStyle.hidden,
+        );
+        windowManager.waitUntilReadyToShow(windowOptions, () async {
           await windowManager.setAsFrameless();
-          // Enforce a minimum window size so the desktop layout doesn't collapse into the mobile view
-          // Width chosen slightly above the small-screen breakpoint (1000px) used in ResponsiveHelper.
-          // Height is set to a sensible value to keep vertical content usable.
-          await windowManager.setMinimumSize(const Size(1100, 600));
-          await windowManager.setSize(const Size(1100, 700));
+          await windowManager.show();
+          await windowManager.focus();
         });
       }
 

@@ -12,6 +12,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -106,6 +107,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     required Widget icon,
     required VoidCallback onTap,
     bool showBetaTag = false,
+    Widget? trailingChip,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -162,6 +164,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   ],
                 ),
               ),
+              if (trailingChip != null) ...[
+                const SizedBox(width: 8),
+                trailingChip,
+                const SizedBox(width: 8),
+              ],
               const Icon(
                 Icons.chevron_right,
                 color: Color(0xFF3C3C43),
@@ -377,6 +384,39 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 onTap: () async {
                   Navigator.pop(context);
                   await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Referral Program',
+                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+                trailingChip: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFFB8860B),
+                        Color(0xFFCD853F),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'New',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ReferralPage(),
+                    ),
+                  );
                 },
               ),
             ],
