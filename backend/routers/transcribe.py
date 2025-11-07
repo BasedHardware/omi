@@ -1273,10 +1273,8 @@ async def _listen(
     except Exception as e:
         print(f"Error during WebSocket operation: {e}", uid, session_id)
     finally:
-        # Record final usage
         if last_usage_record_timestamp:
-            current_time = time.time()
-            transcription_seconds = int(current_time - last_usage_record_timestamp)
+            transcription_seconds = int(time.time() - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record
             if transcription_seconds > 0 or words_to_record > 0:
                 record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
