@@ -108,5 +108,7 @@
 		<string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
 		<string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

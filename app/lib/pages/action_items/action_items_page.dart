@@ -6,12 +6,11 @@ import 'package:provider/provider.dart';
 import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'widgets/task_integrations_banner.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/services/apple_reminders_service.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
@@ -25,7 +24,6 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-  Set<String> _exportedToAppleReminders = <String>{};
   final AppReviewService _appReviewService = AppReviewService();
 
   // Tab state: 0 = To Do, 1 = Done, 2 = snoozed
@@ -45,7 +43,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
       }
-      _checkExistingAppleReminders();
     });
   }
 
@@ -54,23 +51,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  Future<void> _checkExistingAppleReminders() async {
-    if (!PlatformService.isApple) return;
-
-    try {
-      final service = AppleRemindersService();
-      final existingReminders = await service.getExistingReminders();
-
-      if (mounted) {
-        setState(() {
-          _exportedToAppleReminders = existingReminders.toSet();
-        });
-      }
-    } catch (e) {
-      print('Error checking existing Apple Reminders: $e');
-    }
   }
 
   // checks if it's the first action item completed
@@ -142,6 +122,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               : Padding(
                   padding: const EdgeInsets.only(bottom: 60.0),
                   child: FloatingActionButton(
+                    heroTag: 'action_items_fab',
                     onPressed: _showCreateActionItemSheet,
                     backgroundColor: Colors.deepPurpleAccent,
                     child: const Icon(
@@ -212,10 +193,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 else
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 0.0),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Task Integrations Banner
+                          const TaskIntegrationsBanner(),
+
                           // Segmented Control - Full width like action items
                           Container(
                             width: double.infinity,
@@ -374,10 +358,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           if (index < items.length) {
             final item = items[index];
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: _buildDismissibleActionItem(
-                item: item,
-                provider: provider,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 0),
+                    child: _buildDismissibleActionItem(
+                      item: item,
+                      provider: provider,
+                    ),
+                  ),
+                  if (index < items.length - 1)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 50),
+                      child: Divider(
+                        color: Colors.grey.withOpacity(0.2),
+                        thickness: 1,
+                        height: 1,
+                      ),
+                    ),
+                ],
               ),
             );
           }
@@ -482,8 +482,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             _onActionItemCompleted(isSnoozed: _selectedTabIndex == 2);
           }
         },
-        exportedToAppleReminders: _exportedToAppleReminders,
-        onExportedToAppleReminders: _checkExistingAppleReminders,
+        onRefresh: () => provider.fetchActionItems(),
         isSelectionMode: provider.isSelectionMode,
         isSelected: provider.isItemSelected(item.id),
         onLongPress: () => _handleItemLongPress(item, provider),

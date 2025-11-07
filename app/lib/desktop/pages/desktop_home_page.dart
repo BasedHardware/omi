@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -8,10 +9,15 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/desktop/pages/settings/desktop_about_page.dart';
 import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'apps/desktop_apps_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'conversations/desktop_conversations_page.dart';
@@ -137,7 +143,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   late Animation<double> _sidebarSlideAnimation;
   final GlobalKey _profileCardKey = GlobalKey();
 
-  bool _isRecordingMinimized = false;
+  // State for Get Omi Widget
+  bool _showGetOmiWidget = true;
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -173,7 +180,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
   @override
   void initState() {
+    super.initState();
     SharedPreferencesUtil().onboardingCompleted = true;
+    _showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
 
     // Initialize animations
     _sidebarAnimationController = AnimationController(
@@ -267,8 +276,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     });
 
     _listenToMessagesFromNotification();
-
-    super.initState();
   }
 
   void _listenToMessagesFromNotification() {
@@ -530,6 +537,17 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
                           const Spacer(),
 
+                          // Subscription upgrade banner
+                          _buildSubscriptionBanner(),
+
+                          // Get Omi Device widget and spacer
+                          if (_showGetOmiWidget) ...[
+                            const SizedBox(height: 12),
+                            _buildGetOmiWidget(),
+                          ],
+
+                          const SizedBox(height: 12),
+
                           // Profile card at bottom
                           _buildProfileCard(),
 
@@ -752,6 +770,182 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
+  Widget _buildSubscriptionBanner() {
+    return Consumer<UsageProvider>(
+      builder: (context, usageProvider, child) {
+        // Don't show if subscription UI is hidden or user is already on unlimited
+        if (usageProvider.subscription?.showSubscriptionUi != true) {
+          return const SizedBox.shrink();
+        }
+
+        final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+
+        if (isUnlimited) {
+          return const SizedBox.shrink();
+        }
+
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              MixpanelManager().pageOpened('Plan & Usage');
+              routeToPage(context, const UsagePage(showUpgradeDialog: true));
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Ink(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    FontAwesomeIcons.crown,
+                    color: Colors.black,
+                    size: 14,
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    'Upgrade to Unlimited',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGetOmiWidget() {
+    return Consumer<UsageProvider>(
+      builder: (context, usageProvider, child) {
+        final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+
+        if (!_showGetOmiWidget) {
+          return const SizedBox.shrink();
+        }
+
+        return AspectRatio(
+          aspectRatio: 3 / 2,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () async {
+                  MixpanelManager().track('Get Omi Device Clicked');
+                  final url = Uri.parse('https://www.omi.me');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      // Left side - Text and button with padding
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.max,
+                          children: [
+                            const Expanded(
+                              child: SizedBox.expand(),
+                            ),
+                            const Text(
+                              'Wearable ChatGPT',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w600,
+                                color: ResponsiveHelper.textPrimary,
+                                height: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  child: const Text(
+                                    'Order Now',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Right side - Image positioned with no padding
+                      Positioned(
+                        right: 0,
+                        child: SizedBox(
+                          height: 130,
+                          child: Assets.images.omiWithRopeNoPadding.image(
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                      // Close button for unlimited users
+                      if (isUnlimited)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary, size: 18),
+                            style: IconButton.styleFrom(
+                              backgroundColor: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
+                              padding: EdgeInsets.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _showGetOmiWidget = false;
+                              });
+                              SharedPreferencesUtil().showGetOmiCard = false;
+                            },
+                            tooltip: 'Hide this card',
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildProfileCard() {
     final userName = SharedPreferencesUtil().givenName;
     final userEmail = SharedPreferencesUtil().email;
@@ -776,33 +970,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             ),
             child: Row(
               children: [
-                // Profile picture
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                      style: const TextStyle(
-                        color: ResponsiveHelper.purplePrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // User info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -903,6 +1070,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
         // Settings options
         _buildPopupMenuItem('profile', Icons.person, 'Profile', profileCardWidth),
+        _buildPopupMenuItem('usage', FontAwesomeIcons.chartBar, 'Plan & Usage', profileCardWidth),
         _buildPopupMenuItem('device', Icons.bluetooth_connected, 'Device Settings', profileCardWidth),
         _buildPopupMenuItem('developer', Icons.code, 'Developer Mode', profileCardWidth),
         _buildPopupMenuItem('about', Icons.info_outline, 'About Omi', profileCardWidth),
@@ -937,33 +1105,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          // Profile picture
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                width: 2,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                style: const TextStyle(
-                  color: ResponsiveHelper.purplePrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // User info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1033,6 +1174,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       case 'profile':
         MixpanelManager().pageOpened('Settings');
         routeToPage(context, const DesktopProfilePage());
+        break;
+      case 'usage':
+        MixpanelManager().pageOpened('Plan & Usage');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const UsagePage(),
+          ),
+        );
         break;
       case 'device':
         Navigator.of(context).push(
