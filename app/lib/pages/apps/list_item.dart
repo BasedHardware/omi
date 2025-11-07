@@ -113,6 +113,35 @@ class AppListItem extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (app.ratingAvg != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.star_rounded,
+                              color: Color(0xFF8B5CF6),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              app.getRatingAvg()!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '(${app.ratingCount})',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

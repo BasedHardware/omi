@@ -106,6 +106,9 @@ Future<ActionItemWithMetadata?> updateActionItem(
   String? description,
   bool? completed,
   DateTime? dueAt,
+  bool? exported,
+  DateTime? exportDate,
+  String? exportPlatform,
 }) async {
   var requestBody = <String, dynamic>{};
 
@@ -117,6 +120,15 @@ Future<ActionItemWithMetadata?> updateActionItem(
   }
   if (dueAt != null) {
     requestBody['due_at'] = dueAt.toUtc().toIso8601String();
+  }
+  if (exported != null) {
+    requestBody['exported'] = exported;
+  }
+  if (exportDate != null) {
+    requestBody['export_date'] = exportDate.toUtc().toIso8601String();
+  }
+  if (exportPlatform != null) {
+    requestBody['export_platform'] = exportPlatform;
   }
 
   var response = await makeApiCall(

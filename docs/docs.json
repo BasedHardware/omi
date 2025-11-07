@@ -15,8 +15,7 @@
         "pages": [
           "doc/get_started/introduction",
            "getstartedwithomi",
-          "doc/get_started/Flash_device",
-          "calhacks"
+          "doc/get_started/Flash_device"
         ]
       },
       {
@@ -68,7 +67,8 @@
             "group": "APIs & Integrations",
             "pages": [
               "doc/developer/api",
-              "doc/developer/MCP"
+              "doc/developer/MCP",
+              "doc/integrations"
             ]
           },
           {
