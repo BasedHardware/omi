@@ -1102,12 +1102,14 @@ async def _listen(
         try:
             while websocket_active:
                 message = await websocket.receive()
-                last_audio_received_time = time.time()
 
                 if message.get("bytes") is not None:
+
                     data = message.get("bytes")
                     if len(data) <= 2:  # Ping/keepalive, 0x8a 0x00
                         continue
+
+                    last_audio_received_time = time.time()
 
                     if first_audio_byte_timestamp is None:
                         first_audio_byte_timestamp = last_audio_received_time
