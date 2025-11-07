@@ -1,10 +1,9 @@
 import os
-import datetime
 import random
 import re
 import threading
 import uuid
-from datetime import timezone
+from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
 from fastapi import HTTPException
@@ -57,6 +56,7 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
+from utils.notifications import send_action_item_data_message
 
 
 def _get_structured(
@@ -68,12 +68,27 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
+
+        # Fetch existing action items from past 2 days for deduplication
+        existing_action_items = None
+        try:
+            two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
+            existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
+        except Exception as e:
+            print(f"Error fetching existing action items for deduplication: {e}")
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
-                structured = get_transcript_structure(conversation.text, conversation.started_at, language_code, tz)
+                structured = get_transcript_structure(
+                    conversation.text,
+                    conversation.started_at,
+                    language_code,
+                    tz,
+                    existing_action_items=existing_action_items,
+                )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.message:
@@ -102,6 +117,7 @@ def _get_structured(
                     tz,
                     conversation.structured.title,
                     photos=conversation.photos,
+                    existing_action_items=existing_action_items,
                 ),
                 False,
             )
@@ -114,7 +130,12 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         return (
             get_transcript_structure(
-                transcript_text, conversation.started_at, language_code, tz, photos=conversation.photos
+                transcript_text,
+                conversation.started_at,
+                language_code,
+                tz,
+                photos=conversation.photos,
+                existing_action_items=existing_action_items,
             ),
             False,
         )
@@ -158,19 +179,33 @@ def _get_conversation_obj(
     return conversation
 
 
-# Get default conversation summary app IDs from environment variable
-CONVERSATION_SUMMARIZED_APP_IDS = os.getenv(
-    'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
-).split(',')
-
-
-# Function to get default memory apps
+# Function to get conversation summary apps from Redis
 def get_default_conversation_summarized_apps():
+    """
+    Get conversation summary apps from Redis.
+    Falls back to environment variable if Redis is empty.
+    """
     default_apps = []
-    for app_id in CONVERSATION_SUMMARIZED_APP_IDS:
-        app_data = get_app_by_id_db(app_id.strip())
-        if app_data:
-            default_apps.append(App(**app_data))
+
+    # Try to get from Redis first
+    redis_app_ids = redis_db.get_conversation_summary_app_ids()
+
+    if redis_app_ids:
+        # Use apps from Redis
+        for app_id in redis_app_ids:
+            app_data = get_app_by_id_db(app_id.strip())
+            if app_data:
+                default_apps.append(App(**app_data))
+    else:
+        # Fallback to environment variable for backward compatibility
+        env_app_ids = os.getenv(
+            'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
+        ).split(',')
+
+        for app_id in env_app_ids:
+            app_data = get_app_by_id_db(app_id.strip())
+            if app_data:
+                default_apps.append(App(**app_data))
 
     return default_apps
 
@@ -200,19 +235,25 @@ def _trigger_apps(
     if app_id:
         app_to_run = all_apps_dict.get(app_id)
     else:
-        # Auto-selection logic
-        suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_available_apps)
-        conversation.suggested_summarization_apps = suggested_apps
-        print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
+        # Check if user has a preferred app set
+        preferred_app_id = redis_db.get_user_preferred_app(uid)
+        if preferred_app_id and preferred_app_id in all_apps_dict:
+            app_to_run = all_apps_dict.get(preferred_app_id)
+            print(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
+        else:
+            # Auto-selection logic - fall back to LLM-based suggestion
+            suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_available_apps)
+            conversation.suggested_summarization_apps = suggested_apps
+            print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
 
-        # Use the first suggested app if available
-        if conversation.suggested_summarization_apps:
-            first_suggested_app_id = conversation.suggested_summarization_apps[0]
-            app_to_run = all_apps_dict.get(first_suggested_app_id)
-            if app_to_run:
-                print(f"Using first suggested app: {app_to_run.name}")
-            else:
-                print(f"First suggested app '{first_suggested_app_id}' not found in available apps.")
+            # Use the first suggested app if available
+            if conversation.suggested_summarization_apps:
+                first_suggested_app_id = conversation.suggested_summarization_apps[0]
+                app_to_run = all_apps_dict.get(first_suggested_app_id)
+                if app_to_run:
+                    print(f"Using first suggested app: {app_to_run.name}")
+                else:
+                    print(f"First suggested app '{first_suggested_app_id}' not found in available apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 
@@ -326,6 +367,17 @@ def _save_action_items(uid: str, conversation: Conversation):
         action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
         print(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
 
+        # Send FCM data messages for action items with due dates
+        for idx, action_item in enumerate(conversation.structured.action_items):
+            if action_item.due_at and idx < len(action_item_ids):
+                action_item_id = action_item_ids[idx]
+                send_action_item_data_message(
+                    user_id=uid,
+                    action_item_id=action_item_id,
+                    description=action_item.description,
+                    due_at=action_item.due_at.isoformat(),
+                )
+
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
@@ -436,6 +488,18 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+
+    # Create audio files from chunks if private cloud sync was enabled
+    if not is_reprocess and conversation.private_cloud_sync_enabled:
+        try:
+            audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
+            if audio_files:
+                conversation.audio_files = audio_files
+                conversations_db.update_conversation(
+                    uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
+                )
+        except Exception as e:
+            print(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())

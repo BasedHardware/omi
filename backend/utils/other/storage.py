@@ -8,6 +8,8 @@ from google.oauth2 import service_account
 from google.cloud.storage import transfer_manager
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
+from utils import encryption
+from database import users as users_db
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -19,6 +21,7 @@ else:
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
+private_cloud_sync_bucket = os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync')
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
@@ -229,6 +232,160 @@ def delete_syncing_temporal_file(file_path: str):
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.delete()
+
+
+# ************************************************
+# *********** PRIVATE CLOUD SYNC *****************
+# ************************************************
+
+
+def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timestamp: float) -> str:
+    """
+    Upload an audio chunk to Google Cloud Storage with optional encryption.
+
+    Args:
+        chunk_data: Raw audio bytes (PCM16)
+        uid: User ID
+        conversation_id: Conversation ID
+        timestamp: Unix timestamp when chunk was recorded
+
+    Returns:
+        GCS path of the uploaded chunk
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    protection_level = users_db.get_data_protection_level(uid)
+
+    # Format timestamp to 3 decimal places for cleaner filenames
+    formatted_timestamp = f'{timestamp:.3f}'
+
+    if protection_level == 'enhanced':
+        # Encrypt as length-prefixed binary
+        encrypted_chunk = encryption.encrypt_audio_chunk(chunk_data, uid)
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
+        blob = bucket.blob(path)
+        blob.upload_from_string(encrypted_chunk, content_type='application/octet-stream')
+    else:
+        # Standard - no encryption
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
+        blob = bucket.blob(path)
+        blob.upload_from_string(chunk_data, content_type='application/octet-stream')
+
+    return path
+
+
+def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float]) -> None:
+    """Delete audio chunks after they've been merged."""
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    for timestamp in timestamps:
+        # Format timestamp to match upload format (3 decimal places)
+        formatted_timestamp = f'{timestamp:.3f}'
+        # Try both encrypted and unencrypted paths
+        for extension in ['.enc', '.bin']:
+            chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{extension}'
+            blob = bucket.blob(chunk_path)
+            if blob.exists():
+                blob.delete()
+
+
+def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
+    """
+    List all audio chunks for a conversation.
+
+    Returns:
+        List of dicts with chunk info: {'timestamp': float, 'path': str, 'size': int}
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    prefix = f'chunks/{uid}/{conversation_id}/'
+    blobs = bucket.list_blobs(prefix=prefix)
+
+    chunks = []
+    for blob in blobs:
+        # Extract timestamp from filename (e.g., '1234567890.123.bin' or '1234567890.123.enc')
+        filename = blob.name.split('/')[-1]
+        if filename.endswith('.bin') or filename.endswith('.enc'):
+            try:
+                # Remove extension (.bin or .enc)
+                timestamp_str = filename.rsplit('.', 1)[0]
+                timestamp = float(timestamp_str)
+                chunks.append(
+                    {
+                        'timestamp': timestamp,
+                        'path': blob.name,
+                        'size': blob.size,
+                    }
+                )
+            except ValueError:
+                continue
+
+    return sorted(chunks, key=lambda x: x['timestamp'])
+
+
+def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
+    """Delete all audio files (chunks and merged) for a conversation."""
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+
+    # Delete chunks
+    chunks_prefix = f'chunks/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=chunks_prefix):
+        blob.delete()
+
+    # Delete merged files
+    audio_prefix = f'audio/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=audio_prefix):
+        blob.delete()
+
+
+def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: List[float]) -> bytes:
+    """
+    Download and merge audio chunks on-demand, handling mixed encryption states.
+    Normalizes all chunks to unencrypted PCM format for consistent merging.
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+        timestamps: List of chunk timestamps to merge
+
+    Returns:
+        Merged audio bytes (PCM16)
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    merged_data = bytearray()
+
+    for timestamp in timestamps:
+        # Format timestamp to match upload format (3 decimal places)
+        formatted_timestamp = f'{timestamp:.3f}'
+        # Try encrypted path first
+        chunk_path_enc = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
+        chunk_path_bin = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
+
+        chunk_blob_enc = bucket.blob(chunk_path_enc)
+        chunk_blob_bin = bucket.blob(chunk_path_bin)
+
+        chunk_data = None
+        is_encrypted = False
+
+        if chunk_blob_enc.exists():
+            chunk_data = chunk_blob_enc.download_as_bytes()
+            is_encrypted = True
+        elif chunk_blob_bin.exists():
+            chunk_data = chunk_blob_bin.download_as_bytes()
+            is_encrypted = False
+        else:
+            print(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
+            continue
+
+        # Normalize to PCM (decrypt if needed)
+        if is_encrypted:
+            pcm_data = encryption.decrypt_audio_file(chunk_data, uid)
+        else:
+            pcm_data = chunk_data
+
+        merged_data.extend(pcm_data)
+
+    if not merged_data:
+        raise FileNotFoundError(f"No chunks found for conversation {conversation_id}")
+
+    return bytes(merged_data)
 
 
 # **********************************

@@ -141,7 +141,7 @@ async def create_conversation_via_integration(
 @router.post(
     '/v2/integrations/{app_id}/user/memories',
     response_model=integration_models.EmptyResponse,
-    tags=['integration', 'facts'],
+    tags=['integration', 'memories'],
 )
 async def create_memories_via_integration(
     request: Request,
@@ -187,60 +187,11 @@ async def create_memories_via_integration(
     return {}
 
 
-@router.post(
-    '/v2/integrations/{app_id}/user/facts',
-    response_model=integration_models.EmptyResponse,
-    tags=['integration', 'facts'],
-)
-async def create_facts_via_integration(
-    request: Request,
-    app_id: str,
-    fact_data: integration_models.ExternalIntegrationCreateMemory,
-    uid: str,
-    authorization: Optional[str] = Header(None),
-):
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
-    if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
-
-    # Verify if the app exists
-    app = apps_db.get_app_by_id_db(app_id)
-    if not app:
-        raise HTTPException(status_code=404, detail="App not found")
-
-    # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_apps(uid)
-    if app_id not in enabled_plugins:
-        raise HTTPException(status_code=403, detail="App is not enabled for this user")
-
-    # Check if the app has the capability external_integration > action > create_facts / create_memories
-    if not apps_utils.app_can_create_memories(app):
-        raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
-
-    # Validate that text is provided or explicit facts are provided
-    if (not fact_data.text or len(fact_data.text.strip()) == 0) and (
-        not fact_data.memories or len(fact_data.memories) == 0
-    ):
-        raise HTTPException(
-            status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty"
-        )
-
-    # Process and save the memory using the utility function
-    process_external_integration_memory(uid, fact_data, app_id)
-
-    # Empty response
-    return {}
-
-
 @router.get(
     '/v2/integrations/{app_id}/memories',
     response_model=integration_models.MemoriesResponse,
     response_model_exclude_none=True,
-    tags=['integration', 'facts'],
+    tags=['integration', 'memories'],
 )
 async def get_memories_via_integration(
     request: Request,

@@ -74,7 +74,7 @@ Before you start, make sure you have the following:
     - Set the **Name** (e.g., "Omi Backend Auth")
     - Under **Authorized JavaScript origins**, add:
         - `https://your-domain.com` (replace with your actual domain)
-        - `https://your-ngrok-domain.ngrok-free.app/v1/auth/callback/google` (for local development)
+        - `https://your-ngrok-domain.ngrok-free.app` (for local development)
     - Under **Authorized redirect URIs**, add:
         - `https://your-domain.com/v1/auth/callback/google` (replace with your actual domain)
         - `https://your-ngrok-domain.ngrok-free.app/v1/auth/callback/google` (for local development)
@@ -217,6 +217,7 @@ Before you start, make sure you have the following:
     You have two options for installing the required Python packages:
 
     **Option A: Using a Virtual Environment (Recommended) 🐍**
+    - Use Compatible Python Version (>=3.9,<3.13)
     - It's recommended to use a virtual environment to isolate your project dependencies and avoid conflicts
     - Create a new virtual environment in the backend directory:
       ```bash

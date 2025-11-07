@@ -10,6 +10,7 @@ import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/gen/flutter_communicator.g.dart';
+import 'package:omi/utils/device.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
@@ -35,19 +36,6 @@ class _FoundDevicesState extends State<FoundDevices> {
         context.read<DeviceProvider>().periodicConnect('coming from FoundDevices');
       }
     });
-  }
-
-  String _getDeviceImagePath(String deviceName) {
-    if (deviceName.contains('Glass')) {
-      return Assets.images.omiGlass.path;
-    }
-    if (deviceName.contains('Omi DevKit')) {
-      return Assets.images.omiDevkitWithoutRope.path;
-    }
-    if (deviceName.contains('Apple Watch')) {
-      return Assets.images.appleWatch.path;
-    }
-    return Assets.images.omiWithoutRope.path;
   }
 
   Future<void> _handleAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
@@ -259,7 +247,11 @@ class _FoundDevicesState extends State<FoundDevices> {
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Image.asset(
-                      _getDeviceImagePath(device.name),
+                      DeviceUtils.getDeviceImagePath(
+                        deviceType: device.type,
+                        modelNumber: device.modelNumber,
+                        deviceName: device.name,
+                      ),
                       width: 32,
                       height: 32,
                     ),

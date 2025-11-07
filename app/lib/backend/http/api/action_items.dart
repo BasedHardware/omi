@@ -22,10 +22,10 @@ Future<ActionItemsResponse> getActionItems({
     url += '&conversation_id=$conversationId';
   }
   if (startDate != null) {
-    url += '&start_date=${startDate.toIso8601String()}';
+    url += '&start_date=${startDate.toUtc().toIso8601String()}';
   }
   if (endDate != null) {
-    url += '&end_date=${endDate.toIso8601String()}';
+    url += '&end_date=${endDate.toUtc().toIso8601String()}';
   }
 
   var response = await makeApiCall(
@@ -77,7 +77,7 @@ Future<ActionItemWithMetadata?> createActionItem({
   };
 
   if (dueAt != null) {
-    requestBody['due_at'] = dueAt.toIso8601String();
+    requestBody['due_at'] = dueAt.toUtc().toIso8601String();
   }
   if (conversationId != null) {
     requestBody['conversation_id'] = conversationId;
@@ -106,6 +106,9 @@ Future<ActionItemWithMetadata?> updateActionItem(
   String? description,
   bool? completed,
   DateTime? dueAt,
+  bool? exported,
+  DateTime? exportDate,
+  String? exportPlatform,
 }) async {
   var requestBody = <String, dynamic>{};
 
@@ -116,7 +119,16 @@ Future<ActionItemWithMetadata?> updateActionItem(
     requestBody['completed'] = completed;
   }
   if (dueAt != null) {
-    requestBody['due_at'] = dueAt.toIso8601String();
+    requestBody['due_at'] = dueAt.toUtc().toIso8601String();
+  }
+  if (exported != null) {
+    requestBody['exported'] = exported;
+  }
+  if (exportDate != null) {
+    requestBody['export_date'] = exportDate.toUtc().toIso8601String();
+  }
+  if (exportPlatform != null) {
+    requestBody['export_platform'] = exportPlatform;
   }
 
   var response = await makeApiCall(

@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -22,19 +23,13 @@ class AppListItem extends StatelessWidget {
     // Use Selector to only rebuild when this specific app's state or loading state changes
     return Selector<AppProvider, ({bool enabled, bool isLoading})>(
       selector: (context, provider) {
-        // Find the current app state
-        final currentApp = provider.apps.firstWhere(
-          (a) => a.id == app.id,
-          orElse: () => app,
-        );
-
         // Check if this specific app is loading
         final isLoading = index != -1 &&
             provider.appLoading.isNotEmpty &&
             index < provider.appLoading.length &&
             provider.appLoading[index];
 
-        return (enabled: currentApp.enabled, isLoading: isLoading);
+        return (enabled: app.enabled, isLoading: isLoading);
       },
       builder: (context, state, child) {
         return GestureDetector(
@@ -69,10 +64,16 @@ class AppListItem extends StatelessWidget {
                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                       },
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.shade600),
-                          strokeWidth: 2,
+                      placeholder: (context, url) => Shimmer.fromColors(
+                        baseColor: const Color(0xFF1F1F25),
+                        highlightColor: const Color(0xFF35343B),
+                        child: Container(
+                          width: double.infinity,
+                          height: double.infinity,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F25),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                       errorWidget: (context, url, error) => Icon(
@@ -111,6 +112,35 @@ class AppListItem extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (app.ratingAvg != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.star_rounded,
+                              color: Color(0xFF8B5CF6),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              app.getRatingAvg()!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '(${app.ratingCount})',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

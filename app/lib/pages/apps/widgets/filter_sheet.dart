@@ -76,30 +76,6 @@ class FilterBottomSheet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // App Type Toggle
-                      _buildSectionTitle('App Type'),
-                      const SizedBox(height: 12),
-                      _buildToggleOption(
-                        'Show my apps',
-                        provider.isFilterSelected('My Apps', 'Apps'),
-                        () {
-                          provider.addOrRemoveFilter('My Apps', 'Apps');
-                          MixpanelManager().appsTypeFilter('My Apps', provider.isFilterSelected('My Apps', 'Apps'));
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _buildToggleOption(
-                        'Show installed apps',
-                        provider.isFilterSelected('Installed Apps', 'Apps'),
-                        () {
-                          provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                          MixpanelManager()
-                              .appsTypeFilter('Installed Apps', provider.isFilterSelected('Installed Apps', 'Apps'));
-                        },
-                      ),
-
-                      const SizedBox(height: 32),
-
                       // Rating
                       _buildSectionTitle('Rating'),
                       const SizedBox(height: 12),
@@ -148,6 +124,8 @@ class FilterBottomSheet extends StatelessWidget {
                         onPressed: () {
                           provider.clearFilters();
                           MixpanelManager().appsClearFilters();
+                          Navigator.of(context).pop();
+                          Future.microtask(() => provider.applyFilters());
                         },
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -170,8 +148,8 @@ class FilterBottomSheet extends StatelessWidget {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
-                          provider.filterApps();
                           Navigator.of(context).pop();
+                          Future.microtask(() => provider.applyFilters());
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
@@ -211,38 +189,6 @@ class FilterBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildToggleOption(String title, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25).withOpacity(0.5),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.white,
-              ),
-            ),
-            const Spacer(),
-            Switch(
-              value: isSelected,
-              onChanged: (value) => onTap(),
-              activeColor: Color(0xFF8B5CF6),
-              inactiveThumbColor: Colors.grey.shade400,
-              inactiveTrackColor: Colors.grey.shade700,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildRatingSelector(AppProvider provider) {
     final ratings = ['1', '2', '3', '4', '5'];
 
@@ -266,7 +212,7 @@ class FilterBottomSheet extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  rating,
+                  '$rating+',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -294,7 +240,7 @@ class FilterBottomSheet extends StatelessWidget {
             MixpanelManager().appsCategoryFilter(category.title, provider.isCategoryFilterSelected(category));
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: isSelected ? Color(0xFF8B5CF6) : Color(0xFF35343B),
               borderRadius: BorderRadius.circular(20),
@@ -302,7 +248,7 @@ class FilterBottomSheet extends StatelessWidget {
             child: Text(
               category.title,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: isSelected ? Colors.white : Colors.grey.shade300,
               ),
@@ -379,54 +325,29 @@ class FilterBottomSheet extends StatelessWidget {
   }
 
   Widget _buildCapabilities(AppProvider provider) {
-    return Column(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: provider.capabilities.map((capability) {
         final isSelected = provider.isCapabilityFilterSelected(capability);
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: GestureDetector(
-            onTap: () {
-              provider.addOrRemoveCapabilityFilter(capability);
-              MixpanelManager().appsCapabilityFilter(capability.title, provider.isCapabilityFilterSelected(capability));
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F1F25).withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      color: isSelected ? Color(0xFF8B5CF6) : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade500,
-                        width: 2,
-                      ),
-                    ),
-                    child: isSelected
-                        ? const Icon(
-                            Icons.check,
-                            size: 12,
-                            color: Colors.white,
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    capability.title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: isSelected ? Colors.white : Colors.grey.shade300,
-                      fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-                    ),
-                  ),
-                ],
+        return GestureDetector(
+          onTap: () {
+            provider.addOrRemoveCapabilityFilter(capability);
+            MixpanelManager().appsCapabilityFilter(capability.title, provider.isCapabilityFilterSelected(capability));
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected ? Color(0xFF8B5CF6) : Color(0xFF35343B),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              capability.title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.grey.shade300,
               ),
             ),
           ),

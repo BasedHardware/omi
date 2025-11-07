@@ -23,9 +23,9 @@
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
-#include "sdcard.h"
+#include "monitor.h"
+#include "sd_card.h"
 #include "settings.h"
-#include "speaker.h"
 #include "storage.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -33,15 +33,11 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
 #endif
 
-// Counters for tracking function calls
-extern uint32_t gatt_notify_count;
-extern uint32_t write_to_tx_queue_count;
-
-#define MAX_STORAGE_BYTES 0xFFFF0000
+#define MAX_STORAGE_BYTES 0x1E000000 // 480MB
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
-extern uint32_t file_num_array[2];
+extern uint32_t file_num_array[MAX_AUDIO_FILES];
 extern bool storage_is_on;
 #endif
 
@@ -601,7 +597,7 @@ static struct ring_buf ring_buf;
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
     // Increment the counter
-    write_to_tx_queue_count++;
+    monitor_inc_tx_queue_write();
 
     if (size > CODEC_OUTPUT_MAX_BYTES) {
         return false;
@@ -683,7 +679,7 @@ static bool push_to_gatt(struct bt_conn *conn)
             // Try send notification
             int err =
                 bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-            gatt_notify_count++;
+            monitor_inc_gatt_notify();
 
             // Log failure
             if (err) {
@@ -778,6 +774,7 @@ bool write_to_storage(void)
         buffer_offset = buffer_offset + packet_size;
     }
 
+    monitor_inc_storage_write();
     return true;
 }
 #endif
@@ -929,15 +926,6 @@ int transport_off()
     }
 #endif
 
-    // Turn off other peripherals
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-    sd_off();
-    k_mutex_unlock(&write_sdcard_mutex);
-#endif
-
-    mic_off();
-
     // Ensure all Bluetooth resources are cleaned up
     is_connected = false;
     current_mtu = 0;
@@ -1014,15 +1002,16 @@ int transport_start()
 
 #endif
 
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
-    bt_gatt_service_register(&storage_service);
-#endif
-
     // Start advertising
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    // Register storage service for offline audio
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
+    bt_gatt_service_register(&storage_service);
+#endif
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d)", err);
@@ -1053,7 +1042,7 @@ int transport_start()
     struct k_thread *thread = k_thread_create(&pusher_thread,
                                               pusher_stack,
                                               K_THREAD_STACK_SIZEOF(pusher_stack),
-                                              (k_thread_entry_t) test_pusher,
+                                              (k_thread_entry_t) pusher,
                                               NULL,
                                               NULL,
                                               NULL,

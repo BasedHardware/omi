@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,6 +38,7 @@ import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -43,6 +46,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -55,6 +59,38 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:window_manager/window_manager.dart';
+
+/// Background message handler for FCM data messages
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+
+  await AwesomeNotifications().initialize(
+    null,
+    [
+      NotificationChannel(
+        channelKey: 'channel',
+        channelName: 'Omi Notifications',
+        channelDescription: 'Notification channel for Omi',
+        defaultColor: const Color(0xFF9D50DD),
+        ledColor: Colors.white,
+      )
+    ],
+  );
+
+  final data = message.data;
+  final messageType = data['type'];
+  const channelKey = 'channel';
+
+  // Handle action item messages
+  if (messageType == 'action_item_reminder') {
+    await ActionItemNotificationHandler.handleReminderMessage(data, channelKey);
+  } else if (messageType == 'action_item_update') {
+    await ActionItemNotificationHandler.handleUpdateMessage(data, channelKey);
+  } else if (messageType == 'action_item_delete') {
+    await ActionItemNotificationHandler.handleDeletionMessage(data);
+  }
+}
 
 Future _init() async {
   // Env
@@ -88,6 +124,12 @@ Future _init() async {
 
   await PlatformManager.initializeServices();
   await NotificationService.instance.initialize();
+
+  // Register FCM background message handler
+  if (!PlatformService.isDesktop) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
+
   await SharedPreferencesUtil.init();
 
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
@@ -96,6 +138,7 @@ Future _init() async {
 
   await GrowthbookUtil.init();
   if (!PlatformService.isWindows) {
+    ble.FlutterBluePlus.setOptions(restoreState: true);
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
 
@@ -127,13 +170,17 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
-        windowManager.waitUntilReadyToShow().then((_) async {
+        WindowOptions windowOptions = const WindowOptions(
+          size: Size(1440, 900),
+          minimumSize: Size(1000, 650),
+          center: true,
+          title: "Omi",
+          titleBarStyle: TitleBarStyle.hidden,
+        );
+        windowManager.waitUntilReadyToShow(windowOptions, () async {
           await windowManager.setAsFrameless();
-          // Enforce a minimum window size so the desktop layout doesn't collapse into the mobile view
-          // Width chosen slightly above the small-screen breakpoint (1000px) used in ResponsiveHelper.
-          // Height is set to a sensible value to keep vertical content usable.
-          await windowManager.setMinimumSize(const Size(1100, 600));
-          await windowManager.setSize(const Size(1100, 700));
+          await windowManager.show();
+          await windowManager.focus();
         });
       }
 
@@ -181,9 +228,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.detached) {
+
+    if (state == AppLifecycleState.paused) {
+      _onAppPaused();
+    } else if (state == AppLifecycleState.detached) {
       _deinit();
     }
+  }
+
+  void _onAppPaused() {
+    imageCache.clear();
+    imageCache.clearLiveImages();
   }
 
   @override
@@ -241,6 +296,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => UserProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
+          ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

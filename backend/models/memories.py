@@ -84,15 +84,14 @@ class Memory(BaseModel):
 
     @staticmethod
     def get_memories_as_str(memories: List):
-        grouped_memories = defaultdict(list)
-        for f in memories:
-            grouped_memories[f.category].append(f"- {f.content}\n")
-
         result = ''
-        for category, memories_list in grouped_memories.items():
-            result += f"{category.value.capitalize()}:\n"
-            result += ''.join(memories_list)
-            result += '\n'
+        for f in memories:
+            # Include created_at if available (for MemoryDB objects)
+            if hasattr(f, 'created_at') and f.created_at:
+                date_str = f.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
+                result += f"- {f.content} ({date_str})\n"
+            else:
+                result += f"- {f.content}\n"
 
         return result
 

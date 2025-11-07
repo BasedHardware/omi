@@ -118,7 +118,7 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
 
     threading.Thread(target=delete_file).start()
 
-    words, language = fal_whisperx(url, 3, 2, True)
+    words = fal_whisperx(audio_url=url, diarize=False, chunk_level="segment")
     transcript_segments: List[TranscriptSegment] = fal_postprocessing(words, 0)
     if not transcript_segments:
         print('failed to get fal segments')

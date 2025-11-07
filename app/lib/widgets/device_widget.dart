@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/utils/device.dart';
 
 class DeviceAnimationWidget extends StatefulWidget {
   final bool animatedBackground;
   final double sizeMultiplier;
   final bool isConnected;
   final String? deviceName;
+  final DeviceType? deviceType;
+  final String? modelNumber;
 
   const DeviceAnimationWidget({
     super.key,
@@ -13,6 +17,8 @@ class DeviceAnimationWidget extends StatefulWidget {
     this.animatedBackground = true,
     this.isConnected = false,
     this.deviceName,
+    this.deviceType,
+    this.modelNumber,
   });
 
   @override
@@ -77,10 +83,12 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
   }
 
   Widget _buildDeviceImage() {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
     final double imageHeight = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
     final double imageWidth = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
 
-    if (widget.deviceName != null && widget.deviceName == 'Omi') {
+    // Special handling for Omi device with connection indicator
+    if ((widget.deviceType == DeviceType.omi || widget.deviceName == 'Omi') && !widget.isConnected) {
       return Stack(
         alignment: Alignment.center,
         children: [
@@ -89,8 +97,8 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
             Assets.images.omiWithoutRopeTurnedOff.path,
             height: imageHeight,
             width: imageWidth,
-            cacheHeight: imageHeight.round(),
-            cacheWidth: imageWidth.round(),
+            cacheHeight: (imageHeight * pixelRatio).round(),
+            cacheWidth: (imageWidth * pixelRatio).round(),
           ),
           // Blue light overlay when connected TODO: improve this or just use the image itself
           AnimatedOpacity(
@@ -117,33 +125,16 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
     }
 
     return Image.asset(
-      _getImagePath(),
+      DeviceUtils.getDeviceImagePathWithState(
+        deviceType: widget.deviceType,
+        modelNumber: widget.modelNumber,
+        deviceName: widget.deviceName,
+        isConnected: widget.isConnected,
+      ),
       height: imageHeight,
       width: imageWidth,
-      cacheHeight: imageHeight.round(),
-      cacheWidth: imageWidth.round(),
+      cacheHeight: (imageHeight * pixelRatio).round(),
+      cacheWidth: (imageWidth * pixelRatio).round(),
     );
-  }
-
-  String _getImagePath() {
-    // Show device image for both connected and paired devices
-    if (widget.deviceName != null && widget.deviceName!.contains('Glass')) {
-      return Assets.images.omiGlass.path;
-    }
-
-    if (widget.deviceName != null && widget.deviceName!.contains('Omi DevKit')) {
-      return Assets.images.omiDevkitWithoutRope.path;
-    }
-
-    if (widget.deviceName != null && widget.deviceName!.contains('Apple Watch')) {
-      return Assets.images.appleWatch.path;
-    }
-
-    // Default to omi device image, fallback to hero logo only if no device name
-    if (widget.deviceName != null && widget.deviceName!.isNotEmpty) {
-      return Assets.images.omiWithoutRope.path;
-    }
-
-    return Assets.images.herologo.path;
   }
 }

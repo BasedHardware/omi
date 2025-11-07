@@ -32,8 +32,8 @@ class ChatAppsDropdownWidget extends StatelessWidget {
         }
         return child!;
       },
-      child: Consumer<AppProvider>(builder: (context, provider, child) {
-        var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+      child: Consumer2<AppProvider, MessageProvider>(builder: (context, appProvider, messageProvider, child) {
+        var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
         return Padding(
           padding: const EdgeInsets.only(left: 0),
           child: Container(
@@ -73,7 +73,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   Offset((MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context), 114),
               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
               onSelected: (String? val) async {
-                if (val == null || val == provider.selectedChatAppId) {
+                if (val == null || val == appProvider.selectedChatAppId) {
                   return;
                 }
 
@@ -102,15 +102,15 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 }
 
                 // select app by id
-                provider.setSelectedChatAppId(val);
+                appProvider.setSelectedChatAppId(val);
                 await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
-                var app = provider.getSelectedApp();
+                var app = messageProvider.chatApps.firstWhereOrNull((a) => a.id == val);
                 if (context.read<MessageProvider>().messages.isEmpty) {
                   context.read<MessageProvider>().sendInitialAppMessage(app);
                 }
               },
               itemBuilder: (BuildContext context) {
-                return _getAppsDropdownItems(context, provider);
+                return _getAppsDropdownItems(context, messageProvider, appProvider);
               },
               color: const Color(0xFF1F1F25),
             ),
@@ -172,12 +172,16 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     );
   }
 
-  List<PopupMenuItem<String>> _getAppsDropdownItems(BuildContext context, AppProvider provider) {
-    return mode == ChatMode.chat_clone ? _getCloneChatDropdownItems(provider) : _getChatDropdownItems(provider);
+  List<PopupMenuItem<String>> _getAppsDropdownItems(
+      BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
+    return mode == ChatMode.chat_clone
+        ? _getCloneChatDropdownItems(context, messageProvider, appProvider)
+        : _getChatDropdownItems(context, messageProvider, appProvider);
   }
 
-  List<PopupMenuItem<String>> _getCloneChatDropdownItems(AppProvider provider) {
-    var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+  List<PopupMenuItem<String>> _getCloneChatDropdownItems(
+      BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
+    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
     return [
       const PopupMenuItem<String>(
         height: 40,
@@ -232,7 +236,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
           ],
         ),
       ),
-      ...provider.apps.where((p) => p.enabled && p.worksWithChat()).map<PopupMenuItem<String>>((App app) {
+      ...messageProvider.chatApps.map<PopupMenuItem<String>>((App app) {
         return PopupMenuItem<String>(
           height: 40,
           value: app.id,
@@ -269,8 +273,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     ];
   }
 
-  List<PopupMenuItem<String>> _getChatDropdownItems(AppProvider provider) {
-    var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+  List<PopupMenuItem<String>> _getChatDropdownItems(
+      BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
+    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
     return [
       const PopupMenuItem<String>(
         height: 40,
@@ -359,7 +364,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
           ],
         ),
       ),
-      ...provider.apps.where((p) => p.enabled && p.worksWithChat()).map<PopupMenuItem<String>>((App app) {
+      ...messageProvider.chatApps.map<PopupMenuItem<String>>((App app) {
         return PopupMenuItem<String>(
           height: 40,
           value: app.id,

@@ -1,6 +1,9 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/http/api/privacy.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -9,6 +12,9 @@ class UserProvider with ChangeNotifier {
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
+  bool _privateCloudSyncEnabled = false;
+  bool _trainingDataOptedIn = false;
+  String? _trainingDataStatus;
 
   bool _isMigrating = false;
   bool _migrationFailed = false;
@@ -21,8 +27,13 @@ class UserProvider with ChangeNotifier {
   String _targetLevel = '';
   DateTime? _startTime;
 
+  Geolocation? _lastKnownLocation;
+
   String get dataProtectionLevel => _dataProtectionLevel;
   bool get isLoading => _isLoading;
+  bool get privateCloudSyncEnabled => _privateCloudSyncEnabled;
+  bool get trainingDataOptedIn => _trainingDataOptedIn;
+  String? get trainingDataStatus => _trainingDataStatus;
   bool get isMigrating => _isMigrating;
   bool get migrationFailed => _migrationFailed;
   int get migrationTotalCount => _migrationQueue.length;
@@ -74,6 +85,12 @@ class UserProvider with ChangeNotifier {
       final userProfile = await PrivacyApi.getUserProfile();
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
 
+      // Load private cloud sync status
+      await _loadPrivateCloudSyncStatus();
+
+      // Load training data opt-in status
+      await _loadTrainingDataOptIn();
+
       final migrationStatus = userProfile['migration_status'];
       if (migrationStatus != null && migrationStatus['status'] == 'in_progress') {
         final targetLevel = migrationStatus['target_level'];
@@ -86,6 +103,92 @@ class UserProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadPrivateCloudSyncStatus() async {
+    try {
+      _privateCloudSyncEnabled = await getPrivateCloudSyncEnabled();
+    } catch (e) {
+      Logger.error('Failed to load private cloud sync status: $e');
+      _privateCloudSyncEnabled = false;
+    }
+  }
+
+  Future<void> _loadTrainingDataOptIn() async {
+    try {
+      final data = await getTrainingDataOptIn();
+      _trainingDataOptedIn = data['opted_in'] ?? false;
+      _trainingDataStatus = data['status'];
+    } catch (e) {
+      Logger.error('Failed to load training data opt-in status: $e');
+      _trainingDataOptedIn = false;
+      _trainingDataStatus = null;
+    }
+  }
+
+  Future<void> optInForTrainingData() async {
+    try {
+      final success = await setTrainingDataOptIn();
+      if (success) {
+        _trainingDataOptedIn = true;
+        _trainingDataStatus = 'pending_review';
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      Logger.error('Failed to opt-in for training data: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
+  Future<void> setPrivateCloudSync(bool value) async {
+    try {
+      final success = await setPrivateCloudSyncEnabled(value);
+      if (success) {
+        _privateCloudSyncEnabled = value;
+        notifyListeners();
+      }
+    } catch (e, stackTrace) {
+      Logger.error('Failed to set private cloud sync: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
+  Future<void> updateUserGeolocationIfNeeded(Map<String, dynamic> data) async {
+    try {
+      final newLocation = Geolocation(
+        latitude: data['latitude'],
+        longitude: data['longitude'],
+        accuracy: data['accuracy'],
+        altitude: data['altitude'],
+        time: DateTime.parse(data['time']).toUtc(),
+      );
+
+      // Ensure new location has valid coordinates before proceeding.
+      if (newLocation.latitude == null || newLocation.longitude == null) {
+        Logger.log('Received location update with null coordinates, skipping.');
+        return;
+      }
+
+      if (_lastKnownLocation != null && _lastKnownLocation!.latitude != null && _lastKnownLocation!.longitude != null) {
+        // Truncate to 4 decimal places for comparison
+        final lastLat = double.parse(_lastKnownLocation!.latitude!.toStringAsFixed(4));
+        final lastLon = double.parse(_lastKnownLocation!.longitude!.toStringAsFixed(4));
+        final newLat = double.parse(newLocation.latitude!.toStringAsFixed(4));
+        final newLon = double.parse(newLocation.longitude!.toStringAsFixed(4));
+
+        // Only update if location has changed up to 4 decimal places
+        if (lastLat == newLat && lastLon == newLon) {
+          Logger.log('User has not moved significantly (based on 4 decimal places), skipping geolocation update.');
+          return;
+        }
+      }
+
+      Logger.log('Updating user geolocation.');
+      await updateUserGeolocation(geolocation: newLocation);
+      _lastKnownLocation = newLocation;
+    } catch (e, stackTrace) {
+      Logger.error('Failed to update user geolocation: $e\n$stackTrace');
     }
   }
 

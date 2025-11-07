@@ -213,10 +213,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   void _filterByCategory(MemoryCategory? category) {
+    if (!mounted) return;
+
     setState(() {
       _selectedCategory = category;
     });
-    context.read<MemoriesProvider>().setCategoryFilter(category);
+
+    final provider = context.read<MemoriesProvider>();
+    provider.setCategoryFilter(category);
   }
 
   // ignore: unused_element
@@ -237,6 +241,21 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
+            floatingActionButton: Padding(
+              padding: const EdgeInsets.only(bottom: 60.0),
+              child: FloatingActionButton(
+                heroTag: 'memories_fab',
+                onPressed: () {
+                  showMemoryDialog(context, provider);
+                  MixpanelManager().memoriesPageCreateMemoryBtn();
+                },
+                backgroundColor: Colors.deepPurpleAccent,
+                child: const Icon(
+                  Icons.add,
+                  color: Colors.white,
+                ),
+              ),
+            ),
             body: RefreshIndicator(
               onRefresh: () async {
                 HapticFeedback.mediumImpact();
@@ -257,7 +276,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   child: SizedBox(
                                     height: 44,
                                     child: SearchBar(
-                                      hintText: 'Search memories',
+                                      hintText: 'Search ${provider.memories.length} Memories',
                                       leading: const Padding(
                                         padding: EdgeInsets.only(left: 6.0),
                                         child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
@@ -322,7 +341,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     child: SizedBox(
                                       height: 44,
                                       child: SearchBar(
-                                        hintText: 'Search memories',
+                                        hintText: 'Search ${provider.memories.length} Memories',
                                         leading: const Padding(
                                           padding: EdgeInsets.only(left: 6.0),
                                           child:
@@ -463,26 +482,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       ),
                                     ),
                                     child: const Icon(FontAwesomeIcons.sliders, size: 16),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      showMemoryDialog(context, provider);
-                                      MixpanelManager().memoriesPageCreateMemoryBtn();
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppStyles.backgroundSecondary,
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.zero,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    child: const Icon(FontAwesomeIcons.plus, size: 18),
                                   ),
                                 ),
                               ],

@@ -40,16 +40,13 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
 
       await BluetoothAdapter.startScan(
         timeout: Duration(seconds: timeout),
-        withServices: [
-          BluetoothAdapter.createGuid(omiServiceUuid),
-          BluetoothAdapter.createGuid(frameServiceUuid),
-        ],
       );
 
       // Give listener time to receive scan results within timeout
       await Future.delayed(Duration(seconds: timeout));
 
       final List<BtDevice> devices = bleResults
+          .where((r) => BtDevice.isSupportedDevice(r))
           .sorted((a, b) => b.rssi.compareTo(a.rssi))
           .map<BtDevice>((r) => BtDevice.fromScanResult(r))
           .toList();

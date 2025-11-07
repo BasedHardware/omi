@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
 import database.chat as chat_db
+import database.conversations as conversations_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
@@ -34,9 +35,9 @@ from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 
 router = APIRouter()
-fc = FileChatTool()
 
 
 def filter_messages(messages, app_id):
@@ -83,19 +84,16 @@ def send_message(
         type='text',
         app_id=compat_app_id,
     )
-    if data.file_ids is not None:
-        new_file_ids = fc.retrieve_new_file(data.file_ids)
-        if chat_session:
-            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
-            chat_session.add_file_ids(data.file_ids)
-            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+    if data.file_ids is not None and chat_session:
+        new_file_ids = chat_session.retrieve_new_file(data.file_ids)
+        chat_session.add_file_ids(data.file_ids)
+        chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
 
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             files = chat_db.get_chat_files(uid, new_file_ids)
             files = [FileChat(**f) if f else None for f in files]
             message.files = files
-            fc.add_files(new_file_ids)
 
     if chat_session:
         message.chat_session_id = chat_session.id
@@ -153,6 +151,7 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
+        # Using the new agentic system via graph routing
         async for chunk in execute_graph_chat_stream(
             uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
         ):
@@ -202,8 +201,13 @@ def clear_chat_messages(
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
     # clean thread chat file
-    fc_tool = FileChatTool()
-    fc_tool.cleanup(uid)
+    if chat_session and chat_session.get('id'):
+        try:
+            fc_tool = FileChatTool(uid, chat_session['id'])
+            fc_tool.cleanup()
+        except ValueError:
+            # Session not found, continue with cleanup
+            pass
 
     # clear session
     if chat_session_id is not None:
@@ -358,8 +362,7 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
         with temp_file.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        fc_tool = FileChatTool()
-        result = fc_tool.upload(temp_file)
+        result = FileChatTool.upload(temp_file)
 
         thumb_name = result.get("thumbnail_name", "")
         if thumb_name != "":
@@ -387,7 +390,8 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
             fc.thumbnail = thumb_path
             # cleanup file thumb
             thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
+            if thumb_file.exists():
+                thumb_file.unlink()
 
     # save db
     files_chat_dict = [fc.dict() for fc in files_chat]
@@ -411,8 +415,7 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
         with temp_file.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        fc_tool = FileChatTool()
-        result = fc_tool.upload(temp_file)
+        result = FileChatTool.upload(temp_file)
 
         thumb_name = result.get("thumbnail_name", "")
         if thumb_name != "":
@@ -481,9 +484,14 @@ def clear_chat_messages(
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
-    # clean thread chat file
-    fc_tool = FileChatTool()
-    fc_tool.cleanup(uid)
+    # clean thread chat file (v1 endpoint)
+    if chat_session and chat_session.get('id'):
+        try:
+            fc_tool = FileChatTool(uid, chat_session['id'])
+            fc_tool.cleanup()
+        except ValueError:
+            # Session not found, continue with cleanup
+            pass
 
     # clear session
     if chat_session_id is not None:

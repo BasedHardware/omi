@@ -12,6 +12,8 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 class AppProvider extends BaseProvider {
   List<App> apps = [];
   List<App> popularApps = [];
+  // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
+  List<Map<String, dynamic>> groupedApps = [];
 
   bool filterChat = true;
   bool filterMemories = true;
@@ -27,11 +29,13 @@ class AppProvider extends BaseProvider {
   bool appPublicToggled = false;
 
   bool isLoading = false;
+  bool isSearching = false;
 
   List<Category> categories = [];
   List<AppCapability> capabilities = [];
   Map<String, dynamic> filters = {};
   List<App> filteredApps = [];
+  List<App> searchResults = [];
 
   List<App> get userPrivateApps => apps.where((app) => app.private).toList();
 
@@ -83,7 +87,7 @@ class AppProvider extends BaseProvider {
     } else {
       filters.addAll({filterGroup: filter});
     }
-    filterApps();
+
     notifyListeners();
   }
 
@@ -97,7 +101,7 @@ class AppProvider extends BaseProvider {
     } else {
       filters.addAll({'Category': category});
     }
-    filterApps();
+
     notifyListeners();
   }
 
@@ -111,7 +115,7 @@ class AppProvider extends BaseProvider {
     } else {
       filters.addAll({'Capabilities': capability});
     }
-    filterApps();
+
     notifyListeners();
   }
 
@@ -147,29 +151,118 @@ class AppProvider extends BaseProvider {
     return searchQuery.isNotEmpty;
   }
 
-  void searchApps(String query) {
+  void searchApps(String query) async {
     searchQuery = query.toLowerCase();
-    filterApps();
-    notifyListeners();
+
+    if (query.trim().isEmpty && !_hasServerSideFilters()) {
+      searchResults = [];
+      isSearching = false;
+      filterApps();
+      notifyListeners();
+      return;
+    }
+
+    await performServerSearch();
+  }
+
+  bool _hasServerSideFilters() {
+    return filters.containsKey('Category') ||
+        filters.containsKey('Rating') ||
+        filters.containsKey('Capabilities') ||
+        filters.containsKey('Apps');
+  }
+
+  Future<void> performServerSearch() async {
+    if (isSearching) {
+      return;
+    }
+
+    try {
+      isSearching = true;
+      notifyListeners();
+
+      String? categoryFilter;
+      if (filters.containsKey('Category') && filters['Category'] is Category) {
+        categoryFilter = (filters['Category'] as Category).id;
+      }
+
+      // Get rating filter if active
+      double? minRating;
+      if (filters.containsKey('Rating') && filters['Rating'] is String) {
+        String ratingStr = (filters['Rating'] as String).replaceAll('+ Stars', '');
+        minRating = double.tryParse(ratingStr);
+      }
+
+      // Get capability filter if active
+      String? capabilityFilter;
+      if (filters.containsKey('Capabilities') && filters['Capabilities'] is AppCapability) {
+        capabilityFilter = (filters['Capabilities'] as AppCapability).id;
+      }
+
+      // Get "My Apps" filter
+      bool? myAppsFilter;
+      if (filters.containsKey('Apps') && filters['Apps'] == 'My Apps') {
+        myAppsFilter = true;
+      }
+
+      // Get "Installed Apps" filter
+      bool? installedAppsFilter;
+      if (filters.containsKey('Apps') && filters['Apps'] == 'Installed Apps') {
+        installedAppsFilter = true;
+      }
+
+      final result = await retrieveAppsSearch(
+        query: searchQuery.isEmpty ? null : searchQuery,
+        category: categoryFilter,
+        minRating: minRating,
+        capability: capabilityFilter,
+        myApps: myAppsFilter,
+        installedApps: installedAppsFilter,
+        offset: 0,
+        limit: 100,
+      );
+
+      searchResults = result.apps;
+      filteredApps = result.apps;
+    } catch (e) {
+      filterApps();
+    } finally {
+      isSearching = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> applyFilters() async {
+    if (isSearchActive() || _hasServerSideFilters()) {
+      await performServerSearch();
+    } else {
+      filterApps();
+      notifyListeners();
+    }
   }
 
   void filterApps() {
-    // Performance optimization: Early return if no apps
-    if (apps.isEmpty) {
+    if (_hasServerSideFilters() && searchResults.isNotEmpty) {
+      filteredApps = searchResults;
+      return;
+    }
+
+    if (apps.isEmpty && searchResults.isEmpty) {
       filteredApps = [];
       return;
     }
 
-    // Performance optimization: Cache commonly used values
+    if (apps.isEmpty && searchResults.isNotEmpty) {
+      filteredApps = searchResults;
+      return;
+    }
+
     final currentUid = SharedPreferencesUtil().uid;
     final lowercaseQuery = searchQuery.toLowerCase();
 
-    // Use where clause directly on list instead of chaining iterables for better performance
     List<App> result = apps.where((app) {
-      // Apply all filters in a single pass for better performance
       bool passesFilters = true;
 
-      // Apply filter conditions
       for (final entry in filters.entries) {
         final key = entry.key;
         final value = entry.value;
@@ -201,11 +294,9 @@ class AppProvider extends BaseProvider {
             break;
         }
 
-        // Early exit if filter fails
         if (!passesFilters) break;
       }
 
-      // Apply search filter
       if (passesFilters && lowercaseQuery.isNotEmpty) {
         passesFilters = app.name.toLowerCase().contains(lowercaseQuery);
       }
@@ -213,7 +304,6 @@ class AppProvider extends BaseProvider {
       return passesFilters;
     }).toList();
 
-    // Apply sorting if needed
     final Comparator<App>? comparator = _getSortComparator();
     if (comparator != null) {
       result.sort(comparator);
@@ -249,7 +339,7 @@ class AppProvider extends BaseProvider {
         notifyListeners(); // This should notify as it affects UI state
       }
     } else {
-      print("Error: Attempted to set loading state for invalid index $index");
+      debugPrint("Error: Attempted to set loading state for invalid index $index");
     }
   }
 
@@ -269,9 +359,16 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch fresh data from server
-      final freshApps = await retrieveApps();
-      apps = freshApps;
+      // Fetch fresh grouped data from server (first page per category)
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      groupedApps = groups;
+      // Flatten for search/filter views
+      final List<App> flat = [];
+      for (final g in groups) {
+        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
+        flat.addAll(data);
+      }
+      apps = flat;
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
@@ -412,8 +509,14 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       debugPrint('Refreshing apps after installation/change...');
-      final freshApps = await retrieveApps();
-      apps = freshApps;
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      groupedApps = groups;
+      final List<App> flat = [];
+      for (final g in groups) {
+        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
+        flat.addAll(data);
+      }
+      apps = flat;
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Refresh popular apps too

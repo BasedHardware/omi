@@ -10,7 +10,9 @@ import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -104,6 +106,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     required String title,
     required Widget icon,
     required VoidCallback onTap,
+    bool showBetaTag = false,
+    Widget? trailingChip,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -124,15 +128,47 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w400,
-                  ),
+                child: Row(
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    if (showBetaTag) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                          // border: Border.all(
+                          //   color: Colors.orange,
+                          //   width: 1,
+                          // ),
+                        ),
+                        child: const Text(
+                          'BETA',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
+              if (trailingChip != null) ...[
+                const SizedBox(width: 8),
+                trailingChip,
+                const SizedBox(width: 8),
+              ],
               const Icon(
                 Icons.chevron_right,
                 color: Color(0xFF3C3C43),
@@ -302,6 +338,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   );
                 },
               ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Task Integrations',
+                icon: const FaIcon(FontAwesomeIcons.listCheck, color: Color(0xFF8E8E93), size: 20),
+                showBetaTag: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const TaskIntegrationsPage(),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
           const SizedBox(height: 32),
@@ -334,6 +384,39 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 onTap: () async {
                   Navigator.pop(context);
                   await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Referral Program',
+                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+                trailingChip: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFFB8860B),
+                        Color(0xFFCD853F),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'New',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ReferralPage(),
+                    ),
+                  );
                 },
               ),
             ],
@@ -444,7 +527,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           await SharedPreferencesUtil().clear();
                           await AuthService.instance.signOut();
                           personaProvider.setRouting(PersonaProfileRouting.no_device);
-                          routeToPage(context, const AppShell(), replace: true);
+                          if (context.mounted) {
+                            routeToPage(context, const AppShell(), replace: true);
+                          }
                         },
                         "Sign Out?",
                         "Are you sure you want to sign out?",

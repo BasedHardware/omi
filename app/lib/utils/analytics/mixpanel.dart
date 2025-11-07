@@ -727,4 +727,26 @@ class MixpanelManager {
   void actionItemsDateFilterCleared() {
     track('Action Items Date Filter Cleared');
   }
+
+  void actionItemTabChanged(String tabName) {
+    track('Action Item Tab Changed', properties: {
+      'tab_name': tabName,
+    });
+  }
+
+  void actionItemCompleted({required String fromTab}) {
+    track('Action Item Completed', properties: {
+      'from_tab': fromTab,
+    });
+  }
+
+  void trainingDataOptInSubmitted() {
+    track('Training Data Opt-In Submitted');
+    setUserProperty('Training Data Opted In', true);
+  }
+
+  void trainingDataOptInApproved() {
+    track('Training Data Opt-In Approved');
+    setUserProperty('Training Data Status', 'approved');
+  }
 }
