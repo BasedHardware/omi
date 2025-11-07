@@ -109,6 +109,26 @@ class AuthService {
       UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
       debugPrint('Firebase sign-in successful.');
 
+      // Extract name from Apple credential (only available on first sign-in)
+      if (appleCredential.givenName != null && appleCredential.givenName!.isNotEmpty) {
+        debugPrint('Apple provided name: ${appleCredential.givenName} ${appleCredential.familyName ?? ""}');
+        SharedPreferencesUtil().givenName = appleCredential.givenName!;
+        if (appleCredential.familyName != null && appleCredential.familyName!.isNotEmpty) {
+          SharedPreferencesUtil().familyName = appleCredential.familyName!;
+        }
+
+        // Update Firebase profile with the name
+        final fullName = appleCredential.familyName != null && appleCredential.familyName!.isNotEmpty
+            ? '${appleCredential.givenName} ${appleCredential.familyName}'
+            : appleCredential.givenName!;
+        try {
+          await userCred.user?.updateProfile(displayName: fullName);
+          await userCred.user?.reload();
+        } catch (e) {
+          debugPrint('Failed to update Firebase profile with Apple name: $e');
+        }
+      }
+
       await _updateUserPreferences(userCred, 'apple');
 
       return userCred;
