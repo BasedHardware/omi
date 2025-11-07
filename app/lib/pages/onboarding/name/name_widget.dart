@@ -14,7 +14,7 @@ class NameWidget extends StatefulWidget {
 class _NameWidgetState extends State<NameWidget> {
   late TextEditingController nameController;
   var focusNode = FocusNode();
-  late bool hasPrefilledName;
+  bool hasPrefilledName = false;
 
   @override
   void initState() {
