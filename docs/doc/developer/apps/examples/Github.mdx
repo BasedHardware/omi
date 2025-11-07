@@ -1,0 +1,195 @@
+---
+title: "GitHub Issues Voice Poster"
+description: "Create GitHub issues using voice commands through your OMI device"
+---
+
+<CardGroup cols={2}>
+  <Card title="Install App" icon="download" href="https://h.omi.me/apps/01K7BHKJR79KQQW7ZZGZX7GCGD">
+    Install the GitHub Issues app from the Omi App Store
+  </Card>
+  <Card title="View Code" icon="code" href="https://github.com/aaravgarg/omi-github-app">
+    Check out the full source code on GitHub
+  </Card>
+</CardGroup>
+
+## ✨ Features
+
+- **🎤 Voice-Activated** - Say "Feedback Post" and describe your problem
+- **🧠 AI-Powered** - Collects 5 segments for detailed feedback, generates title + description
+- **🔐 OAuth Authentication** - Secure GitHub OAuth 2.0 integration
+- **📦 Repository Selection** - Choose which repo receives issues during setup
+- **⚙️ Flexible Settings** - Change target repository anytime from mobile-first homepage
+- **🤖 Smart Formatting** - AI extracts key info and formats professional issues
+- **🔕 Silent Collection** - Only notifies when issue is created
+- **📱 Mobile-First UI** - Beautiful responsive design for all devices
+
+## 🚀 Quick Start
+
+<Steps>
+  <Step title="Install the App">
+    Install the [GitHub Issues app](https://h.omi.me/apps/01K7BHKJR79KQQW7ZZGZX7GCGD) in your OMI mobile app
+  </Step>
+  <Step title="Authenticate">
+    Authenticate your GitHub account (one-time setup)
+  </Step>
+  <Step title="Select Repository">
+    Choose the repository where issues should be created
+  </Step>
+  <Step title="Start Reporting Issues">
+    - Say: "Feedback Post, the app keeps crashing when I upload photos..."
+    - Keep describing the problem naturally for 15-20 seconds
+    - AI processes your speech and creates a formatted issue
+    - You get a notification with the issue link! ✅
+  </Step>
+</Steps>
+
+### Trigger Phrases
+
+<AccordionGroup>
+  <Accordion title="Supported Voice Triggers">
+    - "Feedback Post"
+    - "Create Issue"
+    - "Report Issue"
+    - "File Issue"
+    - "New Issue"
+  </Accordion>
+</AccordionGroup>
+
+### How It Works
+
+**The app intelligently collects and processes your feedback:**
+1. Detects "Feedback Post" → Starts collecting
+2. Automatically collects 5 segments (15-20 seconds of detailed speech)
+3. Sends all segments to AI
+4. AI generates professional title and detailed description
+5. Creates GitHub issue with "voice-feedback" label
+6. Notifies you with issue link! 🎉
+
+<Note>
+**Example Workflow:**
+
+You: "Feedback Post, the search function isn't working"  
+*[collecting silently...]*
+
+You: "when I type in the search bar nothing happens"  
+*[collecting silently...]*
+
+You: "I've tried on both Chrome and Safari"  
+*[collecting silently...]*
+
+You: "and it worked fine last week but now"  
+*[collecting silently...]*
+
+You: "it's completely broken on all browsers"  
+*→ AI processes all 5 segments*
+
+**AI Generated Issue:**
+- **Title:** "Search function not working across browsers"
+- **Description:** The search function is currently not working. When typing in the search bar, no results appear. This issue has been tested on both Chrome and Safari browsers. The search functionality was working correctly last week but is now completely non-functional across all browsers.
+
+→ Issue created! 🔔
+</Note>
+
+## 🧠 AI Processing
+
+The app uses OpenAI for intelligent issue generation:
+
+1. **Collection** - Gathers 5 segments (~15-20 seconds) for detailed context
+2. **Title Generation** - Creates concise, descriptive title
+3. **Description Formatting** - Structures problem statement professionally
+4. **Cleanup** - Removes filler words, fixes grammar, adds proper formatting
+
+**Example Transformation:**
+
+<CodeGroup>
+```text Voice Input (5 segments)
+"the app keeps crashing when I um try to upload photos 
+it happens every single time on my iPhone 14 like 
+the app just freezes for a second and then 
+it completely closes and this started happening 
+after the latest update yesterday"
+```
+
+```markdown AI-Generated GitHub Issue
+Title: App crashes when uploading photos on iPhone 14
+
+Description:
+The app consistently crashes during photo uploads. When attempting to 
+upload a photo, the app freezes briefly and then closes completely. 
+This issue occurs every time on iPhone 14 and started after the latest 
+update.
+
+Labels: voice-feedback
+```
+</CodeGroup>
+
+## 📊 How Segments Work
+
+**OMI sends transcripts in segments** as you speak. The app:
+- ✅ Detects "Feedback Post" trigger
+- ✅ Collects exactly 5 segments
+- ✅ Silent during collection (no spam)
+- ✅ AI processes all 5 together
+- ✅ One notification on completion
+
+**Why 5 segments?**
+- Allows detailed problem description
+- Captures ~15-20 seconds of speech
+- Gives context for better issue formatting
+- AI has full information for title/description generation
+
+### Refreshing Repository List
+
+Click "Refresh Repos" to:
+- Fetch latest list from GitHub
+- Include newly created repositories
+- Update repository access permissions
+
+## 🔐 Security & Privacy
+
+<Check>
+**Security Features:**
+- OAuth 2.0 authentication (no password storage)
+- Tokens stored securely with file persistence
+- Per-user token isolation
+- HTTPS enforced in production
+- State parameter for CSRF protection
+- Secure scope: only `repo` access
+</Check>
+
+## 🐛 Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="User not authenticated">
+    - Complete the GitHub OAuth flow
+    - Try re-authenticating if the issue persists
+  </Accordion>
+
+  <Accordion title="No repository selected">
+    - Visit the app homepage
+    - Select a repository from the dropdown menu
+    - Click "Save Repository" to confirm
+  </Accordion>
+
+  <Accordion title="Issue not creating">
+    - Verify the repository exists and you have write access
+    - Ensure OAuth app has correct permissions
+  </Accordion>
+
+  <Accordion title="Repository not in list">
+    - Click "Refresh Repos" button on the homepage
+    - Ensure you have push access to the repository
+    - Verify GitHub OAuth app permissions are correctly set
+  </Accordion>
+</AccordionGroup>
+
+## Support & Resources
+
+<CardGroup cols={3}>
+  <Card title="Integration App" icon="book" href="https://docs.omi.me/doc/developer/apps/Integrations/">
+     Integration App Guide
+  </Card>
+  <Card title="Source Code" icon="code" href="https://github.com/aaravgarg/omi-github-app">
+    View the full codebase
+  </Card>
+</CardGroup>
