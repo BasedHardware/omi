@@ -153,22 +153,18 @@ async def _listen(
     seconds_to_trim = None
     seconds_to_add = None
     current_conversation_id = None
-    is_paused = False
-    pause_start_time: Optional[float] = None
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
-        nonlocal last_audio_received_time, last_transcript_time, user_has_credits, is_paused, pause_start_time
+        nonlocal last_audio_received_time, last_transcript_time, user_has_credits
 
         while websocket_active:
             await asyncio.sleep(60)
             if not websocket_active:
                 break
 
-            # Record usages - only when not paused
-            if is_paused:
-                pass  # Skip recording while paused
-            elif last_usage_record_timestamp:
+            # Record usages
+            if last_usage_record_timestamp:
                 current_time = time.time()
                 transcription_seconds = int(current_time - last_usage_record_timestamp)
 
@@ -1014,7 +1010,6 @@ async def _listen(
     async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
         nonlocal realtime_photo_buffers, speech_profile_processed, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
-        nonlocal is_paused, pause_start_time, words_transcribed_since_last_record
 
         timer_start = time.time()
         last_audio_received_time = timer_start
@@ -1073,26 +1068,6 @@ async def _listen(
                             await handle_image_chunk(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
-                        elif json_data.get('type') == 'recording_paused':
-                            is_paused = True
-                            pause_start_time = time.time()
-                            # Record usage up to this point before pausing
-                            if last_usage_record_timestamp:
-                                transcription_seconds = int(pause_start_time - last_usage_record_timestamp)
-                                words_to_record = words_transcribed_since_last_record
-                                if transcription_seconds > 0 or words_to_record > 0:
-                                    record_usage(
-                                        uid,
-                                        transcription_seconds=transcription_seconds,
-                                        words_transcribed=words_to_record,
-                                    )
-                                    words_transcribed_since_last_record = 0
-                        elif json_data.get('type') == 'recording_resumed':
-                            is_paused = False
-                            resume_time = time.time()
-                            # Reset timestamp to resume time for next usage calculation
-                            last_usage_record_timestamp = resume_time
-                            pause_start_time = None
                         elif json_data.get('type') == 'speaker_assigned':
                             segment_ids = json_data.get('segment_ids', [])
                             can_assign = False
@@ -1178,8 +1153,8 @@ async def _listen(
     except Exception as e:
         print(f"Error during WebSocket operation: {e}", uid, session_id)
     finally:
-        # Record final usage - only if not paused
-        if not is_paused and last_usage_record_timestamp:
+        # Record final usage
+        if last_usage_record_timestamp:
             current_time = time.time()
             transcription_seconds = int(current_time - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record
