@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:omi/services/auth_service.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class NameWidget extends StatefulWidget {
   final Function goNext;
@@ -17,10 +14,12 @@ class NameWidget extends StatefulWidget {
 class _NameWidgetState extends State<NameWidget> {
   late TextEditingController nameController;
   var focusNode = FocusNode();
+  late bool hasPrefilledName;
 
   @override
   void initState() {
     nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
+    hasPrefilledName = SharedPreferencesUtil().givenName.trim().isNotEmpty;
     super.initState();
 
     // Auto-focus the name input field after the widget is built
@@ -57,11 +56,11 @@ class _NameWidgetState extends State<NameWidget> {
                 const SizedBox(height: 16),
 
                 // Main title
-                const Text(
-                  'What\'s your name?',
+                Text(
+                  hasPrefilledName ? 'Want to go by something else?' : 'What\'s your name?',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 28,
+                    fontSize: hasPrefilledName ? 22 : 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
                     fontFamily: 'Manrope',
