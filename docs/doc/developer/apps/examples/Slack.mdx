@@ -1,0 +1,214 @@
+---
+title: "Slack Voice Messenger"
+description: "Send Slack messages using voice commands through your OMI device"
+---
+
+<CardGroup cols={2}>
+  <Card title="Install App" icon="download" href="https://h.omi.me/apps/SLACK_APP_ID">
+    Install the Slack app from the OMI App Store
+  </Card>
+  <Card title="View Code" icon="code" href="https://github.com/BasedHardware/omi-slack-app">
+    Check out the full source code on GitHub
+  </Card>
+</CardGroup>
+
+## Features
+
+- **Voice-Activated** - Say "Send message" and speak naturally
+- **AI-Powered Channel Matching** - AI intelligently matches spoken channel names to your workspace
+- **OAuth Authentication** - Secure Slack OAuth 2.0 integration
+- **Channel Selection** - Set a default channel or specify in voice command
+- **Flexible Settings** - Change channels anytime from mobile-first homepage
+- **Smart Message Extraction** - AI cleans up filler words and formats professionally
+- **Silent Collection** - Only notifies when message is sent
+- **Mobile-First UI** - Beautiful responsive Slack-themed design
+
+## Quick Start
+
+<Steps>
+  <Step title="Install the App">
+    Install the Slack app in your OMI mobile app
+  </Step>
+  <Step title="Authenticate">
+    Authenticate your Slack workspace (one-time setup)
+  </Step>
+  <Step title="Select Default Channel">
+    Choose a default channel (optional - you can specify in voice)
+  </Step>
+  <Step title="Start Messaging">
+    - Say: "Send message to general saying hello team!"
+    - Say: "Post in marketing that the campaign is live"
+    - Say: "Slack message to random saying great idea!"
+  </Step>
+</Steps>
+
+### Trigger Phrases
+
+<AccordionGroup>
+  <Accordion title="Supported Voice Triggers">
+    - "Send Slack message" - "Send Slack message to general saying..."
+    - "Post Slack message" - "Post Slack message in marketing that..."
+    - "Post in Slack" - "Post in Slack to random saying..."
+  </Accordion>
+</AccordionGroup>
+
+### How It Works
+
+**The app intelligently processes your voice commands:**
+1. Detects trigger phrase → Starts collecting
+2. Collects up to 5 segments OR stops if 5+ second gap detected
+3. AI extracts:
+   - Channel name (fuzzy matches to your workspace channels)
+   - Message content (cleaned and formatted)
+4. Fetches fresh channel list automatically (new channels work immediately!)
+5. Posts message to Slack
+6. Notifies you with confirmation!
+
+<Note>
+**Example Workflow:**
+
+You: "Send Slack message to general saying hello team"  
+*[collecting segment 1/5...]*
+
+You: "hope everyone is having a great day"  
+*[collecting segment 2/5...]*  
+*[5+ second pause - timeout!]*  
+*→ AI processes 2 segments*
+
+**AI Extracted:**
+- **Channel:** #general
+- **Message:** "Hello team, hope everyone is having a great day."
+
+→ Message sent!
+</Note>
+
+## Using the App
+
+### With OMI Device
+
+1. Install the Slack app from the OMI App Store
+2. Authenticate your Slack workspace
+3. Select a default channel (optional)
+4. Say: "Send message to general saying hello team!"
+5. Wait for AI processing (happens silently)
+6. Get a notification with confirmation!
+
+## AI Processing
+
+The app uses OpenAI for intelligent processing:
+
+1. **Channel Matching** - Fuzzy matches spoken channel names to workspace channels
+2. **Message Extraction** - Extracts clean message content from voice segments
+3. **Cleanup** - Removes filler words, fixes grammar, proper formatting
+
+**Example Transformation:**
+
+<CodeGroup>
+```text Voice Input (3 segments)
+"to general saying um hello team hope you're all um doing great today"
+```
+
+```markdown AI-Extracted Message
+Channel: #general (matched from "general")
+Message: "Hello team, hope you're all doing great today"
+```
+</CodeGroup>
+
+## How Segments Work
+
+**OMI sends transcripts in segments** as you speak. The app:
+- Detects trigger phrase (Send Slack message / Post Slack message / Post in Slack)
+- Collects up to 5 segments MAX
+- Processes early if 5+ second gap detected (minimum 2 segments)
+- Silent during collection (no spam)
+- AI processes all collected segments together
+- One notification on completion
+
+**Smart Collection:**
+- **Max segments:** 5 (including trigger)
+- **Timeout:** 5 seconds of silence → processes immediately
+- **Minimum:** 2 segments (trigger + content)
+- **Duration:** ~5-20 seconds depending on speech
+- **Auto-refresh:** Fetches latest channels every time (new channels work immediately!)
+
+## Channel Management
+
+### Specifying Channel in Voice
+
+You can always specify the channel in your voice command:
+- "Send message to **general** saying hello"
+- "Post in **marketing** that campaign is live"
+- "Message to **engineering** about the bug fix"
+
+AI will fuzzy match to your workspace channels!
+
+### Using Default Channel
+
+Set a default channel in settings, then just say:
+- "Send message saying quick update for everyone"
+- Message goes to your default channel
+
+### Refreshing Channel List
+
+The app **automatically fetches fresh channels** every time you send a message, so new channels work immediately without manual refresh!
+
+You can also manually refresh:
+- Click "Refresh Channels" button on homepage
+- Or re-authenticate to get latest channels
+
+### Switching Workspaces
+
+Click "Switch Workspace" to:
+- Connect to a different Slack workspace
+- Re-authenticate with new team
+- Switch between multiple workspaces easily
+
+## Security & Privacy
+
+<Check>
+**Security Features:**
+- OAuth 2.0 authentication (no password storage)
+- Tokens stored securely with file persistence
+- Per-user token isolation
+- HTTPS enforced in production
+- State parameter for CSRF protection
+- Secure scopes: minimal required permissions
+</Check>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="User not authenticated">
+    - Complete the Slack OAuth flow
+    - Try re-authenticating if the issue persists
+  </Accordion>
+
+  <Accordion title="No channel specified and no default channel set">
+    - Visit the app homepage
+    - Select a default channel OR
+    - Specify channel in voice command
+  </Accordion>
+
+  <Accordion title="Message not sending">
+    - Verify channel exists and bot has access
+    - Ensure Slack app has correct scopes
+  </Accordion>
+
+  <Accordion title="Channel not found">
+    - Check channel name pronunciation
+    - AI does fuzzy matching but might need clearer speech
+    - Use "Refresh Channels" to update list
+    - Set as default channel in settings
+  </Accordion>
+</AccordionGroup>
+
+## Support & Resources
+
+<CardGroup cols={3}>
+  <Card title="Integration App" icon="book" href="https://docs.omi.me/doc/developer/apps/Integrations/">
+    Integration App Guide
+  </Card>
+  <Card title="Source Code" icon="code" href="https://github.com/BasedHardware/omi-slack-app">
+    View the full codebase
+  </Card>
+</CardGroup>

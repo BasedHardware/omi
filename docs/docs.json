@@ -30,7 +30,8 @@
               {
                 "group": "Examples",
                 "pages": [
-                  "doc/developer/apps/examples/Github"
+                  "doc/developer/apps/examples/Github",
+                  "doc/developer/apps/examples/Slack"
                 ]
               },
               "doc/developer/apps/AudioStreaming",
