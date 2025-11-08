@@ -24,6 +24,19 @@ from .omi_tools import (
 from .perplexity_tools import (
     perplexity_search_tool,
 )
+from .calendar_tools import (
+    get_calendar_events_tool,
+    create_calendar_event_tool,
+    delete_calendar_event_tool,
+)
+from .whoop_tools import (
+    get_whoop_sleep_tool,
+    get_whoop_recovery_tool,
+    get_whoop_workout_tool,
+)
+from .notion_tools import (
+    search_notion_pages_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -35,4 +48,11 @@ __all__ = [
     'update_action_item_tool',
     'get_omi_product_info_tool',
     'perplexity_search_tool',
+    'get_calendar_events_tool',
+    'create_calendar_event_tool',
+    'delete_calendar_event_tool',
+    'get_whoop_sleep_tool',
+    'get_whoop_recovery_tool',
+    'get_whoop_workout_tool',
+    'search_notion_pages_tool',
 ]

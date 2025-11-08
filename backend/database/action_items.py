@@ -187,14 +187,22 @@ def get_action_items(
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(action_items_collection)
 
+    # Log query parameters for debugging
+    print(
+        f"🔍 get_action_items query params - uid: {uid}, conversation_id: {conversation_id}, "
+        f"completed: {completed}, start_date: {start_date}, end_date: {end_date}, "
+        f"due_start_date: {due_start_date}, due_end_date: {due_end_date}, "
+        f"limit: {limit}, offset: {offset}"
+    )
+
     # Apply filters
     if conversation_id is not None:
         query = query.where(filter=FieldFilter('conversation_id', '==', conversation_id))
-    elif conversation_id is None and completed is None:
-        pass
+        print(f"🔍 Applied conversation_id filter: {conversation_id}")
 
     if completed is not None:
         query = query.where(filter=FieldFilter('completed', '==', completed))
+        print(f"🔍 Applied completed filter: {completed}")
 
     # Determine which date field to use for database-level filtering and ordering
     # Priority: due_at filters if present, otherwise created_at filters
@@ -203,33 +211,78 @@ def get_action_items(
     if due_at_filtering:
         if due_start_date is not None:
             query = query.where(filter=FieldFilter('due_at', '>=', due_start_date))
+            print(f"🔍 Applied due_start_date filter: {due_start_date}")
         if due_end_date is not None:
             query = query.where(filter=FieldFilter('due_at', '<=', due_end_date))
+            print(f"🔍 Applied due_end_date filter: {due_end_date}")
 
         query = query.order_by('due_at', direction=firestore.Query.DESCENDING)
+        print(f"🔍 Ordered by due_at DESC")
     else:
         if start_date is not None:
             query = query.where(filter=FieldFilter('created_at', '>=', start_date))
+            print(f"🔍 Applied start_date filter: {start_date}")
         if end_date is not None:
             query = query.where(filter=FieldFilter('created_at', '<=', end_date))
+            print(f"🔍 Applied end_date filter: {end_date}")
 
         query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+        print(f"🔍 Ordered by created_at DESC")
 
     # Apply pagination
     if offset > 0:
         query = query.offset(offset)
+        print(f"🔍 Applied offset: {offset}")
     if limit:
         query = query.limit(limit)
+        print(f"🔍 Applied limit: {limit}")
 
-    # Execute query
-    docs = query.stream()
-
+    # Execute query with error handling
     action_items = []
-    for doc in docs:
-        data = doc.to_dict()
-        data['id'] = doc.id
-        action_item = _prepare_action_item_for_read(data)
-        action_items.append(action_item)
+    try:
+        docs = query.stream()
+        doc_count = 0
+        for doc in docs:
+            doc_count += 1
+            data = doc.to_dict()
+            data['id'] = doc.id
+            action_item = _prepare_action_item_for_read(data)
+            action_items.append(action_item)
+
+        print(f"🔍 Query executed successfully - retrieved {doc_count} documents from Firestore")
+
+        # Diagnostic: If we got 0 results and we're filtering by completed, check total count
+        if doc_count == 0 and completed is not None:
+            try:
+                # Quick check: count total action items for this user (no filters)
+                total_query = user_ref.collection(action_items_collection)
+                total_docs = list(total_query.limit(1).stream())
+                total_count = len(total_docs)
+                print(f"🔍 Diagnostic: User has {total_count} total action item(s) (checking first doc only)")
+
+                if total_count > 0:
+                    # Check completion status distribution
+                    completed_query = user_ref.collection(action_items_collection).where(
+                        filter=FieldFilter('completed', '==', True)
+                    )
+                    completed_count = len(list(completed_query.limit(100).stream()))
+
+                    pending_query = user_ref.collection(action_items_collection).where(
+                        filter=FieldFilter('completed', '==', False)
+                    )
+                    pending_count = len(list(pending_query.limit(100).stream()))
+
+                    print(f"🔍 Diagnostic: {completed_count} completed, {pending_count} pending (sampled up to 100)")
+            except Exception as diag_error:
+                print(f"⚠️ Diagnostic query failed (non-critical): {diag_error}")
+
+    except Exception as e:
+        print(f"❌ Error executing Firestore query: {e}")
+        import traceback
+
+        traceback.print_exc()
+        # Re-raise to let caller handle it
+        raise
 
     # Sort results by due_at first (items without due_at come last), then by created_at
     action_items.sort(

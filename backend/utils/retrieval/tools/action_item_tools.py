@@ -4,6 +4,7 @@ Tools for accessing and managing user action items.
 
 from datetime import datetime, timedelta
 from typing import Optional
+import contextvars
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -14,6 +15,13 @@ from utils.notifications import (
     send_action_item_created_notification,
     send_action_item_data_message,
 )
+
+# Import agent_config_context for fallback config access
+try:
+    from utils.retrieval.agentic import agent_config_context
+except ImportError:
+    # Fallback if import fails
+    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
 @tool
@@ -79,16 +87,49 @@ def get_action_items_tool(
     Returns:
         Formatted list of action items with their details.
     """
+    print(f"🚀 get_action_items_tool START - limit: {limit}, offset: {offset}, completed: {completed}")
     print(
         f"🔧 get_action_items_tool called - limit: {limit}, offset: {offset}, completed: {completed}, "
         f"conversation_id: {conversation_id}, start_date: {start_date}, end_date: {end_date}, "
         f"due_start_date: {due_start_date}, due_end_date: {due_end_date}"
     )
-    uid = config['configurable'].get('user_id')
-    if not uid:
-        print(f"❌ get_action_items_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
-    print(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
+
+    # Get config from parameter or context variable (like other tools do)
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 get_action_items_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ get_action_items_tool - config not found in context variable")
+            config = None
+
+    # Safely access config
+    try:
+        if config is None:
+            print(f"❌ get_action_items_tool - config is None")
+            return "Error: Configuration not available"
+
+        if 'configurable' not in config:
+            print(
+                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(config.keys()) if config else 'None'}"
+            )
+            return "Error: Configuration format invalid"
+
+        uid = config['configurable'].get('user_id')
+        if not uid:
+            print(
+                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(config['configurable'].keys()) if config.get('configurable') else 'None'}"
+            )
+            return "Error: User ID not found in configuration"
+
+        print(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
+    except Exception as config_error:
+        print(f"❌ get_action_items_tool - error accessing config: {config_error}")
+        import traceback
+
+        traceback.print_exc()
+        return f"Error: Configuration error - {str(config_error)}"
 
     # Get safety guard from config if available
     safety_guard = config['configurable'].get('safety_guard')
@@ -149,6 +190,17 @@ def get_action_items_tool(
     # Get action items
     action_items = []
     try:
+        print(f"🔍 Calling action_items_db.get_action_items with:")
+        print(f"   uid: {uid}")
+        print(f"   conversation_id: {conversation_id}")
+        print(f"   completed: {completed}")
+        print(f"   start_date: {start_dt}")
+        print(f"   end_date: {end_dt}")
+        print(f"   due_start_date: {due_start_dt}")
+        print(f"   due_end_date: {due_end_dt}")
+        print(f"   limit: {limit}")
+        print(f"   offset: {offset}")
+
         action_items = action_items_db.get_action_items(
             uid=uid,
             conversation_id=conversation_id,
@@ -160,8 +212,13 @@ def get_action_items_tool(
             limit=limit,
             offset=offset,
         )
+
+        print(f"🔍 Database call completed - received {len(action_items) if action_items else 0} items")
     except Exception as e:
         print(f"❌ Error getting action items: {e}")
+        import traceback
+
+        traceback.print_exc()
         return f"Error retrieving action items: {str(e)}"
 
     action_items_count = len(action_items) if action_items else 0
@@ -191,6 +248,7 @@ def get_action_items_tool(
 
         msg = f"No{status_info} action items found{date_info}."
         print(f"⚠️ get_action_items_tool - {msg}")
+        print(f"✅ get_action_items_tool END - returning early (no items found)")
         return msg
 
     # Format action items
@@ -221,6 +279,7 @@ def get_action_items_tool(
 
         result += "\n"
 
+    print(f"✅ get_action_items_tool END - returning {len(action_items)} items")
     return result.strip()
 
 
@@ -265,7 +324,27 @@ def create_action_item_tool(
         f"🔧 create_action_item_tool called - description: {description}, "
         f"due_at: {due_at}, conversation_id: {conversation_id}"
     )
-    uid = config['configurable'].get('user_id')
+
+    # Get config from parameter or context variable (like other tools do)
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 create_action_item_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ create_action_item_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ create_action_item_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ create_action_item_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
     if not uid:
         print(f"❌ create_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
@@ -396,7 +475,27 @@ def update_action_item_tool(
         f"🔧 update_action_item_tool called - action_item_id: {action_item_id}, "
         f"completed: {completed}, description: {description}, due_at: {due_at}"
     )
-    uid = config['configurable'].get('user_id')
+
+    # Get config from parameter or context variable (like other tools do)
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 update_action_item_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ update_action_item_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ update_action_item_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ update_action_item_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
     if not uid:
         print(f"❌ update_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
