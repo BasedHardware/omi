@@ -224,9 +224,9 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         # Remove trailing slash from base_url if present
         base_url_clean = base_url.rstrip('/')
         redirect_uri = f'{base_url_clean}/v2/integrations/google-calendar/callback'
-        # Use calendar scope (includes read and write access) and contacts scopes for People API
-        # This allows creating events and looking up contacts by name in both My Contacts and Other Contacts
-        scope = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly'
+        # Use calendar scope (includes read and write access), contacts scopes for People API, and Gmail scope
+        # This allows creating events, looking up contacts by name, and accessing Gmail
+        scope = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly https://www.googleapis.com/auth/gmail.readonly'
         from urllib.parse import quote
 
         auth_url = f'https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&scope={quote(scope)}&access_type=offline&prompt=consent&state={state_token}'

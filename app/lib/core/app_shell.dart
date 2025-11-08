@@ -155,7 +155,7 @@ class _AppShellState extends State<AppShell> {
       final error = uri.queryParameters['error'];
       if (error != null) {
         debugPrint('Google Calendar OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to Google Calendar: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to Google: $error');
         return;
       }
 
@@ -297,11 +297,11 @@ class _AppShellState extends State<AppShell> {
       await GoogleCalendarService().refreshConnectionStatus();
       await context.read<IntegrationProvider>().loadFromBackend();
 
-      debugPrint('✓ Google Calendar authentication completed successfully');
-      AppSnackbar.showSnackbar('Successfully connected to Google Calendar!');
+      debugPrint('✓ Google authentication completed successfully');
+      AppSnackbar.showSnackbar('Successfully connected to Google!');
     } catch (e) {
       debugPrint('Error handling Google Calendar callback: $e');
-      AppSnackbar.showSnackbarError('Failed to refresh Google Calendar connection status.');
+      AppSnackbar.showSnackbarError('Failed to refresh Google connection status.');
     }
   }
 

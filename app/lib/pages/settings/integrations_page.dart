@@ -17,7 +17,7 @@ extension IntegrationAppExtension on IntegrationApp {
   String get displayName {
     switch (this) {
       case IntegrationApp.googleCalendar:
-        return 'Google Calendar';
+        return 'Google';
       case IntegrationApp.whoop:
         return 'Whoop';
       case IntegrationApp.notion:
@@ -148,7 +148,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Failed to start Google Calendar authentication'),
+                  content: Text('Failed to start Google authentication'),
                   backgroundColor: Colors.red,
                   duration: Duration(seconds: 3),
                 ),

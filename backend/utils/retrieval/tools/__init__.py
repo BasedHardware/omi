@@ -30,6 +30,9 @@ from .calendar_tools import (
     update_calendar_event_tool,
     delete_calendar_event_tool,
 )
+from .gmail_tools import (
+    get_gmail_messages_tool,
+)
 from .whoop_tools import (
     get_whoop_sleep_tool,
     get_whoop_recovery_tool,
@@ -53,6 +56,7 @@ __all__ = [
     'create_calendar_event_tool',
     'update_calendar_event_tool',
     'delete_calendar_event_tool',
+    'get_gmail_messages_tool',
     'get_whoop_sleep_tool',
     'get_whoop_recovery_tool',
     'get_whoop_workout_tool',
