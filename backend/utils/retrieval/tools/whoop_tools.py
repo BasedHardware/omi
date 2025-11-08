@@ -23,16 +23,35 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
-def refresh_whoop_token(uid: str, integration: dict) -> Optional[str]:
+def refresh_whoop_token(uid: str, integration: Optional[dict] = None) -> Optional[str]:
     """
     Refresh Whoop access token using refresh token.
+
+    Args:
+        uid: User ID
+        integration: Optional integration dict. If not provided, will reload from database.
 
     Returns:
         New access token or None if refresh failed
     """
+    # Reload integration from database to ensure we have the latest refresh_token
+    if integration is None:
+        integration = users_db.get_integration(uid, 'whoop')
+
+    if not integration:
+        print(f"🔄 Whoop token refresh failed: No integration found")
+        return None
+
+    # Debug: Log what keys are in the integration dict
+    integration_keys = list(integration.keys())
+    print(f"🔄 Whoop integration keys: {integration_keys}")
+
     refresh_token = integration.get('refresh_token')
     if not refresh_token:
-        print(f"🔄 Whoop token refresh failed: No refresh token found")
+        print(f"🔄 Whoop token refresh failed: No refresh token found in integration")
+        print(
+            f"🔄 Integration data (excluding sensitive fields): { {k: v for k, v in integration.items() if k not in ['access_token']} }"
+        )
         return None
 
     client_id = os.getenv('WHOOP_CLIENT_ID')
@@ -51,6 +70,7 @@ def refresh_whoop_token(uid: str, integration: dict) -> Optional[str]:
                 'client_secret': client_secret,
                 'refresh_token': refresh_token,
                 'grant_type': 'refresh_token',
+                'scope': 'offline',  # Required by Whoop API for refresh token requests
             },
             timeout=10.0,
         )
@@ -486,6 +506,8 @@ def get_whoop_sleep_tool(
             # Try to refresh token if authentication failed
             if "Authentication failed" in error_msg or "401" in error_msg:
                 print(f"🔄 Attempting to refresh Whoop token...")
+                # Reload integration to get latest refresh_token before refreshing
+                integration = users_db.get_integration(uid, 'whoop')
                 new_token = refresh_whoop_token(uid, integration)
                 if new_token:
                     print(f"✅ Token refreshed, retrying...")
@@ -505,7 +527,7 @@ def get_whoop_sleep_tool(
                         return f"Error fetching sleep data: {str(retry_error)}"
                 else:
                     print(f"❌ Token refresh failed")
-                    return "Whoop authentication expired. Please reconnect your Whoop account from settings."
+                    return "Whoop authentication expired. Please reconnect your Whoop account from settings to restore access."
             else:
                 print(f"❌ Non-auth error: {error_msg}")
                 return f"Error fetching sleep data: {error_msg}"
@@ -739,6 +761,8 @@ def get_whoop_recovery_tool(
         except Exception as e:
             error_msg = str(e)
             if "Authentication failed" in error_msg or "401" in error_msg:
+                # Reload integration to get latest refresh_token before refreshing
+                integration = users_db.get_integration(uid, 'whoop')
                 new_token = refresh_whoop_token(uid, integration)
                 if new_token:
                     recovery_data = get_whoop_recovery_data(
@@ -924,6 +948,8 @@ def get_whoop_workout_tool(
         except Exception as e:
             error_msg = str(e)
             if "Authentication failed" in error_msg or "401" in error_msg:
+                # Reload integration to get latest refresh_token before refreshing
+                integration = users_db.get_integration(uid, 'whoop')
                 new_token = refresh_whoop_token(uid, integration)
                 if new_token:
                     workout_data = get_whoop_workout_data(
