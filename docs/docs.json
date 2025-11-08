@@ -14,8 +14,8 @@
         "group": "Get Started",
         "pages": [
           "doc/get_started/introduction",
-           "getstartedwithomi",
-          "doc/get_started/Flash_device"
+           "getstartedwithomi"
+          
         ]
       },
       {
@@ -103,7 +103,8 @@
         "pages": [
           "doc/assembly/introduction",
           "doc/assembly/Buying_Guide",
-          "doc/assembly/Build_the_device"
+          "doc/assembly/Build_the_device",
+          "doc/get_started/Flash_device"
         ]
       },
       {
