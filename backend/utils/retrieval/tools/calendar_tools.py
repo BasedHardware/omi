@@ -314,6 +314,161 @@ def create_google_calendar_event(
         raise
 
 
+def get_google_calendar_event(access_token: str, event_id: str) -> dict:
+    """
+    Get a single calendar event by event ID.
+
+    Args:
+        access_token: Google Calendar access token
+        event_id: Event ID to retrieve
+
+    Returns:
+        Event data
+    """
+    print(f"📅 Getting Google Calendar event: {event_id}")
+
+    try:
+        response = requests.get(
+            f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10.0,
+        )
+
+        print(f"📅 Google Calendar API get response status: {response.status_code}")
+
+        if response.status_code == 200:
+            event_data = response.json()
+            print(f"✅ Successfully retrieved calendar event: {event_data.get('id')}")
+            return event_data
+        elif response.status_code == 401:
+            print(f"❌ Google Calendar API 401 - token expired")
+            raise Exception("Authentication failed - token may be expired")
+        elif response.status_code == 403:
+            print(f"❌ Google Calendar API 403 - insufficient permissions")
+            raise Exception("Insufficient permissions - calendar read access required")
+        elif response.status_code == 404:
+            print(f"❌ Google Calendar API 404 - event not found")
+            raise Exception(f"Event not found: {event_id}")
+        else:
+            error_body = response.text[:200] if response.text else "No error body"
+            print(f"❌ Google Calendar API error {response.status_code}: {error_body}")
+            raise Exception(f"Google Calendar API error: {response.status_code} - {error_body}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error getting Google Calendar event: {e}")
+        raise
+    except Exception as e:
+        print(f"❌ Error getting Google Calendar event: {e}")
+        raise
+
+
+def update_google_calendar_event(
+    access_token: str,
+    event_id: str,
+    summary: Optional[str] = None,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    description: Optional[str] = None,
+    location: Optional[str] = None,
+    attendees: Optional[list] = None,
+) -> dict:
+    """
+    Update an existing calendar event.
+
+    Args:
+        access_token: Google Calendar access token
+        event_id: Event ID to update
+        summary: Optional new event title/summary
+        start_time: Optional new start time (datetime with timezone)
+        end_time: Optional new end time (datetime with timezone)
+        description: Optional new description
+        location: Optional new location
+        attendees: Optional new list of attendee email addresses (replaces existing attendees)
+
+    Returns:
+        Updated event data
+    """
+    print(f"📅 Updating Google Calendar event: {event_id}")
+
+    # Build update body with only provided fields
+    event_body = {}
+
+    if summary is not None:
+        event_body['summary'] = summary
+
+    if start_time is not None:
+        if start_time.tzinfo is not None:
+            start_time_utc = start_time.astimezone(timezone.utc)
+        else:
+            start_time_utc = start_time.replace(tzinfo=timezone.utc)
+        start_time_str = start_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        event_body['start'] = {
+            'dateTime': start_time_str,
+            'timeZone': 'UTC',
+        }
+
+    if end_time is not None:
+        if end_time.tzinfo is not None:
+            end_time_utc = end_time.astimezone(timezone.utc)
+        else:
+            end_time_utc = end_time.replace(tzinfo=timezone.utc)
+        end_time_str = end_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        event_body['end'] = {
+            'dateTime': end_time_str,
+            'timeZone': 'UTC',
+        }
+
+    if description is not None:
+        event_body['description'] = description
+
+    if location is not None:
+        event_body['location'] = location
+
+    if attendees is not None:
+        event_body['attendees'] = [{'email': email} for email in attendees]
+
+    if not event_body:
+        raise Exception("No fields provided to update")
+
+    print(f"📅 Updating event with fields: {list(event_body.keys())}")
+
+    try:
+        response = requests.patch(
+            f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+            headers={
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json',
+            },
+            json=event_body,
+            timeout=10.0,
+        )
+
+        print(f"📅 Google Calendar API update response status: {response.status_code}")
+
+        if response.status_code == 200:
+            event_data = response.json()
+            print(f"✅ Successfully updated calendar event: {event_data.get('id')}")
+            return event_data
+        elif response.status_code == 401:
+            print(f"❌ Google Calendar API 401 - token expired")
+            raise Exception("Authentication failed - token may be expired")
+        elif response.status_code == 403:
+            print(f"❌ Google Calendar API 403 - insufficient permissions")
+            raise Exception("Insufficient permissions - calendar write access required")
+        elif response.status_code == 404:
+            print(f"❌ Google Calendar API 404 - event not found")
+            raise Exception(f"Event not found: {event_id}")
+        else:
+            error_body = response.text[:200] if response.text else "No error body"
+            print(f"❌ Google Calendar API error {response.status_code}: {error_body}")
+            raise Exception(f"Google Calendar API error: {response.status_code} - {error_body}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error updating Google Calendar event: {e}")
+        raise
+    except Exception as e:
+        print(f"❌ Error updating Google Calendar event: {e}")
+        raise
+
+
 def delete_google_calendar_event(access_token: str, event_id: str) -> bool:
     """
     Delete a calendar event by event ID.
@@ -1352,3 +1507,333 @@ def delete_calendar_event_tool(
 
         traceback.print_exc()
         return f"Unexpected error deleting calendar events: {str(e)}"
+
+
+@tool
+def update_calendar_event_tool(
+    event_id: Optional[str] = None,
+    event_title: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    location: Optional[str] = None,
+    add_attendees: Optional[str] = None,
+    remove_attendees: Optional[str] = None,
+    set_attendees: Optional[str] = None,
+    config: RunnableConfig = None,
+) -> str:
+    """
+    Update an existing calendar event in the user's Google Calendar.
+    Can modify event title, description, location, time, or attendees.
+
+    Use this tool when:
+    - User asks to "update" or "modify" a calendar event
+    - User wants to "change" something about an event
+    - User asks to "add" or "remove" attendees from an event
+    - User wants to "edit" an event
+    - **ALWAYS use this tool when the user wants to modify an existing calendar event**
+
+    To identify the event:
+    - If event_id is provided, use it directly
+    - Otherwise, search for events matching event_title and date range
+
+    Attendee modifications:
+    - add_attendees: Comma-separated list of names or emails to ADD to existing attendees
+    - remove_attendees: Comma-separated list of names or emails to REMOVE from existing attendees
+    - set_attendees: Comma-separated list of names or emails to REPLACE all attendees
+    - Names will be automatically resolved to email addresses via Google Contacts
+
+    Args:
+        event_id: Optional specific event ID to update (if known)
+        event_title: Optional event title to search for
+        start_date: Optional start date/time for search range in ISO format with timezone
+        end_date: Optional end date/time for search range in ISO format with timezone
+        title: Optional new event title
+        description: Optional new event description
+        location: Optional new event location
+        add_attendees: Optional comma-separated list of attendee names or emails to add
+        remove_attendees: Optional comma-separated list of attendee names or emails to remove
+        set_attendees: Optional comma-separated list of attendee names or emails to set (replaces all)
+
+    Returns:
+        Confirmation message with updated event details if successful, or error message if failed.
+    """
+    print(
+        f"🔧 update_calendar_event_tool called - event_id: {event_id}, event_title: {event_title}, "
+        f"add_attendees: {add_attendees}, remove_attendees: {remove_attendees}, set_attendees: {set_attendees}"
+    )
+
+    # Get config from parameter or context variable
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 update_calendar_event_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ update_calendar_event_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ update_calendar_event_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ update_calendar_event_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
+    if not uid:
+        print(f"❌ update_calendar_event_tool - no user_id in config")
+        return "Error: User ID not found in configuration"
+
+    print(f"✅ update_calendar_event_tool - uid: {uid}")
+
+    try:
+        # Check if user has Google Calendar connected
+        print(f"📅 Checking Google Calendar connection for user {uid}...")
+        try:
+            integration = users_db.get_integration(uid, 'google_calendar')
+            if not integration:
+                print(f"❌ No integration found for user {uid}")
+                return "Google Calendar is not connected. Please connect your Google Calendar from settings to update events."
+        except Exception as e:
+            print(f"❌ Error checking calendar integration: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return f"Error checking Google Calendar connection: {str(e)}"
+
+        if not integration or not integration.get('connected'):
+            print(f"❌ Google Calendar not connected for user {uid}")
+            return (
+                "Google Calendar is not connected. Please connect your Google Calendar from settings to update events."
+            )
+
+        access_token = integration.get('access_token')
+        if not access_token:
+            print(f"❌ No access token found in integration data")
+            return "Google Calendar access token not found. Please reconnect your Google Calendar from settings."
+
+        print(f"✅ Access token found, length: {len(access_token)}")
+
+        # Find the event if event_id not provided
+        target_event_id = event_id
+        if not target_event_id:
+            if not event_title:
+                return "Error: Please provide either event_id or event_title to identify which event to update."
+
+            # Parse dates if provided
+            time_min = None
+            time_max = None
+
+            if start_date:
+                try:
+                    time_min = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                    if time_min.tzinfo is None:
+                        return (
+                            f"Error: start_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM: {start_date}"
+                        )
+                except ValueError as e:
+                    return (
+                        f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_date} - {str(e)}"
+                    )
+
+            if end_date:
+                try:
+                    time_max = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    if time_max.tzinfo is None:
+                        return f"Error: end_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM: {end_date}"
+                except ValueError as e:
+                    return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_date} - {str(e)}"
+
+            # If only start_date provided, set end_date to 1 day later
+            if time_min and not time_max:
+                time_max = time_min + timedelta(days=1)
+
+            # Search for matching events
+            try:
+                events = get_google_calendar_events(
+                    access_token=access_token,
+                    time_min=time_min,
+                    time_max=time_max,
+                    max_results=10,
+                    search_query=event_title,
+                )
+
+                if not events:
+                    return f"No calendar events found matching '{event_title}'."
+
+                # Filter events by title if provided
+                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+
+                if not matching_events:
+                    return f"No calendar events found matching '{event_title}'."
+
+                if len(matching_events) > 1:
+                    return f"Multiple events found matching '{event_title}'. Please provide the event_id to specify which one to update."
+
+                target_event_id = matching_events[0].get('id')
+                if not target_event_id:
+                    return f"Event found but missing ID."
+
+                print(f"📅 Found event ID: {target_event_id}")
+            except Exception as e:
+                error_msg = str(e)
+                print(f"❌ Error searching for event: {error_msg}")
+                return f"Error searching for calendar event: {error_msg}"
+
+        # Get current event to preserve existing data
+        try:
+            current_event = get_google_calendar_event(access_token, target_event_id)
+        except Exception as e:
+            error_msg = str(e)
+            print(f"❌ Error getting event: {error_msg}")
+
+            # Try to refresh token if authentication failed
+            if "Authentication failed" in error_msg or "401" in error_msg:
+                print(f"🔄 Attempting to refresh Google Calendar token...")
+                new_token = refresh_google_calendar_token(uid, integration)
+                if new_token:
+                    print(f"✅ Token refreshed, retrying...")
+                    try:
+                        current_event = get_google_calendar_event(new_token, target_event_id)
+                        access_token = new_token
+                    except Exception as retry_error:
+                        return f"Error getting calendar event: {str(retry_error)}"
+                else:
+                    return (
+                        "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
+                    )
+            else:
+                return f"Error getting calendar event: {error_msg}"
+
+        # Prepare update fields
+        update_summary = title if title is not None else None
+        update_description = description if description is not None else None
+        update_location = location if location is not None else None
+
+        # Handle attendees
+        update_attendees = None
+        if set_attendees is not None:
+            # Replace all attendees
+            attendee_strings = [a.strip() for a in set_attendees.split(',') if a.strip()]
+            resolved_emails = []
+            unresolved_attendees = []
+
+            for attendee in attendee_strings:
+                email = resolve_attendee_to_email(access_token, attendee)
+                if email:
+                    resolved_emails.append(email)
+                else:
+                    unresolved_attendees.append(attendee)
+
+            if unresolved_attendees:
+                return f"Error: Could not find email addresses for the following attendees: {', '.join(unresolved_attendees)}. Please provide email addresses directly or ensure these contacts exist in your Google Contacts."
+
+            update_attendees = resolved_emails
+        elif add_attendees is not None or remove_attendees is not None:
+            # Modify existing attendees
+            current_attendees = current_event.get('attendees', [])
+            current_emails = [a.get('email') for a in current_attendees if a.get('email')]
+
+            # Add attendees
+            if add_attendees:
+                attendee_strings = [a.strip() for a in add_attendees.split(',') if a.strip()]
+                for attendee in attendee_strings:
+                    email = resolve_attendee_to_email(access_token, attendee)
+                    if email and email not in current_emails:
+                        current_emails.append(email)
+                    elif not email:
+                        return f"Error: Could not find email address for attendee: {attendee}. Please provide email address directly or ensure this contact exists in your Google Contacts."
+
+            # Remove attendees
+            if remove_attendees:
+                attendee_strings = [a.strip() for a in remove_attendees.split(',') if a.strip()]
+                emails_to_remove = []
+                for attendee in attendee_strings:
+                    email = resolve_attendee_to_email(access_token, attendee)
+                    if email:
+                        emails_to_remove.append(email)
+                    else:
+                        # Try to find by name in current attendees
+                        for current_email in current_emails:
+                            if attendee.lower() in current_email.lower():
+                                emails_to_remove.append(current_email)
+                                break
+
+                current_emails = [e for e in current_emails if e not in emails_to_remove]
+
+            update_attendees = current_emails
+
+        # Update the event
+        try:
+            updated_event = update_google_calendar_event(
+                access_token=access_token,
+                event_id=target_event_id,
+                summary=update_summary,
+                description=update_description,
+                location=update_location,
+                attendees=update_attendees,
+            )
+
+            result = f"✅ Successfully updated calendar event: {updated_event.get('summary', 'Untitled')}\n"
+
+            if update_summary:
+                result += f"   Title: {update_summary}\n"
+
+            if update_location:
+                result += f"   Location: {update_location}\n"
+
+            if update_attendees is not None:
+                result += f"   Attendees: {', '.join(update_attendees)}\n"
+
+            event_link = updated_event.get('htmlLink', '')
+            if event_link:
+                result += f"   View event: {event_link}"
+
+            return result.strip()
+
+        except Exception as e:
+            error_msg = str(e)
+            print(f"❌ Error updating calendar event: {error_msg}")
+            import traceback
+
+            traceback.print_exc()
+
+            # Try to refresh token if authentication failed
+            if "Authentication failed" in error_msg or "401" in error_msg:
+                print(f"🔄 Attempting to refresh Google Calendar token...")
+                new_token = refresh_google_calendar_token(uid, integration)
+                if new_token:
+                    print(f"✅ Token refreshed, retrying...")
+                    try:
+                        updated_event = update_google_calendar_event(
+                            access_token=new_token,
+                            event_id=target_event_id,
+                            summary=update_summary,
+                            description=update_description,
+                            location=update_location,
+                            attendees=update_attendees,
+                        )
+
+                        result = f"✅ Successfully updated calendar event: {updated_event.get('summary', 'Untitled')}\n"
+                        if update_attendees is not None:
+                            result += f"   Attendees: {', '.join(update_attendees)}\n"
+                        return result.strip()
+                    except Exception as retry_error:
+                        return f"Error updating calendar event: {str(retry_error)}"
+                else:
+                    return (
+                        "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
+                    )
+            else:
+                return f"Error updating calendar event: {error_msg}"
+
+    except Exception as e:
+        print(f"❌ Unexpected error in update_calendar_event_tool: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return f"Unexpected error updating calendar event: {str(e)}"

@@ -38,6 +38,7 @@ from utils.retrieval.tools import (
     perplexity_search_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
+    update_calendar_event_tool,
     delete_calendar_event_tool,
     get_whoop_sleep_tool,
     get_whoop_recovery_tool,
@@ -67,6 +68,7 @@ def get_tool_display_name(tool_name: str) -> str:
         'get_whoop_workout_tool': 'Checking Whoop workout data',
         'get_calendar_events_tool': 'Checking calendar',
         'create_calendar_event_tool': 'Creating calendar event',
+        'update_calendar_event_tool': 'Updating calendar event',
         'delete_calendar_event_tool': 'Deleting calendar event',
         'perplexity_search_tool': 'Searching the web',
         'get_conversations_tool': 'Searching conversations',
@@ -191,6 +193,7 @@ def execute_agentic_chat(
         perplexity_search_tool,
         get_calendar_events_tool,
         create_calendar_event_tool,
+        update_calendar_event_tool,
         delete_calendar_event_tool,
         get_whoop_sleep_tool,
         get_whoop_recovery_tool,
@@ -273,6 +276,7 @@ async def execute_agentic_chat_stream(
         perplexity_search_tool,
         get_calendar_events_tool,
         create_calendar_event_tool,
+        update_calendar_event_tool,
         delete_calendar_event_tool,
         get_whoop_sleep_tool,
         get_whoop_recovery_tool,
@@ -455,6 +459,14 @@ async def _run_agent_stream(
                             await callback.put_thought('Failed to create event')
                         else:
                             await callback.put_thought('Creating event...')
+                    elif 'update' in tool_name.lower():
+                        # Clear the "Updating calendar event" status
+                        if output and ('Successfully updated' in output or '✅' in output):
+                            await callback.put_thought('Event updated successfully')
+                        elif output and ('Error' in output or 'error' in output.lower()):
+                            await callback.put_thought('Failed to update event')
+                        else:
+                            await callback.put_thought('Updating event...')
                     elif 'delete' in tool_name.lower():
                         # Clear the "Deleting calendar event" status
                         if output and ('Successfully deleted' in output or '✅' in output):

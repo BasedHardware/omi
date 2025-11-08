@@ -27,6 +27,7 @@ from .perplexity_tools import (
 from .calendar_tools import (
     get_calendar_events_tool,
     create_calendar_event_tool,
+    update_calendar_event_tool,
     delete_calendar_event_tool,
 )
 from .whoop_tools import (
@@ -50,6 +51,7 @@ __all__ = [
     'perplexity_search_tool',
     'get_calendar_events_tool',
     'create_calendar_event_tool',
+    'update_calendar_event_tool',
     'delete_calendar_event_tool',
     'get_whoop_sleep_tool',
     'get_whoop_recovery_tool',
