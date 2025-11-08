@@ -21,27 +21,6 @@
       {
         "group": "Developer",
         "pages": [
-          {
-            "group": "Apps",
-            "pages": [
-              "doc/developer/apps/Introduction",
-              "doc/developer/apps/PromptBased",
-              "doc/developer/apps/Integrations",
-              {
-                "group": "Examples",
-                "pages": [
-                  "doc/developer/apps/examples/Github",
-                  "doc/developer/apps/examples/Slack",
-                  "doc/developer/apps/examples/OmiMentor"
-                ]
-              },
-              "doc/developer/apps/AudioStreaming",
-              "doc/developer/apps/Import",
-              "doc/developer/apps/Oauth",
-              "doc/developer/apps/Notifications",
-              "doc/developer/apps/Submitting"
-            ]
-          },
           "doc/developer/AppSetup",
           {
             "group": "Backend",
@@ -87,6 +66,27 @@
               "doc/developer/DevKit2Testing"
             ]
           }
+        ]
+      },
+      {
+        "group": "Build Apps",
+        "pages": [
+          "doc/developer/apps/Introduction",
+          "doc/developer/apps/PromptBased",
+          "doc/developer/apps/Integrations",
+          {
+            "group": "Examples",
+            "pages": [
+              "doc/developer/apps/examples/Github",
+              "doc/developer/apps/examples/Slack",
+              "doc/developer/apps/examples/OmiMentor"
+            ]
+          },
+          "doc/developer/apps/AudioStreaming",
+          "doc/developer/apps/Import",
+          "doc/developer/apps/Oauth",
+          "doc/developer/apps/Notifications",
+          "doc/developer/apps/Submitting"
         ]
       },
       {
