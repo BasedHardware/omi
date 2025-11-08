@@ -211,12 +211,22 @@ function sendServiceUpdate(userId, serviceName, status) {
 
 ## Implementing Proactive Notifications 🔔
 
-### Step 1: Configure App Capabilities 🔑
+Proactive notifications require creating an OMI app with specific capabilities. Unlike direct notifications, these leverage the app system to access user context and generate intelligent, personalized messages.
 
-Add the `proactive_notification` capability and specify which user data scopes you need:
+### Step 1: Create Your OMI App 🔑
+
+First, create an app in the [OMI App Store](https://omi.me/apps) with the following configuration:
+
+**Required Capabilities:**
+- `external_integration` - Enables real-time transcript webhooks
+- `proactive_notification` - Allows sending AI-generated contextual notifications
+
+**Example App Configuration:**
 
 ```json
 {
+  "name": "Your App Name",
+  "description": "App description",
   "capabilities": ["external_integration", "proactive_notification"],
   "external_integration": {
     "triggers_on": "transcript_processed",
@@ -237,14 +247,21 @@ Add the `proactive_notification` capability and specify which user data scopes y
 | `user_context` | `{{user_context}}` | Relevant conversation context |
 | `user_chat` | `{{user_chat}}` | Recent chat history with app |
 
-### Step 2: Configure Your Webhook 🔌
+**Important:** Users must install your app from the OMI App Store and grant the requested scopes before you can send them proactive notifications.
 
-Your real-time transcript webhook receives conversations and can return notification prompts.
+### Step 2: Set Up Your Webhook Server 🔌
+
+Your app's webhook endpoint receives real-time transcripts during conversations. When you want to send a notification, return a notification prompt in your webhook response.
 
 **Webhook receives:**
 ```
 POST /your-webhook?session_id={session_id}&uid={user_id}
 ```
+
+**Request includes:**
+- `session_id`: Unique conversation identifier
+- `segments`: Array of transcript segments with speaker info
+- User context (based on requested scopes)
 
 **Response Format:**
 ```json
@@ -259,7 +276,12 @@ POST /your-webhook?session_id={session_id}&uid={user_id}
 
 **Template variables** are replaced with actual user data by OMI, then AI generates the final notification.
 
-### Step 3: Implement the Code 💻
+### Step 3: Deploy and Publish Your App 💻
+
+1. **Deploy your webhook server** to a public HTTPS endpoint
+2. **Test your app** in Developer Mode
+3. **Submit for review** in the OMI App Store
+4. **Users install** your app and grant permissions
 
 Here's a complete Python implementation:
 
@@ -301,9 +323,19 @@ def proactive_notification(data: RealtimeRequest):
 ### Step 4: Test Your Implementation 🧪
 
 1. Enable Developer Mode in OMI app (Settings → Developer Mode)
-2. Set webhook URL in Developer Settings
-3. Start a conversation with trigger phrases
-4. Verify notification appears
+2. Install your app in Developer Mode
+3. Set webhook URL in Developer Settings
+4. Grant requested scopes to your app
+5. Start a conversation with trigger phrases
+6. Verify notification appears
+
+**Testing Checklist:**
+- [ ] App configuration has both required capabilities
+- [ ] Webhook endpoint is publicly accessible via HTTPS
+- [ ] User has installed the app
+- [ ] User has granted the requested scopes
+- [ ] Webhook returns proper notification format
+- [ ] Notification appears within 30 seconds
 
 **Rate Limit:** 1 notification per user per app every 30 seconds.
 
