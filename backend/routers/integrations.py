@@ -243,7 +243,8 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         redirect_uri = f'{base_url_clean}/v2/integrations/whoop/callback'
 
         # Whoop scopes: read:recovery, read:cycles, read:workout, read:sleep, read:profile, read:body_measurement
-        scopes = 'read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement'
+        # IMPORTANT: Include 'offline' scope to receive refresh_token
+        scopes = 'read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement offline'
         from urllib.parse import quote
 
         auth_url = f'https://api.prod.whoop.com/oauth/oauth2/auth?client_id={client_id}&redirect_uri={quote(redirect_uri)}&response_type=code&scope={quote(scopes)}&state={state_token}'
@@ -355,6 +356,12 @@ async def handle_oauth_callback(
                 deep_link = f'omi://{app_key}/callback?error=no_access_token'
                 return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
+            # Debug: Log token response keys for Whoop
+            if app_key == 'whoop':
+                token_keys = list(token_data.keys())
+                print(f'{app_key}: Token response keys: {token_keys}')
+                print(f'{app_key}: Has refresh_token: {bool(refresh_token)}')
+
             integration_data = {
                 'connected': True,
                 'access_token': access_token,
@@ -362,6 +369,11 @@ async def handle_oauth_callback(
 
             if refresh_token:
                 integration_data['refresh_token'] = refresh_token
+                if app_key == 'whoop':
+                    print(f'{app_key}: Storing refresh_token (length: {len(refresh_token)})')
+            else:
+                if app_key == 'whoop':
+                    print(f'{app_key}: WARNING - No refresh_token in token response!')
 
             try:
                 additional_data = await provider_config.fetch_additional_data(client, access_token)
