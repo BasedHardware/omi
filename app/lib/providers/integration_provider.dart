@@ -33,6 +33,14 @@ class IntegrationProvider extends ChangeNotifier {
         _integrations['notion'] = false;
       }
 
+      // Check Twitter connection
+      final twitterResponse = await getIntegration('twitter');
+      if (twitterResponse != null) {
+        _integrations['twitter'] = twitterResponse.connected;
+      } else {
+        _integrations['twitter'] = false;
+      }
+
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading integrations from backend: $e');
@@ -75,6 +83,8 @@ class IntegrationProvider extends ChangeNotifier {
         return _integrations['whoop'] ?? false;
       case IntegrationApp.notion:
         return _integrations['notion'] ?? false;
+      case IntegrationApp.twitter:
+        return _integrations['twitter'] ?? false;
     }
   }
 }

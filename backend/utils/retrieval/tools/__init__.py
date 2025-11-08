@@ -41,6 +41,9 @@ from .whoop_tools import (
 from .notion_tools import (
     search_notion_pages_tool,
 )
+from .twitter_tools import (
+    get_twitter_tweets_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -61,4 +64,5 @@ __all__ = [
     'get_whoop_recovery_tool',
     'get_whoop_workout_tool',
     'search_notion_pages_tool',
+    'get_twitter_tweets_tool',
 ]

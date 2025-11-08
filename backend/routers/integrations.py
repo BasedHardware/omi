@@ -29,6 +29,7 @@ OAUTH_CONFIGS = {
     'google_calendar': {'name': 'Google Calendar'},
     'whoop': {'name': 'Whoop'},
     'notion': {'name': 'Notion'},
+    'twitter': {'name': 'Twitter'},
 }
 
 
@@ -263,6 +264,35 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
 
         auth_url = f'https://api.notion.com/v1/oauth/authorize?client_id={client_id}&response_type=code&owner=user&redirect_uri={quote(redirect_uri)}&state={state_token}'
         print(f'Generated Notion OAuth URL for user {uid}')
+
+    elif app_key == 'twitter':
+        client_id = os.getenv('TWITTER_CLIENT_ID')
+        if not client_id:
+            print(f'ERROR: TWITTER_CLIENT_ID not configured for Twitter integration OAuth')
+            raise HTTPException(status_code=500, detail="Twitter not configured - TWITTER_CLIENT_ID missing")
+
+        # Remove trailing slash from base_url if present
+        base_url_clean = base_url.rstrip('/')
+        redirect_uri = f'{base_url_clean}/v2/integrations/twitter/callback'
+        from urllib.parse import quote
+        import hashlib
+        import base64
+
+        # Twitter OAuth 2.0 requires PKCE
+        # Generate code_verifier (random string) and code_challenge (SHA256 hash)
+        # Using state_token as seed for code_verifier for simplicity
+        code_verifier = state_token[:43]  # Twitter requires 43-128 chars
+        code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
+
+        # Store code_verifier in Redis for later use in callback
+        verifier_key = f"oauth_code_verifier:{state_token}"
+        redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
+
+        # Twitter OAuth 2.0 authorization URL
+        # Scopes: tweet.read (read tweets), users.read (read user profile), offline.access (for refresh token)
+        scopes = 'tweet.read users.read offline.access'
+        auth_url = f'https://twitter.com/i/oauth2/authorize?response_type=code&client_id={client_id}&redirect_uri={quote(redirect_uri)}&scope={quote(scopes)}&state={state_token}&code_challenge={code_challenge}&code_challenge_method=S256'
+        print(f'Generated Twitter OAuth URL for user {uid}')
 
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
@@ -522,6 +552,60 @@ async def notion_oauth_callback(
     )
 
     return await handle_oauth_callback(request, 'notion', code, state, config)
+
+
+@router.get(
+    '/v2/integrations/twitter/callback',
+    response_class=HTMLResponse,
+    tags=['integrations', 'oauth'],
+)
+async def twitter_oauth_callback(
+    request: Request,
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+):
+    """OAuth callback endpoint for Twitter integration."""
+    client_id = os.getenv('TWITTER_CLIENT_ID')
+    client_secret = os.getenv('TWITTER_CLIENT_SECRET')
+    base_url = os.getenv('BASE_API_URL')
+
+    if not all([client_id, client_secret, base_url]):
+        return render_oauth_response(request, 'twitter', success=False, error_type='config_error')
+
+    # Remove trailing slash from base_url if present
+    base_url_clean = base_url.rstrip('/')
+    redirect_uri = f'{base_url_clean}/v2/integrations/twitter/callback'
+
+    # Retrieve code_verifier from Redis (stored during OAuth initiation)
+    verifier_key = f"oauth_code_verifier:{state}"
+    code_verifier = redis_db.r.get(verifier_key)
+    if code_verifier:
+        code_verifier = code_verifier.decode() if isinstance(code_verifier, bytes) else code_verifier
+        # Delete after use
+        redis_db.r.delete(verifier_key)
+    else:
+        print(f'ERROR: Code verifier not found for state {state}')
+        return render_oauth_response(request, 'twitter', success=False, error_type='invalid_state')
+
+    # Twitter OAuth 2.0 uses Basic Auth with client_id:client_secret
+    credentials = f'{client_id}:{client_secret}'
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+    config = OAuthProviderConfig(
+        token_endpoint='https://api.twitter.com/2/oauth2/token',
+        token_request_type='form',
+        token_request_data={
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': redirect_uri,
+            'code_verifier': code_verifier,
+        },
+        additional_headers={
+            'Authorization': f'Basic {encoded_credentials}',
+        },
+    )
+
+    return await handle_oauth_callback(request, 'twitter', code, state, config)
 
 
 @router.on_event("shutdown")

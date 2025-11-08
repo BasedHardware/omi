@@ -45,6 +45,7 @@ from utils.retrieval.tools import (
     get_whoop_recovery_tool,
     get_whoop_workout_tool,
     search_notion_pages_tool,
+    get_twitter_tweets_tool,
 )
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
@@ -67,6 +68,7 @@ def get_tool_display_name(tool_name: str) -> str:
         'get_whoop_sleep_tool': 'Checking Whoop sleep data',
         'get_whoop_recovery_tool': 'Checking Whoop recovery data',
         'get_whoop_workout_tool': 'Checking Whoop workout data',
+        'get_twitter_tweets_tool': 'Checking Twitter',
         'get_calendar_events_tool': 'Checking calendar',
         'create_calendar_event_tool': 'Creating calendar event',
         'update_calendar_event_tool': 'Updating calendar event',
@@ -91,6 +93,8 @@ def get_tool_display_name(tool_name: str) -> str:
         return 'Searching Notion'
     elif 'whoop' in tool_name.lower():
         return 'Checking Whoop data'
+    elif 'twitter' in tool_name.lower():
+        return 'Checking Twitter'
     elif 'calendar' in tool_name.lower():
         return 'Checking calendar'
     elif 'perplexity' in tool_name.lower() or 'search' in tool_name.lower():
@@ -202,6 +206,7 @@ def execute_agentic_chat(
         get_whoop_recovery_tool,
         get_whoop_workout_tool,
         search_notion_pages_tool,
+        get_twitter_tweets_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
@@ -286,6 +291,7 @@ async def execute_agentic_chat_stream(
         get_whoop_recovery_tool,
         get_whoop_workout_tool,
         search_notion_pages_tool,
+        get_twitter_tweets_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message

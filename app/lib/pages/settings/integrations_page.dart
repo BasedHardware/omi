@@ -4,6 +4,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/google_calendar_service.dart';
 import 'package:omi/services/notion_service.dart';
+import 'package:omi/services/twitter_service.dart';
 import 'package:omi/services/whoop_service.dart';
 import 'package:provider/provider.dart';
 
@@ -11,6 +12,7 @@ enum IntegrationApp {
   googleCalendar,
   whoop,
   notion,
+  twitter,
 }
 
 extension IntegrationAppExtension on IntegrationApp {
@@ -22,6 +24,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'Whoop';
       case IntegrationApp.notion:
         return 'Notion';
+      case IntegrationApp.twitter:
+        return 'Twitter';
     }
   }
 
@@ -33,6 +37,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'whoop';
       case IntegrationApp.notion:
         return 'notion';
+      case IntegrationApp.twitter:
+        return 'twitter';
     }
   }
 
@@ -50,6 +56,10 @@ extension IntegrationAppExtension on IntegrationApp {
         // Use logo from assets - file is notion-logo.png (if available)
         // Direct path works even if not in generated assets file
         return 'assets/integration_app_logos/notion-logo.png';
+      case IntegrationApp.twitter:
+        // Use logo from assets - file is twitter-logo.png (if available)
+        // Direct path works even if not in generated assets file
+        return 'assets/integration_app_logos/twitter-logo.png';
     }
   }
 
@@ -61,6 +71,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return Icons.favorite; // Heart icon for health/fitness
       case IntegrationApp.notion:
         return Icons.note; // Note icon for Notion
+      case IntegrationApp.twitter:
+        return FontAwesomeIcons.twitter; // Twitter icon
     }
   }
 
@@ -72,6 +84,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return const Color(0xFF00D9FF); // Whoop brand color (cyan)
       case IntegrationApp.notion:
         return const Color(0xFF000000); // Notion brand color (black)
+      case IntegrationApp.twitter:
+        return const Color(0xFF1DA1F2); // Twitter brand color (blue)
     }
   }
 
@@ -118,6 +132,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     await GoogleCalendarService().refreshConnectionStatus();
     await WhoopService().refreshConnectionStatus();
     await NotionService().refreshConnectionStatus();
+    await TwitterService().refreshConnectionStatus();
   }
 
   Future<void> _connectApp(IntegrationApp app) async {
@@ -229,6 +244,41 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         return;
       }
     }
+
+    // Check if Twitter requires authentication
+    if (app == IntegrationApp.twitter) {
+      final twitterService = TwitterService();
+      if (!twitterService.isAuthenticated) {
+        final shouldAuth = await _showAuthDialog(app);
+        if (shouldAuth == true) {
+          final success = await twitterService.authenticate();
+          if (success) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
+                  duration: Duration(seconds: 5),
+                ),
+              );
+            }
+            // Refresh connection status
+            await _loadFromBackend();
+            debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Failed to start Twitter authentication'),
+                  backgroundColor: Colors.red,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+        }
+        return;
+      }
+    }
   }
 
   Future<void> _disconnectApp(IntegrationApp app) async {
@@ -320,6 +370,30 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       } else if (app == IntegrationApp.notion) {
         final notionService = NotionService();
         final success = await notionService.disconnect();
+        if (success) {
+          await context.read<IntegrationProvider>().deleteConnection(app.key);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Disconnected from ${app.displayName}'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to disconnect'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } else if (app == IntegrationApp.twitter) {
+        final twitterService = TwitterService();
+        final success = await twitterService.disconnect();
         if (success) {
           await context.read<IntegrationProvider>().deleteConnection(app.key);
           if (mounted) {
