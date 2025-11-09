@@ -51,4 +51,8 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'USE_WEB_AUTH', obfuscate: false, defaultValue: false)
   final bool? useWebAuth = _DevEnv.useWebAuth;
+
+  @override
+  @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: true)
+  final bool? useAuthCustomToken = _DevEnv.useAuthCustomToken;
 }
