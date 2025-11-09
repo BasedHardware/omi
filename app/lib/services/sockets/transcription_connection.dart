@@ -49,6 +49,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   BleAudioCodec codec;
   String language;
   bool includeSpeechProfile;
+  String _sttService = SharedPreferencesUtil().transcriptionModel;
 
   TranscriptSegmentSocketService.create(
     this.sampleRate,
@@ -56,18 +57,55 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.language, {
     this.includeSpeechProfile = false,
   }) {
-    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
-        '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
+    _sttService = SharedPreferencesUtil().transcriptionModel;
+    _createSocket();
+  }
+
+  String _buildUrl() {
+    final params =
+        '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+        '&include_speech_profile=$includeSpeechProfile&stt_service=${_sttService}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
-    String url = Env.apiBaseUrl!
-    .replaceFirst('https://', 'wss://')
-    .replaceFirst('http://', 'ws://') +
-    'v4/listen$params';
+    final base = Env.apiBaseUrl!
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
 
+    return '$base' 'v4/listen$params';
+  }
 
+  void _createSocket() {
+    final url = _buildUrl();
     _socket = PureSocket(url);
     _socket.setListener(this);
+  }
+
+  String? _fallbackFor(String current) {
+    switch (current) {
+      case 'soniox':
+        return 'deepgram';
+      case 'speechmatics':
+        return 'deepgram';
+      default:
+        return null;
+    }
+  }
+
+  Future<bool> _reconnectWithSttService(String next) async {
+    if (next == _sttService) return false;
+    final prev = _sttService;
+    _sttService = next;
+    await _socket.stop();
+    _createSocket();
+    final ok = await _socket.connect();
+    await DebugLogManager.logEvent('transcription_socket_fallback', {
+      'from': prev,
+      'to': next,
+      'sample_rate': sampleRate,
+      'codec': codec.toString(),
+      'language': language,
+    });
+    return ok;
   }
 
   void subscribe(Object context, ITransctipSegmentSocketServiceListener listener) {
@@ -88,7 +126,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
         'sample_rate': sampleRate,
         'codec': codec.toString(),
         'language': language,
+        'stt_service': _sttService,
       });
+      final next = _fallbackFor(_sttService);
+      if (next != null) {
+        await _reconnectWithSttService(next);
+      }
     }
   }
 
@@ -154,6 +197,24 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     // Message event
     if (jsonEvent.containsKey("type")) {
+      // Simple fallback trigger on backend service error status
+      try {
+        final type = jsonEvent['type']?.toString();
+        if (type == r'$service_status') {
+          final status = jsonEvent['status']?.toString() ?? '';
+          final message = jsonEvent['message']?.toString() ?? '';
+          if (status.toLowerCase() == 'error' ||
+              message.contains('API_KEY') ||
+              message.contains('not set')) {
+            final next = _fallbackFor(_sttService);
+            if (next != null) {
+              () async {
+                await _reconnectWithSttService(next);
+              }();
+            }
+          }
+        }
+      } catch (_) {}
       var event = MessageEvent.fromJson(jsonEvent);
       _listeners.forEach((k, v) {
         v.onMessageEventReceived(event);
@@ -204,6 +265,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       'codec': codec.toString(),
       'language': language,
       'include_speech_profile': includeSpeechProfile,
+      'stt_service': _sttService,
     });
   }
 }
