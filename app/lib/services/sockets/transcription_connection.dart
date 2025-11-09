@@ -49,7 +49,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   BleAudioCodec codec;
   String language;
   bool includeSpeechProfile;
-  String _sttService = SharedPreferencesUtil().transcriptionModel;
+  String _sttService = '';
+  late final List<String> _candidateServices;
+  final Set<String> _attemptedServices = <String>{};
+  bool _fallbackInProgress = false;
 
   TranscriptSegmentSocketService.create(
     this.sampleRate,
@@ -57,7 +60,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.language, {
     this.includeSpeechProfile = false,
   }) {
-    _sttService = SharedPreferencesUtil().transcriptionModel;
+    final prefModel = SharedPreferencesUtil().transcriptionModel.trim();
+    if (prefModel.isNotEmpty) {
+      _sttService = prefModel.toLowerCase();
+      _attemptedServices.add(_sttService);
+    }
+    _candidateServices = _buildCandidateServices();
     _createSocket();
   }
 
@@ -74,27 +82,80 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     return '$base' 'v4/listen$params';
   }
 
+  List<String> _buildCandidateServices() {
+    const orderedFallbacks = ['elevenlabs', 'soniox', 'deepgram', 'speechmatics'];
+    final seen = <String>{};
+    final result = <String>[];
+
+    void add(String? value) {
+      if (value == null || value.isEmpty) return;
+      final normalized = value.toLowerCase();
+      if (seen.add(normalized)) {
+        result.add(normalized);
+      }
+    }
+
+    if (_sttService.isNotEmpty) {
+      add(_sttService);
+    }
+    for (final fallback in orderedFallbacks) {
+      add(fallback);
+    }
+
+    return result;
+  }
+
   void _createSocket() {
     final url = _buildUrl();
     _socket = PureSocket(url);
     _socket.setListener(this);
   }
 
-  String? _fallbackFor(String current) {
-    switch (current) {
-      case 'soniox':
-        return 'deepgram';
-      case 'speechmatics':
-        return 'deepgram';
-      default:
-        return null;
+  String? _nextFallback() {
+    for (final candidate in _candidateServices) {
+      if (!_attemptedServices.contains(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  void _scheduleFallback(String reason) {
+    if (_fallbackInProgress) return;
+    Future.microtask(() => _attemptFallback(reason));
+  }
+
+  Future<void> _attemptFallback(String reason) async {
+    if (_fallbackInProgress) return;
+    _fallbackInProgress = true;
+    try {
+      while (true) {
+        final next = _nextFallback();
+        if (next == null) {
+          await DebugLogManager.logWarning('transcription_socket_fallback_exhausted', {
+            'attempted': _attemptedServices.join(','),
+            'language': language,
+            'sample_rate': sampleRate,
+            'codec': codec.toString(),
+            'reason': reason,
+          });
+          break;
+        }
+        final connected = await _reconnectWithSttService(next, reason: reason);
+        if (connected) {
+          break;
+        }
+      }
+    } finally {
+      _fallbackInProgress = false;
     }
   }
 
-  Future<bool> _reconnectWithSttService(String next) async {
+  Future<bool> _reconnectWithSttService(String next, {required String reason}) async {
     if (next == _sttService) return false;
     final prev = _sttService;
     _sttService = next;
+    _attemptedServices.add(next);
     await _socket.stop();
     _createSocket();
     final ok = await _socket.connect();
@@ -104,7 +165,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       'sample_rate': sampleRate,
       'codec': codec.toString(),
       'language': language,
+      'reason': reason,
+      'success': ok,
     });
+    if (!ok) {
+      await DebugLogManager.logWarning('transcription_socket_fallback_failed', {
+        'from': prev,
+        'to': next,
+        'sample_rate': sampleRate,
+        'codec': codec.toString(),
+        'language': language,
+        'reason': reason,
+      });
+    }
     return ok;
   }
 
@@ -118,7 +191,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   Future start() async {
-    bool ok = await _socket.connect();
+    final ok = await _socket.connect();
     if (!ok) {
       debugPrint("Can not connect to websocket");
       await DebugLogManager.logWarning('transcription_socket_connect_failed', {
@@ -128,10 +201,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
         'language': language,
         'stt_service': _sttService,
       });
-      final next = _fallbackFor(_sttService);
-      if (next != null) {
-        await _reconnectWithSttService(next);
-      }
+      await _attemptFallback('connect_failed');
     }
   }
 
@@ -206,12 +276,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
           if (status.toLowerCase() == 'error' ||
               message.contains('API_KEY') ||
               message.contains('not set')) {
-            final next = _fallbackFor(_sttService);
-            if (next != null) {
-              () async {
-                await _reconnectWithSttService(next);
-              }();
-            }
+            _scheduleFallback('service_status_error');
           }
         }
       } catch (_) {}
