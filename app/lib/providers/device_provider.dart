@@ -92,6 +92,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return await connection.disconnect();
   }
 
+  Future<int> _retrieveBatteryLevel(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return -1;
+    }
+    return connection.retrieveBatteryLevel();
+  }
+
   Future<StreamSubscription<List<int>>?> _getBleBatteryLevelListener(
     String deviceId, {
     void Function(int)? onBatteryLevelChange,
@@ -322,6 +330,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setisDeviceStorageSupport();
     setIsConnected(true);
 
+    // Read initial battery level
+    int currentLevel = await _retrieveBatteryLevel(device.id);
+    if (currentLevel != -1) {
+      batteryLevel = currentLevel;
+    }
+
+    // Then set up listener for battery changes
     await initiateBleBatteryListener();
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;

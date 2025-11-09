@@ -31,6 +31,7 @@ from utils.retrieval.tools import (
     create_action_item_tool,
     update_action_item_tool,
     get_omi_product_info_tool,
+    perplexity_search_tool,
 )
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
@@ -124,6 +125,7 @@ def execute_agentic_chat(
         create_action_item_tool,
         update_action_item_tool,
         get_omi_product_info_tool,
+        perplexity_search_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
@@ -195,13 +197,13 @@ async def execute_agentic_chat_stream(
         create_action_item_tool,
         update_action_item_tool,
         get_omi_product_info_tool,
+        perplexity_search_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
     lc_messages = [SystemMessage(content=system_prompt)]
     lc_messages.extend(_messages_to_langchain(messages))
 
-    # Create callback for streaming
     callback = AsyncStreamingCallback()
 
     # Create streaming agent with callback

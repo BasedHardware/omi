@@ -1,0 +1,200 @@
+---
+title: "Omi Mentor"
+description: "Get personalized AI mentorship during your conversations with OMI"
+---
+
+<CardGroup cols={2}>
+  <Card title="Install App" icon="download" href="https://h.omi.me/apps/omi-your-mentor-and-teacher-01JCPRSZ7FS40FHFNSJZEWR8R1">
+    Install the OMI Mentor app from the OMI App Store
+  </Card>
+  <Card title="View Code" icon="code" href="https://github.com/BasedHardware/omi/blob/main/plugins/example/notifications/mentor/main.py">
+    Check out the full source code on GitHub
+  </Card>
+</CardGroup>
+
+## Features
+
+- **Context-Aware Mentorship** - AI analyzes your conversations and provides timely insights
+- **Smart Interruption Logic** - Only interrupts when you need meaningful guidance
+- **Topic Extraction** - Automatically identifies key topics from your discussions
+- **Personalized Advice** - Uses your facts, context, and chat history for tailored guidance
+- **Silence Detection** - Intelligently detects conversation breaks and starts fresh
+- **Real-time Processing** - Analyzes conversations every 5 minutes for relevant insights
+- **Privacy-Focused** - Processes only when you're actively participating in conversations
+
+## Quick Start
+
+<Steps>
+  <Step title="Install the App">
+    Install the OMI Mentor app in your OMI mobile app
+  </Step>
+  <Step title="Start Conversations">
+    Have natural conversations while wearing your OMI device
+  </Step>
+  <Step title="Receive Insights">
+    Get personalized mentorship when the AI detects you need guidance
+  </Step>
+  <Step title="Implement Advice">
+    Act on the specific, actionable recommendations provided
+  </Step>
+</Steps>
+
+## How It Works
+
+**The app intelligently monitors and analyzes your conversations:**
+1. Listens to your conversations in real-time
+2. Buffers messages and detects silence periods
+3. Analyzes conversation context every 5 minutes
+4. Extracts relevant topics using AI
+5. Evaluates if mentorship is warranted
+6. Sends personalized, direct advice when appropriate
+
+<Note>
+**Example Workflow:**
+
+You: "I'm not sure if I should take this new job offer..."  
+*[AI listens and analyzes conversation]*
+
+Friend: "What's holding you back?"  
+*[Continues collecting context]*
+
+You: "The salary is better but I'd lose my work-life balance..."  
+*[AI evaluates if intervention is needed]*
+
+**AI Mentor Decision:**
+- ✓ User is participating
+- ✓ User expressed a specific challenge
+- ✓ Has strong, clear opinion to share
+- ✓ Insight is time-sensitive
+
+**AI Sends:** "You just said work-life balance matters more than money. The answer's already clear - you're trying to convince yourself otherwise. What would you tell your best friend in this situation?"
+
+→ Notification sent!
+</Note>
+
+## Using the App
+
+### With OMI Device
+
+1. Install the OMI Mentor app from the OMI App Store
+2. Wear your OMI device during conversations
+3. The AI monitors and analyzes in the background
+4. Receive timely notifications with personalized advice
+5. Implement the guidance provided
+
+## AI Processing
+
+The app uses OpenAI for intelligent mentorship:
+
+1. **Topic Extraction** - Identifies key topics from conversations using GPT-4
+2. **Context Analysis** - Evaluates user participation and expressed challenges
+3. **Interruption Logic** - Determines if advice is warranted based on 4 criteria
+4. **Personalized Guidance** - Generates direct, actionable advice using user context
+
+**Interruption Criteria:**
+
+<CodeGroup>
+```text Requirements (ALL must be met)
+1. User is actively participating in the conversation
+2. User expressed a specific problem, challenge, goal, or question
+3. AI has a STRONG, CLEAR opinion that would significantly impact the situation
+4. The insight is time-sensitive and worth interrupting for
+```
+
+```text Response Style
+- Speaks DIRECTLY to the user (no third-person analysis)
+- Takes a clear stance (no "however" or "on the other hand")
+- Under 300 characters
+- Simple, everyday language
+- References specific details from what user said
+- Bold and direct advice
+- Ends with a specific implementation question
+```
+</CodeGroup>
+
+## How the Buffer System Works
+
+**OMI Mentor uses an intelligent message buffering system:**
+- Collects conversation segments continuously
+- Detects silence periods (2+ minutes of inactivity)
+- Requires minimum 5 words after silence to resume
+- Clears old messages after silence to start fresh
+- Analyzes buffered messages every 5 minutes
+- Cleans up inactive sessions after 1 hour
+
+**Smart Collection:**
+- **Analysis Interval:** Every 5 minutes
+- **Silence Threshold:** 2 minutes of no activity
+- **Min Words to Resume:** 5 words after silence
+- **Session Cleanup:** 1 hour of inactivity
+- **Message Grouping:** Combines messages from same speaker within 2 seconds
+
+## Personalization Features
+
+### User Context Integration
+
+The AI uses multiple sources to personalize advice:
+- **User Facts** - Information about the user's preferences and history
+- **User Context** - Previous discussions and ongoing situations
+- **Chat History** - Past interactions with the mentor
+- **Current Topics** - Automatically extracted conversation themes
+
+### Topic-Based Filtering
+
+Topics are automatically extracted and used to:
+- Filter relevant historical context
+- Match with user's interests and expertise
+- Provide domain-specific guidance
+- Connect current challenges with past experiences
+
+## Privacy & Behavior
+
+<Check>
+**Privacy Features:**
+- Only analyzes when you're actively speaking
+- Doesn't interrupt every conversation
+- Requires specific conditions before providing advice
+- Clears messages after silence periods
+- No persistent storage of conversation content
+- Session-based processing with automatic cleanup
+</Check>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Not receiving any mentorship">
+    - Ensure you're actively participating in conversations
+    - The AI only interrupts when all 4 criteria are met
+    - Check if 5 minutes have passed since last analysis
+    - Verify the app is properly installed and running
+  </Accordion>
+
+  <Accordion title="Too many interruptions">
+    - The AI is designed to interrupt sparingly
+    - Only sends advice when time-sensitive and impactful
+    - Check if multiple problems are being discussed in short timeframes
+  </Accordion>
+
+  <Accordion title="Advice not relevant">
+    - Ensure your user facts and context are up to date
+    - The AI uses your historical data for personalization
+    - Try having more detailed conversations about your challenges
+  </Accordion>
+
+  <Accordion title="App not detecting conversations">
+    - Check if OMI device is properly connected
+    - Verify app has necessary permissions
+    - Ensure you're speaking clearly during conversations
+  </Accordion>
+</AccordionGroup>
+
+## Support & Resources
+
+<CardGroup cols={3}>
+  <Card title="Integration App" icon="book" href="https://docs.omi.me/doc/developer/apps/Integrations/">
+    Integration App Guide
+  </Card>
+  <Card title="Source Code" icon="code" href="https://github.com/BasedHardware/omi/blob/main/plugins/example/notifications/mentor/main.py">
+    View the full codebase
+  </Card>
+</CardGroup>

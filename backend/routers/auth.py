@@ -12,6 +12,7 @@ from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+import pathlib
 import firebase_admin.auth
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
 
@@ -19,6 +20,10 @@ router = APIRouter(
     prefix="/v1/auth",
     tags=["authentication"],
 )
+
+# Set up Jinja2 templates
+templates_path = pathlib.Path(__file__).parent.parent / "templates"
+templates = Jinja2Templates(directory=str(templates_path))
 
 
 @router.get("/authorize")
@@ -79,9 +84,16 @@ async def auth_callback_google(
     auth_code = str(uuid.uuid4())
     set_auth_code(auth_code, oauth_credentials, 300)
 
-    # Redirect back to app
-    redirect_url = f"{session_data['redirect_uri']}?code={auth_code}&state={session_data['state'] or ''}"
-    return RedirectResponse(url=redirect_url)
+    # Redirect to HTML page that will handle custom scheme redirect
+    # This avoids browser security issues with backend->custom scheme redirects
+    return templates.TemplateResponse(
+        "auth_callback.html",
+        {
+            "request": request,
+            "code": auth_code,
+            "state": session_data['state'] or '',
+        },
+    )
 
 
 @router.post("/callback/apple")
@@ -110,9 +122,16 @@ async def auth_callback_apple_post(
     auth_code = str(uuid.uuid4())
     set_auth_code(auth_code, oauth_credentials, 300)
 
-    # Redirect back to app
-    redirect_url = f"{session_data['redirect_uri']}?code={auth_code}&state={session_data['state'] or ''}"
-    return RedirectResponse(url=redirect_url)
+    # Redirect to HTML page that will handle custom scheme redirect
+    # This avoids browser security issues with backend->custom scheme redirects
+    return templates.TemplateResponse(
+        "auth_callback.html",
+        {
+            "request": request,
+            "code": auth_code,
+            "state": session_data['state'] or '',
+        },
+    )
 
 
 @router.post("/token")
@@ -121,10 +140,14 @@ async def auth_token(
     grant_type: str = Form(...),
     code: str = Form(...),
     redirect_uri: str = Form(...),
+    use_custom_token: bool = Form(False),
 ):
     """
     Exchange auth code for OAuth credentials
     Used for both initial sign-in and account linking flows
+
+    Args:
+        use_custom_token: If True, also generate Firebase custom token (default: True)
     """
     if grant_type != 'authorization_code':
         raise HTTPException(status_code=400, detail="Unsupported grant type")
@@ -140,15 +163,28 @@ async def auth_token(
     try:
         oauth_credentials = json.loads(oauth_credentials_json)
         provider = oauth_credentials.get('provider')
+        id_token = oauth_credentials.get('id_token')
+        access_token = oauth_credentials.get('access_token')
 
-        return {
+        response = {
             "provider": provider,
-            "id_token": oauth_credentials.get('id_token'),
-            "access_token": oauth_credentials.get('access_token'),
+            "id_token": id_token,
+            "access_token": access_token,
             "provider_id": oauth_credentials.get('provider_id'),
             "token_type": "Bearer",
             "expires_in": 3600,
         }
+
+        # Generate custom token if requested
+        if use_custom_token:
+            try:
+                custom_token = await _generate_custom_token(provider, id_token, access_token)
+                response["custom_token"] = custom_token
+            except Exception as e:
+                print(f"Error generating custom token: {e}")
+                # Don't fail the request, just log and continue without custom token
+
+        return response
 
     except Exception as e:
         print(f"Error parsing OAuth credentials: {e}")
@@ -332,13 +368,72 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
 
 
+async def _generate_custom_token(provider: str, id_token: str, access_token: str = None) -> str:
+    """
+    Generate Firebase custom token by signing in with OAuth credentials
+    This ensures we get the same Firebase UID that client-side auth would create
+    Works with any bundle ID - perfect for multiple developers
+    """
+    try:
+        # Get Firebase API Key from environment
+        firebase_api_key = os.getenv('FIREBASE_API_KEY')
+        if not firebase_api_key:
+            raise Exception("FIREBASE_API_KEY not configured")
+
+        # Sign in with OAuth credential using Firebase Auth REST API
+        sign_in_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+
+        # Prepare the postBody based on provider
+        if provider == 'google':
+            post_body = f'id_token={id_token}&providerId=google.com'
+            if access_token:
+                post_body += f'&access_token={access_token}'
+        elif provider == 'apple':
+            post_body = f'id_token={id_token}&providerId=apple.com'
+            if access_token:
+                post_body += f'&access_token={access_token}'
+        else:
+            raise Exception(f"Unsupported provider: {provider}")
+
+        payload = {
+            'postBody': post_body,
+            'requestUri': 'http://localhost',
+            'returnIdpCredential': True,
+            'returnSecureToken': True,
+        }
+
+        # Call Firebase Auth REST API to sign in
+        response = requests.post(sign_in_url, json=payload)
+
+        if response.status_code != 200:
+            print(f"Firebase sign-in failed: {response.text}")
+            raise Exception(f"Firebase sign-in failed: {response.text}")
+
+        result = response.json()
+        firebase_uid = result.get('localId')
+
+        if not firebase_uid:
+            raise Exception("No Firebase UID returned from sign-in")
+
+        print(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
+
+        # Create custom token for this UID
+        custom_token = firebase_admin.auth.create_custom_token(firebase_uid)
+
+        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token
+
+    except Exception as e:
+        print(f"Error in _generate_custom_token: {e}")
+        raise
+
+
 def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, private_key_content: str) -> str:
     """
     Generate Apple client secret JWT as per Apple's requirements
     https://developer.apple.com/documentation/signinwithapplerestapi/generate_and_validate_tokens
     """
     try:
-        # Load the private key from direct PEM content
+        # Load the private key from PEM content
         private_key = serialization.load_pem_private_key(
             private_key_content.encode('utf-8'),
             password=None,

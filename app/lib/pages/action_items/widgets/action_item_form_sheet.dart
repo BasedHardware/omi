@@ -7,14 +7,12 @@ import 'package:provider/provider.dart';
 
 class ActionItemFormSheet extends StatefulWidget {
   final ActionItemWithMetadata? actionItem; // null for create, non-null for edit
-  final Set<String>? exportedToAppleReminders;
-  final VoidCallback? onExportedToAppleReminders;
+  final VoidCallback? onRefresh;
 
   const ActionItemFormSheet({
     super.key,
     this.actionItem,
-    this.exportedToAppleReminders,
-    this.onExportedToAppleReminders,
+    this.onRefresh,
   });
 
   bool get isEditing => actionItem != null;

@@ -25,13 +25,8 @@ export default function Memory({ memory }: MemoryProps) {
               </h2>
               <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400 md:text-base">
                 <time dateTime={new Date(memory.created_at).toISOString()}>
-                  {moment(memory.created_at).format('MMMM Do YYYY, h:mm:ss a')}
+                  {moment(memory.created_at).format('MMMM Do YYYY, h:mm a')}
                 </time>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-800/50 md:text-sm">
-                  {memory.structured.emoji}{' '}
-                  {memory.structured.category.charAt(0).toUpperCase() +
-                    memory.structured.category.slice(1)}
-                </span>
               </div>
             </div>
           </div>

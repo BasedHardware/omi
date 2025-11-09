@@ -62,6 +62,27 @@ echo ""
 API_BASE_URL=https://api.omiapi.com/
 
 ######################################
+# Generate device suffix from hostname
+######################################
+function generate_device_suffix() {
+  # Use hostname or a hash of it as suffix
+  HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
+  echo "${HOSTNAME}"
+}
+
+######################################
+# Generate custom configs for iOS
+######################################
+function generate_ios_custom_config() {
+  bash scripts/generate_ios_custom_config.sh ios/Config/Dev/GoogleService-Info.plist ios/Flutter \
+
+  # Custom bundle identifier
+  SUFFIX=$(generate_device_suffix)
+  CUSTOM_BUNDLE="com.friend-app-with-wearable.ios12-${SUFFIX}"
+  echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "ios/Flutter/Custom.xcconfig"
+}
+
+######################################
 # Setup Firebase with prebuilt configs
 ######################################
 function setup_firebase() {
@@ -154,6 +175,8 @@ function setup_provisioning_profile_macos() {
 #################
 function setup_app_env() {
   echo API_BASE_URL=$API_BASE_URL > .dev.env
+  echo USE_WEB_AUTH=true >> .dev.env
+  echo USE_AUTH_CUSTOM_TOKEN=true >> .dev.env
 }
 
 # #######################
@@ -168,7 +191,8 @@ function setup_keystore_android() {
 # #####
 function run_build_android() {
   flutter pub get \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
@@ -177,7 +201,8 @@ function run_build_android() {
 function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
@@ -202,9 +227,9 @@ case "${1}" in
       && run_build_macos
     ;;
   ios)
-    setup_firebase \
+      setup_firebase \
+      && generate_ios_custom_config \
       && setup_app_env \
-      && setup_provisioning_profile \
       && run_build_ios
     ;;
   android)
@@ -212,12 +237,6 @@ case "${1}" in
       && setup_firebase \
       && setup_app_env \
       && run_build_android
-    ;;
-  macos)
-    setup_firebase \
-      && setup_app_env \
-      && setup_provisioning_profile \
-      && build_macos
     ;;
   *)
     error "Unexpected platform '${1}'"

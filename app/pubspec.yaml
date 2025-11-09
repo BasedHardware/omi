@@ -163,6 +163,7 @@ flutter:
     - assets/images/herologo.png
     - assets/fonts/
     - assets/images/
+    - assets/integration_app_logos/
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
   fonts:

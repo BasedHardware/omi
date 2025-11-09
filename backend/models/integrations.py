@@ -67,6 +67,9 @@ class MemoriesResponse(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False
+    exported: bool = False
+    export_date: Optional[datetime] = None
+    export_platform: Optional[str] = None
 
 
 class Event(BaseModel):

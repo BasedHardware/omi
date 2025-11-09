@@ -6,14 +6,21 @@ import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/desktop/desktop_app.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/settings/asana_settings_page.dart';
+import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/asana_service.dart';
+import 'package:omi/services/clickup_service.dart';
+import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -39,6 +46,11 @@ class _AppShellState extends State<AppShell> {
   }
 
   void openAppLink(Uri uri) async {
+    if (uri.pathSegments.isEmpty) {
+      debugPrint('No path segments in URI: $uri');
+      return;
+    }
+
     if (uri.pathSegments.first == 'apps') {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
@@ -52,8 +64,168 @@ class _AppShellState extends State<AppShell> {
           AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
         }
       }
+    } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Todoist OAuth callback
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('Todoist OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to Todoist');
+        return;
+      }
+
+      final success = uri.queryParameters['success'];
+      if (success == 'true') {
+        debugPrint('Todoist OAuth successful (tokens in Firebase)');
+        _handleTodoistCallback();
+      } else {
+        debugPrint('Todoist callback received but no success flag');
+      }
+    } else if (uri.host == 'asana' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Asana OAuth callback
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('Asana OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to Asana');
+        return;
+      }
+
+      final success = uri.queryParameters['success'];
+      final requiresSetup = uri.queryParameters['requires_setup'];
+      if (success == 'true') {
+        debugPrint('Asana OAuth successful (tokens in Firebase)');
+        _handleAsanaCallback(requiresSetup == 'true');
+      } else {
+        debugPrint('Asana callback received but no success flag');
+      }
+    } else if (uri.host == 'google-tasks' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Google Tasks OAuth callback
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('Google Tasks OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to Google Tasks');
+        return;
+      }
+
+      final success = uri.queryParameters['success'];
+      if (success == 'true') {
+        debugPrint('Google Tasks OAuth successful (tokens in Firebase)');
+        _handleGoogleTasksCallback();
+      } else {
+        debugPrint('Google Tasks callback received but no success flag');
+      }
+    } else if (uri.host == 'clickup' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle ClickUp OAuth callback
+      final error = uri.queryParameters['error'];
+      if (error != null) {
+        debugPrint('ClickUp OAuth error: $error');
+        AppSnackbar.showSnackbarError('Failed to connect to ClickUp');
+        return;
+      }
+
+      final success = uri.queryParameters['success'];
+      final requiresSetup = uri.queryParameters['requires_setup'];
+      if (success == 'true') {
+        debugPrint('ClickUp OAuth successful (tokens in Firebase)');
+        _handleClickUpCallback(requiresSetup == 'true');
+      } else {
+        debugPrint('ClickUp callback received but no success flag');
+      }
     } else {
       debugPrint('Unknown link: $uri');
+    }
+  }
+
+  Future<void> _handleTodoistCallback() async {
+    final todoistService = TodoistService();
+    final success = await todoistService.handleCallback();
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ Todoist authentication completed successfully');
+      debugPrint('✓ Task integration enabled: Todoist - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to Todoist!');
+
+      // Notify task integration provider to refresh UI from Firebase
+      context.read<TaskIntegrationProvider>().refresh();
+    } else {
+      debugPrint('Failed to complete Todoist authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to Todoist. Please try again.');
+    }
+  }
+
+  Future<void> _handleAsanaCallback(bool requiresSetup) async {
+    final asanaService = AsanaService();
+    final success = await asanaService.handleCallback();
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ Asana authentication completed successfully');
+      debugPrint('✓ Task integration enabled: Asana - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to Asana!');
+
+      // Notify task integration provider to refresh UI from Firebase
+      context.read<TaskIntegrationProvider>().refresh();
+
+      // Auto-open settings page for configuration
+      if (requiresSetup && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const AsanaSettingsPage(),
+          ),
+        );
+      }
+    } else {
+      debugPrint('Failed to complete Asana authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to Asana. Please try again.');
+    }
+  }
+
+  Future<void> _handleGoogleTasksCallback() async {
+    final googleTasksService = GoogleTasksService();
+    final success = await googleTasksService.handleCallback();
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ Google Tasks authentication completed successfully');
+      debugPrint('✓ Task integration enabled: Google Tasks - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to Google Tasks!');
+
+      // Notify task integration provider to refresh UI from Firebase
+      context.read<TaskIntegrationProvider>().refresh();
+    } else {
+      debugPrint('Failed to complete Google Tasks authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to Google Tasks. Please try again.');
+    }
+  }
+
+  Future<void> _handleClickUpCallback(bool requiresSetup) async {
+    final clickupService = ClickUpService();
+    final success = await clickupService.handleCallback();
+
+    if (!mounted) return;
+
+    if (success) {
+      debugPrint('✓ ClickUp authentication completed successfully');
+      debugPrint('✓ Task integration enabled: ClickUp - authentication complete');
+      AppSnackbar.showSnackbar('Successfully connected to ClickUp!');
+
+      // Notify task integration provider to refresh UI from Firebase
+      context.read<TaskIntegrationProvider>().refresh();
+
+      // Auto-open settings page for configuration
+      if (requiresSetup && mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const ClickUpSettingsPage(),
+          ),
+        );
+      }
+    } else {
+      debugPrint('Failed to complete ClickUp authentication');
+      AppSnackbar.showSnackbarError('Failed to connect to ClickUp. Please try again.');
     }
   }
 

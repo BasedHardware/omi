@@ -8,6 +8,9 @@ class ActionItemWithMetadata {
   final DateTime? completedAt;
   final String? conversationId;
   final bool isLocked;
+  final bool exported;
+  final DateTime? exportDate;
+  final String? exportPlatform;
 
   ActionItemWithMetadata({
     required this.id,
@@ -19,6 +22,9 @@ class ActionItemWithMetadata {
     this.completedAt,
     this.conversationId,
     this.isLocked = false,
+    this.exported = false,
+    this.exportDate,
+    this.exportPlatform,
   });
 
   factory ActionItemWithMetadata.fromJson(Map<String, dynamic> json) {
@@ -32,6 +38,9 @@ class ActionItemWithMetadata {
       completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at']).toLocal() : null,
       conversationId: json['conversation_id'],
       isLocked: json['is_locked'] ?? false,
+      exported: json['exported'] ?? false,
+      exportDate: json['export_date'] != null ? DateTime.parse(json['export_date']).toLocal() : null,
+      exportPlatform: json['export_platform'],
     );
   }
 
@@ -46,6 +55,9 @@ class ActionItemWithMetadata {
       'completed_at': completedAt?.toUtc().toIso8601String(),
       'conversation_id': conversationId,
       'is_locked': isLocked,
+      'exported': exported,
+      'export_date': exportDate?.toUtc().toIso8601String(),
+      'export_platform': exportPlatform,
     };
   }
 
@@ -59,6 +71,9 @@ class ActionItemWithMetadata {
     DateTime? completedAt,
     String? conversationId,
     bool? isLocked,
+    bool? exported,
+    DateTime? exportDate,
+    String? exportPlatform,
   }) {
     return ActionItemWithMetadata(
       id: id ?? this.id,
@@ -70,6 +85,9 @@ class ActionItemWithMetadata {
       completedAt: completedAt ?? this.completedAt,
       conversationId: conversationId ?? this.conversationId,
       isLocked: isLocked ?? this.isLocked,
+      exported: exported ?? this.exported,
+      exportDate: exportDate ?? this.exportDate,
+      exportPlatform: exportPlatform ?? this.exportPlatform,
     );
   }
 }

@@ -32,13 +32,8 @@ export default async function SidePanel({ previewId }: SidePanelProps) {
                 {memory.structured.title || DEFAULT_TITLE_MEMORY}
               </h2>
               <p className="my-2 text-sm text-gray-500 md:text-base">
-                {moment(memory.created_at).format('MMMM Do YYYY, h:mm:ss a')}
+                {moment(memory.created_at).format('MMMM Do YYYY, h:mm a')}
               </p>
-              <span className="rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm">
-                {memory.structured.emoji}{' '}
-                {memory.structured.category.charAt(0).toUpperCase() +
-                  memory.structured.category.slice(1)}
-              </span>
             </div>
             <MemoryWithTabs memory={memory} />
           </div>

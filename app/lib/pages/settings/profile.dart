@@ -50,6 +50,7 @@ class _ProfilePageState extends State<ProfilePage> {
     required Widget icon,
     required VoidCallback onTap,
     bool showSubtitle = true,
+    bool showBetaTag = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -72,13 +73,36 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        if (showBetaTag) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'BETA',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     if (showSubtitle && subtitle != null) ...[
                       const SizedBox(height: 2),
@@ -236,6 +260,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 _buildProfileItem(
                   title: 'Persona',
                   icon: const FaIcon(FontAwesomeIcons.solidCircleUser, color: Color(0xFF8E8E93), size: 20),
+                  showBetaTag: true,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(

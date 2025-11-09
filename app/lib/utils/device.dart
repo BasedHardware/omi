@@ -53,12 +53,51 @@ class DeviceUtils {
     String? modelNumber,
     String? deviceName,
   }) {
-    // Check modelNumber for specific variants
-    if (modelNumber != null && modelNumber.isNotEmpty) {
+    // Check deviceType first
+    if (deviceType != null) {
+      switch (deviceType) {
+        case DeviceType.bee:
+          return Assets.images.beeDevice.path;
+        case DeviceType.openglass:
+          return Assets.images.omiGlass.path;
+        case DeviceType.frame:
+          return Assets.images.omiDevkitWithoutRope.path;
+        case DeviceType.appleWatch:
+          return Assets.images.appleWatch.path;
+        case DeviceType.xor:
+          return Assets.images.plaudNotePin.path;
+        case DeviceType.fieldy:
+          return Assets.images.fieldy.path;
+        case DeviceType.friendPendant:
+          return Assets.images.friendPendant.path;
+        case DeviceType.omi:
+          // For omi type, need to check model/name to distinguish between devkit and regular omi
+          if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
+            final upperModel = modelNumber.toUpperCase();
+            if (upperModel.contains('DEVKIT') || upperModel.contains('FRIEND')) {
+              return Assets.images.omiDevkitWithoutRope.path;
+            }
+          }
+          if (deviceName != null && deviceName.isNotEmpty) {
+            final upperName = deviceName.toUpperCase();
+            if (upperName.contains('DEVKIT') || upperName.contains('DEV') || upperName.contains('FRIEND')) {
+              return Assets.images.omiDevkitWithoutRope.path;
+            }
+          }
+          // Default omi image
+          return Assets.images.omiWithoutRope.path;
+      }
+    }
+
+    // Then check modelNumber for specific variants
+    if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
       final upperModel = modelNumber.toUpperCase();
 
       if (upperModel.contains('PLAUD')) {
         return Assets.images.plaudNotePin.path;
+      }
+      if (upperModel.contains('FRIEND PENDANT')) {
+        return Assets.images.friendPendant.path;
       }
       if (upperModel.contains('OMI DEVKIT 2') || upperModel.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
@@ -80,7 +119,7 @@ class DeviceUtils {
       }
     }
 
-    // Fallback: Use device name
+    // Fallback to device name
     if (deviceName != null && deviceName.isNotEmpty) {
       final upperName = deviceName.toUpperCase();
 
@@ -89,6 +128,9 @@ class DeviceUtils {
       }
       if (upperName.contains('GLASS')) {
         return Assets.images.omiGlass.path;
+      }
+      if (upperName.startsWith('FRIEND_')) {
+        return Assets.images.friendPendant.path;
       }
       if (upperName.contains('OMI DEVKIT') || upperName.contains('OMI DEV') || upperName.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
@@ -127,6 +169,11 @@ class DeviceUtils {
     // Special case for Omi when disconnected
     if (deviceType == DeviceType.omi && !isConnected) {
       return Assets.images.omiWithoutRopeTurnedOff.path;
+    }
+
+    // Special case for Friend Pendant when disconnected
+    if (deviceType == DeviceType.friendPendant && !isConnected) {
+      return Assets.images.friendPendant.path;
     }
 
     return getDeviceImagePath(

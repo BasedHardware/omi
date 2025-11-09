@@ -11,4 +11,5 @@ export interface CommunityPlugin {
   capabilities: string[];
   memory_prompt: string;
   deleted: boolean;
+  private: boolean;
 }
