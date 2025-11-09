@@ -43,6 +43,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       return GestureDetector(
         onTap: () async {
           if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+          MixpanelManager().liveTranscriptCardClicked(
+            hasSegments: provider.segments.isNotEmpty,
+            hasPhotos: provider.photos.isNotEmpty,
+            segmentCount: provider.segments.length,
+            photoCount: provider.photos.length,
+          );
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(

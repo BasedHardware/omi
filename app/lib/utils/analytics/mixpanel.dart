@@ -349,6 +349,20 @@ class MixpanelManager {
     properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = conversation.structured.actionItems.length;
     properties['transcript_language'] = _preferences.userPrimaryLanguage;
+
+    // Additional properties for conversation creation
+    properties['conversation_source'] = conversation.source?.toString().split('.').last ?? 'unknown';
+    properties['duration_seconds'] = conversation.getDurationInSeconds();
+    properties['timestamp'] = conversation.createdAt.toIso8601String();
+
+    // Get the summarized app info if available
+    if (conversation.appResults.isNotEmpty) {
+      var summarizedApp = conversation.appResults.firstOrNull;
+      if (summarizedApp != null && summarizedApp.appId != null) {
+        properties['summary_app_id'] = summarizedApp.appId!;
+      }
+    }
+
     track('Memory Created', properties: properties);
   }
 
@@ -748,5 +762,166 @@ class MixpanelManager {
   void trainingDataOptInApproved() {
     track('Training Data Opt-In Approved');
     setUserProperty('Training Data Status', 'approved');
+  }
+
+  // Homepage Events
+  void deletedConversationsFilterToggled(bool showDeleted) {
+    track('Deleted Conversations Filter Toggled', properties: {'show_deleted': showDeleted});
+  }
+
+  void calendarFilterApplied(DateTime selectedDate) {
+    track('Calendar Filter Applied', properties: {
+      'selected_date': selectedDate.toIso8601String(),
+      'days_ago': DateTime.now().difference(selectedDate).inDays,
+    });
+  }
+
+  void calendarFilterCleared() {
+    track('Calendar Filter Cleared');
+  }
+
+  void searchBarFocused() {
+    track('Search Bar Focused');
+  }
+
+  void searchQueryEntered(String query, int resultsCount) {
+    track('Search Query Entered', properties: {
+      'query_length': query.length,
+      'query_word_count': query.split(' ').length,
+      'results_count': resultsCount,
+    });
+  }
+
+  void searchQueryCleared() {
+    track('Search Query Cleared');
+  }
+
+  void conversationOpenedFromSearch({
+    required ServerConversation conversation,
+    required String searchQuery,
+    required int conversationIndexInResults,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['search_query'] = searchQuery;
+    properties['search_query_length'] = searchQuery.length;
+    properties['conversation_index_in_results'] = conversationIndexInResults;
+    track('Conversation Opened From Search', properties: properties);
+  }
+
+  void liveTranscriptCardClicked({
+    required bool hasSegments,
+    required bool hasPhotos,
+    required int segmentCount,
+    required int photoCount,
+  }) {
+    track('Live Transcript Card Clicked', properties: {
+      'has_segments': hasSegments,
+      'has_photos': hasPhotos,
+      'segment_count': segmentCount,
+      'photo_count': photoCount,
+    });
+  }
+
+  void deviceInfoButtonClicked({String? deviceId, String? deviceName, int? batteryLevel}) {
+    track('Device Info Button Clicked', properties: {
+      if (deviceId != null) 'device_id': deviceId,
+      if (deviceName != null) 'device_name': deviceName,
+      if (batteryLevel != null) 'battery_level': batteryLevel,
+    });
+  }
+
+  void conversationListItemClickedWithTimeDifference({
+    required ServerConversation conversation,
+    required int conversationIndex,
+    required int hoursSinceConversation,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['conversation_index'] = conversationIndex;
+    properties['hours_since_conversation'] = hoursSinceConversation;
+    track('Conversation List Item Clicked', properties: properties);
+  }
+
+  void conversationSwipedToDelete(ServerConversation conversation) {
+    var properties = getConversationEventProperties(conversation);
+    track('Conversation Swiped To Delete', properties: properties);
+  }
+
+  // Conversation Detail Page Events
+  void conversationDetailTabChanged(String tabName) {
+    track('Conversation Detail Tab Changed', properties: {'tab_name': tabName});
+  }
+
+  void speakerEdited({
+    required String conversationId,
+    required int oldSpeakerCount,
+    required int newSpeakerCount,
+  }) {
+    track('Speaker Edited', properties: {
+      'conversation_id': conversationId,
+      'old_speaker_count': oldSpeakerCount,
+      'new_speaker_count': newSpeakerCount,
+      'speaker_count_changed': oldSpeakerCount != newSpeakerCount,
+    });
+  }
+
+  void conversationDetailSearchClicked({required String conversationId}) {
+    track('Conversation Detail Search Clicked', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
+  void conversationDetailSearchQueryEntered({
+    required String conversationId,
+    required String query,
+    required int resultsCount,
+    required String activeTab,
+  }) {
+    track('Conversation Detail Search Query Entered', properties: {
+      'conversation_id': conversationId,
+      'query_length': query.length,
+      'results_count': resultsCount,
+      'active_tab': activeTab,
+    });
+  }
+
+  void conversationReprocessedWithApp({
+    required String conversationId,
+    required String appId,
+    required String appName,
+    required bool isOwnApp,
+    required bool wasAutoSelected,
+  }) {
+    track('Conversation Reprocessed', properties: {
+      'conversation_id': conversationId,
+      'app_id': appId,
+      'app_name': appName,
+      'is_own_app': isOwnApp,
+      'was_auto_selected': wasAutoSelected,
+    });
+  }
+
+  void conversationShared({
+    required ServerConversation conversation,
+    required String shareMethod,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['share_method'] = shareMethod;
+    track('Conversation Shared', properties: properties);
+  }
+
+  void conversationThreeDotsMenuOpened({required String conversationId}) {
+    track('Conversation Three Dots Menu Opened', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
+  void conversationThreeDotsMenuActionSelected({
+    required String conversationId,
+    required String action,
+  }) {
+    track('Conversation Three Dots Menu Action Selected', properties: {
+      'conversation_id': conversationId,
+      'action': action,
+    });
   }
 }
