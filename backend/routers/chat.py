@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
 import database.chat as chat_db
+import database.conversations as conversations_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
@@ -34,6 +35,7 @@ from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 
 router = APIRouter()
 
@@ -82,10 +84,16 @@ def send_message(
         type='text',
         app_id=compat_app_id,
     )
-    if data.file_ids is not None and chat_session:
-        new_file_ids = chat_session.retrieve_new_file(data.file_ids)
-        chat_session.add_file_ids(data.file_ids)
-        chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+    
+    # Handle file attachments
+    if data.file_ids is not None and len(data.file_ids) > 0:
+        if chat_session:
+            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
+            chat_session.add_file_ids(data.file_ids)
+            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+        else:
+            # No chat session, use all file_ids
+            new_file_ids = data.file_ids
 
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
@@ -99,12 +107,18 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
 
-    app = get_available_app_by_id(compat_app_id, uid)
-    app = App(**app) if app else None
+    # Try to get app, but don't fail if Redis is down (local dev)
+    try:
+        app = get_available_app_by_id(compat_app_id, uid)
+        app = App(**app) if app else None
+    except Exception as e:
+        print(f"⚠️  Could not get app from cache (Redis issue): {e}")
+        print("⚠️  Continuing without app (local dev mode)")
+        app = None
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id, include_conversations=True)]))
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -149,6 +163,7 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
+        # Using the new agentic system via graph routing
         async for chunk in execute_graph_chat_stream(
             uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
         ):
