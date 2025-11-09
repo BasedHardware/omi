@@ -140,7 +140,7 @@ async def auth_token(
     grant_type: str = Form(...),
     code: str = Form(...),
     redirect_uri: str = Form(...),
-    use_custom_token: bool = Form(True),
+    use_custom_token: bool = Form(False),
 ):
     """
     Exchange auth code for OAuth credentials
