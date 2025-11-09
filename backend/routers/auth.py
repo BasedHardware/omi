@@ -433,15 +433,6 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
     https://developer.apple.com/documentation/signinwithapplerestapi/generate_and_validate_tokens
     """
     try:
-        # Handle escaped newlines from .env file
-        # .env files store multi-line strings with literal \n characters
-        if '\\n' in private_key_content:
-            private_key_content = private_key_content.replace('\\n', '\n')
-
-        # Ensure proper PEM format
-        if not private_key_content.startswith('-----BEGIN PRIVATE KEY-----'):
-            private_key_content = f"-----BEGIN PRIVATE KEY-----\n{private_key_content}\n-----END PRIVATE KEY-----"
-
         # Load the private key from PEM content
         private_key = serialization.load_pem_private_key(
             private_key_content.encode('utf-8'),

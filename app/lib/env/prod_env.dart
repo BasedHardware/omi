@@ -53,6 +53,6 @@ final class ProdEnv implements EnvFields {
   final bool? useWebAuth = _ProdEnv.useWebAuth;
 
   @override
-  @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: true)
+  @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _ProdEnv.useAuthCustomToken;
 }

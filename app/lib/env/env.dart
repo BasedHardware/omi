@@ -30,7 +30,7 @@ abstract class Env {
 
   static bool get useWebAuth => _instance.useWebAuth ?? false;
 
-  static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? true;
+  static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
 }
 
 abstract class EnvFields {
