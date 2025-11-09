@@ -83,6 +83,18 @@ function generate_ios_custom_config() {
 }
 
 ######################################
+# Generate custom configs for macOS
+######################################
+function generate_macos_custom_config() {
+  bash scripts/generate_ios_custom_config.sh macos/Config/Dev/GoogleService-Info.plist macos/Runner/Configs
+
+  # Custom bundle identifier
+  SUFFIX=$(generate_device_suffix)
+  CUSTOM_BUNDLE="com.friend-app-with-wearable.ios12-${SUFFIX}"
+  echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "macos/Runner/Configs/Custom.xcconfig"
+}
+
+######################################
 # Setup Firebase with prebuilt configs
 ######################################
 function setup_firebase() {
@@ -212,18 +224,15 @@ function run_build_macos() {
   flutter pub get \
     && pushd macos && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter build macos --debug --flavor dev \
-    && open build/macos/Build/Products/Debug-dev/Omi.app
-
-  echo "Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on Discord (http://discord.omi.me)."
+    && flutter run --debug --flavor dev
 }
 
 
 case "${1}" in
   macos)
     setup_firebase \
+      && generate_macos_custom_config \
       && setup_app_env \
-      && setup_provisioning_profile_macos \
       && run_build_macos
     ;;
   ios)
