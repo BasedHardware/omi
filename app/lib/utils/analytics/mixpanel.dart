@@ -765,6 +765,13 @@ class MixpanelManager {
   }
 
   // Homepage Events
+  void recordingMuteToggled({required bool isMuted, required String recordingType}) {
+    track('Recording Mute Toggled', properties: {
+      'is_muted': isMuted,
+      'recording_type': recordingType,
+    });
+  }
+
   void deletedConversationsFilterToggled(bool showDeleted) {
     track('Deleted Conversations Filter Toggled', properties: {'show_deleted': showDeleted});
   }

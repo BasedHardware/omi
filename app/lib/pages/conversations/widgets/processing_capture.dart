@@ -348,6 +348,20 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
+                        // Track mute/pause action
+                        if (!isPaused) {
+                          // User is pausing/muting
+                          MixpanelManager().recordingMuteToggled(
+                            isMuted: true,
+                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                          );
+                        } else {
+                          // User is resuming
+                          MixpanelManager().recordingMuteToggled(
+                            isMuted: false,
+                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                          );
+                        }
                         _toggleRecording(context, provider);
                       },
                       child: Container(
