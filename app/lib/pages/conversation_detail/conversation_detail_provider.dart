@@ -51,27 +51,30 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    final provider = conversationProvider;
+    final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
-    final list = provider?.groupedConversations[selectedDate];
 
-    if (id != null && list != null && list.isNotEmpty) {
+    ServerConversation? result;
+
+    if (list != null && list.isNotEmpty) {
       final i = list.indexWhere((c) => c.id == id);
       if (i != -1) {
-        if (i != conversationIdx) conversationIdx = i;
-        return _cachedConversation = list[i];
+        result = list[conversationIdx = i];
+      } else if (conversationIdx < list.length) {
+        result = list[conversationIdx];
+        _cachedConversationId = result.id;
       }
-      if (_cachedConversation != null) return _cachedConversation!;
     }
 
-    if (list == null || conversationIdx >= list.length) {
-      if (_cachedConversation == null) throw StateError("No conversation available");
-      return _cachedConversation!;
+    result ??= _cachedConversation;
+    if (result != null &&
+        result.createdAt.year == selectedDate.year &&
+        result.createdAt.month == selectedDate.month &&
+        result.createdAt.day == selectedDate.day) {
+      return _cachedConversation = result;
     }
 
-    _cachedConversation = list[conversationIdx];
-    _cachedConversationId = list[conversationIdx].id;
-    return _cachedConversation!;
+    throw StateError("No valid conversation found");
   }
 
   List<bool> appResponseExpanded = [];
