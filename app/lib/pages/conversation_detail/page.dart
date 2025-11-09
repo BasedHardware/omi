@@ -161,8 +161,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       // Find the proper date and index for this conversation in the grouped conversations
       var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
-      provider.conversationIdx = index >= 0 ? index : 0;
-      provider.selectedDate = date;
+      provider.updateConversation(index >= 0 ? index : 0, date);
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {

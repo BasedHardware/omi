@@ -24,6 +24,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
+  String? _cachedConversationId;
 
   bool isLoading = false;
   bool loadingReprocessConversation = false;
@@ -50,17 +51,26 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null ||
-        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
-        conversationProvider!.groupedConversations[selectedDate] == null ||
-        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
-      // Return cached conversation if available, otherwise create an empty one
-      if (_cachedConversation == null) {
-        throw StateError("No conversation available");
+    final provider = conversationProvider;
+    final id = _cachedConversationId;
+    final list = provider?.groupedConversations[selectedDate];
+
+    if (id != null && list != null && list.isNotEmpty) {
+      final i = list.indexWhere((c) => c.id == id);
+      if (i != -1) {
+        if (i != conversationIdx) conversationIdx = i;
+        return _cachedConversation = list[i];
       }
+      if (_cachedConversation != null) return _cachedConversation!;
+    }
+
+    if (list == null || conversationIdx >= list.length) {
+      if (_cachedConversation == null) throw StateError("No conversation available");
       return _cachedConversation!;
     }
-    _cachedConversation = conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
+
+    _cachedConversation = list[conversationIdx];
+    _cachedConversationId = list[conversationIdx].id;
     return _cachedConversation!;
   }
 
@@ -131,6 +141,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   void updateConversation(int memIdx, DateTime date) {
     conversationIdx = memIdx;
     selectedDate = date;
+    final list = conversationProvider?.groupedConversations[date];
+    if (list != null && memIdx < list.length) {
+      _cachedConversationId = list[memIdx].id;
+      _cachedConversation = list[memIdx];
+    }
     appResponseExpanded = List.filled(conversation.appResults.length, false);
     notifyListeners();
   }
@@ -425,6 +440,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   void setCachedConversation(ServerConversation conversation) {
     _cachedConversation = conversation;
+    _cachedConversationId = conversation.id;
     notifyListeners();
   }
 
