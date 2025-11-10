@@ -87,31 +87,53 @@ static void boot_ready_sequence(void)
 
 void set_led_state()
 {
+    static bool charge_blink_state = false;
+
     // Set LED state based on connection and charging status
     if (is_charging) {
-        set_led_green(true);
+        // When charging, alternate blink between green and connection status color
+        charge_blink_state = !charge_blink_state;
+
+        if (charge_blink_state) {
+            // Green phase
+            set_led_green(true);
+            set_led_red(false);
+            set_led_blue(false);
+        } else {
+            // Connection status color phase
+            set_led_green(false);
+            if (is_connected) {
+                set_led_blue(true);
+                set_led_red(false);
+            } else {
+                set_led_red(true);
+                set_led_blue(false);
+            }
+        }
     } else {
+        // Not charging - reset blink state and turn off green
+        charge_blink_state = false;
         set_led_green(false);
-    }
 
-    // If device is off, turn off all status LEDs except charging indicator
-    if (is_off) {
-        set_led_red(false);
-        set_led_blue(false);
-        return;
-    }
+        // If device is off, turn off all status LEDs
+        if (is_off) {
+            set_led_red(false);
+            set_led_blue(false);
+            return;
+        }
 
-    if (is_connected) {
-        set_led_blue(true);
-        set_led_red(false);
-        return;
-    }
+        if (is_connected) {
+            set_led_blue(true);
+            set_led_red(false);
+            return;
+        }
 
-    // Not connected - RED
-    if (!is_connected) {
-        set_led_red(true);
-        set_led_blue(false);
-        return;
+        // Not connected - RED
+        if (!is_connected) {
+            set_led_red(true);
+            set_led_blue(false);
+            return;
+        }
     }
 }
 
