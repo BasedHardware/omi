@@ -252,6 +252,8 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     base_url = os.getenv('BASE_API_URL')
     if not base_url:
         raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
+    # Normalize base_url: remove trailing slash to prevent redirect URI mismatches
+    base_url = base_url.rstrip('/')
 
     # Generate cryptographically secure random state token
     state_token = secrets.token_urlsafe(32)
@@ -266,6 +268,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         if not client_id:
             raise HTTPException(status_code=500, detail="Todoist not configured")
 
+        base_url = base_url.rstrip('/')
         redirect_uri = f'{base_url}/v2/integrations/todoist/callback'
         auth_url = f'https://todoist.com/oauth/authorize?client_id={client_id}&scope=data:read_write&state={state_token}&redirect_uri={redirect_uri}'
 
@@ -274,6 +277,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         if not client_id:
             raise HTTPException(status_code=500, detail="Asana not configured")
 
+        base_url = base_url.rstrip('/')
         redirect_uri = f'{base_url}/v2/integrations/asana/callback'
         scopes = 'tasks:read tasks:write workspaces:read projects:read users:read'
         from urllib.parse import quote
@@ -285,6 +289,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         if not client_id:
             raise HTTPException(status_code=500, detail="Google Tasks not configured")
 
+        base_url = base_url.rstrip('/')
         redirect_uri = f'{base_url}/v2/integrations/google-tasks/callback'
         scope = 'https://www.googleapis.com/auth/tasks'
         from urllib.parse import quote
@@ -296,6 +301,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         if not client_id:
             raise HTTPException(status_code=500, detail="ClickUp not configured")
 
+        base_url = base_url.rstrip('/')
         redirect_uri = f'{base_url}/v2/integrations/clickup/callback'
         from urllib.parse import quote
 
@@ -791,6 +797,8 @@ async def asana_oauth_callback(
     if not all([client_id, client_secret, base_url]):
         return render_oauth_response(request, 'asana', success=False, error_type='config_error')
 
+    # Normalize base_url: remove trailing slash to prevent redirect URI mismatches
+    base_url = base_url.rstrip('/')
     redirect_uri = f'{base_url}/v2/integrations/asana/callback'
 
     class AsanaConfig(OAuthProviderConfig):
@@ -842,6 +850,8 @@ async def google_tasks_oauth_callback(
     if not all([client_id, client_secret, base_url]):
         return render_oauth_response(request, 'google_tasks', success=False, error_type='config_error')
 
+    # Normalize base_url: remove trailing slash to prevent redirect URI mismatches
+    base_url = base_url.rstrip('/')
     redirect_uri = f'{base_url}/v2/integrations/google-tasks/callback'
 
     class GoogleTasksConfig(OAuthProviderConfig):
