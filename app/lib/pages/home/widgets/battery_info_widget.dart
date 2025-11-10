@@ -6,27 +6,12 @@ import 'package:omi/pages/home/device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class BatteryInfoWidget extends StatelessWidget {
   const BatteryInfoWidget({super.key});
-
-  String _getDeviceImagePath(String? deviceName) {
-    if (deviceName != null && deviceName.contains('Glass')) {
-      return Assets.images.omiGlass.path;
-    }
-
-    if (deviceName != null && deviceName.contains('Omi DevKit')) {
-      return Assets.images.omiDevkitWithoutRope.path;
-    }
-
-    if (deviceName != null && deviceName.contains('Apple Watch')) {
-      return Assets.images.appleWatch.path;
-    }
-
-    return Assets.images.omiWithoutRope.path;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +61,11 @@ class BatteryInfoWidget extends StatelessWidget {
                           width: 20,
                           height: 20,
                           child: Image.asset(
-                            _getDeviceImagePath(deviceProvider.connectedDevice?.name),
+                            DeviceUtils.getDeviceImagePath(
+                              deviceType: deviceProvider.connectedDevice?.type,
+                              modelNumber: deviceProvider.connectedDevice?.modelNumber,
+                              deviceName: deviceProvider.connectedDevice?.name,
+                            ),
                             fit: BoxFit.contain,
                           ),
                         ),
@@ -111,7 +100,7 @@ class BatteryInfoWidget extends StatelessWidget {
                         child: Stack(
                           children: [
                             Image.asset(
-                              _getDeviceImagePath(SharedPreferencesUtil().btDevice.name),
+                              DeviceUtils.getDeviceImageFromBtDevice(SharedPreferencesUtil().btDevice),
                               fit: BoxFit.contain,
                             ),
                             // Slash line across the image

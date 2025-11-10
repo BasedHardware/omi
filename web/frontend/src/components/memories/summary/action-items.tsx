@@ -7,21 +7,21 @@ interface ActionsItemsProps {
 
 export default function ActionItems({ items }: ActionsItemsProps) {
   return (
-    <div className="px-4 md:px-12">
-      <h3 className="text-xl font-semibold md:text-2xl">Action Items</h3>
-      <ul className="mt-3 text-base md:text-lg">
+    <div>
+      <h3 className="mb-4 text-xl font-semibold text-white md:text-2xl">Action Items</h3>
+      <ul className="space-y-4 text-base md:text-lg">
         {items.map((item, index) => (
-          <li key={index} className="my-5 flex items-start gap-3 first:mt-0">
+          <li key={index} className="flex items-start gap-3">
             {item.completed ? (
-              <div className="mt-1">
-                <CheckCircle className="min-w-min text-sm text-green-400" />
+              <div className="mt-0.5">
+                <CheckCircle className="h-5 w-5 text-green-400" />
               </div>
             ) : (
-              <div className="mt-1">
-                <CheckCircle className="min-w-min text-sm text-zinc-600" />
+              <div className="mt-0.5">
+                <CheckCircle className="h-5 w-5 text-zinc-600" />
               </div>
             )}
-            <p>{item.description}</p>
+            <p className="flex-1 leading-relaxed text-zinc-300">{item.description}</p>
           </li>
         ))}
       </ul>

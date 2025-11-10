@@ -1,11 +1,15 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
+import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/xor_connection.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 
@@ -39,6 +43,8 @@ enum BleAudioCodec {
   mulaw8,
   opus,
   opusFS320,
+  aac,
+  lc3FS1030,
   unknown;
 
   @override
@@ -58,6 +64,10 @@ enum BleAudioCodec {
         return 'PCM (16kHz)';
       case BleAudioCodec.pcm8:
         return 'PCM (8kHz)';
+      case BleAudioCodec.aac:
+        return 'AAC';
+      case BleAudioCodec.lc3FS1030:
+        return 'LC3 (10ms/30B)';
       default:
         return toString().split('.').last.toUpperCase();
     }
@@ -87,6 +97,10 @@ String mapCodecToName(BleAudioCodec codec) {
       return 'pcm16';
     case BleAudioCodec.pcm8:
       return 'pcm8';
+    case BleAudioCodec.aac:
+      return 'aac';
+    case BleAudioCodec.lc3FS1030:
+      return 'lc3_fs1030';
     default:
       return 'pcm8';
   }
@@ -102,6 +116,10 @@ BleAudioCodec mapNameToCodec(String codec) {
       return BleAudioCodec.pcm16;
     case 'pcm8':
       return BleAudioCodec.pcm8;
+    case 'aac':
+      return BleAudioCodec.aac;
+    case 'lc3_fs1030':
+      return BleAudioCodec.lc3FS1030;
     default:
       return BleAudioCodec.pcm8;
   }
@@ -116,6 +134,8 @@ int mapCodecToSampleRate(BleAudioCodec codec) {
     case BleAudioCodec.pcm16:
       return 16000;
     case BleAudioCodec.pcm8:
+      return 16000;
+    case BleAudioCodec.lc3FS1030:
       return 16000;
     default:
       return 16000;
@@ -132,6 +152,8 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
       return 16;
     case BleAudioCodec.pcm8:
       return 8;
+    case BleAudioCodec.lc3FS1030:
+      return 16;
     default:
       return 16;
   }
@@ -143,14 +165,24 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
   }
   DeviceType? deviceType;
   await device.discoverServices();
-  if (device.servicesList.where((s) => s.uuid == Guid(omiServiceUuid)).isNotEmpty) {
+
+  // Check for device types using helper methods
+  if (BtDevice.isBeeDeviceFromDevice(device)) {
+    deviceType = DeviceType.bee;
+  } else if (BtDevice.isXorDeviceFromDevice(device)) {
+    deviceType = DeviceType.xor;
+  } else if (BtDevice.isFieldyDeviceFromDevice(device)) {
+    deviceType = DeviceType.fieldy;
+  } else if (BtDevice.isFriendPendantDeviceFromDevice(device)) {
+    deviceType = DeviceType.friendPendant;
+  } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
         .where((s) => s.uuid == Guid.fromString(omiServiceUuid))
         .expand((s) => s.characteristics)
         .any((c) => c.uuid.toString().toLowerCase() == imageDataStreamCharacteristicUuid.toLowerCase());
     deviceType = hasImageStream ? DeviceType.openglass : DeviceType.omi;
-  } else if (device.servicesList.where((s) => s.uuid == Guid(frameServiceUuid)).isNotEmpty) {
+  } else if (BtDevice.isFrameDeviceFromDevice(device)) {
     deviceType = DeviceType.frame;
   }
   if (deviceType != null) {
@@ -164,6 +196,10 @@ enum DeviceType {
   openglass,
   frame,
   appleWatch,
+  xor,
+  bee,
+  fieldy,
+  friendPendant,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -282,7 +318,15 @@ class BtDevice {
       }
     }
 
-    if (type == DeviceType.omi) {
+    if (type == DeviceType.bee) {
+      return await _getDeviceInfoFromBee(conn);
+    } else if (type == DeviceType.xor) {
+      return await _getDeviceInfoFromXor(conn as XorDeviceConnection);
+    } else if (type == DeviceType.fieldy) {
+      return await _getDeviceInfoFromFieldy(conn);
+    } else if (type == DeviceType.friendPendant) {
+      return await _getDeviceInfoFromFriendPendant(conn);
+    } else if (type == DeviceType.omi) {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
       return await _getDeviceInfoFromOmi(conn);
@@ -296,7 +340,7 @@ class BtDevice {
   }
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
-    var modelNumber = 'Omi Device';
+    var modelNumber = 'Omi';
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
@@ -385,6 +429,107 @@ class BtDevice {
     );
   }
 
+  Future _getDeviceInfoFromBee(DeviceConnection conn) async {
+    var modelNumber = 'Bee';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = '1.0.0';
+    var manufacturerName = 'Bee';
+
+    try {
+      // Bee devices don't have standard device info service
+      // Use defaults
+    } catch (e) {
+      Logger.error('Error getting Bee device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.bee,
+    );
+  }
+
+  Future _getDeviceInfoFromXor(XorDeviceConnection conn) async {
+    var modelNumber = 'XOR';
+    var firmwareRevision = '0.0.1';
+    var hardwareRevision = '0.0.1';
+    var manufacturerName = '--';
+
+    try {
+      final deviceInfo = await conn.getDeviceInfo();
+      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+    } catch (e) {
+      Logger.error('Error getting XOR device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.xor,
+    );
+  }
+
+  Future _getDeviceInfoFromFieldy(DeviceConnection conn) async {
+    var modelNumber = 'Fieldy';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = 'Fieldy Hardware';
+    var manufacturerName = 'Fieldy';
+
+    try {
+      if (conn is FieldyDeviceConnection) {
+        final deviceInfo = await conn.getDeviceInfo();
+        modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+        firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+        hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+        manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+      }
+    } catch (e) {
+      Logger.error('Error getting Fieldy device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.fieldy,
+    );
+  }
+
+  Future _getDeviceInfoFromFriendPendant(DeviceConnection conn) async {
+    var modelNumber = 'Friend Pendant';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = '1.0.0';
+    var manufacturerName = 'Friend';
+
+    try {
+      if (conn is FriendPendantDeviceConnection) {
+        final deviceInfo = await conn.getDeviceInfo();
+        modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+        firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+        hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+        manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+      }
+    } catch (e) {
+      Logger.error('Error getting Friend Pendant device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.friendPendant,
+    );
+  }
+
   // from BluetoothDevice
   Future fromBluetoothDevice(BluetoothDevice device) async {
     var rssi = await device.readRssi();
@@ -396,12 +541,88 @@ class BtDevice {
     );
   }
 
+  // Check if a scan result is from a supported device
+  static bool isSupportedDevice(ScanResult result) {
+    return isBeeDevice(result) ||
+        isXorDevice(result) ||
+        isFieldyDevice(result) ||
+        isFriendPendantDevice(result) ||
+        isOmiDevice(result) ||
+        isFrameDevice(result);
+  }
+
+  static bool isBeeDevice(ScanResult result) {
+    return result.device.platformName.toLowerCase().contains('bee');
+  }
+
+  static bool isBeeDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == beeServiceUuid.toLowerCase()) ||
+        device.platformName.toLowerCase().contains('bee');
+  }
+
+  static bool isXorDevice(ScanResult result) {
+    return result.device.platformName.toUpperCase().startsWith('PLAUD');
+  }
+
+  static bool isXorDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid == Guid(xorServiceUuid)) ||
+        device.platformName.toUpperCase().startsWith('PLAUD');
+  }
+
+  static bool isFieldyDevice(ScanResult result) {
+    final name = result.device.platformName.toLowerCase();
+    return name == 'compass' || name == 'fieldy';
+  }
+
+  static bool isFieldyDeviceFromDevice(BluetoothDevice device) {
+    final name = device.platformName.toLowerCase();
+    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == fieldyServiceUuid.toLowerCase()) ||
+        name == 'compass' ||
+        name == 'fieldy';
+  }
+
+  static bool isFriendPendantDevice(ScanResult result) {
+    return result.device.platformName.toLowerCase().startsWith('friend_') ||
+        result.advertisementData.serviceUuids
+            .any((uuid) => uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase());
+  }
+
+  static bool isFriendPendantDeviceFromDevice(BluetoothDevice device) {
+    return device.platformName.toLowerCase().startsWith('friend_') ||
+        device.servicesList.any((s) => s.uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase());
+  }
+
+  static bool isOmiDevice(ScanResult result) {
+    return result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid));
+  }
+
+  static bool isOmiDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid == Guid(omiServiceUuid));
+  }
+
+  static bool isFrameDevice(ScanResult result) {
+    return result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid));
+  }
+
+  static bool isFrameDeviceFromDevice(BluetoothDevice device) {
+    return device.servicesList.any((s) => s.uuid == Guid(frameServiceUuid));
+  }
+
   // from ScanResult
   static fromScanResult(ScanResult result) {
     DeviceType? deviceType;
-    if (result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid))) {
+
+    if (isBeeDevice(result)) {
+      deviceType = DeviceType.bee;
+    } else if (isXorDevice(result)) {
+      deviceType = DeviceType.xor;
+    } else if (isFieldyDevice(result)) {
+      deviceType = DeviceType.fieldy;
+    } else if (isFriendPendantDevice(result)) {
+      deviceType = DeviceType.friendPendant;
+    } else if (isOmiDevice(result)) {
       deviceType = DeviceType.omi;
-    } else if (result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
+    } else if (isFrameDevice(result)) {
       deviceType = DeviceType.frame;
     }
     if (deviceType != null) {

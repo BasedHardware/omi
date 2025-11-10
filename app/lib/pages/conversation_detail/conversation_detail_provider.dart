@@ -218,9 +218,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         notifyListeners();
         if (!hasConversationSummaryRatingSet) {
           _ratingTimer = Timer(const Duration(seconds: 15), () {
-            setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
-            showRatingUI = true;
-            notifyListeners();
+            // Only notify if the timer hasn't been cancelled (provider still alive)
+            if (_ratingTimer?.isActive ?? false) {
+              setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
+              showRatingUI = true;
+              notifyListeners();
+            }
           });
         }
       });

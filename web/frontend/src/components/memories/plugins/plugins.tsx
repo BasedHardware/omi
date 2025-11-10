@@ -11,19 +11,18 @@ interface PluginsProps {
 export default function Plugins({ apps }: PluginsProps) {
   return (
     <div className="h-auto">
-      <h3 className="px-4 text-xl font-semibold md:px-12 md:text-2xl">App Summary</h3>
-      <div className="mt-3 flex flex-col gap-8">
+      <div className="flex flex-col gap-10">
         {apps.map((app, index) => {
           return (
             <div key={index}>
-              <ErrorBoundary errorComponent={ErrorIdentifyPlugin}>
-                <IdentifyPlugin pluginId={app.app_id} />
-              </ErrorBoundary>
-              <div className="bg-bg-color px-4 md:px-12">
-                <Markdown className="prose text-white prose-headings:text-gray-200 prose-p:m-0 prose-p:mt-3 last:prose-p:mt-8 last:prose-p:rounded-lg last:prose-p:bg-zinc-900 last:prose-p:p-2 last:prose-p:px-4 last:prose-p:text-zinc-200 prose-strong:text-white prose-ul:text-gray-300 prose-li:text-gray-300 md:prose-p:text-lg md:last:prose-p:text-sm">
+              <div className="mb-4">
+                <Markdown className="prose prose-sm max-w-none text-zinc-300 prose-headings:text-zinc-100 prose-headings:font-semibold prose-p:leading-relaxed prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-ul:text-zinc-300 prose-li:text-zinc-300 prose-li:marker:text-zinc-500 md:prose-base">
                   {app.content}
                 </Markdown>
               </div>
+              <ErrorBoundary errorComponent={ErrorIdentifyPlugin}>
+                <IdentifyPlugin pluginId={app.app_id} />
+              </ErrorBoundary>
             </div>
           );
         })}
