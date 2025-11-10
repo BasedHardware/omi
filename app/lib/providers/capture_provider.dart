@@ -897,6 +897,7 @@ class CaptureProvider extends ChangeNotifier
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
     }
+
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
     notifyListeners();
@@ -907,6 +908,7 @@ class CaptureProvider extends ChangeNotifier
     if (!PlatformService.isDesktop) return;
     _isPaused = false; // Clear paused state
     await streamSystemAudioRecording(); // Re-trigger the recording flow
+
     _broadcastRecordingState();
   }
 
@@ -1295,6 +1297,8 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
+
+    // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
     _isPaused = true;
     updateRecordingState(RecordingState.pause);
@@ -1304,6 +1308,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
     _isPaused = false;
+    // Resume streaming from the device
+    await _initiateDeviceAudioStreaming();
 
     final deviceId = _recordingDevice!.id;
     BleAudioCodec codec = await _getAudioCodec(deviceId);
