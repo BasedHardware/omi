@@ -21,16 +21,29 @@ class BatteryInfoWidget extends StatelessWidget {
         return Consumer<DeviceProvider>(
           builder: (context, deviceProvider, child) {
             if (deviceProvider.connectedDevice != null) {
+              final displayLevel = deviceProvider.lastKnownBatteryLevel;
+              final hasBattery = displayLevel != null;
+              final isFresh = deviceProvider.hasBatteryReading;
+              final awaitingFresh = deviceProvider.isAwaitingFreshBattery;
+              Color _baseColor(int level) {
+                if (level > 75) return const Color.fromARGB(255, 0, 255, 8);
+                if (level > 20) return Colors.yellow.shade700;
+                return Colors.red;
+              }
+
+              final indicatorColor = hasBattery ? _baseColor(displayLevel!) : Colors.grey;
+              final displayColor = hasBattery
+                  ? (awaitingFresh ? indicatorColor.withOpacity(0.7) : indicatorColor)
+                  : indicatorColor.withOpacity(0.7);
+
               return GestureDetector(
-                onTap: deviceProvider.connectedDevice == null
-                    ? null
-                    : () {
-                        routeToPage(
-                          context,
-                          const ConnectedDevice(),
-                        );
-                        MixpanelManager().batteryIndicatorClicked();
-                      },
+                onTap: () {
+                  routeToPage(
+                    context,
+                    const ConnectedDevice(),
+                  );
+                  MixpanelManager().batteryIndicatorClicked();
+                },
                 child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
@@ -45,18 +58,11 @@ class BatteryInfoWidget extends StatelessWidget {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: deviceProvider.batteryLevel > 75
-                                ? const Color.fromARGB(255, 0, 255, 8)
-                                : deviceProvider.batteryLevel > 20
-                                    ? Colors.yellow.shade700
-                                    : deviceProvider.batteryLevel > 0
-                                        ? Colors.red
-                                        : Colors.grey,
+                            color: displayColor,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 8.0),
-                        // Add device icon
                         Container(
                           width: 20,
                           height: 20,
@@ -70,10 +76,34 @@ class BatteryInfoWidget extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8.0),
-                        Text(
-                          deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
+                        if (!hasBattery && awaitingFresh) ...[
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                            ),
+                          ),
+                          const SizedBox(width: 6.0),
+                          const Text(
+                            'Checking…',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ] else ...[
+                          Text(
+                            hasBattery ? '${displayLevel}%' : '—',
+                            style: TextStyle(
+                              color: hasBattery ? (awaitingFresh ? Colors.white70 : Colors.white) : Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ],
                     )),
               );
