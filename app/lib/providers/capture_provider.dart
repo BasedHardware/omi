@@ -169,6 +169,7 @@ class CaptureProvider extends ChangeNotifier
   StreamSubscription? _bleButtonStream;
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
+  bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
 
   StreamSubscription? _storageStream;
 
@@ -322,7 +323,44 @@ class CaptureProvider extends ChangeNotifier
       var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("device button $buttonState");
 
-      // start long press
+      // double tap
+      if (buttonState == 2) {
+        debugPrint("Double tap detected");
+
+        // Guard: ignore if already processing a button event
+        if (_isProcessingButtonEvent) {
+          debugPrint("Double tap: already processing, ignoring");
+          return;
+        }
+
+        if (SharedPreferencesUtil().doubleTapPausesMuting) {
+          // Pause/resume recording
+          debugPrint("Double tap: toggling pause/mute");
+          _isProcessingButtonEvent = true;
+          if (_isPaused) {
+            resumeDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              debugPrint("Error resuming device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
+          } else {
+            pauseDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              debugPrint("Error pausing device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
+          }
+        } else {
+          // End conversation and process (default)
+          debugPrint("Double tap: processing conversation");
+          forceProcessingCurrentConversation();
+        }
+        return;
+      }
+
+      // start long press (for voice commands)
       if (buttonState == 3 && _voiceCommandSession == null) {
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
@@ -330,7 +368,7 @@ class CaptureProvider extends ChangeNotifier
         _playSpeakerHaptic(deviceId, 1);
       }
 
-      // release
+      // release (end voice command)
       if (buttonState == 5 && _voiceCommandSession != null) {
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
@@ -1257,9 +1295,7 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
-    // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
-    await _bleButtonStream?.cancel();
     _isPaused = true;
     updateRecordingState(RecordingState.pause);
     notifyListeners();
@@ -1268,8 +1304,13 @@ class CaptureProvider extends ChangeNotifier
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
     _isPaused = false;
-    // Resume streaming from the device
-    await _initiateDeviceAudioStreaming();
+
+    final deviceId = _recordingDevice!.id;
+    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+
+    await streamAudioToWs(deviceId, codec);
+
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
