@@ -25,7 +25,22 @@ class CreateConversationResponse {
   }
 }
 
-enum ConversationSource { friend, omi, workflow, openglass, screenpipe, sdcard }
+enum ConversationSource {
+  friend,
+  omi,
+  workflow,
+  openglass,
+  screenpipe,
+  sdcard,
+  fieldy,
+  bee,
+  xor,
+  frame,
+  friend_com,
+  apple_watch,
+  phone,
+  desktop,
+}
 
 class ConversationExternalData {
   final String text;
