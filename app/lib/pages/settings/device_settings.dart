@@ -197,6 +197,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                     ),
+                    _buildDoubleTapSetting(),
                     _buildDimmingControl(),
                     _buildMicGainControl(),
                   ],
@@ -259,6 +260,94 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             : const SizedBox(),
       );
     });
+  }
+
+  Widget _buildDoubleTapSetting() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade800, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Double Tap Action',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Choose what happens when you double tap the device button',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: SharedPreferencesUtil().doubleTapPausesMuting,
+                activeColor: Colors.white,
+                activeTrackColor: const Color(0xFF7C3AED),
+                inactiveThumbColor: Colors.grey.shade400,
+                inactiveTrackColor: Colors.grey.shade700,
+                onChanged: (bool value) {
+                  setState(() {
+                    SharedPreferencesUtil().doubleTapPausesMuting = value;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  SharedPreferencesUtil().doubleTapPausesMuting ? Icons.pause : Icons.stop,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    SharedPreferencesUtil().doubleTapPausesMuting
+                        ? 'Pause/Resume Recording'
+                        : 'End & Process Conversation',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade300,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDimmingControl() {
