@@ -90,7 +90,7 @@ function generate_macos_custom_config() {
 
   # Custom bundle identifier
   SUFFIX=$(generate_device_suffix)
-  CUSTOM_BUNDLE="com.friend-app-with-wearable.ios12-${SUFFIX}"
+  CUSTOM_BUNDLE="com.friend-app-with-wearable.macos-${SUFFIX}"
   echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "macos/Runner/Configs/Custom.xcconfig"
 }
 
@@ -221,10 +221,23 @@ function run_build_ios() {
 # Build macOS
 # #########
 function run_build_macos() {
-  flutter pub get \
+  flutter clean \
+    && flutter pub get \
     && pushd macos && pod install --repo-update && popd \
-    && dart run build_runner build \
-    && flutter run --debug --flavor dev
+    && dart run build_runner build
+
+  echo ""
+  echo "Setup complete! Opening Xcode..."
+  echo ""
+  echo "NEXT STEPS:"
+  echo "1. Select 'Runner' target"
+  echo "2. Go to 'Signing & Capabilities'"
+  echo "3. Select your Development Team"
+  echo "4. Run \$ flutter run --flavor dev --debug"
+  echo ""
+  sleep 3
+
+  open macos/Runner.xcodeproj
 }
 
 
