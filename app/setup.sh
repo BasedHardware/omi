@@ -83,6 +83,18 @@ function generate_ios_custom_config() {
 }
 
 ######################################
+# Generate custom configs for macOS
+######################################
+function generate_macos_custom_config() {
+  bash scripts/generate_ios_custom_config.sh macos/Config/Dev/GoogleService-Info.plist macos/Runner/Configs
+
+  # Custom bundle identifier
+  SUFFIX=$(generate_device_suffix)
+  CUSTOM_BUNDLE="com.friend-app-with-wearable.macos-${SUFFIX}"
+  echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "macos/Runner/Configs/Custom.xcconfig"
+}
+
+######################################
 # Setup Firebase with prebuilt configs
 ######################################
 function setup_firebase() {
@@ -209,21 +221,31 @@ function run_build_ios() {
 # Build macOS
 # #########
 function run_build_macos() {
-  flutter pub get \
+  flutter clean \
+    && flutter pub get \
     && pushd macos && pod install --repo-update && popd \
-    && dart run build_runner build \
-    && flutter build macos --debug --flavor dev \
-    && open build/macos/Build/Products/Debug-dev/Omi.app
+    && dart run build_runner build
 
-  echo "Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on Discord (http://discord.omi.me)."
+  echo ""
+  echo "Setup complete! Opening Xcode..."
+  echo ""
+  echo "NEXT STEPS:"
+  echo "1. Select 'Runner' target"
+  echo "2. Go to 'Signing & Capabilities'"
+  echo "3. Select your Development Team"
+  echo "4. Run \$ flutter run --flavor dev --debug"
+  echo ""
+  sleep 3
+
+  open macos/Runner.xcodeproj
 }
 
 
 case "${1}" in
   macos)
     setup_firebase \
+      && generate_macos_custom_config \
       && setup_app_env \
-      && setup_provisioning_profile_macos \
       && run_build_macos
     ;;
   ios)

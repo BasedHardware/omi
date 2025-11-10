@@ -31,6 +31,8 @@
 		33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11192044BFA00003C045 /* MenuBarManager.swift */; };
 		33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC111B2044BFA00003C045 /* AudioManager.swift */; };
 		6CEA62AC1B6F48029F663C75 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */; };
+		CF46C6482EC157BB00BEE80A /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF46C6472EC157BB00BEE80A /* Custom.xcconfig */; };
+		CF46C6492EC157BB00BEE80A /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF46C6462EC157BB00BEE80A /* Base.xcconfig */; };
 		CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5512E857FDC00CFA1AD /* GlobalShortcutManager.swift */; };
 		CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */; };
 		CFD3F5612E86368F00CFA1AD /* FloatingControlBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */; };
@@ -101,6 +103,8 @@
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		9E30D5C1306899D4214FF616 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
+		CF46C6462EC157BB00BEE80A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		CF46C6472EC157BB00BEE80A /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Custom.xcconfig; sourceTree = "<group>"; };
 		CFD3F5512E857FDC00CFA1AD /* GlobalShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutManager.swift; sourceTree = "<group>"; };
 		CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatWindowManager.swift; sourceTree = "<group>"; };
 		CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingControlBar.swift; sourceTree = "<group>"; };
@@ -131,6 +135,8 @@
 		33BA886A226E78AF003329D5 /* Configs */ = {
 			isa = PBXGroup;
 			children = (
+				CF46C6462EC157BB00BEE80A /* Base.xcconfig */,
+				CF46C6472EC157BB00BEE80A /* Custom.xcconfig */,
 				33E5194F232828860026EE4D /* AppInfo.xcconfig */,
 				9740EEB21CF90195004384FC /* Debug.xcconfig */,
 				7AFA3C8E1D35360C0083082E /* Release.xcconfig */,
@@ -316,6 +322,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CF46C6482EC157BB00BEE80A /* Custom.xcconfig in Resources */,
+				CF46C6492EC157BB00BEE80A /* Base.xcconfig in Resources */,
 				33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */,
 				332689E32D863DBF00CB35A1 /* GoogleService-Info.plist in Resources */,
 				33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */,
@@ -411,9 +419,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -428,9 +440,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -540,18 +556,16 @@
 		};
 		332689D12D863BCE00CB35A1 /* Debug-dev */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = devAppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Mac Developer";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
 				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -562,9 +576,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "match Development com.friend-app-with-wearable.ios12.development macos";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
@@ -633,7 +646,7 @@
 		};
 		332689D42D863BD900CB35A1 /* Debug-prod */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = prodAppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -653,7 +666,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -716,18 +729,16 @@
 		};
 		332689D72D863BEA00CB35A1 /* Profile-dev */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = devAppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/DebugProfile.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Mac Developer";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
 				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -738,9 +749,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "match Development com.friend-app-with-wearable.ios12.development macos";
 				SWIFT_VERSION = 5.0;
 			};
 			name = "Profile-dev";
@@ -801,7 +811,7 @@
 		};
 		332689DA2D863BF000CB35A1 /* Profile-prod */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = prodAppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -821,7 +831,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
 			};
@@ -883,7 +893,7 @@
 		};
 		332689DD2D863BF900CB35A1 /* Release-dev */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = devAppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -903,7 +913,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
 			};
@@ -965,7 +975,7 @@
 		};
 		332689E02D863BFF00CB35A1 /* Release-prod */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = prodAppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -985,7 +995,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1047,7 +1057,7 @@
 		};
 		338D0CEA231458BD00FA5F75 /* Profile */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -1067,7 +1077,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1182,7 +1192,7 @@
 		};
 		33CC10FC2044A3C60003C045 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -1191,7 +1201,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -1202,7 +1212,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -1211,7 +1221,7 @@
 		};
 		33CC10FD2044A3C60003C045 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -1231,7 +1241,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0.64;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
 			};
