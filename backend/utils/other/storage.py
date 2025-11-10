@@ -459,3 +459,29 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
         else:
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
     return dictFiles
+
+def get_chatfile_blob(url: str):
+    bucket = storage_client.bucket(chat_files_bucket)
+    path = url.split(f'https://storage.googleapis.com/{chat_files_bucket}/')[1]
+    return bucket.blob(path)
+
+def get_chatfile_signed(url: str):
+    blob = get_chatfile_blob(url)
+    return _get_signed_url(blob, 60)
+
+def upload_chat_image(file_path: str, unique_filename: str) -> str:
+    """
+    Upload a single image file to Google Cloud Storage.
+
+    Args:
+        file_path: Local path to the image file
+        unique_filename: Unique filename to use in GCS
+
+    Returns:
+        str: Public URL of the uploaded image in GCS, or local file path for dev
+    """
+    bucket = storage_client.bucket(chat_files_bucket)
+    path = f'chat_images/{unique_filename}'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{chat_files_bucket}/{path}'

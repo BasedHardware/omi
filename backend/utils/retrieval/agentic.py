@@ -25,6 +25,7 @@ from langgraph.prebuilt.chat_agent_executor import AgentState
 from models.app import App
 from models.chat import Message, ChatSession
 from models.conversation import Conversation
+from utils.other.storage import get_chatfile_signed
 from utils.retrieval.tools import (
     get_conversations_tool,
     vector_search_conversations_tool,
@@ -101,22 +102,34 @@ def _messages_to_langchain(messages: List[Message]) -> List:
                     if file.mime_type == "application/pdf":
                         content.append({"type": "file", "file": {"file_id": file.openai_file_id}})
                     elif file.is_image():
+                        # Not supported by currently used completions API
+                        # https://platform.openai.com/docs/guides/images-vision?api-mode=responses&format=file
+                        # content.append({"type": "input_image", "file": {"file_id": file.openai_file_id}})
+
                         # 1. Can be added by image_url - need to update storage/filechat
                         # content.append({"type": "image_url", "image_url": {"url": file.thumbnail}})
                         # 2. Can be added by base64 - need to update storage
                         #    openai: Not allowed to download files of purpose: user_data
 
-                        # Retrieve image content from OpenAI and encode as base64
-                        try:
-                            file_response = openai.files.content(file.openai_file_id)
-                            base64_data = base64.b64encode(file_response.content).decode('utf-8')
-                            content.append({
-                                "type": "image_url",
-                                "image_url": {"url": f"data:{file.mime_type};base64,{base64_data}"}
-                            })
-                        except Exception as e:
-                            print(f"Failed to retrieve image {file.openai_file_id}: {e}")
-                        pass
+                        file_location = file.openai_file_id
+                        # Check if it's a local path or GCS URL
+                        if file_location.startswith('https://'):
+                            # GCS URL
+                            url = get_chatfile_signed(file_location)
+                            content.append({"type": "image_url", "image_url": {"url": url}})
+
+                        else:
+                            # Retrieve image content from OpenAI and encode as base64
+                            # try:
+                            #     file_response = openai.files.content(file.openai_file_id)
+                            #     base64_data = base64.b64encode(file_response.content).decode('utf-8')
+                            #     content.append({
+                            #         "type": "image_url",
+                            #         "image_url": {"url": f"data:{file.mime_type};base64,{base64_data}"}
+                            #     })
+                            # except Exception as e:
+                            #     print(f"Failed to retrieve image {file.openai_file_id}: {e}")
+                            pass
                     else:
                         # Unsupported file type
                         pass
