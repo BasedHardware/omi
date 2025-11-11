@@ -159,7 +159,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (context) => ConfirmationDialog(
         title: device.getFirmwareWarningTitle(),
         description: warningMessage,
-        checkboxText: "Don't show this message again",
+        checkboxText: "Don't show it again",
         checkboxValue: false,
         onCheckboxChanged: (value) {
           dontShowAgain = value;

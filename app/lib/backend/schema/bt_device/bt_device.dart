@@ -538,7 +538,7 @@ class BtDevice {
       case DeviceType.bee:
       case DeviceType.fieldy:
       case DeviceType.friendPendant:
-        return 'Firmware Recommendation';
+        return 'Compatibility Note';
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.frame:
@@ -552,24 +552,21 @@ class BtDevice {
   String getFirmwareWarningMessage() {
     switch (type) {
       case DeviceType.plaud:
-        return 'Your device is running firmware V0207, which works great with Omi.\n\n'
-            'ℹ️ We recommend avoiding firmware updates through the PLAUD app, as newer versions may affect compatibility.\n\n'
-            'For the best experience, please keep firmware V0207.';
+        return 'Your $name\'s current firmware works great with Omi.\n\n'
+            'We recommend keeping your current firmware and not updating through the PLAUD app, as newer versions may affect compatibility.';
 
       case DeviceType.bee:
-        return 'Your device\'s current firmware works great with Omi.\n\n'
-            'ℹ️ We recommend avoiding firmware updates through the Bee app, as newer versions may affect compatibility.\n\n'
-            'For the best experience, please keep your current firmware.';
+        return 'Your $name\'s current firmware works great with Omi.\n\n'
+            'We recommend keeping your current firmware and not updating through the Bee app, as newer versions may affect compatibility.\n\n'
+            'For the best experience, please keep your current firmware version.';
 
       case DeviceType.fieldy:
-        return 'Your device\'s current firmware works great with Omi.\n\n'
-            'ℹ️ We recommend avoiding firmware updates through the Compass app, as newer versions may affect compatibility.\n\n'
-            'For the best experience, please keep your current firmware.';
+        return 'Your $name\'s current firmware works great with Omi.\n\n'
+            'We recommend keeping your current firmware and not updating through the Compass app, as newer versions may affect compatibility.';
 
       case DeviceType.friendPendant:
-        return 'Your device\'s current firmware works great with Omi.\n\n'
-            'ℹ️ We recommend avoiding firmware updates through the Friend app, as newer versions may affect compatibility.\n\n'
-            'For the best experience, please keep your current firmware.';
+        return 'Your $name\'s current firmware works great with Omi.\n\n'
+            'We recommend keeping your current firmware and not updating through the Friend app, as newer versions may affect compatibility.';
 
       case DeviceType.omi:
       case DeviceType.openglass:
