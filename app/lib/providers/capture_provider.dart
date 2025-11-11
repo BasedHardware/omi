@@ -169,8 +169,8 @@ class CaptureProvider extends ChangeNotifier
         return 'fieldy';
       case DeviceType.bee:
         return 'bee';
-      case DeviceType.xor:
-        return 'xor';
+      case DeviceType.plaud:
+        return 'plaud';
       case DeviceType.frame:
         return 'frame';
       case DeviceType.appleWatch:

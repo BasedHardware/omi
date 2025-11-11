@@ -25,9 +25,7 @@ class AppListItem extends StatelessWidget {
       selector: (context, provider) {
         // Check if this specific app is loading
         bool isLoading = false;
-        if (provider.appLoading.isNotEmpty && 
-            index >= 0 && 
-            index < provider.appLoading.length) {
+        if (provider.appLoading.isNotEmpty && index >= 0 && index < provider.appLoading.length) {
           isLoading = provider.appLoading[index];
         }
 
