@@ -86,7 +86,7 @@ function generate_ios_custom_config() {
 # Generate custom configs for macOS
 ######################################
 function generate_macos_custom_config() {
-  bash scripts/generate_ios_custom_config.sh macos/Config/Dev/GoogleService-Info.plist macos/Runner/Configs
+  echo "// This is a generated file; do not edit or check into version control." > "macos/Runner/Configs/Custom.xcconfig"
 
   # Custom bundle identifier
   SUFFIX=$(generate_device_suffix)
