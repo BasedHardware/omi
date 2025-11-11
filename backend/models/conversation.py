@@ -217,7 +217,7 @@ class ConversationSource(str, Enum):
     omi = 'omi'
     fieldy = 'fieldy'
     bee = 'bee'
-    xor = 'xor'
+    plaud = 'plaud'
     frame = 'frame'
     friend_com = 'friend_com'
     apple_watch = 'apple_watch'

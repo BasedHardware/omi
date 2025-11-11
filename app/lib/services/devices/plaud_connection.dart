@@ -6,7 +6,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 
-class XorDeviceConnection extends DeviceConnection {
+class PlaudDeviceConnection extends DeviceConnection {
   static const int _cmdGetBattery = 9;
   static const int _cmdStartRecord = 20;
   static const int _cmdStopRecord = 23;
@@ -19,7 +19,7 @@ class XorDeviceConnection extends DeviceConnection {
   StreamSubscription? _notificationSub;
   int? _sessionId;
 
-  XorDeviceConnection(super.device, super.transport);
+  PlaudDeviceConnection(super.device, super.transport);
 
   @override
   Future<void> connect({
@@ -28,7 +28,7 @@ class XorDeviceConnection extends DeviceConnection {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await Future.delayed(const Duration(seconds: 2));
 
-    final stream = transport.getCharacteristicStream(xorServiceUuid, xorNotifyCharUuid);
+    final stream = transport.getCharacteristicStream(plaudServiceUuid, plaudNotifyCharUuid);
     _notificationSub = stream.listen(_handleNotification);
   }
 
@@ -79,7 +79,7 @@ class XorDeviceConnection extends DeviceConnection {
     _commandQueues.putIfAbsent(cmdId, () => StreamController<List<int>>.broadcast());
 
     final command = [1, cmdId & 0xFF, (cmdId >> 8) & 0xFF, ...payload];
-    await transport.writeCharacteristic(xorServiceUuid, xorWriteCharUuid, command);
+    await transport.writeCharacteristic(plaudServiceUuid, plaudWriteCharUuid, command);
 
     try {
       return await _commandQueues[cmdId]!.stream.first.timeout(const Duration(seconds: 10));
@@ -114,7 +114,7 @@ class XorDeviceConnection extends DeviceConnection {
 
   Future<void> _stopSync() async {
     await transport
-        .writeCharacteristic(xorServiceUuid, xorWriteCharUuid, [1, _cmdStopSync & 0xFF, (_cmdStopSync >> 8) & 0xFF, 1]);
+        .writeCharacteristic(plaudServiceUuid, plaudWriteCharUuid, [1, _cmdStopSync & 0xFF, (_cmdStopSync >> 8) & 0xFF, 1]);
   }
 
   @override
@@ -125,12 +125,12 @@ class XorDeviceConnection extends DeviceConnection {
         // Response format: [is_charging, battery_level]
         final batteryLevel = response[1];
         final isCharging = response[0] != 0;
-        debugPrint('[XOR] Battery: $batteryLevel% ${isCharging ? "(Charging)" : ""}');
+        debugPrint('[PLAUD] Battery: $batteryLevel% ${isCharging ? "(Charging)" : ""}');
         return batteryLevel;
       }
       return -1;
     } catch (e) {
-      debugPrint('[XOR] Error retrieving battery level: $e');
+      debugPrint('[PLAUD] Error retrieving battery level: $e');
       return -1;
     }
   }
@@ -146,7 +146,7 @@ class XorDeviceConnection extends DeviceConnection {
       }
       return null;
     } catch (e) {
-      debugPrint('[XOR] Error getting battery state: $e');
+      debugPrint('[PLAUD] Error getting battery state: $e');
       return null;
     }
   }
@@ -155,7 +155,7 @@ class XorDeviceConnection extends DeviceConnection {
   Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
     void Function(int)? onBatteryLevelChange,
   }) async {
-    // XOR devices use command-based battery retrieval, not automatic notifications
+    // PLAUD devices use command-based battery retrieval, not automatic notifications
     // Battery state must be explicitly requested via CMD_GET_BATTERY (command 9)
     // Therefore we poll periodically rather than relying on unsolicited notifications
     if (onBatteryLevelChange == null) return null;
@@ -179,7 +179,7 @@ class XorDeviceConnection extends DeviceConnection {
           onBatteryLevelChange(batteryLevel);
         }
       } catch (e) {
-        debugPrint('[XOR] Error polling battery level: $e');
+        debugPrint('[PLAUD] Error polling battery level: $e');
       }
     });
 
@@ -192,7 +192,7 @@ class XorDeviceConnection extends DeviceConnection {
         onBatteryLevelChange(batteryLevel);
       }
     } catch (e) {
-      debugPrint('[XOR] Error getting initial battery level: $e');
+      debugPrint('[PLAUD] Error getting initial battery level: $e');
     }
 
     return controller.stream.listen(null);
@@ -213,7 +213,7 @@ class XorDeviceConnection extends DeviceConnection {
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
     if (!await _setupRecordingSession()) {
-      debugPrint('[XOR] Failed to setup recording session after retries');
+      debugPrint('[PLAUD] Failed to setup recording session after retries');
       return null;
     }
 
@@ -243,7 +243,7 @@ class XorDeviceConnection extends DeviceConnection {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          debugPrint('[XOR] Retry attempt $attempt/$maxRetries');
+          debugPrint('[PLAUD] Retry attempt $attempt/$maxRetries');
           await Future.delayed(Duration(seconds: attempt)); // Exponential backoff: 0s, 1s, 2s
         }
 
@@ -259,11 +259,11 @@ class XorDeviceConnection extends DeviceConnection {
         await Future.delayed(const Duration(seconds: 1));
 
         if (await _startSync(_sessionId!, startTime)) {
-          debugPrint('[XOR] Recording session setup successful');
+          debugPrint('[PLAUD] Recording session setup successful');
           return true;
         }
       } catch (e) {
-        debugPrint('[XOR] Setup error (attempt ${attempt + 1}): $e');
+        debugPrint('[PLAUD] Setup error (attempt ${attempt + 1}): $e');
       }
     }
 
