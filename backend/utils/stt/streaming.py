@@ -2,6 +2,7 @@ import asyncio
 import os
 import random
 import time
+import base64
 from typing import List
 from enum import Enum
 from io import BytesIO
@@ -12,6 +13,7 @@ import json
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 from elevenlabs.client import ElevenLabs
+from elevenlabs.realtime import AudioFormat, CommitStrategy, RealtimeEvents
 
 from utils.stt.soniox_util import *
 
@@ -241,9 +243,9 @@ def get_stt_service_for_language(language: str):
                 'ja': 'jpn',
                 'ko': 'kor',
             }
-            el_lang = lang_mapping.get(language, 'eng')  # Default to English
+            el_lang = lang_mapping.get(language, 'eng')
             if el_lang in elevenlabs_supported_languages:
-                return STTService.elevenlabs, el_lang, 'scribe_v1'
+                return STTService.elevenlabs, el_lang, 'scribe_v2_realtime'
         # Soniox
         elif m == 'soniox-stt-rt':
             if language in soniox_multi_languages:
@@ -259,9 +261,8 @@ def get_stt_service_for_language(language: str):
             if language in deepgram_supported_languages:
                 return STTService.deepgram, language, 'nova-2-general'
 
-    # Fallback to ElevenLabs Scribe English if available, otherwise DeepGram Nova-2 en
     if 'el-scribe' in stt_service_models:
-        return STTService.elevenlabs, 'eng', 'scribe_v1'
+        return STTService.elevenlabs, 'eng', 'scribe_v2_realtime'
     return STTService.deepgram, 'en', 'nova-2-general'
 
 
@@ -754,138 +755,134 @@ async def process_audio_elevenlabs(
     sample_rate: int,
     language: str,
     preseconds: int = 0,
-    model: str = "scribe_v1"
+    model: str = "scribe_v2_realtime"
 ):
-    """
-    Process audio using ElevenLabs Scribe STT service.
-    Note: ElevenLabs Scribe currently supports batch processing, not streaming.
-    This implementation buffers audio and processes it in chunks for near real-time transcription.
-    """
     api_key = os.getenv('ELEVENLABS_API_KEY')
     if not api_key:
-        raise ValueError("ELEVENLABS_API_KEY is not set. Please set the ELEVENLABS_API_KEY environment variable.")
+        raise ValueError("ELEVENLABS_API_KEY is not set.")
     
     print(f'process_audio_elevenlabs: language={language}, sample_rate={sample_rate}, preseconds={preseconds}')
     
-    # Initialize ElevenLabs client
     elevenlabs = ElevenLabs(api_key=api_key)
     
-    # Buffer to collect audio data
-    audio_buffer = BytesIO()
-    buffer_duration = 3.0  # Process in 3-second chunks
-    last_process_time = time.time()
-    segment_counter = 0
-    min_bytes_required = int(sample_rate * 2 * 0.5)  # ~0.5 seconds of 16-bit mono audio
-    audio_event_requests_remaining = 2  # limit audio event tagging to avoid spam
+    audio_format_map = {
+        16000: AudioFormat.PCM_16000,
+        22050: AudioFormat.PCM_22050,
+        24000: AudioFormat.PCM_24000,
+        44100: AudioFormat.PCM_44100,
+    }
     
-    # Create a WebSocket-like interface for compatibility
+    audio_format = audio_format_map.get(sample_rate, AudioFormat.PCM_16000)
+    
+    connection = await elevenlabs.speech_to_text.realtime.connect({
+        "model_id": model,
+        "audio_format": audio_format,
+        "sample_rate": sample_rate,
+        "commit_strategy": CommitStrategy.VAD,
+        "language_code": language,
+        "vad_silence_threshold_secs": 1.0,
+    })
+    
+    partial_transcript_buffer = ""
+    word_buffer = []
+    start_time_offset = 0.0
+    
+    def handle_partial_transcript(data):
+        nonlocal partial_transcript_buffer
+        if 'text' in data:
+            partial_transcript_buffer = data['text']
+    
+    def handle_committed_transcript(data):
+        nonlocal partial_transcript_buffer, word_buffer, start_time_offset
+        
+        if 'words' not in data or not data['words']:
+            partial_transcript_buffer = ""
+            return
+        
+        words = data['words']
+        segments = []
+        current_segment = None
+        
+        for word in words:
+            word_start = word.get('start', 0.0)
+            word_end = word.get('end', 0.0)
+            word_text = word.get('text', '')
+            
+            if word_start < preseconds:
+                continue
+            
+            speaker_id = word.get('speaker', 0)
+            is_user = speaker_id == 0 and preseconds > 0
+            
+            if not current_segment:
+                current_segment = {
+                    'speaker': f"SPEAKER_{speaker_id}",
+                    'start': word_start - preseconds,
+                    'end': word_end - preseconds,
+                    'text': word_text,
+                    'is_user': is_user,
+                    'person_id': None,
+                }
+            else:
+                if current_segment['speaker'] == f"SPEAKER_{speaker_id}":
+                    current_segment['text'] += f" {word_text}"
+                    current_segment['end'] = word_end - preseconds
+                else:
+                    segments.append(current_segment)
+                    current_segment = {
+                        'speaker': f"SPEAKER_{speaker_id}",
+                        'start': word_start - preseconds,
+                        'end': word_end - preseconds,
+                        'text': word_text,
+                        'is_user': is_user,
+                        'person_id': None,
+                    }
+        
+        if current_segment:
+            segments.append(current_segment)
+        
+        if segments:
+            stream_transcript(segments)
+        
+        partial_transcript_buffer = ""
+    
+    def handle_error(error):
+        print(f"ElevenLabs WebSocket error: {error}")
+    
+    def handle_close():
+        print("ElevenLabs WebSocket closed")
+    
+    connection.on(RealtimeEvents.PARTIAL_TRANSCRIPT, handle_partial_transcript)
+    connection.on(RealtimeEvents.COMMITTED_TRANSCRIPT, handle_committed_transcript)
+    connection.on(RealtimeEvents.ERROR, handle_error)
+    connection.on(RealtimeEvents.CLOSE, handle_close)
+    
     class ElevenLabsSocket:
-        def __init__(self):
+        def __init__(self, conn):
+            self.connection = conn
             self.closed = False
             
         async def send(self, data):
-            nonlocal audio_buffer, last_process_time, segment_counter, audio_event_requests_remaining
-            
-            # Add data to buffer
-            audio_buffer.write(data)
-            current_time = time.time()
-            
-            # Check if we should process the buffer
-            if current_time - last_process_time >= buffer_duration:
-                await self._process_buffer()
-                last_process_time = current_time
-                
-        async def _process_buffer(self, allow_partial: bool = False):
-            nonlocal segment_counter, audio_event_requests_remaining
-            
-            # Get buffer content
-            audio_data = audio_buffer.getvalue()
-            if len(audio_data) == 0 or (len(audio_data) < min_bytes_required and not allow_partial):
+            if self.closed:
                 return
-                
-            # Reset buffer
-            audio_buffer.seek(0)
-            audio_buffer.truncate(0)
             
             try:
-                # Wrap raw PCM into a WAV container so ElevenLabs receives playable audio
-                wav_stream = BytesIO()
-                with wave.open(wav_stream, 'wb') as wav_file:
-                    wav_file.setnchannels(1)
-                    wav_file.setsampwidth(2)  # 16-bit PCM
-                    wav_file.setframerate(sample_rate)
-                    wav_file.writeframes(audio_data)
-                wav_stream.seek(0)
-
-                # Process with ElevenLabs Scribe
-                transcription = elevenlabs.speech_to_text.convert(
-                    file=wav_stream,
-                    model_id=model,
-                    tag_audio_events=audio_event_requests_remaining > 0,
-                    language_code=language,
-                    diarize=True,
-                )
-                if audio_event_requests_remaining > 0:
-                    audio_event_requests_remaining -= 1
-
-                # Parse the transcription result
-                if hasattr(transcription, 'words') and transcription.words:
-                    segments = []
-                    current_segment = None
-                    
-                    for word in transcription.words:
-                        # Skip words that are before the preseconds threshold
-                        if word.start < preseconds:
-                            continue
-                            
-                        speaker_id = word.speaker if hasattr(word, 'speaker') else 0
-                        is_user = True if speaker_id == 0 and preseconds > 0 else False
-                        
-                        # Create or update segment
-                        if not current_segment:
-                            current_segment = {
-                                'speaker': f"SPEAKER_{speaker_id}",
-                                'start': word.start - preseconds,
-                                'end': word.end - preseconds,
-                                'text': word.text,
-                                'is_user': is_user,
-                                'person_id': None,
-                            }
-                        else:
-                            # Check if speaker changed
-                            if current_segment['speaker'] == f"SPEAKER_{speaker_id}":
-                                current_segment['text'] += f" {word.text}"
-                                current_segment['end'] = word.end - preseconds
-                            else:
-                                # Send previous segment and start new one
-                                segments.append(current_segment)
-                                current_segment = {
-                                    'speaker': f"SPEAKER_{speaker_id}",
-                                    'start': word.start - preseconds,
-                                    'end': word.end - preseconds,
-                                    'text': word.text,
-                                    'is_user': is_user,
-                                    'person_id': None,
-                                }
-                    
-                    # Send the last segment if it exists
-                    if current_segment:
-                        segments.append(current_segment)
-                    
-                    # Stream the segments
-                    if segments:
-                        stream_transcript(segments)
-                        
+                audio_base64 = base64.b64encode(data).decode('utf-8')
+                await self.connection.send({"audio_base_64": audio_base64})
             except Exception as e:
-                print(f"Error processing audio with ElevenLabs: {e}")
+                print(f"Error sending audio to ElevenLabs: {e}")
                 
         async def close(self):
-            # Process any remaining audio in the buffer (even if smaller than usual)
-            await self._process_buffer(allow_partial=True)
-            self.closed = True
+            if not self.closed:
+                try:
+                    await self.connection.commit()
+                    await self.connection.close()
+                except Exception as e:
+                    print(f"Error closing ElevenLabs connection: {e}")
+                finally:
+                    self.closed = True
             
         async def keepalive_ping(self):
-            # No-op for compatibility
             pass
     
-    return ElevenLabsSocket()
+    return ElevenLabsSocket(connection)

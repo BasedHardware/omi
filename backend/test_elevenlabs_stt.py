@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
-"""
-Simple test script to verify ElevenLabs Scribe STT integration
-"""
 import os
 import asyncio
 from io import BytesIO
 from utils.stt.streaming import process_audio_elevenlabs, get_stt_service_for_language
 
 async def test_elevenlabs_stt():
-    """Test ElevenLabs Scribe STT service"""
     print("Testing ElevenLabs Scribe STT integration...")
     
     # Check if API key is set
@@ -33,22 +29,21 @@ async def test_elevenlabs_stt():
         segments_received.extend(segments)
     
     try:
-        # Create ElevenLabs socket
         socket = await process_audio_elevenlabs(
             stream_transcript, 
             sample_rate=16000, 
             language='eng', 
             preseconds=0,
-            model='scribe_v1'
+            model='scribe_v2_realtime'
         )
         
         print("ElevenLabs socket created successfully")
         
-        # Test sending some dummy audio data
-        dummy_audio = b'\x00' * 3200  # 100ms of silence at 16kHz
+        dummy_audio = b'\x00' * 3200
         await socket.send(dummy_audio)
         
-        # Close the socket
+        await asyncio.sleep(2)
+        
         await socket.close()
         
         print("ElevenLabs socket closed successfully")
@@ -59,12 +54,11 @@ async def test_elevenlabs_stt():
         return False
 
 if __name__ == "__main__":
-    # Set default values for testing if not present
     if not os.getenv('STT_SERVICE_MODELS'):
         os.environ['STT_SERVICE_MODELS'] = 'el-scribe'
     
     result = asyncio.run(test_elevenlabs_stt())
     if result:
-        print("\n✅ ElevenLabs Scribe STT integration test PASSED")
+        print("\n✅ Test PASSED")
     else:
-        print("\n❌ ElevenLabs Scribe STT integration test FAILED")
+        print("\n❌ Test FAILED")
