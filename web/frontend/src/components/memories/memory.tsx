@@ -18,9 +18,22 @@ export default function Memory({ memory }: MemoryProps) {
           <h2 className="text-2xl font-medium tracking-wide md:text-3xl">
             {memory.structured.title || DEFAULT_TITLE_MEMORY}
           </h2>
-          <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400 md:text-base">
-            <time dateTime={new Date(memory.created_at).toISOString()}>
-              {moment(memory.created_at).format('MMMM Do YYYY, h:mm a')}
+          <div className="flex flex-wrap items-center gap-3">
+            <time
+              dateTime={new Date(memory.created_at).toISOString()}
+              className="inline-flex items-center rounded-full bg-zinc-800/50 px-3 py-1 text-xs text-zinc-400 ring-1 ring-inset ring-zinc-800 md:text-sm"
+            >
+              {(() => {
+                const date = moment(memory.created_at);
+                const now = moment();
+                if (date.isSame(now, 'day')) {
+                  return `Today ${date.format('h:mm A')}`;
+                } else if (date.isSame(now.clone().subtract(1, 'day'), 'day')) {
+                  return `Yesterday ${date.format('h:mm A')}`;
+                } else {
+                  return date.format('ddd, MMM D h:mm A');
+                }
+              })()}
             </time>
           </div>
         </div>
