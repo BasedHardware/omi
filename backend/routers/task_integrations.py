@@ -482,7 +482,7 @@ async def create_task_via_integration(
 @router.get("/v1/task-integrations/asana/workspaces", tags=['task-integrations'])
 async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's Asana workspaces"""
-    user_ref = db.collection('users').document(uid)
+    user_ref = users_db.collection('users').document(uid)
     task_integrations = user_ref.collection('task_integrations').document('asana').get()
 
     if not task_integrations.exists:
@@ -513,7 +513,7 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
 @router.get("/v1/task-integrations/asana/projects/{workspace_gid}", tags=['task-integrations'])
 async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get projects in an Asana workspace"""
-    user_ref = db.collection('users').document(uid)
+    user_ref = users_db.collection('users').document(uid)
     task_integrations = user_ref.collection('task_integrations').document('asana').get()
 
     if not task_integrations.exists:
@@ -544,7 +544,7 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
 @router.get("/v1/task-integrations/clickup/teams", tags=['task-integrations'])
 async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's ClickUp teams"""
-    user_ref = db.collection('users').document(uid)
+    user_ref = users_db.collection('users').document(uid)
     task_integrations = user_ref.collection('task_integrations').document('clickup').get()
 
     if not task_integrations.exists:
@@ -575,7 +575,7 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
 @router.get("/v1/task-integrations/clickup/spaces/{team_id}", tags=['task-integrations'])
 async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get spaces in a ClickUp team"""
-    user_ref = db.collection('users').document(uid)
+    user_ref = users_db.collection('users').document(uid)
     task_integrations = user_ref.collection('task_integrations').document('clickup').get()
 
     if not task_integrations.exists:
@@ -606,7 +606,7 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
 @router.get("/v1/task-integrations/clickup/lists/{space_id}", tags=['task-integrations'])
 async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get lists in a ClickUp space"""
-    user_ref = db.collection('users').document(uid)
+    user_ref = users_db.collection('users').document(uid)
     task_integrations = user_ref.collection('task_integrations').document('clickup').get()
 
     if not task_integrations.exists:
