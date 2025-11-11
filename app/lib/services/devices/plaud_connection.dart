@@ -113,8 +113,8 @@ class PlaudDeviceConnection extends DeviceConnection {
   }
 
   Future<void> _stopSync() async {
-    await transport
-        .writeCharacteristic(plaudServiceUuid, plaudWriteCharUuid, [1, _cmdStopSync & 0xFF, (_cmdStopSync >> 8) & 0xFF, 1]);
+    await transport.writeCharacteristic(
+        plaudServiceUuid, plaudWriteCharUuid, [1, _cmdStopSync & 0xFF, (_cmdStopSync >> 8) & 0xFF, 1]);
   }
 
   @override
@@ -316,8 +316,8 @@ class PlaudDeviceConnection extends DeviceConnection {
   Future<Map<String, String>> getDeviceInfo() async {
     return {
       'modelNumber': 'PLAUD NotePin',
-      'firmwareRevision': '0.0.1',
-      'hardwareRevision': '0.0.1',
+      'firmwareRevision': '1.0.0',
+      'hardwareRevision': '1.0.0',
       'manufacturerName': 'PLAUD',
     };
   }
