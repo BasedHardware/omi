@@ -561,12 +561,42 @@ class BtDevice {
   }
 
   static bool isXorDevice(ScanResult result) {
+    final manufacturerData = result.advertisementData.manufacturerData;
+
+    // Check for PLAUD manufacturer ID (93 / 0x5D)
+    // This should be consistent across all PLAUD devices
+    if (manufacturerData.containsKey(93)) {
+      final data = manufacturerData[93]!;
+
+      // Log the pattern to learn new devices
+      debugPrint(
+          '[XOR Discovery] Found manufacturer ID 93 with data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join()}');
+
+      // Known pattern for NotePin: 0456cf00
+      if (data.length >= 4 && data[0] == 0x04 && data[1] == 0x56 && data[2] == 0xcf && data[3] == 0x00) {
+        return true;
+      }
+
+      // Accept any device with manufacturer ID 93 if it has data
+      // This catches other PLAUD models we haven't seen yet
+      if (data.isNotEmpty) {
+        debugPrint('[XOR Discovery] Accepting device with manufacturer ID 93');
+        return true;
+      }
+    }
+
+    // Fallback: name check for renamed/unknown variants
     return result.device.platformName.toUpperCase().startsWith('PLAUD');
   }
 
   static bool isXorDeviceFromDevice(BluetoothDevice device) {
-    return device.servicesList.any((s) => s.uuid == Guid(xorServiceUuid)) ||
-        device.platformName.toUpperCase().startsWith('PLAUD');
+    // Primary check: XOR service UUID (most reliable after connection)
+    if (device.servicesList.any((s) => s.uuid == Guid(xorServiceUuid))) {
+      return true;
+    }
+
+    // Fallback: name check for compatibility
+    return device.platformName.toUpperCase().startsWith('PLAUD');
   }
 
   static bool isFieldyDevice(ScanResult result) {
