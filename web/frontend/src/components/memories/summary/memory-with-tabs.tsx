@@ -54,6 +54,7 @@ export default function MemoryWithTabs({ memory }: MemoryWithTabsProps) {
           <Transcription
             transcript={memory.transcript_segments}
             externalData={memory.external_data}
+            people={memory.people}
           />
         ) : (
           <Chat
