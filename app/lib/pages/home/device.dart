@@ -232,6 +232,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   ),
                   const SizedBox(height: 32),
                   DeviceAnimationWidget(
+                    deviceType: provider.connectedDevice?.type,
+                    modelNumber: provider.connectedDevice?.modelNumber,
                     isConnected: provider.connectedDevice != null,
                     deviceName: provider.connectedDevice?.name ?? provider.pairedDevice?.name,
                     animatedBackground: provider.connectedDevice != null,

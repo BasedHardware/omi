@@ -214,7 +214,7 @@ workflows:
       events:
         - tag
       tag_patterns:
-        - pattern: "v*-mobile-cm"
+        - pattern: "v*-desktop-cm"
           include: true
     working_directory: app
     scripts:
@@ -311,8 +311,8 @@ workflows:
       - name: Flutter build macOS
         script: |
           # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-desktop-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-desktop-cm$/\2/')
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
