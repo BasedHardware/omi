@@ -50,6 +50,7 @@ class _ProfilePageState extends State<ProfilePage> {
     required Widget icon,
     required VoidCallback onTap,
     bool showSubtitle = true,
+    bool showBetaTag = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -59,7 +60,7 @@ class _ProfilePageState extends State<ProfilePage> {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
               SizedBox(
@@ -72,13 +73,36 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        if (showBetaTag) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'BETA',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     if (showSubtitle && subtitle != null) ...[
                       const SizedBox(height: 2),
@@ -86,7 +110,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         subtitle,
                         style: const TextStyle(
                           color: Color(0xFF8E8E93),
-                          fontSize: 15,
+                          fontSize: 12,
                           fontWeight: FontWeight.w400,
                         ),
                       ),
@@ -198,7 +222,6 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _buildProfileItem(
                   title: SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
-                  subtitle: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
                   icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     MixpanelManager().pageOpened('Profile Change Name');
@@ -223,7 +246,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
                     return _buildProfileItem(
                       title: 'Primary Language',
-                      subtitle: languageName,
                       icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
                       onTap: () async {
                         MixpanelManager().pageOpened('Profile Change Language');
@@ -237,8 +259,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: 'Persona',
-                  subtitle: 'Manage your Omi persona',
                   icon: const FaIcon(FontAwesomeIcons.solidCircleUser, color: Color(0xFF8E8E93), size: 20),
+                  showBetaTag: true,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -260,7 +282,6 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _buildProfileItem(
                   title: 'Speech Profile',
-                  subtitle: 'Teach Omi your voice',
                   icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const SpeechProfilePage());
@@ -270,7 +291,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: 'Identifying Others',
-                  subtitle: 'Tell Omi who said it 🗣️',
                   icon: const FaIcon(FontAwesomeIcons.users, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const UserPeoplePage());
@@ -279,7 +299,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: 'Conversation Timeout',
-                  subtitle: 'Set silence duration before auto-end',
                   icon: const FaIcon(FontAwesomeIcons.clock, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     ConversationTimeoutDialog.show(context);
@@ -294,7 +313,6 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _buildProfileItem(
                   title: 'Payment Methods',
-                  subtitle: 'Add or change your payment method',
                   icon: const FaIcon(FontAwesomeIcons.solidCreditCard, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const PaymentsPage());

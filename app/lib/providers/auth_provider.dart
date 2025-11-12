@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/auth_service.dart';
@@ -62,11 +63,12 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   Future<void> onGoogleSignIn(Function() onSignIn) async {
+    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       try {
         UserCredential? credential;
-        if (PlatformService.isMobile) {
+        if (PlatformService.isMobile && !useWebAuth) {
           credential = await AuthService.instance.signInWithGoogleMobile();
         } else {
           credential = await AuthService.instance.authenticateWithProvider('google');
@@ -85,11 +87,12 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   Future<void> onAppleSignIn(Function() onSignIn) async {
+    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       try {
         UserCredential? credential;
-        if (PlatformService.isMobile) {
+        if (PlatformService.isMobile && !useWebAuth) {
           credential = await AuthService.instance.signInWithAppleMobile();
         } else {
           credential = await AuthService.instance.authenticateWithProvider('apple');

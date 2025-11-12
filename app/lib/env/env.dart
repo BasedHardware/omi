@@ -11,6 +11,7 @@ abstract class Env {
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
+  // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _instance.apiBaseUrl;
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
@@ -26,6 +27,10 @@ abstract class Env {
   static String? get googleClientId => _instance.googleClientId;
 
   static String? get googleClientSecret => _instance.googleClientSecret;
+
+  static bool get useWebAuth => _instance.useWebAuth ?? false;
+
+  static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
 }
 
 abstract class EnvFields {
@@ -48,4 +53,8 @@ abstract class EnvFields {
   String? get googleClientId;
 
   String? get googleClientSecret;
+
+  bool? get useWebAuth;
+
+  bool? get useAuthCustomToken;
 }

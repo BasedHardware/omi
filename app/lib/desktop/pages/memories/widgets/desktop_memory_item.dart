@@ -1,5 +1,8 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -27,7 +30,17 @@ class DesktopMemoryItem extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => onTap(context, memory, provider),
+          onTap: () {
+            if (memory.isLocked) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const UsagePage(showUpgradeDialog: true),
+                ),
+              );
+              return;
+            }
+            onTap(context, memory, provider);
+          },
           borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: const EdgeInsets.all(16),
@@ -63,8 +76,7 @@ class DesktopMemoryItem extends StatelessWidget {
 
                 // Memory content
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Stack(
                     children: [
                       Text(
                         memory.content.decodeString,
@@ -76,6 +88,7 @@ class DesktopMemoryItem extends StatelessWidget {
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (memory.isLocked) _buildLockedOverlay(context),
                     ],
                   ),
                 ),
@@ -88,6 +101,31 @@ class DesktopMemoryItem extends StatelessWidget {
 
                 _buildQuickActions(),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLockedOverlay(BuildContext context) {
+    return Positioned.fill(
+      child: ClipRRect(
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.01),
+            ),
+            child: const Text(
+              'Upgrade to unlimited',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),

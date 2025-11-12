@@ -76,6 +76,11 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  // Double tap behavior: true = pause/mute, false = end conversation (default)
+  bool get doubleTapPausesMuting => getBool('doubleTapPausesMuting') ?? false;
+
+  set doubleTapPausesMuting(bool value) => saveBool('doubleTapPausesMuting', value);
+
   //----------------------------- Permissions ---------------------------------//
 
   set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
@@ -230,6 +235,10 @@ class SharedPreferencesUtil {
   bool get showActionItemDeleteConfirmation => getBool('showActionItemDeleteConfirmation') ?? true;
 
   set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
+
+  bool get showGetOmiCard => getBool('showGetOmiCard') ?? true;
+
+  set showGetOmiCard(bool value) => saveBool('showGetOmiCard', value);
 
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];

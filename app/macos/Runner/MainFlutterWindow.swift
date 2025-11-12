@@ -579,6 +579,8 @@ extension MainFlutterWindow {
     @objc private func handleToggleFloatingButtonShortcut() {
         if floatingControlBar?.isVisible ?? false {
             hideFloatingControlBar()
+            // Also hide the AI conversation window when hiding the floating bar
+            FloatingChatWindowManager.shared.clearAndHideAIConversationWindow()
         } else {
             showFloatingControlBar()
         }
