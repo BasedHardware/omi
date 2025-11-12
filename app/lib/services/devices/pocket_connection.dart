@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -17,9 +18,9 @@ class PocketDeviceConnection extends DeviceConnection {
     65, 80, 80, 38, 83, 75, 38, 101, 121, 54, 114, 66, 80, 88, 80, 80, 105, 97, 86, 67, 103, 105, 84
   ]; // "APP&SK&ey6rBPXPPiaVCgiT"
 
-  // MP3 Frame marker
-  static const List<int> mp3Marker = [0xFF, 0xF3, 0x48, 0xC4];
-  static const int mp3FrameSize = 144;
+  // MP3 frame marker and size (from protocol analysis)
+  static const List<int> mp3Marker = [0xFF, 0xF3, 0x48, 0xC4]; // MP3 frame marker (4 bytes)
+  static const int mp3FrameSize = 144; // bytes per frame
 
   // Response buffers
   final List<int> _responseBuffer = [];
@@ -188,9 +189,9 @@ class PocketDeviceConnection extends DeviceConnection {
           if (parts.length >= 4) {
             final used = int.parse(parts[2]);
             final total = int.parse(parts[3]);
-            debugPrint('Pocket: Storage response - used: $used KB, total: $total KB');
-            // Convert KB to bytes
-            return (used * 1024, total * 1024);
+            debugPrint('Pocket: Storage response - used: $used MB, total: $total MB');
+            // Convert MB to bytes
+            return (used * 1024 * 1024, total * 1024 * 1024);
           }
         } catch (e) {
           debugPrint('Pocket: Error parsing storage: $e');
@@ -276,36 +277,34 @@ class PocketDeviceConnection extends DeviceConnection {
       await Future.delayed(const Duration(seconds: 30));
       
       // Find MP3 data in buffer
+      debugPrint('Pocket: Response buffer size: ${_responseBuffer.length} bytes');
+      debugPrint('Pocket: First 20 bytes of buffer: ${_responseBuffer.take(20).toList()}');
+      
       final audioStart = _findMarker(_responseBuffer, mp3Marker);
       if (audioStart < 0) {
         debugPrint('Pocket: MP3 marker not found in response');
         return null;
       }
       
+      debugPrint('Pocket: MP3 marker found at position $audioStart');
       final audioData = _responseBuffer.sublist(audioStart);
+      debugPrint('Pocket: Audio data size: ${audioData.length} bytes');
+      debugPrint('Pocket: First 20 bytes of audio data: ${audioData.take(20).toList()}');
       
-      // Verify and extract valid MP3 frames
-      int packetCount = 0;
-      int pos = 0;
-      
-      while (pos < audioData.length - mp3FrameSize) {
-        if (_matchesMarker(audioData, pos, mp3Marker)) {
-          packetCount++;
-          pos += mp3FrameSize;
-        } else {
-          break;
+      // Check if there's any non-zero data
+      int nonZeroCount = 0;
+      for (int i = 0; i < min(1000, audioData.length); i++) {
+        if (audioData[i] != 0 && audioData[i] != 0xFF && audioData[i] != 0xF3 && audioData[i] != 0x48 && audioData[i] != 0xC4) {
+          nonZeroCount++;
         }
       }
+      debugPrint('Pocket: Non-zero bytes in first 1000: $nonZeroCount');
       
-      if (packetCount == 0) {
-        debugPrint('Pocket: No valid MP3 frames found');
-        return null;
-      }
+      // Return ALL audio data after the first marker (like Python does)
+      // Python doesn't validate frame-by-frame, it just saves everything
+      debugPrint('Pocket: Downloaded ${audioData.length} bytes of MP3 data');
       
-      final validData = audioData.sublist(0, packetCount * mp3FrameSize);
-      debugPrint('Pocket: Downloaded ${validData.length} bytes ($packetCount frames)');
-      
-      return Uint8List.fromList(validData);
+      return Uint8List.fromList(audioData);
     } catch (e) {
       debugPrint('Pocket: Error downloading recording: $e');
       return null;

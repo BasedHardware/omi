@@ -123,8 +123,16 @@ def _get_structured(
             )
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
-        discarded = should_discard_conversation(transcript_text, conversation.photos)
+        # Skip discard check for Pocket recordings - they're intentionally recorded by the user
+        if conversation.source == ConversationSource.pocket:
+            print(f"[DEBUG] Skipping discard check for Pocket recording, transcript_length: {len(transcript_text)}")
+            discarded = False
+        else:
+            discarded = should_discard_conversation(transcript_text, conversation.photos)
+            print(f"[DEBUG] should_discard_conversation returned: {discarded}, transcript_length: {len(transcript_text)}, has_photos: {bool(conversation.photos)}")
+        
         if discarded:
+            print(f"[DEBUG] Discarding conversation due to should_discard_conversation")
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.

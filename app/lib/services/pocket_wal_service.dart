@@ -7,9 +7,10 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Service to convert Pocket MP3 recordings to WAL files for processing
+/// Service to save Pocket MP3 recordings for backend conversion
 class PocketWalService {
   /// Create a WAL file from a Pocket recording's MP3 data
+  /// Saves raw MP3 file for backend conversion
   /// Returns the created WAL object
   static Future<Wal> createWalFromPocketRecording({
     required PocketRecording recording,
@@ -23,28 +24,27 @@ class PocketWalService {
     // Calculate duration in seconds
     final durationSeconds = recording.durationSeconds;
     
-    // Save MP3 file directly - backend will handle conversion
-    final directory = await getApplicationDocumentsDirectory();
+    // Save raw MP3 file (backend will convert)
     final cleanDeviceId = device.id.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase();
-    final mp3Filename = 'pocket_${cleanDeviceId}_$timerStart.mp3';
-    final fullPath = '${directory.path}/$mp3Filename';
+    final mp3Filename = 'audio_${cleanDeviceId}_pocket_mp3_$timerStart.mp3';
     
-    final file = File(fullPath);
-    await file.writeAsBytes(mp3Data);
+    debugPrint('Saving Pocket MP3 for backend conversion: $mp3Filename');
+    final docsDir = await getApplicationDocumentsDirectory();
+    final mp3Path = '${docsDir.path}/$mp3Filename';
+    final mp3File = File(mp3Path);
+    await mp3File.writeAsBytes(mp3Data);
     
-    debugPrint('Saved Pocket MP3: $fullPath');
+    debugPrint('Saved MP3 to: $mp3Path');
     
-    // Create WAL object
-    // Note: We use opus codec as a placeholder since the backend will handle MP3
-    // The actual audio format doesn't matter for the sync process
+    // Create WAL object with MP3 codec
     final wal = Wal(
       timerStart: timerStart,
-      codec: BleAudioCodec.opus, // Placeholder codec
+      codec: BleAudioCodec.pcm8, // Use pcm8 as placeholder for MP3 (backend will handle)
       seconds: durationSeconds,
-      sampleRate: 16000, // Standard sample rate
-      channel: 1, // Mono
-      status: WalStatus.miss, // Mark as missing/ready to sync
-      storage: WalStorage.disk, // Store as phone storage (not SD card)
+      sampleRate: 16000,
+      channel: 1,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
       filePath: mp3Filename, // Store only filename, not full path
       device: device.id,
       deviceModel: 'Pocket',

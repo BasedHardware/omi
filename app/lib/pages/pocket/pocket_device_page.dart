@@ -434,31 +434,6 @@ class _PocketDevicePageState extends State<PocketDevicePage> {
           child: Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading || _isSyncing
-                      ? null
-                      : () {
-                          if (_selectedRecordings.isNotEmpty) {
-                            setState(() {
-                              _selectedRecordings.clear();
-                            });
-                          } else if (_recordings.isNotEmpty) {
-                            setState(() {
-                              _selectedRecordings.addAll(_recordings.map((r) => r.recordingId));
-                            });
-                          }
-                        },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white54),
-                  ),
-                  icon: Icon(_selectedRecordings.isEmpty ? Icons.check_box_outline_blank : Icons.check_box),
-                  label: Text(_selectedRecordings.isEmpty ? 'Select All' : 'Deselect All'),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 2,
                 child: ElevatedButton.icon(
                   onPressed: _isLoading || _isDownloading || _isSyncing || _recordings.isEmpty
                       ? null

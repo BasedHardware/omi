@@ -329,8 +329,14 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
 
 Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
   try {
+    // Check if this is a Pocket MP3 file (filename contains "pocket_mp3")
+    final isPocketMp3 = files.isNotEmpty && files.first.path.contains('pocket_mp3');
+    final endpoint = isPocketMp3 ? 'v1/pocket/upload-mp3' : 'v1/sync-local-files';
+    
+    debugPrint('Syncing ${files.length} file(s) to $endpoint (isPocketMp3: $isPocketMp3)');
+    
     var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}v1/sync-local-files',
+      url: '${Env.apiBaseUrl}$endpoint',
       files: files,
     );
 
