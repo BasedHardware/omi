@@ -85,7 +85,7 @@ def get_conversations(
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
-    
+
     # date parameters
     start_datetime = None
     end_datetime = None
@@ -93,7 +93,7 @@ def get_conversations(
         start_datetime = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
     if end_date:
         end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    
+
     conversations = conversations_db.get_conversations(
         uid,
         limit,
