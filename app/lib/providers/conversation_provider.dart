@@ -357,8 +357,8 @@ class ConversationProvider extends ChangeNotifier {
     DateTime? startDate;
     DateTime? endDate;
     if (selectedDate != null) {
-      startDate = DateTime.utc(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
-      endDate = DateTime.utc(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
+      startDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
+      endDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
     }
 
     return await getConversations(
@@ -384,8 +384,8 @@ class ConversationProvider extends ChangeNotifier {
     DateTime? startDate;
     DateTime? endDate;
     if (selectedDate != null) {
-      startDate = DateTime.utc(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
-      endDate = DateTime.utc(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
+      startDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
+      endDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
     }
 
     var newConversations = await getConversations(
