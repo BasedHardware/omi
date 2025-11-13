@@ -17,6 +17,7 @@
 #include "mic.h"
 #include "speaker.h"
 #include "transport.h"
+#include "wdog_facade.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -409,6 +410,12 @@ void turnoff_all()
     rc = gpio_pin_interrupt_configure_dt(&usr_btn, GPIO_INT_LEVEL_LOW);
     if (rc < 0) {
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
+        return;
+    }
+
+    rc = watchdog_deinit();
+    if (rc < 0) {
+        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
         return;
     }
 
