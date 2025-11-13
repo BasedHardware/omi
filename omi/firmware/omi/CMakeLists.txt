@@ -14,6 +14,7 @@ file(GLOB app_sources
     src/spi_flash.c
     src/settings.c
     src/feedback.c
+    src/wdog_facade.c
 )
 file(GLOB core_sources
     src/lib/core/config.h
