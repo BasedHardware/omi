@@ -51,3 +51,8 @@ int watchdog_init(void)
     LOG_INF("Watchdog initialized (timeout: 30s, channel: %d)", wdt_channel_id);
     return 0;
 }
+
+int watchdog_deinit(void)
+{
+    return wdt_disable(wdt_dev);
+}

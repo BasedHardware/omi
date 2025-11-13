@@ -13,4 +13,11 @@ void watchdog_feed(void);
  */
 int watchdog_init(void);
 
+/**
+ * @brief Disable the watchdog timer.
+ * 
+ * @return 0 on success, negative error code on failure to initialize.
+ */
+int watchdog_deinit(void);
+
 #endif /*_WDOG_FACADE_H_*/

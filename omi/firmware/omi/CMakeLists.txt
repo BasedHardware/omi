@@ -29,6 +29,10 @@ if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
 endif()
 
 target_sources(app PRIVATE ${core_sources} ${app_sources})
+target_include_directories(app PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/lib/core
+)
 
 if(CONFIG_OMI_CODEC_OPUS)
     add_subdirectory(src/lib/core/lib/opus-1.2.1/)
