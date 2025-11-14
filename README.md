@@ -44,10 +44,6 @@ cd omi/app
 bash setup.sh ios     # android, macos
 ```
 
-That's it!
-
-**Full setup guide:** [App Setup](https://docs.omi.me/doc/developer/AppSetup) • [Backend Setup](https://docs.omi.me/doc/developer/backend/Backend_Setup)
-
 ## Create your own App (1 min)
 
 Download omi App
@@ -68,15 +64,14 @@ In omi App:
 
 Start speaking, you'll see Real-time transcript on [webhook.site ](https://webhook.site).
 
-To build your own app, replace the webhook URL with your backend. See the **[App Development Guide](https://docs.omi.me/doc/developer/apps/Introduction)** to learn more.
-
 ## In this repo:
 
-- [omi device](https://github.com/BasedHardware/omi/tree/main/omi)
-- [omi glass](https://github.com/BasedHardware/omi/tree/main/omiGlass)
-- [omi app](https://github.com/BasedHardware/omi/tree/main/app)
-- [ai personas (web)](https://github.com/BasedHardware/omi/tree/main/personas-open-source)
-- [SDKs](sdks)
+- [omi device](omi) *nrf\* chips, zephyr (c/c++)*
+- [omi glass](omiglass) *esp32-s3, c/c++*
+- [omi app](app) *flutter*
+- [omi backend](backend) *python (fastapi, firebase, pinecone, deepgram, openai, silero vad)*
+- [SDKs](sdks) *react native, swift, python*
+- [ai personas (web)](web/personas-open-source) *nextjs*
 
 ## Documentation:
 
