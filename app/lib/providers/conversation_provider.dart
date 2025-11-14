@@ -19,6 +19,11 @@ class ConversationProvider extends ChangeNotifier {
   bool showDiscardedConversations = false;
   DateTime? selectedDate;
 
+  // Selection mode for merging conversations
+  bool isSelectionMode = false;
+  Set<String> selectedConversationIds = {};
+  bool isMerging = false;
+
   String previousQuery = '';
   int totalSearchPages = 1;
   int currentSearchPage = 1;
@@ -664,5 +669,106 @@ class ConversationProvider extends ChangeNotifier {
   void updateSyncedConversation(ServerConversation conversation) {
     updateConversationInSortedList(conversation);
     notifyListeners();
+  }
+
+  // Selection mode methods for conversation merging
+  void enableSelectionMode() {
+    isSelectionMode = true;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  void disableSelectionMode() {
+    isSelectionMode = false;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  void toggleConversationSelection(String conversationId) {
+    if (selectedConversationIds.contains(conversationId)) {
+      selectedConversationIds.remove(conversationId);
+    } else {
+      selectedConversationIds.add(conversationId);
+    }
+    notifyListeners();
+  }
+
+  bool isConversationSelected(String conversationId) {
+    return selectedConversationIds.contains(conversationId);
+  }
+
+  bool canMergeSelectedConversations() {
+    if (selectedConversationIds.length < 2) return false;
+
+    // Get selected conversations in chronological order
+    List<ServerConversation> selectedConvos = conversations
+        .where((c) => selectedConversationIds.contains(c.id))
+        .toList();
+    selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+
+    // Check if they are adjacent in the conversation list
+    for (int i = 0; i < selectedConvos.length - 1; i++) {
+      DateTime currentEnd = selectedConvos[i].finishedAt ?? selectedConvos[i].createdAt;
+      DateTime nextStart = selectedConvos[i + 1].startedAt ?? selectedConvos[i + 1].createdAt;
+
+      // Find the index of these conversations in the full list
+      int currentIndex = conversations.indexOf(selectedConvos[i]);
+      int nextIndex = conversations.indexOf(selectedConvos[i + 1]);
+
+      // Check if they are adjacent (allowing for some conversations in between, but within 1 hour)
+      Duration gap = nextStart.difference(currentEnd);
+      if (gap.inHours > 1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  Future<bool> mergeSelectedConversations() async {
+    if (!canMergeSelectedConversations()) return false;
+
+    isMerging = true;
+    notifyListeners();
+
+    try {
+      // Sort conversation IDs by timestamp
+      List<ServerConversation> selectedConvos = conversations
+          .where((c) => selectedConversationIds.contains(c.id))
+          .toList();
+      selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+      List<String> sortedIds = selectedConvos.map((c) => c.id).toList();
+
+      // Call merge API
+      ServerConversation? mergedConversation = await mergeConversations(sortedIds);
+
+      if (mergedConversation != null) {
+        // Remove merged conversations from local list
+        conversations.removeWhere((c) => selectedConversationIds.contains(c.id));
+
+        // Add merged conversation
+        conversations.insert(0, mergedConversation);
+        conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // Update grouped conversations
+        _groupConversationsByDateWithoutNotify();
+
+        // Clear selection
+        disableSelectionMode();
+
+        isMerging = false;
+        notifyListeners();
+        return true;
+      } else {
+        isMerging = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Error merging conversations: $e');
+      isMerging = false;
+      notifyListeners();
+      return false;
+    }
   }
 }

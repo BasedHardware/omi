@@ -604,3 +604,58 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     summary = generate_summary_with_prompt(full_transcript, request.prompt)
 
     return {"summary": summary}
+
+
+@router.post("/v1/conversations/merge", response_model=Conversation, tags=['conversations'])
+def merge_conversations_endpoint(request: MergeConversationsRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Merge multiple adjacent conversations into a single conversation.
+
+    This endpoint:
+    1. Validates that all conversations exist and belong to the user
+    2. Validates that conversations are adjacent (no gaps > 1 hour)
+    3. Combines transcript segments, photos, action items, and events
+    4. Generates a new title and overview for the merged conversation
+    5. Deletes the source conversations
+    6. Returns the new merged conversation
+    """
+    if len(request.conversation_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 conversations are required to merge")
+
+    # Validate all conversations exist and belong to user
+    for conv_id in request.conversation_ids:
+        _get_valid_conversation_by_id(uid, conv_id)
+
+    try:
+        # Merge conversations
+        merged_conversation_data = conversations_db.merge_conversations(uid, request.conversation_ids)
+
+        if not merged_conversation_data:
+            raise HTTPException(status_code=500, detail="Failed to merge conversations")
+
+        merged_conversation = Conversation(**merged_conversation_data)
+
+        # Generate title and overview for merged conversation
+        full_transcript = "\n".join([seg.text for seg in merged_conversation.transcript_segments if seg.text])
+
+        if full_transcript:
+            # Reprocess the merged conversation to generate structured data
+            processed_conversation = process_conversation(
+                uid, merged_conversation.language or 'en', merged_conversation, force_process=True
+            )
+            return processed_conversation
+        else:
+            # No transcript, return as-is with basic title
+            merged_conversation.structured.title = f"Merged Conversation"
+            merged_conversation.structured.overview = f"Combined {len(request.conversation_ids)} conversations"
+            conversations_db.update_conversation(uid, merged_conversation.id, {
+                'structured.title': merged_conversation.structured.title,
+                'structured.overview': merged_conversation.structured.overview,
+            })
+            return merged_conversation
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error merging conversations: {e}")
+        raise HTTPException(status_code=500, detail="Failed to merge conversations")

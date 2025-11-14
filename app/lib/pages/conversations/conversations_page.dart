@@ -137,8 +137,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     debugPrint('building conversations page');
     super.build(context);
     return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-      return RefreshIndicator(
-        onRefresh: () async {
+      return Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: () async {
           HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
           await convoProvider.getInitialConversations();
@@ -222,6 +224,92 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
           ],
         ),
+      ),
+          // Merge toolbar
+          if (convoProvider.isSelectionMode)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Row(
+                    children: [
+                      // Cancel button
+                      TextButton(
+                        onPressed: () {
+                          convoProvider.disableSelectionMode();
+                        },
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ),
+                      const Spacer(),
+                      // Selection count
+                      Text(
+                        '${convoProvider.selectedConversationIds.length} selected',
+                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      const SizedBox(width: 16),
+                      // Merge button
+                      ElevatedButton(
+                        onPressed: convoProvider.canMergeSelectedConversations() && !convoProvider.isMerging
+                            ? () async {
+                                HapticFeedback.mediumImpact();
+                                bool success = await convoProvider.mergeSelectedConversations();
+                                if (success && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Conversations merged successfully'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                } else if (!success && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Failed to merge conversations'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: convoProvider.isMerging
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Text('Merge'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       );
     });
   }

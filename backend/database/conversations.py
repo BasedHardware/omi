@@ -867,3 +867,169 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
     conversations = [doc.to_dict() for doc in query.stream()]
     conversation = conversations[0] if conversations else None
     return conversation
+
+
+# ********************************
+# ********** MERGING *************
+# ********************************
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def merge_conversations(uid: str, conversation_ids: List[str]) -> Optional[dict]:
+    """
+    Merge multiple conversations into a single conversation.
+
+    Args:
+        uid: User ID
+        conversation_ids: List of conversation IDs to merge (must be adjacent by time)
+
+    Returns:
+        The merged conversation dict
+    """
+    if len(conversation_ids) < 2:
+        raise ValueError("At least 2 conversations are required to merge")
+
+    # Fetch all conversations
+    user_ref = db.collection('users').document(uid)
+    conversations = []
+    for conv_id in conversation_ids:
+        conv_ref = user_ref.collection(conversations_collection).document(conv_id)
+        conv_data = conv_ref.get().to_dict()
+        if not conv_data:
+            raise ValueError(f"Conversation {conv_id} not found")
+        # Decrypt and prepare for merging
+        conv_data = _prepare_conversation_for_read(conv_data, uid)
+        # Fetch photos
+        photos = get_conversation_photos(uid, conv_id)
+        if photos:
+            conv_data['photos'] = photos
+        conversations.append(conv_data)
+
+    # Sort by started_at or created_at
+    conversations.sort(key=lambda c: c.get('started_at') or c.get('created_at'))
+
+    # Validate adjacency (no gaps > 1 hour between conversations)
+    for i in range(len(conversations) - 1):
+        current_end = conversations[i].get('finished_at') or conversations[i].get('created_at')
+        next_start = conversations[i + 1].get('started_at') or conversations[i + 1].get('created_at')
+
+        if current_end and next_start:
+            current_end = _ensure_timezone_aware(current_end)
+            next_start = _ensure_timezone_aware(next_start)
+            gap = (next_start - current_end).total_seconds()
+            # Allow up to 1 hour gap between adjacent conversations
+            if gap > 3600:
+                raise ValueError(f"Conversations are not adjacent (gap: {gap / 60:.1f} minutes)")
+
+    # Create merged conversation
+    first_conv = conversations[0]
+    last_conv = conversations[-1]
+
+    merged_id = str(uuid.uuid4())
+    merged_data = {
+        'id': merged_id,
+        'created_at': first_conv.get('created_at'),
+        'started_at': first_conv.get('started_at') or first_conv.get('created_at'),
+        'finished_at': last_conv.get('finished_at') or last_conv.get('created_at'),
+        'source': first_conv.get('source'),
+        'language': first_conv.get('language'),
+        'structured': {
+            'title': '',  # Will be generated
+            'overview': '',  # Will be generated
+            'emoji': '🔗',  # Merged conversation emoji
+            'category': first_conv.get('structured', {}).get('category', 'other'),
+            'action_items': [],
+            'events': [],
+        },
+        'transcript_segments': [],
+        'transcript_segments_compressed': False,
+        'geolocation': first_conv.get('geolocation'),
+        'photos': [],
+        'audio_files': [],
+        'apps_results': [],
+        'suggested_summarization_apps': [],
+        'plugins_results': [],
+        'external_data': None,
+        'app_id': None,
+        'discarded': False,
+        'visibility': 'private',
+        'processing_conversation_id': None,
+        'processing_memory_id': None,
+        'status': ConversationStatus.completed,
+        'is_locked': False,
+        'data_protection_level': first_conv.get('data_protection_level', 'standard'),
+        'private_cloud_sync_enabled': first_conv.get('private_cloud_sync_enabled', False),
+    }
+
+    # Merge transcript segments
+    all_segments = []
+    for conv in conversations:
+        segments = conv.get('transcript_segments', [])
+        all_segments.extend(segments)
+    # Sort segments by start time
+    all_segments.sort(key=lambda s: s.get('start', 0))
+    merged_data['transcript_segments'] = all_segments
+
+    # Merge photos
+    all_photos = []
+    for conv in conversations:
+        photos = conv.get('photos', [])
+        all_photos.extend(photos)
+    # Sort photos by created_at
+    all_photos.sort(key=lambda p: p.get('created_at') if isinstance(p.get('created_at'), datetime) else datetime.now(timezone.utc))
+    merged_data['photos'] = all_photos
+
+    # Merge action items
+    all_action_items = []
+    for conv in conversations:
+        items = conv.get('structured', {}).get('action_items', [])
+        for item in items:
+            # Add conversation_id reference if not present
+            if not item.get('conversation_id'):
+                item['conversation_id'] = conv['id']
+        all_action_items.extend(items)
+    merged_data['structured']['action_items'] = all_action_items
+
+    # Merge events
+    all_events = []
+    for conv in conversations:
+        events = conv.get('structured', {}).get('events', [])
+        all_events.extend(events)
+    merged_data['structured']['events'] = all_events
+
+    # Merge audio files
+    all_audio_files = []
+    for conv in conversations:
+        audio_files = conv.get('audio_files', [])
+        # Update conversation_id in audio files
+        for audio_file in audio_files:
+            audio_file['conversation_id'] = merged_id
+        all_audio_files.extend(audio_files)
+    merged_data['audio_files'] = all_audio_files
+
+    # Create the merged conversation in database
+    upsert_conversation(uid, merged_data)
+
+    # Write photos to subcollection
+    if all_photos:
+        user_ref = db.collection('users').document(uid)
+        conversation_ref = user_ref.collection(conversations_collection).document(merged_id)
+        photos_ref = conversation_ref.collection('photos')
+        level = merged_data.get('data_protection_level', 'standard')
+        batch = db.batch()
+        for photo in all_photos:
+            photo_id = photo.get('id') or str(uuid.uuid4())
+            photo_ref = photos_ref.document(photo_id)
+            photo_data = dict(photo)
+            photo_data['id'] = photo_id
+            prepared_photo = _prepare_photo_for_write(photo_data, uid, level)
+            batch.set(photo_ref, prepared_photo)
+        batch.commit()
+
+    # Delete the source conversations
+    for conv_id in conversation_ids:
+        delete_conversation(uid, conv_id)
+
+    # Return the merged conversation
+    return get_conversation(uid, merged_id)

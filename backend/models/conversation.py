@@ -507,3 +507,7 @@ class SearchRequest(BaseModel):
 
 class TestPromptRequest(BaseModel):
     prompt: str
+
+
+class MergeConversationsRequest(BaseModel):
+    conversation_ids: List[str] = Field(description="List of conversation IDs to merge (must be adjacent by time)")

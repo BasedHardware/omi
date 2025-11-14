@@ -451,3 +451,25 @@ Future<bool> updateActionItemStateByMetadata(
 ) async {
   return await setConversationActionItemState(conversationId, [itemIndex], [newState]);
 }
+
+Future<ServerConversation?> mergeConversations(List<String> conversationIds) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/merge',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({
+      'conversation_ids': conversationIds,
+    }),
+  );
+
+  if (response == null) return null;
+  debugPrint('mergeConversations: ${response.statusCode}');
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return ServerConversation.fromJson(jsonDecode(body));
+  } else {
+    debugPrint('mergeConversations error: ${response.body}');
+    return null;
+  }
+}
