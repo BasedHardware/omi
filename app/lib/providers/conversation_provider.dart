@@ -76,6 +76,11 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
 
+    // Exit selection mode when searching
+    if (isSelectionMode) {
+      disableSelectionMode();
+    }
+
     if (showShimmer) {
       setLoadingConversations(true);
     } else {
@@ -152,6 +157,11 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
+
+    // Exit selection mode when switching views
+    if (isSelectionMode) {
+      disableSelectionMode();
+    }
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -704,6 +714,12 @@ class ConversationProvider extends ChangeNotifier {
     List<ServerConversation> selectedConvos = conversations
         .where((c) => selectedConversationIds.contains(c.id))
         .toList();
+
+    // Check if any are locked or discarded
+    if (selectedConvos.any((c) => c.isLocked || c.discarded)) {
+      return false;
+    }
+
     selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
 
     // Check if they are adjacent in the conversation list
@@ -739,6 +755,12 @@ class ConversationProvider extends ChangeNotifier {
       selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
       List<String> sortedIds = selectedConvos.map((c) => c.id).toList();
 
+      // Track merge attempt
+      MixpanelManager().track('Conversations Merge Initiated', properties: {
+        'conversation_count': sortedIds.length,
+        'conversation_ids': sortedIds,
+      });
+
       // Call merge API
       ServerConversation? mergedConversation = await mergeConversations(sortedIds);
 
@@ -753,6 +775,12 @@ class ConversationProvider extends ChangeNotifier {
         // Update grouped conversations
         _groupConversationsByDateWithoutNotify();
 
+        // Track success
+        MixpanelManager().track('Conversations Merge Successful', properties: {
+          'merged_conversation_id': mergedConversation.id,
+          'source_conversation_count': selectedConversationIds.length,
+        });
+
         // Clear selection
         disableSelectionMode();
 
@@ -760,12 +788,18 @@ class ConversationProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       } else {
+        MixpanelManager().track('Conversations Merge Failed', properties: {
+          'error': 'Null response from API',
+        });
         isMerging = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       debugPrint('Error merging conversations: $e');
+      MixpanelManager().track('Conversations Merge Failed', properties: {
+        'error': e.toString(),
+      });
       isMerging = false;
       notifyListeners();
       return false;

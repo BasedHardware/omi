@@ -874,8 +874,6 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
 # ********************************
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-@with_photos(get_conversation_photos)
 def merge_conversations(uid: str, conversation_ids: List[str]) -> Optional[dict]:
     """
     Merge multiple conversations into a single conversation.
@@ -890,20 +888,19 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Optional[dict]
     if len(conversation_ids) < 2:
         raise ValueError("At least 2 conversations are required to merge")
 
-    # Fetch all conversations
-    user_ref = db.collection('users').document(uid)
+    # Fetch all conversations using the existing get_conversation function
     conversations = []
     for conv_id in conversation_ids:
-        conv_ref = user_ref.collection(conversations_collection).document(conv_id)
-        conv_data = conv_ref.get().to_dict()
+        conv_data = get_conversation(uid, conv_id)
         if not conv_data:
             raise ValueError(f"Conversation {conv_id} not found")
-        # Decrypt and prepare for merging
-        conv_data = _prepare_conversation_for_read(conv_data, uid)
-        # Fetch photos
-        photos = get_conversation_photos(uid, conv_id)
-        if photos:
-            conv_data['photos'] = photos
+
+        # Check if conversation is discarded or locked
+        if conv_data.get('discarded', False):
+            raise ValueError(f"Cannot merge discarded conversation {conv_id}")
+        if conv_data.get('is_locked', False):
+            raise ValueError(f"Cannot merge locked conversation {conv_id}")
+
         conversations.append(conv_data)
 
     # Sort by started_at or created_at

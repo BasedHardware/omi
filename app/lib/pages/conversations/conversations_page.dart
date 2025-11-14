@@ -275,13 +275,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                                     const SnackBar(
                                       content: Text('Conversations merged successfully'),
                                       backgroundColor: Colors.green,
+                                      duration: Duration(seconds: 2),
                                     ),
                                   );
                                 } else if (!success && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Failed to merge conversations'),
+                                      content: Text(
+                                          'Failed to merge conversations. They must be adjacent (within 1 hour of each other).'),
                                       backgroundColor: Colors.red,
+                                      duration: Duration(seconds: 4),
                                     ),
                                   );
                                 }

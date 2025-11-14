@@ -619,6 +619,8 @@ def merge_conversations_endpoint(request: MergeConversationsRequest, uid: str = 
     5. Deletes the source conversations
     6. Returns the new merged conversation
     """
+    print('merge_conversations', uid, request.conversation_ids)
+
     if len(request.conversation_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 conversations are required to merge")
 

@@ -72,7 +72,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
         onTap: () async {
           // If in selection mode, toggle selection instead of opening detail
           if (provider.isSelectionMode) {
-            provider.toggleConversationSelection(widget.conversation.id);
+            // Don't allow selecting locked or discarded conversations
+            if (!widget.conversation.isLocked && !widget.conversation.discarded) {
+              provider.toggleConversationSelection(widget.conversation.id);
+            }
             return;
           }
           if (widget.conversation.isLocked) {
@@ -119,6 +122,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
           }
         },
         onLongPress: () {
+          // Don't allow selecting locked or discarded conversations
+          if (widget.conversation.isLocked || widget.conversation.discarded) {
+            return;
+          }
           // Enable selection mode and select this conversation
           HapticFeedback.mediumImpact();
           provider.enableSelectionMode();
@@ -127,7 +134,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
         child: Padding(
           padding:
               EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
-          child: Stack(
+          child: Opacity(
+            opacity: (provider.isSelectionMode && (widget.conversation.isLocked || widget.conversation.discarded))
+                ? 0.5
+                : 1.0,
+            child: Stack(
             children: [
               Container(
             width: double.maxFinite,
@@ -139,7 +150,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
                 key: UniqueKey(),
-                direction: DismissDirection.endToStart,
+                direction: provider.isSelectionMode ? DismissDirection.none : DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20.0),
@@ -228,6 +239,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   ),
                 ),
             ],
+            ),
           ),
         ),
       );
