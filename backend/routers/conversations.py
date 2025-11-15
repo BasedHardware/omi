@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 import database.conversations as conversations_db
 import database.action_items as action_items_db
 import database.redis_db as redis_db
+import database.users as users_db
 from database.vector_db import delete_vector
 from models.conversation import *
 from models.conversation import SearchRequest
+from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
@@ -501,21 +503,30 @@ def set_conversation_visibility(
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/shared", response_model=Conversation, tags=['conversations'])
+@router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
 def get_shared_conversation_by_id(conversation_id: str):
     uid = redis_db.get_conversation_uid(conversation_id)
     if not uid:
         raise HTTPException(status_code=404, detail="Conversation is private")
 
-    # TODO: include speakers and people matched?
-    # TODO: other fields that  shouldn't be included?
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
     conversation = Conversation(**conversation)
     conversation.geolocation = None
-    return conversation
+
+    # Fetch people data for speaker names
+    person_ids = conversation.get_person_ids()
+    people = []
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, person_ids)
+        people = [Person(**p) for p in people_data]
+
+    # Return conversation with people data
+    response_dict = conversation.as_dict_cleaned_dates()
+    response_dict['people'] = [p.dict() for p in people]
+    return response_dict
 
 
 @router.get("/v1/public-conversations", response_model=List[Conversation], tags=['conversations'])

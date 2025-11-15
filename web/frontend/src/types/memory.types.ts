@@ -1,3 +1,11 @@
+export interface Person {
+  id: string;
+  name: string;
+  created_at: Date;
+  updated_at: Date;
+  speech_samples: string[];
+}
+
 export interface Memory {
   id: string;
   created_at: Date;
@@ -14,6 +22,7 @@ export interface Memory {
   postprocessing: Postprocessing;
   discarded: boolean;
   deleted: boolean;
+  people?: Person[];
 }
 
 export interface ExternalData {
@@ -65,7 +74,7 @@ export interface TranscriptSegment {
   speaker: string;
   speaker_id: number;
   is_user: boolean;
-  person_id: null;
+  person_id: string | null;
   start: number;
   end: number;
 }
