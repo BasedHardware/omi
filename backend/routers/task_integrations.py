@@ -316,6 +316,356 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
 
 
 # *****************************
+# ****** Token Refresh ******
+# *****************************
+
+
+async def refresh_google_tasks_token(uid: str, integration: dict) -> dict:
+    """
+    Refresh Google Tasks access token using refresh token.
+
+    Args:
+        uid: User ID
+        integration: Current integration data with refresh_token
+
+    Returns:
+        Updated integration data with new access_token and expires_at
+
+    Raises:
+        HTTPException: If refresh fails
+    """
+    refresh_token = integration.get('refresh_token')
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="No refresh token available for Google Tasks")
+
+    client_id = os.getenv('GOOGLE_TASKS_CLIENT_ID')
+    client_secret = os.getenv('GOOGLE_TASKS_CLIENT_SECRET')
+
+    if not all([client_id, client_secret]):
+        raise HTTPException(status_code=500, detail="Google Tasks not configured")
+
+    try:
+        client = get_http_client()
+        token_response = await client.post(
+            'https://oauth2.googleapis.com/token',
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            data={
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'refresh_token': refresh_token,
+                'grant_type': 'refresh_token',
+            },
+        )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            new_access_token = token_data.get('access_token')
+            expires_in = token_data.get('expires_in')
+
+            if not new_access_token:
+                raise HTTPException(status_code=401, detail="Failed to refresh Google Tasks token")
+
+            # Update integration data
+            updated_integration = integration.copy()
+            updated_integration['access_token'] = new_access_token
+
+            # Update expiry time
+            if expires_in:
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                updated_integration['expires_at'] = expires_at.isoformat()
+
+            # Store updated tokens in Firebase
+            users_db.set_task_integration(uid, 'google_tasks', updated_integration)
+
+            return updated_integration
+        else:
+            error_text = token_response.text
+            print(f'google_tasks: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
+            # If refresh token is invalid, mark integration as disconnected
+            if token_response.status_code == 400:
+                updated_integration = integration.copy()
+                updated_integration['connected'] = False
+                users_db.set_task_integration(uid, 'google_tasks', updated_integration)
+            raise HTTPException(status_code=401, detail="Failed to refresh Google Tasks token")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f'google_tasks: Error refreshing token: {e}')
+        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+
+
+async def refresh_asana_token(uid: str, integration: dict) -> dict:
+    """
+    Refresh Asana access token using refresh token.
+
+    Args:
+        uid: User ID
+        integration: Current integration data with refresh_token
+
+    Returns:
+        Updated integration data with new access_token and expires_at
+
+    Raises:
+        HTTPException: If refresh fails
+    """
+    refresh_token = integration.get('refresh_token')
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="No refresh token available for Asana")
+
+    client_id = os.getenv('ASANA_CLIENT_ID')
+    client_secret = os.getenv('ASANA_CLIENT_SECRET')
+    base_url = os.getenv('BASE_API_URL')
+
+    if not all([client_id, client_secret, base_url]):
+        raise HTTPException(status_code=500, detail="Asana not configured")
+
+    base_url = base_url.rstrip('/')
+    redirect_uri = f'{base_url}/v2/integrations/asana/callback'
+
+    try:
+        client = get_http_client()
+        token_response = await client.post(
+            'https://app.asana.com/-/oauth_token',
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            data={
+                'grant_type': 'refresh_token',
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'refresh_token': refresh_token,
+                'redirect_uri': redirect_uri,
+            },
+        )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            new_access_token = token_data.get('access_token')
+            new_refresh_token = token_data.get('refresh_token')  # Asana may return new refresh token
+            expires_in = token_data.get('expires_in')
+
+            if not new_access_token:
+                raise HTTPException(status_code=401, detail="Failed to refresh Asana token")
+
+            # Update integration data
+            updated_integration = integration.copy()
+            updated_integration['access_token'] = new_access_token
+            if new_refresh_token:
+                updated_integration['refresh_token'] = new_refresh_token
+
+            # Update expiry time
+            if expires_in:
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                updated_integration['expires_at'] = expires_at.isoformat()
+
+            # Store updated tokens in Firebase
+            users_db.set_task_integration(uid, 'asana', updated_integration)
+
+            return updated_integration
+        else:
+            error_text = token_response.text
+            print(f'asana: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
+            # If refresh token is invalid, mark integration as disconnected
+            if token_response.status_code == 400:
+                updated_integration = integration.copy()
+                updated_integration['connected'] = False
+                users_db.set_task_integration(uid, 'asana', updated_integration)
+            raise HTTPException(status_code=401, detail="Failed to refresh Asana token")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f'asana: Error refreshing token: {e}')
+        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+
+
+async def refresh_clickup_token(uid: str, integration: dict) -> dict:
+    """
+    Refresh ClickUp access token using refresh token.
+
+    Args:
+        uid: User ID
+        integration: Current integration data with refresh_token
+
+    Returns:
+        Updated integration data with new access_token and expires_at
+
+    Raises:
+        HTTPException: If refresh fails
+    """
+    refresh_token = integration.get('refresh_token')
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="No refresh token available for ClickUp")
+
+    client_id = os.getenv('CLICKUP_CLIENT_ID')
+    client_secret = os.getenv('CLICKUP_CLIENT_SECRET')
+
+    if not all([client_id, client_secret]):
+        raise HTTPException(status_code=500, detail="ClickUp not configured")
+
+    try:
+        client = get_http_client()
+        token_response = await client.post(
+            'https://api.clickup.com/api/v2/oauth/token',
+            params={
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+            },
+        )
+
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            new_access_token = token_data.get('access_token')
+            new_refresh_token = token_data.get('refresh_token')  # ClickUp may return new refresh token
+            expires_in = token_data.get('expires_in')
+
+            if not new_access_token:
+                raise HTTPException(status_code=401, detail="Failed to refresh ClickUp token")
+
+            # Update integration data
+            updated_integration = integration.copy()
+            updated_integration['access_token'] = new_access_token
+            if new_refresh_token:
+                updated_integration['refresh_token'] = new_refresh_token
+
+            # Update expiry time
+            if expires_in:
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                updated_integration['expires_at'] = expires_at.isoformat()
+
+            # Store updated tokens in Firebase
+            users_db.set_task_integration(uid, 'clickup', updated_integration)
+
+            return updated_integration
+        else:
+            error_text = token_response.text
+            print(f'clickup: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
+            # If refresh token is invalid, mark integration as disconnected
+            if token_response.status_code == 400:
+                updated_integration = integration.copy()
+                updated_integration['connected'] = False
+                users_db.set_task_integration(uid, 'clickup', updated_integration)
+            raise HTTPException(status_code=401, detail="Failed to refresh ClickUp token")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f'clickup: Error refreshing token: {e}')
+        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+
+
+async def ensure_valid_google_tasks_token(uid: str, integration: dict) -> dict:
+    """
+    Ensure Google Tasks access token is valid, refreshing if necessary.
+
+    Args:
+        uid: User ID
+        integration: Current integration data
+
+    Returns:
+        Integration data with valid access_token
+    """
+    expires_at_str = integration.get('expires_at')
+
+    # If no expiry info, assume token might be expired and refresh
+    if not expires_at_str:
+        print('google_tasks: No expiry info, refreshing token')
+        return await refresh_google_tasks_token(uid, integration)
+
+    # Check if token is expired (with 5 minute buffer)
+    try:
+        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        buffer_time = timedelta(minutes=5)
+        if datetime.now(timezone.utc) + buffer_time >= expires_at:
+            print('google_tasks: Token expired or expiring soon, refreshing')
+            return await refresh_google_tasks_token(uid, integration)
+    except Exception as e:
+        print(f'google_tasks: Error parsing expiry date: {e}, refreshing token')
+        return await refresh_google_tasks_token(uid, integration)
+
+    # Token is still valid
+    return integration
+
+
+async def ensure_valid_asana_token(uid: str, integration: dict) -> dict:
+    """
+    Ensure Asana access token is valid, refreshing if necessary.
+
+    Args:
+        uid: User ID
+        integration: Current integration data
+
+    Returns:
+        Integration data with valid access_token
+    """
+    expires_at_str = integration.get('expires_at')
+
+    # If no expiry info, check if we have refresh token
+    if not expires_at_str:
+        if integration.get('refresh_token'):
+            print('asana: No expiry info but has refresh token, refreshing')
+            return await refresh_asana_token(uid, integration)
+        # No expiry info and no refresh token - assume token is still valid (might be long-lived)
+        return integration
+
+    # Check if token is expired (with 5 minute buffer)
+    try:
+        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        buffer_time = timedelta(minutes=5)
+        if datetime.now(timezone.utc) + buffer_time >= expires_at:
+            if integration.get('refresh_token'):
+                print('asana: Token expired or expiring soon, refreshing')
+                return await refresh_asana_token(uid, integration)
+            # Expired but no refresh token - user needs to reconnect
+            print('asana: Token expired but no refresh token available')
+    except Exception as e:
+        print(f'asana: Error parsing expiry date: {e}')
+        if integration.get('refresh_token'):
+            return await refresh_asana_token(uid, integration)
+
+    # Token is still valid
+    return integration
+
+
+async def ensure_valid_clickup_token(uid: str, integration: dict) -> dict:
+    """
+    Ensure ClickUp access token is valid, refreshing if necessary.
+
+    Args:
+        uid: User ID
+        integration: Current integration data
+
+    Returns:
+        Integration data with valid access_token
+    """
+    expires_at_str = integration.get('expires_at')
+
+    # If no expiry info, check if we have refresh token
+    if not expires_at_str:
+        if integration.get('refresh_token'):
+            print('clickup: No expiry info but has refresh token, refreshing')
+            return await refresh_clickup_token(uid, integration)
+        # No expiry info and no refresh token - assume token is still valid (might be long-lived)
+        return integration
+
+    # Check if token is expired (with 5 minute buffer)
+    try:
+        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        buffer_time = timedelta(minutes=5)
+        if datetime.now(timezone.utc) + buffer_time >= expires_at:
+            if integration.get('refresh_token'):
+                print('clickup: Token expired or expiring soon, refreshing')
+                return await refresh_clickup_token(uid, integration)
+            # Expired but no refresh token - user needs to reconnect
+            print('clickup: Token expired but no refresh token available')
+    except Exception as e:
+        print(f'clickup: Error parsing expiry date: {e}')
+        if integration.get('refresh_token'):
+            return await refresh_clickup_token(uid, integration)
+
+    # Token is still valid
+    return integration
+
+
+# *****************************
 # ****** Task Operations ******
 # *****************************
 
@@ -347,6 +697,21 @@ async def create_task_via_integration(
     integration = users_db.get_task_integration(uid, app_key)
     if not integration or not integration.get('connected'):
         raise HTTPException(status_code=404, detail=f"Not connected to {app_key}")
+
+    # Ensure token is valid (refresh if needed) for OAuth 2.0 integrations
+    if app_key == 'google_tasks':
+        integration = await ensure_valid_google_tasks_token(uid, integration)
+        if not integration.get('connected'):
+            raise HTTPException(status_code=401, detail="Google Tasks token refresh failed. Please reconnect.")
+    elif app_key == 'asana':
+        integration = await ensure_valid_asana_token(uid, integration)
+        if not integration.get('connected'):
+            raise HTTPException(status_code=401, detail="Asana token refresh failed. Please reconnect.")
+    elif app_key == 'clickup':
+        integration = await ensure_valid_clickup_token(uid, integration)
+        if not integration.get('connected'):
+            raise HTTPException(status_code=401, detail="ClickUp token refresh failed. Please reconnect.")
+    # Note: Todoist uses long-lived tokens that don't expire, so no refresh needed
 
     access_token = integration.get('access_token')
     if not access_token:
@@ -408,6 +773,22 @@ async def create_task_via_integration(
                 json={'data': task_data},
             )
 
+            # If we get 401, try refreshing token once and retry
+            if response.status_code == 401:
+                print('asana: Got 401, attempting token refresh and retry')
+                try:
+                    integration = await refresh_asana_token(uid, integration)
+                    new_access_token = integration.get('access_token')
+                    if new_access_token:
+                        response = await client.post(
+                            'https://app.asana.com/api/1.0/tasks',
+                            headers={'Authorization': f'Bearer {new_access_token}', 'Content-Type': 'application/json'},
+                            json={'data': task_data},
+                        )
+                except Exception as refresh_error:
+                    print(f'asana: Token refresh failed during retry: {refresh_error}')
+                    return CreateTaskResponse(success=False, error="Asana authentication expired. Please reconnect.")
+
             if response.status_code in [200, 201]:
                 result = response.json()
                 return CreateTaskResponse(success=True, external_task_id=result.get('data', {}).get('gid'))
@@ -434,6 +815,24 @@ async def create_task_via_integration(
                 json=task_data,
             )
 
+            # If we get 401, try refreshing token once and retry
+            if response.status_code == 401:
+                print('google_tasks: Got 401, attempting token refresh and retry')
+                try:
+                    integration = await refresh_google_tasks_token(uid, integration)
+                    new_access_token = integration.get('access_token')
+                    if new_access_token:
+                        response = await client.post(
+                            f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
+                            headers={'Authorization': f'Bearer {new_access_token}', 'Content-Type': 'application/json'},
+                            json=task_data,
+                        )
+                except Exception as refresh_error:
+                    print(f'google_tasks: Token refresh failed during retry: {refresh_error}')
+                    return CreateTaskResponse(
+                        success=False, error="Google Tasks authentication expired. Please reconnect."
+                    )
+
             if response.status_code in [200, 201]:
                 result = response.json()
                 return CreateTaskResponse(success=True, external_task_id=result.get('id'))
@@ -459,6 +858,22 @@ async def create_task_via_integration(
                 headers={'Authorization': access_token, 'Content-Type': 'application/json'},
                 json=task_data,
             )
+
+            # If we get 401, try refreshing token once and retry
+            if response.status_code == 401:
+                print('clickup: Got 401, attempting token refresh and retry')
+                try:
+                    integration = await refresh_clickup_token(uid, integration)
+                    new_access_token = integration.get('access_token')
+                    if new_access_token:
+                        response = await client.post(
+                            f'https://api.clickup.com/api/v2/list/{list_id}/task',
+                            headers={'Authorization': new_access_token, 'Content-Type': 'application/json'},
+                            json=task_data,
+                        )
+                except Exception as refresh_error:
+                    print(f'clickup: Token refresh failed during retry: {refresh_error}')
+                    return CreateTaskResponse(success=False, error="ClickUp authentication expired. Please reconnect.")
 
             if response.status_code in [200, 201]:
                 result = response.json()
@@ -487,6 +902,11 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     if not data:
         raise HTTPException(status_code=404, detail="Asana integration not found")
 
+    # Ensure token is valid (refresh if needed)
+    data = await ensure_valid_asana_token(uid, data)
+    if not data.get('connected'):
+        raise HTTPException(status_code=401, detail="Asana token refresh failed. Please reconnect.")
+
     access_token = data.get('access_token')
 
     if not access_token:
@@ -499,11 +919,26 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
             headers={'Authorization': f'Bearer {access_token}'},
         )
 
+        # If we get 401, try refreshing token once and retry
+        if response.status_code == 401:
+            try:
+                data = await refresh_asana_token(uid, data)
+                access_token = data.get('access_token')
+                if access_token:
+                    response = await client.get(
+                        'https://app.asana.com/api/1.0/workspaces',
+                        headers={'Authorization': f'Bearer {access_token}'},
+                    )
+            except Exception:
+                raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+
         if response.status_code == 200:
             result = response.json()
             return {'workspaces': result.get('data', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana workspaces")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
 
@@ -515,6 +950,11 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
 
     if not data:
         raise HTTPException(status_code=404, detail="Asana integration not found")
+
+    # Ensure token is valid (refresh if needed)
+    data = await ensure_valid_asana_token(uid, data)
+    if not data.get('connected'):
+        raise HTTPException(status_code=401, detail="Asana token refresh failed. Please reconnect.")
 
     access_token = data.get('access_token')
 
@@ -528,11 +968,26 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
             headers={'Authorization': f'Bearer {access_token}'},
         )
 
+        # If we get 401, try refreshing token once and retry
+        if response.status_code == 401:
+            try:
+                data = await refresh_asana_token(uid, data)
+                access_token = data.get('access_token')
+                if access_token:
+                    response = await client.get(
+                        f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
+                        headers={'Authorization': f'Bearer {access_token}'},
+                    )
+            except Exception:
+                raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+
         if response.status_code == 200:
             result = response.json()
             return {'projects': result.get('data', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana projects")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
 
@@ -544,6 +999,11 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
 
     if not data:
         raise HTTPException(status_code=404, detail="ClickUp integration not found")
+
+    # Ensure token is valid (refresh if needed)
+    data = await ensure_valid_clickup_token(uid, data)
+    if not data.get('connected'):
+        raise HTTPException(status_code=401, detail="ClickUp token refresh failed. Please reconnect.")
 
     access_token = data.get('access_token')
 
@@ -557,11 +1017,26 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
             headers={'Authorization': access_token},
         )
 
+        # If we get 401, try refreshing token once and retry
+        if response.status_code == 401:
+            try:
+                data = await refresh_clickup_token(uid, data)
+                access_token = data.get('access_token')
+                if access_token:
+                    response = await client.get(
+                        'https://api.clickup.com/api/v2/team',
+                        headers={'Authorization': access_token},
+                    )
+            except Exception:
+                raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
+
         if response.status_code == 200:
             result = response.json()
             return {'teams': result.get('teams', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp teams")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
 
@@ -573,6 +1048,11 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
 
     if not data:
         raise HTTPException(status_code=404, detail="ClickUp integration not found")
+
+    # Ensure token is valid (refresh if needed)
+    data = await ensure_valid_clickup_token(uid, data)
+    if not data.get('connected'):
+        raise HTTPException(status_code=401, detail="ClickUp token refresh failed. Please reconnect.")
 
     access_token = data.get('access_token')
 
@@ -586,11 +1066,26 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
             headers={'Authorization': access_token},
         )
 
+        # If we get 401, try refreshing token once and retry
+        if response.status_code == 401:
+            try:
+                data = await refresh_clickup_token(uid, data)
+                access_token = data.get('access_token')
+                if access_token:
+                    response = await client.get(
+                        f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false',
+                        headers={'Authorization': access_token},
+                    )
+            except Exception:
+                raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
+
         if response.status_code == 200:
             result = response.json()
             return {'spaces': result.get('spaces', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp spaces")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
 
@@ -602,6 +1097,11 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
 
     if not data:
         raise HTTPException(status_code=404, detail="ClickUp integration not found")
+
+    # Ensure token is valid (refresh if needed)
+    data = await ensure_valid_clickup_token(uid, data)
+    if not data.get('connected'):
+        raise HTTPException(status_code=401, detail="ClickUp token refresh failed. Please reconnect.")
 
     access_token = data.get('access_token')
 
@@ -615,11 +1115,26 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
             headers={'Authorization': access_token},
         )
 
+        # If we get 401, try refreshing token once and retry
+        if response.status_code == 401:
+            try:
+                data = await refresh_clickup_token(uid, data)
+                access_token = data.get('access_token')
+                if access_token:
+                    response = await client.get(
+                        f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false',
+                        headers={'Authorization': access_token},
+                    )
+            except Exception:
+                raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
+
         if response.status_code == 200:
             result = response.json()
             return {'lists': result.get('lists', [])}
         else:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch ClickUp lists")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching lists: {str(e)}")
 
@@ -695,6 +1210,7 @@ async def handle_oauth_callback(
             token_data = token_response.json()
             access_token = token_data.get('access_token', '')
             refresh_token = token_data.get('refresh_token')
+            expires_in = token_data.get('expires_in')  # Seconds until expiry
 
             if not access_token:
                 print(f'{app_key}: No access token received in response')
@@ -708,6 +1224,11 @@ async def handle_oauth_callback(
 
             if refresh_token:
                 integration_data['refresh_token'] = refresh_token
+
+            # Store token expiry time (calculate expires_at from expires_in)
+            if expires_in:
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                integration_data['expires_at'] = expires_at.isoformat()
 
             try:
                 additional_data = await provider_config.fetch_additional_data(client, access_token)
