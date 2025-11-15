@@ -341,11 +341,8 @@ def _build_refresh_request(app_key: str, refresh_token: str) -> dict:
     if app_key == 'asana':
         client_id = os.getenv('ASANA_CLIENT_ID')
         client_secret = os.getenv('ASANA_CLIENT_SECRET')
-        base_url = os.getenv('BASE_API_URL')
-        if not all([client_id, client_secret, base_url]):
+        if not all([client_id, client_secret]):
             raise HTTPException(status_code=500, detail=f"{name} not configured")
-        base_url = base_url.rstrip('/')
-        redirect_uri = f'{base_url}/v2/integrations/asana/callback'
         return {
             'url': 'https://app.asana.com/-/oauth_token',
             'type': 'form',
@@ -355,7 +352,6 @@ def _build_refresh_request(app_key: str, refresh_token: str) -> dict:
                 'client_id': client_id,
                 'client_secret': client_secret,
                 'refresh_token': refresh_token,
-                'redirect_uri': redirect_uri,
             },
         }
     if app_key == 'clickup':
