@@ -767,12 +767,14 @@ def store_model_emotion_predictions_result(
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    elevenlabs_ref = conversation_ref.collection('elevenlabs_scribe')
     deepgram_ref = conversation_ref.collection('deepgram_streaming')
     soniox_ref = conversation_ref.collection('soniox_streaming')
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
     whisperx_ref = conversation_ref.collection('fal_whisperx')
 
     return {
+        'elevenlabs': list(sorted([doc.to_dict() for doc in elevenlabs_ref.stream()], key=lambda x: x['start'])),
         'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
         'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
         'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
