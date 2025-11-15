@@ -131,14 +131,14 @@ def determine_conversation_type(
     "no_context_conversation",
     "agentic_context_dependent_conversation",
     # "omi_question",
-    "file_chat_question",
+    # "file_chat_question",
     "persona_question",
 ]:
     # chat with files by attachments on the last message
     print("determine_conversation_type")
     messages = state.get("messages", [])
-    if len(messages) > 0 and len(messages[-1].files_id) > 0:
-        return "file_chat_question"
+    # if len(messages) > 0 and len(messages[-1].files_id) > 0:
+    #     return "file_chat_question"
 
     # persona
     app: App = state.get("plugin_selected")
@@ -158,9 +158,9 @@ def determine_conversation_type(
         return "no_context_conversation"
 
     # determine the follow-up question is chatting with files or not
-    is_file_question = retrieve_is_file_question(question)
-    if is_file_question:
-        return "file_chat_question"
+    # is_file_question = retrieve_is_file_question(question)
+    # if is_file_question:
+    #     return "file_chat_question"
 
     # is_omi_question = retrieve_is_an_omi_question(question)
     # if is_omi_question:
