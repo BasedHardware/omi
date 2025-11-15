@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -38,6 +39,14 @@ class _FoundDevicesState extends State<FoundDevices> {
         context.read<DeviceProvider>().periodicConnect('coming from FoundDevices');
       }
     });
+  }
+
+  String _getDisplayName(String deviceId, String deviceName) {
+    final customName = SharedPreferencesUtil().getCustomDeviceName(deviceId);
+    final displayName = customName.isNotEmpty ? customName : deviceName;
+    return displayName == 'Omi' 
+        ? '$displayName (${BtDevice.shortId(deviceId)})' 
+        : displayName;
   }
 
   Future<void> _handleAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
@@ -117,7 +126,16 @@ class _FoundDevicesState extends State<FoundDevices> {
   Future<void> _completeAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
     try {
       provider.deviceId = device.id;
-      provider.deviceName = device.name;
+
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      String? customName = await connection?.getDeviceName();
+      provider.deviceName = (customName != null && customName.isNotEmpty) ? customName : device.name;
+
+      SharedPreferencesUtil().deviceName = provider.deviceName;
+      if (customName != null && customName.isNotEmpty) {
+        SharedPreferencesUtil().setCustomDeviceName(device.id, customName);
+      }
+
       provider.isConnected = true;
       provider.isClicked = false;
       provider.connectingToDeviceId = null;
@@ -231,7 +249,7 @@ class _FoundDevicesState extends State<FoundDevices> {
             if (!provider.isConnected) ..._devicesList(provider),
             if (provider.isConnected)
               Text(
-                '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})',
+                _getDisplayName(provider.deviceId, provider.deviceName),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
@@ -316,7 +334,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '${device.name} (${device.getShortId()})',
+                              _getDisplayName(device.id, device.name),
                               textAlign: TextAlign.left,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w500,

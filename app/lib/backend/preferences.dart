@@ -72,6 +72,15 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName') ?? '';
 
+  void setCustomDeviceName(String deviceId, String customName) {
+    saveString('customDeviceName_$deviceId', customName);
+  }
+  
+  // Get custom name for a specific device ID
+  String getCustomDeviceName(String deviceId) {
+    return getString('customDeviceName_$deviceId') ?? '';
+  }
+
   bool get deviceIsV2 => getBool('deviceIsV2') ?? false;
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
