@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/clickup_service.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
 class ClickUpSettingsPage extends StatefulWidget {
@@ -174,364 +173,264 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     });
   }
 
-  Future<void> _disconnectClickUp() async {
-    final provider = context.read<TaskIntegrationProvider>();
-    final navigator = Navigator.of(context);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Text(
-            'Disconnect from ClickUp?',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: const Text(
-            'This will remove your ClickUp authentication and settings. You\'ll need to reconnect and reconfigure.',
-            style: TextStyle(color: Color(0xFF8E8E93)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0xFF8E8E93)),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Disconnect',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed == true) {
-      await _clickupService.disconnect();
-
-      if (!mounted) return;
-
-      // Delete connection from Firebase
-      await provider.deleteConnection('clickup');
-
-      // Also clear from task integrations if ClickUp was selected
-      if (provider.selectedApp.key == 'clickup') {
-        // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-        final defaultApp =
-            PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
-        await provider.setSelectedApp(defaultApp);
-        debugPrint('✓ Task integration disabled: ClickUp - switched to ${defaultApp.key}');
-      }
-
-      provider.refresh();
-
-      // Show snackbar before popping to avoid using deactivated context
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(
-          content: Text('Disconnected from ClickUp'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-
-      navigator.pop();
-    }
-  }
-
-  Widget _buildSelectionTile({
-    required String title,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(12),
-          border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            if (isSelected)
-              const Icon(
-                Icons.check_circle,
-                color: Colors.white,
-                size: 24,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'ClickUp Settings',
+    if (_isLoadingTeams) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF000000),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return IntegrationSettingsPage(
+      appName: 'ClickUp',
+      appKey: 'clickup',
+      disconnectService: _clickupService.disconnect,
+      showRefresh: true,
+      onRefresh: _initializeClickUp,
+      children: [
+        if (_clickupService.currentUserId != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Connected as user: ${_clickupService.currentUserId}',
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const Text(
+          'Default Workspace',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _initializeClickUp,
-            tooltip: 'Refresh',
+        const SizedBox(height: 8),
+        const Text(
+          'Tasks will be created in this workspace',
+          style: TextStyle(
+            color: Color(0xFF8E8E93),
+            fontSize: 14,
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: _isLoadingTeams
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Debug info
-                    if (_clickupService.currentUserId != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.green.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Connected as user: ${_clickupService.currentUserId}',
-                                style: const TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Workspace Section
-                    const Text(
-                      'Default Workspace',
-                      style: TextStyle(
+        ),
+        const SizedBox(height: 16),
+        ..._teams.map((team) {
+          final teamId = team['id'].toString();
+          final teamName = team['name'] as String;
+          final isSelected = _selectedTeamId == teamId;
+          return GestureDetector(
+            onTap: () => _selectTeam(team),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(12),
+                border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      teamName,
+                      style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Tasks will be created in this workspace',
-                      style: TextStyle(
-                        color: Color(0xFF8E8E93),
-                        fontSize: 14,
-                      ),
+                  ),
+                  if (isSelected)
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.white,
+                      size: 24,
                     ),
-                    const SizedBox(height: 16),
-
-                    // Team List
-                    ..._teams.map((team) {
-                      final teamId = team['id'].toString();
-                      final teamName = team['name'] as String;
-                      final isSelected = _selectedTeamId == teamId;
-
-                      return _buildSelectionTile(
-                        title: teamName,
-                        isSelected: isSelected,
-                        onTap: () => _selectTeam(team),
-                      );
-                    }),
-
-                    const SizedBox(height: 32),
-
-                    // Space Section
-                    if (_selectedTeamId != null) ...[
-                      const Text(
-                        'Default Space',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Select a space in your workspace',
-                        style: TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_isLoadingSpaces)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(),
-                          ),
-                        )
-                      else if (_spaces.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1C1C1E),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'No spaces found in this workspace',
-                              style: TextStyle(
-                                color: Color(0xFF8E8E93),
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        ..._spaces.map((space) {
-                          final spaceId = space['id'].toString();
-                          final spaceName = space['name'] as String;
-                          final isSelected = _selectedSpaceId == spaceId;
-
-                          return _buildSelectionTile(
-                            title: spaceName,
-                            isSelected: isSelected,
-                            onTap: () => _selectSpace(space),
-                          );
-                        }),
-                      const SizedBox(height: 32),
-                    ],
-
-                    // List Section
-                    if (_selectedSpaceId != null) ...[
-                      const Text(
-                        'Default List',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Tasks will be added to this list',
-                        style: TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_isLoadingLists)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(),
-                          ),
-                        )
-                      else if (_lists.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1C1C1E),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'No lists found in this space',
-                              style: TextStyle(
-                                color: Color(0xFF8E8E93),
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        ..._lists.map((list) {
-                          final listId = list['id'].toString();
-                          final listName = list['name'] as String;
-                          final isSelected = _selectedListId == listId;
-
-                          return _buildSelectionTile(
-                            title: listName,
-                            isSelected: isSelected,
-                            onTap: () => _selectList(list),
-                          );
-                        }),
-                      const SizedBox(height: 32),
-                    ],
-
-                    // Disconnect Button
-                    GestureDetector(
-                      onTap: _disconnectClickUp,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red.withOpacity(0.3)),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.logout,
-                              color: Colors.red,
-                              size: 20,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'Disconnect from ClickUp',
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                ],
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 32),
+        if (_selectedTeamId != null) ...[
+          const Text(
+            'Default Space',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Select a space in your workspace',
+            style: TextStyle(
+              color: Color(0xFF8E8E93),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingSpaces)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_spaces.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Text(
+                  'No spaces found in this workspace',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 14,
+                  ),
                 ),
               ),
-      ),
+            )
+          else
+            ..._spaces.map((space) {
+              final spaceId = space['id'].toString();
+              final spaceName = space['name'] as String;
+              final isSelected = _selectedSpaceId == spaceId;
+              return GestureDetector(
+                onTap: () => _selectSpace(space),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          spaceName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      if (isSelected)
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          const SizedBox(height: 32),
+        ],
+        if (_selectedSpaceId != null) ...[
+          const Text(
+            'Default List',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Tasks will be added to this list',
+            style: TextStyle(
+              color: Color(0xFF8E8E93),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingLists)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_lists.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Text(
+                  'No lists found in this space',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            )
+          else
+            ..._lists.map((list) {
+              final listId = list['id'].toString();
+              final listName = list['name'] as String;
+              final isSelected = _selectedListId == listId;
+              return GestureDetector(
+                onTap: () => _selectList(list),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          listName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      if (isSelected)
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          const SizedBox(height: 32),
+        ],
+      ],
     );
   }
 }
