@@ -442,6 +442,26 @@ async def ensure_valid_oauth_token(
     return integration
 
 
+async def perform_request_with_token_retry(
+    uid: str,
+    app_key: str,
+    integration: dict,
+    request_fn,
+):
+    client = get_http_client()
+    access_token = integration.get('access_token') or ''
+    response = await request_fn(client, access_token)
+    if response.status_code == 401:
+        try:
+            integration = await refresh_oauth_token(uid, app_key, integration)
+            new_access_token = integration.get('access_token') or ''
+            response = await request_fn(client, new_access_token)
+        except Exception as e:
+            print(f'{app_key}: Token refresh failed during retry: {e}')
+            return response, integration, e
+    return response, integration, None
+
+
 # *****************************
 # ****** Task Operations ******
 # *****************************
@@ -537,27 +557,18 @@ async def create_task_via_integration(
             if project_gid:
                 task_data['projects'] = [project_gid]
 
-            client = get_http_client()
-            response = await client.post(
-                'https://app.asana.com/api/1.0/tasks',
-                headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
-                json={'data': task_data},
-            )
+            async def _request(client, token):
+                return await client.post(
+                    'https://app.asana.com/api/1.0/tasks',
+                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                    json={'data': task_data},
+                )
 
-            if response.status_code == 401:
-                print('asana: Got 401, attempting token refresh and retry')
-                try:
-                    integration = await refresh_oauth_token(uid, 'asana', integration)
-                    new_access_token = integration.get('access_token')
-                    if new_access_token:
-                        response = await client.post(
-                            'https://app.asana.com/api/1.0/tasks',
-                            headers={'Authorization': f'Bearer {new_access_token}', 'Content-Type': 'application/json'},
-                            json={'data': task_data},
-                        )
-                except Exception as refresh_error:
-                    print(f'asana: Token refresh failed during retry: {refresh_error}')
-                    return CreateTaskResponse(success=False, error="Asana authentication expired. Please reconnect.")
+            response, integration, err = await perform_request_with_token_retry(
+                uid, 'asana', integration, _request
+            )
+            if err:
+                return CreateTaskResponse(success=False, error="Asana authentication expired. Please reconnect.")
 
             if response.status_code in [200, 201]:
                 result = response.json()
@@ -578,29 +589,20 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 task_data['due'] = due.strftime('%Y-%m-%dT00:00:00.000Z')
 
-            client = get_http_client()
-            response = await client.post(
-                f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
-                headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
-                json=task_data,
-            )
+            async def _request(client, token):
+                return await client.post(
+                    f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
+                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                    json=task_data,
+                )
 
-            if response.status_code == 401:
-                print('google_tasks: Got 401, attempting token refresh and retry')
-                try:
-                    integration = await refresh_oauth_token(uid, 'google_tasks', integration)
-                    new_access_token = integration.get('access_token')
-                    if new_access_token:
-                        response = await client.post(
-                            f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
-                            headers={'Authorization': f'Bearer {new_access_token}', 'Content-Type': 'application/json'},
-                            json=task_data,
-                        )
-                except Exception as refresh_error:
-                    print(f'google_tasks: Token refresh failed during retry: {refresh_error}')
-                    return CreateTaskResponse(
-                        success=False, error="Google Tasks authentication expired. Please reconnect."
-                    )
+            response, integration, err = await perform_request_with_token_retry(
+                uid, 'google_tasks', integration, _request
+            )
+            if err:
+                return CreateTaskResponse(
+                    success=False, error="Google Tasks authentication expired. Please reconnect."
+                )
 
             if response.status_code in [200, 201]:
                 result = response.json()
@@ -621,27 +623,18 @@ async def create_task_via_integration(
                 due = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
                 task_data['due_date'] = int(due.timestamp() * 1000)
 
-            client = get_http_client()
-            response = await client.post(
-                f'https://api.clickup.com/api/v2/list/{list_id}/task',
-                headers={'Authorization': access_token, 'Content-Type': 'application/json'},
-                json=task_data,
-            )
+            async def _request(client, token):
+                return await client.post(
+                    f'https://api.clickup.com/api/v2/list/{list_id}/task',
+                    headers={'Authorization': token, 'Content-Type': 'application/json'},
+                    json=task_data,
+                )
 
-            if response.status_code == 401:
-                print('clickup: Got 401, attempting token refresh and retry')
-                try:
-                    integration = await refresh_oauth_token(uid, 'clickup', integration)
-                    new_access_token = integration.get('access_token')
-                    if new_access_token:
-                        response = await client.post(
-                            f'https://api.clickup.com/api/v2/list/{list_id}/task',
-                            headers={'Authorization': new_access_token, 'Content-Type': 'application/json'},
-                            json=task_data,
-                        )
-                except Exception as refresh_error:
-                    print(f'clickup: Token refresh failed during retry: {refresh_error}')
-                    return CreateTaskResponse(success=False, error="ClickUp authentication expired. Please reconnect.")
+            response, integration, err = await perform_request_with_token_retry(
+                uid, 'clickup', integration, _request
+            )
+            if err:
+                return CreateTaskResponse(success=False, error="ClickUp authentication expired. Please reconnect.")
 
             if response.status_code in [200, 201]:
                 result = response.json()
@@ -680,23 +673,15 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=401, detail="Asana not authenticated")
 
     try:
-        client = get_http_client()
-        response = await client.get(
-            'https://app.asana.com/api/1.0/workspaces',
-            headers={'Authorization': f'Bearer {access_token}'},
-        )
+        async def _request(client, token):
+            return await client.get(
+                'https://app.asana.com/api/1.0/workspaces',
+                headers={'Authorization': f'Bearer {token}'},
+            )
 
-        if response.status_code == 401:
-            try:
-                data = await refresh_oauth_token(uid, 'asana', data)
-                access_token = data.get('access_token')
-                if access_token:
-                    response = await client.get(
-                        'https://app.asana.com/api/1.0/workspaces',
-                        headers={'Authorization': f'Bearer {access_token}'},
-                    )
-            except Exception:
-                raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+        response, data, err = await perform_request_with_token_retry(uid, 'asana', data, _request)
+        if err:
+            raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
 
         if response.status_code == 200:
             result = response.json()
@@ -727,23 +712,15 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=401, detail="Asana not authenticated")
 
     try:
-        client = get_http_client()
-        response = await client.get(
-            f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
-            headers={'Authorization': f'Bearer {access_token}'},
-        )
+        async def _request(client, token):
+            return await client.get(
+                f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
+                headers={'Authorization': f'Bearer {token}'},
+            )
 
-        if response.status_code == 401:
-            try:
-                data = await refresh_oauth_token(uid, 'asana', data)
-                access_token = data.get('access_token')
-                if access_token:
-                    response = await client.get(
-                        f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
-                        headers={'Authorization': f'Bearer {access_token}'},
-                    )
-            except Exception:
-                raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+        response, data, err = await perform_request_with_token_retry(uid, 'asana', data, _request)
+        if err:
+            raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
 
         if response.status_code == 200:
             result = response.json()
@@ -774,23 +751,15 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=401, detail="ClickUp not authenticated")
 
     try:
-        client = get_http_client()
-        response = await client.get(
-            'https://api.clickup.com/api/v2/team',
-            headers={'Authorization': access_token},
-        )
+        async def _request(client, token):
+            return await client.get(
+                'https://api.clickup.com/api/v2/team',
+                headers={'Authorization': token},
+            )
 
-        if response.status_code == 401:
-            try:
-                data = await refresh_oauth_token(uid, 'clickup', data)
-                access_token = data.get('access_token')
-                if access_token:
-                    response = await client.get(
-                        'https://api.clickup.com/api/v2/team',
-                        headers={'Authorization': access_token},
-                    )
-            except Exception:
-                raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
+        response, data, err = await perform_request_with_token_retry(uid, 'clickup', data, _request)
+        if err:
+            raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
 
         if response.status_code == 200:
             result = response.json()
@@ -821,24 +790,15 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=401, detail="ClickUp not authenticated")
 
     try:
-        client = get_http_client()
-        response = await client.get(
-            f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false',
-            headers={'Authorization': access_token},
-        )
+        async def _request(client, token):
+            return await client.get(
+                f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false',
+                headers={'Authorization': token},
+            )
 
-        # If 401, refresh token once and retry
-        if response.status_code == 401:
-            try:
-                data = await refresh_oauth_token(uid, 'clickup', data)
-                access_token = data.get('access_token')
-                if access_token:
-                    response = await client.get(
-                        f'https://api.clickup.com/api/v2/team/{team_id}/space?archived=false',
-                        headers={'Authorization': access_token},
-                    )
-            except Exception:
-                raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
+        response, data, err = await perform_request_with_token_retry(uid, 'clickup', data, _request)
+        if err:
+            raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
 
         if response.status_code == 200:
             result = response.json()
@@ -869,24 +829,15 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=401, detail="ClickUp not authenticated")
 
     try:
-        client = get_http_client()
-        response = await client.get(
-            f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false',
-            headers={'Authorization': access_token},
-        )
+        async def _request(client, token):
+            return await client.get(
+                f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false',
+                headers={'Authorization': token},
+            )
 
-        # If 401, refresh token once and retry
-        if response.status_code == 401:
-            try:
-                data = await refresh_oauth_token(uid, 'clickup', data)
-                access_token = data.get('access_token')
-                if access_token:
-                    response = await client.get(
-                        f'https://api.clickup.com/api/v2/space/{space_id}/list?archived=false',
-                        headers={'Authorization': access_token},
-                    )
-            except Exception:
-                raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
+        response, data, err = await perform_request_with_token_retry(uid, 'clickup', data, _request)
+        if err:
+            raise HTTPException(status_code=401, detail="ClickUp authentication expired. Please reconnect.")
 
         if response.status_code == 200:
             result = response.json()
