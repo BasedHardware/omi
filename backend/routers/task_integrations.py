@@ -491,7 +491,6 @@ async def create_task_via_integration(
     app_key: str, request: CreateTaskRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Create a task in the specified integration using stored credentials."""
-    from datetime import datetime
 
     # Get integration details
     integration = users_db.get_task_integration(uid, app_key)
