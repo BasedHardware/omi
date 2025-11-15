@@ -436,6 +436,10 @@ async def ensure_valid_oauth_token(
         if datetime.now(timezone.utc) + buffer_time >= expires_at:
             if integration.get('refresh_token'):
                 return await refresh_oauth_token(uid, app_key, integration)
+            updated_integration = integration.copy()
+            updated_integration['connected'] = False
+            users_db.set_task_integration(uid, app_key, updated_integration)
+            return updated_integration
     except Exception:
         if integration.get('refresh_token'):
             return await refresh_oauth_token(uid, app_key, integration)
