@@ -354,22 +354,6 @@ def _build_refresh_request(app_key: str, refresh_token: str) -> dict:
                 'refresh_token': refresh_token,
             },
         }
-    if app_key == 'clickup':
-        client_id = os.getenv('CLICKUP_CLIENT_ID')
-        client_secret = os.getenv('CLICKUP_CLIENT_SECRET')
-        if not all([client_id, client_secret]):
-            raise HTTPException(status_code=500, detail=f"{name} not configured")
-        return {
-            'url': 'https://api.clickup.com/api/v2/oauth/token',
-            'type': 'params',
-            'headers': {},
-            'params': {
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'grant_type': 'refresh_token',
-                'refresh_token': refresh_token,
-            },
-        }
     raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
 
 
@@ -421,6 +405,9 @@ async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict
 async def ensure_valid_oauth_token(
     uid: str, app_key: str, integration: dict, refresh_if_missing_expires_at: bool = False
 ) -> dict:
+    supports_refresh = app_key in ['google_tasks', 'asana']
+    if not supports_refresh:
+        return integration
     expires_at_str = integration.get('expires_at')
     if not expires_at_str:
         if refresh_if_missing_expires_at or integration.get('refresh_token'):
@@ -452,13 +439,14 @@ async def perform_request_with_token_retry(
     access_token = integration.get('access_token') or ''
     response = await request_fn(client, access_token)
     if response.status_code == 401:
-        try:
-            integration = await refresh_oauth_token(uid, app_key, integration)
-            new_access_token = integration.get('access_token') or ''
-            response = await request_fn(client, new_access_token)
-        except Exception as e:
-            print(f'{app_key}: Token refresh failed during retry: {e}')
-            return response, integration, e
+        if app_key in ['google_tasks', 'asana']:
+            try:
+                integration = await refresh_oauth_token(uid, app_key, integration)
+                new_access_token = integration.get('access_token') or ''
+                response = await request_fn(client, new_access_token)
+            except Exception as e:
+                print(f'{app_key}: Token refresh failed during retry: {e}')
+                return response, integration, e
     return response, integration, None
 
 
@@ -495,7 +483,7 @@ async def create_task_via_integration(
     if not integration or not integration.get('connected'):
         raise HTTPException(status_code=404, detail=f"Not connected to {app_key}")
 
-    if app_key in ['google_tasks', 'asana', 'clickup']:
+    if app_key in ['google_tasks', 'asana']:
         integration = await ensure_valid_oauth_token(
             uid, app_key, integration, refresh_if_missing_expires_at=(app_key == 'google_tasks')
         )
@@ -937,11 +925,11 @@ async def handle_oauth_callback(
                 'access_token': access_token,
             }
 
-            if refresh_token:
+            supports_refresh = app_key in ['google_tasks', 'asana']
+            if refresh_token and supports_refresh:
                 integration_data['refresh_token'] = refresh_token
 
-            # Store token expiry time (calculate expires_at from expires_in)
-            if expires_in:
+            if expires_in and supports_refresh:
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 integration_data['expires_at'] = expires_at.isoformat()
 
