@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/asana_service.dart';
@@ -144,6 +143,11 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
   }
 
   Future<void> _disconnectAsana() async {
+    // Capture context references before any async operations
+    final provider = context.read<TaskIntegrationProvider>();
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -183,32 +187,31 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
     if (confirmed == true) {
       await _asanaService.disconnect();
 
-      if (mounted) {
-        // Delete connection from Firebase
-        await context.read<TaskIntegrationProvider>().deleteConnection('asana');
+      if (!mounted) return;
 
-        // Also clear from task integrations if Asana was selected
-        final provider = context.read<TaskIntegrationProvider>();
-        if (provider.selectedApp.key == 'asana') {
-          // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-          final defaultApp =
-              PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
-          await provider.setSelectedApp(defaultApp);
-          debugPrint('✓ Task integration disabled: Asana - switched to ${defaultApp.key}');
-        }
+      // Delete connection from Firebase
+      await provider.deleteConnection('asana');
 
-        // Trigger provider refresh to update UI
-        provider.refresh();
-
-        Navigator.of(context).pop(); // Go back to task integrations
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Disconnected from Asana'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+      // Also clear from task integrations if Asana was selected
+      if (provider.selectedApp.key == 'asana') {
+        // Default to Google Tasks on Android, Apple Reminders on Apple platforms
+        final defaultApp =
+            PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+        await provider.setSelectedApp(defaultApp);
+        debugPrint('✓ Task integration disabled: Asana - switched to ${defaultApp.key}');
       }
+
+      // Trigger provider refresh to update UI
+      provider.refresh();
+
+      navigator.pop(); // Go back to task integrations
+
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Disconnected from Asana'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 

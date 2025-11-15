@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/clickup_service.dart';
@@ -176,6 +175,10 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
   }
 
   Future<void> _disconnectClickUp() async {
+    final provider = context.read<TaskIntegrationProvider>();
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -215,32 +218,31 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
     if (confirmed == true) {
       await _clickupService.disconnect();
 
-      if (mounted) {
-        // Delete connection from Firebase
-        await context.read<TaskIntegrationProvider>().deleteConnection('clickup');
+      if (!mounted) return;
 
-        // Also clear from task integrations if ClickUp was selected
-        final provider = context.read<TaskIntegrationProvider>();
-        if (provider.selectedApp.key == 'clickup') {
-          // Default to Google Tasks on Android, Apple Reminders on Apple platforms
-          final defaultApp =
-              PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
-          await provider.setSelectedApp(defaultApp);
-          debugPrint('✓ Task integration disabled: ClickUp - switched to ${defaultApp.key}');
-        }
+      // Delete connection from Firebase
+      await provider.deleteConnection('clickup');
 
-        provider.refresh();
-
-        // Show snackbar before popping to avoid using deactivated context
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Disconnected from ClickUp'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-
-        Navigator.of(context).pop();
+      // Also clear from task integrations if ClickUp was selected
+      if (provider.selectedApp.key == 'clickup') {
+        // Default to Google Tasks on Android, Apple Reminders on Apple platforms
+        final defaultApp =
+            PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+        await provider.setSelectedApp(defaultApp);
+        debugPrint('✓ Task integration disabled: ClickUp - switched to ${defaultApp.key}');
       }
+
+      provider.refresh();
+
+      // Show snackbar before popping to avoid using deactivated context
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Disconnected from ClickUp'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      navigator.pop();
     }
   }
 
