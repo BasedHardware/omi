@@ -40,6 +40,7 @@ enum ConversationSource {
   apple_watch,
   phone,
   desktop,
+  pocket,
 }
 
 class ConversationExternalData {
@@ -247,6 +248,7 @@ class ServerConversation {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'OmiGlass';
     if (source == ConversationSource.sdcard) return 'SD Card';
+    if (source == ConversationSource.pocket) return 'Pocket';
     if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }

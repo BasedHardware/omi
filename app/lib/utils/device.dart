@@ -70,6 +70,8 @@ class DeviceUtils {
           return Assets.images.fieldy.path;
         case DeviceType.friendPendant:
           return Assets.images.friendPendant.path;
+        case DeviceType.pocket:
+          return Assets.images.omiDevkitWithoutRope.path; // TODO: Add pocket device image
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi
           if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {

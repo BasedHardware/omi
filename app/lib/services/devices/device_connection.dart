@@ -9,6 +9,8 @@ import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
+import 'package:omi/services/devices/pocket_connection.dart';
+import 'package:omi/services/devices/xor_connection.dart';
 import 'package:omi/services/devices/bee_connection.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
@@ -20,10 +22,9 @@ import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 
 class DeviceConnectionFactory {
-  static DeviceConnection? create(BtDevice device) {
-    DeviceTransport transport;
+  static Future<DeviceConnection?> create(BtDevice device) async {
+    DeviceTransport? transport;
 
-    // Create transport based on device locator
     final locator = device.locator;
     if (locator == null) return null;
 
@@ -31,8 +32,7 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        final bleDevice = BluetoothDevice.fromId(deviceId);
-        transport = BleTransport(bleDevice);
+        transport = BleTransport(BluetoothDevice.fromId(deviceId));
         break;
 
       case TransportKind.watchConnectivity:
@@ -43,15 +43,28 @@ class DeviceConnectionFactory {
         return null;
     }
 
+    // Re-detect device type if it's a Bluetooth device (in case it was saved with wrong type)
+    // This is especially important for Pocket devices that may have been saved before Pocket support
+    DeviceType deviceType = device.type;
+    if (locator.kind == TransportKind.bluetooth) {
+      // Check if it's a Pocket device by name
+      if (device.name.toUpperCase().startsWith('PKT01')) {
+        deviceType = DeviceType.pocket;
+        debugPrint('Re-detected device as Pocket type based on name: ${device.name}');
+      }
+    }
+
     // Create device connection with transport
-    switch (device.type) {
+    switch (deviceType) {
       case DeviceType.omi:
       case DeviceType.openglass:
-        return OmiDeviceConnection(device, transport);
+        return OmiDeviceConnection(device, transport!);
       case DeviceType.bee:
-        return BeeDeviceConnection(device, transport);
+        return BeeDeviceConnection(device, transport!);
       case DeviceType.plaud:
-        return PlaudDeviceConnection(device, transport);
+        return PlaudDeviceConnection(device, transport!);
+      case DeviceType.xor:
+        return XorDeviceConnection(device, transport!);
       case DeviceType.frame:
         if (locator.kind == TransportKind.bluetooth) {
           final deviceId = locator.bluetoothId;
@@ -62,9 +75,11 @@ class DeviceConnectionFactory {
       case DeviceType.appleWatch:
         return AppleWatchDeviceConnection(device, transport);
       case DeviceType.fieldy:
-        return FieldyDeviceConnection(device, transport);
+        return FieldyDeviceConnection(device, transport!);
       case DeviceType.friendPendant:
-        return FriendPendantDeviceConnection(device, transport);
+        return FriendPendantDeviceConnection(device, transport!);
+      case DeviceType.pocket:
+        return PocketDeviceConnection(device, transport);
     }
   }
 }
