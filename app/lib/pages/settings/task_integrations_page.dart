@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
+import 'package:omi/pages/settings/google_tasks_settings_page.dart';
+import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
@@ -177,9 +178,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   }
 
   bool _shouldShowSettingsIcon() {
-    // Show settings icon only for apps that have configuration pages
+    // Show settings icon only for apps that are connected
     final hasSettings = (_selectedApp == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
-        (_selectedApp == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated);
+        (_selectedApp == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
+        (_selectedApp == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
+        (_selectedApp == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
     return hasSettings;
   }
 
@@ -194,6 +197,18 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const ClickUpSettingsPage(),
+        ),
+      );
+    } else if (_selectedApp == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const TodoistSettingsPage(),
+        ),
+      );
+    } else if (_selectedApp == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const GoogleTasksSettingsPage(),
         ),
       );
     }
@@ -463,19 +478,33 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     return GestureDetector(
       onTap: isAvailable
           ? () {
-              // If Asana is already connected and selected, open settings
-              if (app == TaskIntegrationApp.asana && isConnected && isSelected) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const AsanaSettingsPage(),
-                  ),
-                );
-              } else if (app == TaskIntegrationApp.clickup && isConnected && isSelected) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const ClickUpSettingsPage(),
-                  ),
-                );
+              // If already connected and selected, open settings
+              if (isConnected && isSelected) {
+                if (app == TaskIntegrationApp.asana) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AsanaSettingsPage(),
+                    ),
+                  );
+                } else if (app == TaskIntegrationApp.clickup) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ClickUpSettingsPage(),
+                    ),
+                  );
+                } else if (app == TaskIntegrationApp.todoist) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const TodoistSettingsPage(),
+                    ),
+                  );
+                } else if (app == TaskIntegrationApp.googleTasks) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const GoogleTasksSettingsPage(),
+                    ),
+                  );
+                }
               } else {
                 _selectApp(app);
               }
@@ -588,25 +617,25 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
               )
             else
-            // Radio button for connected services
-            if (isSelected)
-              const FaIcon(
-                FontAwesomeIcons.solidCircleCheck,
-                color: Colors.green,
-                size: 24,
-              )
-            else
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF3C3C43),
-                    width: 2,
+              // Radio button for connected services
+              if (isSelected)
+                const FaIcon(
+                  FontAwesomeIcons.solidCircleCheck,
+                  color: Colors.green,
+                  size: 24,
+                )
+              else
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF3C3C43),
+                      width: 2,
+                    ),
                   ),
                 ),
-              ),
           ],
         ),
       ),
