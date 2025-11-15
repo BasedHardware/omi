@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { TranscriptSegment } from '@/src/types/memory.types';
 import chatWithMemory from '@/src/actions/memories/chat-with-memory';
-import { Send, UserCircle, Message } from 'iconoir-react';
+import { Send, UserCircle, Message, ArrowDown } from 'iconoir-react';
 import Markdown from 'markdown-to-jsx';
 
 interface ChatProps {
@@ -21,22 +21,34 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Calculate dynamic height based on message count
-  const getChatHeight = () => {
-    const messageCount = messages.length;
-    if (messageCount === 0) {
-      // Small height when only AI welcome message is shown
-      return 320;
-    } else {
-      // Full viewport height minus header/tabs and percentage-based bottom margin
-      return 'calc(100vh - 200px - 8vh)'; // Account for header (~80px), title/tabs (~120px), and 8vh bottom margin
-    }
-  };
+  // Add custom scrollbar styles
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .chat-messages-container::-webkit-scrollbar {
+        width: 8px;
+      }
+      .chat-messages-container::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .chat-messages-container::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 4px;
+      }
+      .chat-messages-container::-webkit-scrollbar-thumb:hover {
+        background: #52525b;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   // Convert transcript segments to a readable string
   const transcriptText = transcript
@@ -46,12 +58,21 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
     })
     .join('\n\n');
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (smooth = true) => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
-        behavior: 'smooth',
+        behavior: smooth ? 'smooth' : 'auto',
       });
+    }
+  };
+
+  // Handle scroll to check if user is at bottom
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setShowScrollButton(!isNearBottom && messages.length > 0);
     }
   };
 
@@ -63,7 +84,8 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 120);
+      textareaRef.current.style.height = `${newHeight}px`;
     }
   }, [input]);
 
@@ -113,14 +135,14 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
       ]);
     } finally {
       setIsLoading(false);
-      inputRef.current?.focus();
+      textareaRef.current?.focus();
     }
   };
 
   const handleClearChat = () => {
     setMessages([]);
     setInput('');
-    inputRef.current?.focus();
+    textareaRef.current?.focus();
   };
 
   // Expose clear chat function to parent
@@ -152,21 +174,23 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
     );
   }
 
-  const chatHeight = getChatHeight();
-
   return (
-    <div
-      className="flex flex-col px-4 md:px-12 transition-all duration-300 ease-in-out"
-      style={{
-        height: typeof chatHeight === 'string' ? chatHeight : `${chatHeight}px`,
-        marginBottom: messages.length > 0 ? '8vh' : '0',
-      }}
-    >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="px-4 pb-8 md:px-12">
+      <div className="flex flex-col rounded-lg border border-zinc-800/50 bg-zinc-900/20">
         {/* Messages Container */}
         <div
           ref={messagesContainerRef}
-          className={`min-h-0 flex-1 overflow-y-auto ${messages.length === 0 ? 'pb-2 pt-6 px-6' : 'p-6'}`}
+          onScroll={handleScroll}
+          className={`chat-messages-container relative overflow-y-auto ${messages.length === 0 ? 'pb-2 pt-4 px-4 md:pt-6 md:px-6' : 'p-4 md:p-6'}`}
+          style={{
+            height: '400px',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            scrollBehavior: 'smooth',
+            // Custom scrollbar styling for Firefox
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#3f3f46 transparent'
+          }}
         >
           <div className={messages.length === 0 ? 'space-y-0' : 'space-y-6'}>
             {messages.length === 0 && (
@@ -187,7 +211,7 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
                   </div>
                 </div>
                 {/* Suggestion Questions */}
-                <div className="flex flex-wrap gap-2 pl-12">
+                <div className="flex flex-wrap gap-2 pl-0 md:pl-12">
                   {[
                     'What are 3 key takeaways?',
                     'What are 3 top action items?',
@@ -238,7 +262,7 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
                           ]);
                         } finally {
                           setIsLoading(false);
-                          inputRef.current?.focus();
+                          textareaRef.current?.focus();
                         }
                       }}
                       className="inline-flex items-center rounded-full bg-zinc-800/50 px-3 py-1 text-xs text-zinc-400 ring-1 ring-inset ring-zinc-800 transition-all hover:bg-zinc-800 hover:text-zinc-300 md:text-sm"
@@ -318,32 +342,45 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
               )}
               <div ref={messagesEndRef} />
           </div>
+
+          {/* Scroll to bottom button */}
+          {showScrollButton && (
+            <button
+              onClick={() => scrollToBottom()}
+              className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl active:scale-95"
+              aria-label="Scroll to bottom"
+            >
+              <ArrowDown className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
-        {/* Input Area */}
-        <div className={`shrink-0 border-t border-zinc-800/50 ${messages.length === 0 ? 'pt-2 pb-4 px-4' : 'p-4'}`}>
-          <div className="flex items-center gap-3">
+        {/* Input Area - Fixed at bottom */}
+        <div className="shrink-0 border-t border-zinc-800/50 bg-zinc-900/30 p-3 backdrop-blur-sm md:p-4">
+          <div className="flex items-center gap-2 md:gap-3">
             <div className="relative flex-1">
               <textarea
-                ref={(node) => {
-                  inputRef.current = node;
-                  textareaRef.current = node;
-                }}
+                ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a question about this conversation..."
-                className="w-full resize-none rounded-xl border border-zinc-700/50 bg-zinc-900/80 px-4 py-3 text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                className="w-full resize-none rounded-xl border border-zinc-700/50 bg-zinc-900/80 px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all md:px-4 md:py-3 md:text-base"
                 rows={1}
                 disabled={isLoading}
-                style={{ maxHeight: '120px' }}
+                style={{
+                  minHeight: '44px',
+                  maxHeight: '120px',
+                  overflow: 'hidden'
+                }}
               />
             </div>
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg transition-all hover:from-blue-700 hover:to-blue-800 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-lg"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg transition-all hover:from-blue-700 hover:to-blue-800 hover:shadow-xl active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-lg disabled:active:scale-100"
               title="Send message"
+              aria-label="Send message"
             >
               <Send className="h-5 w-5" />
             </button>

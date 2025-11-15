@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useRef, useEffect } from 'react';
+import { Fragment, useState, useRef } from 'react';
 import Tabs from '../tabs';
 import Summary from './sumary';
 import Transcription from '../transcript/transcription';
@@ -26,18 +26,18 @@ export default function MemoryWithTabs({ memory }: MemoryWithTabsProps) {
     }
   };
 
-  // Prevent page scrolling when chat tab is active
-  useEffect(() => {
-    if (currentTab === 'chat') {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
+  // No longer needed - chat tab handles its own layout
+  // useEffect(() => {
+  //   if (currentTab === 'chat') {
+  //     document.body.style.overflow = 'hidden';
+  //   } else {
+  //     document.body.style.overflow = '';
+  //   }
 
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [currentTab]);
+  //   return () => {
+  //     document.body.style.overflow = '';
+  //   };
+  // }, [currentTab]);
 
   return (
     <Fragment>
@@ -48,21 +48,23 @@ export default function MemoryWithTabs({ memory }: MemoryWithTabsProps) {
         showNewChat={hasMessages}
       />
       <div className="">
-        {currentTab === 'sum' ? (
+        <div style={{ display: currentTab === 'sum' ? 'block' : 'none' }}>
           <Summary memory={memory} />
-        ) : currentTab === 'trs' ? (
+        </div>
+        <div style={{ display: currentTab === 'trs' ? 'block' : 'none' }}>
           <Transcription
             transcript={memory.transcript_segments}
             externalData={memory.external_data}
             people={memory.people}
           />
-        ) : (
+        </div>
+        <div style={{ display: currentTab === 'chat' ? 'block' : 'none' }}>
           <Chat
             transcript={memory.transcript_segments}
             onClearChatRef={handleClearChatRef}
             onMessagesChange={setHasMessages}
           />
-        )}
+        </div>
       </div>
     </Fragment>
   );
