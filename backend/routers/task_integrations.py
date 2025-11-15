@@ -536,6 +536,10 @@ async def create_task_via_integration(
                 task_data = response.json()
                 return CreateTaskResponse(success=True, external_task_id=task_data.get('id'))
             else:
+                if response.status_code == 401:
+                    updated_integration = integration.copy()
+                    updated_integration['connected'] = False
+                    users_db.set_task_integration(uid, 'todoist', updated_integration)
                 return CreateTaskResponse(success=False, error=f"Todoist API error: {response.status_code}")
 
         elif app_key == 'asana':
