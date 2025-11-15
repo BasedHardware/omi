@@ -142,10 +142,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     final appProvider = Provider.of<AppProvider>(context, listen: false);
 
     final detailProvider = ConversationDetailProvider();
-    detailProvider.conversationIdx = index;
-    detailProvider.selectedDate = date;
     detailProvider.conversationProvider = conversationProvider;
     detailProvider.appProvider = appProvider;
+    detailProvider.updateConversation(index, date);
 
     await detailProvider.initConversation();
 
