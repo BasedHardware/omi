@@ -142,6 +142,7 @@ Future<String?> getOAuthUrl(String appKey) async {
 }
 
 /// Create a task via backend integration API
+/// Returns a map with 'success' (bool) and optionally 'error' (String) and 'external_task_id' (String)
 Future<Map<String, dynamic>?> createTaskViaIntegration(
   String appKey, {
   required String title,
@@ -167,8 +168,21 @@ Future<Map<String, dynamic>?> createTaskViaIntegration(
     var body = utf8.decode(response.bodyBytes);
     return jsonDecode(body) as Map<String, dynamic>;
   } else {
-    debugPrint('createTaskViaIntegration error ${response.statusCode}');
-    return null;
+    // Try to parse error response
+    try {
+      var body = utf8.decode(response.bodyBytes);
+      var errorData = jsonDecode(body) as Map<String, dynamic>;
+      return {
+        'success': false,
+        'error': errorData['detail'] as String? ?? 'Failed to create task',
+      };
+    } catch (e) {
+      debugPrint('createTaskViaIntegration error ${response.statusCode}: $e');
+      return {
+        'success': false,
+        'error': 'Failed to create task (HTTP ${response.statusCode})',
+      };
+    }
   }
 }
 
