@@ -141,8 +141,6 @@ class TaskIntegrationsPage extends StatefulWidget {
 }
 
 class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with WidgetsBindingObserver {
-  TaskIntegrationApp _selectedApp =
-      PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   @override
   void initState() {
@@ -170,42 +168,38 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   Future<void> _loadFromBackend() async {
     await context.read<TaskIntegrationProvider>().loadFromBackend();
-    if (mounted) {
-      setState(() {
-        _selectedApp = context.read<TaskIntegrationProvider>().selectedApp;
-      });
-    }
   }
 
   bool _shouldShowSettingsIcon() {
-    // Show settings icon only for apps that are connected
-    final hasSettings = (_selectedApp == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
-        (_selectedApp == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
-        (_selectedApp == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
-        (_selectedApp == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
+    final selected = context.read<TaskIntegrationProvider>().selectedApp;
+    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+        (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
+        (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
+        (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
     return hasSettings;
   }
 
   void _openSelectedAppSettings() {
-    if (_selectedApp == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
+    final selected = context.read<TaskIntegrationProvider>().selectedApp;
+    if (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const AsanaSettingsPage(),
         ),
       );
-    } else if (_selectedApp == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
+    } else if (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const ClickUpSettingsPage(),
         ),
       );
-    } else if (_selectedApp == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
+    } else if (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const TodoistSettingsPage(),
         ),
       );
-    } else if (_selectedApp == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
+    } else if (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const GoogleTasksSettingsPage(),
@@ -236,9 +230,6 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
               );
             }
-            setState(() {
-              _selectedApp = app;
-            });
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             // Note: OAuth callback will save connection to Firebase
             // Provider will refresh when user returns to this page
@@ -275,9 +266,6 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
               );
             }
-            setState(() {
-              _selectedApp = app;
-            });
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
@@ -312,9 +300,6 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
               );
             }
-            setState(() {
-              _selectedApp = app;
-            });
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
@@ -349,9 +334,6 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
               );
             }
-            setState(() {
-              _selectedApp = app;
-            });
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
@@ -369,10 +351,6 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         return;
       }
     }
-
-    setState(() {
-      _selectedApp = app;
-    });
 
     // Save to backend via provider
     await context.read<TaskIntegrationProvider>().setSelectedApp(app);
@@ -471,7 +449,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   }
 
   Widget _buildAppTile(TaskIntegrationApp app) {
-    final isSelected = _selectedApp == app;
+    final isSelected = context.read<TaskIntegrationProvider>().selectedApp == app;
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
 
