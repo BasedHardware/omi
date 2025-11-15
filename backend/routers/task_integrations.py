@@ -391,9 +391,24 @@ async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict
             error_text = token_response.text
             print(f'{app_key}: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
             if token_response.status_code == 400:
-                updated_integration = integration.copy()
-                updated_integration['connected'] = False
-                users_db.set_task_integration(uid, app_key, updated_integration)
+                should_disconnect = False
+                try:
+                    err_json = token_response.json()
+                except Exception:
+                    err_json = None
+                if err_json:
+                    err_code = str(err_json.get('error', '')).lower()
+                    err_desc = str(err_json.get('error_description', '')).lower()
+                    if 'invalid_grant' in err_code or 'invalid_refresh_token' in err_code or 'invalid_grant' in err_desc or 'invalid_refresh_token' in err_desc:
+                        should_disconnect = True
+                else:
+                    lower_text = error_text.lower()
+                    if 'invalid_grant' in lower_text or 'invalid_refresh_token' in lower_text:
+                        should_disconnect = True
+                if should_disconnect:
+                    updated_integration = integration.copy()
+                    updated_integration['connected'] = False
+                    users_db.set_task_integration(uid, app_key, updated_integration)
             raise HTTPException(status_code=401, detail=f"Failed to refresh {name} token")
     except HTTPException:
         raise
