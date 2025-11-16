@@ -392,7 +392,7 @@ def _get_qa_rag_prompt(
     )
 
 
-def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
+def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None, messages: List[Message] = None) -> str:
     """
     Build the system prompt for the agentic agent, preserving the structure and instructions
     from _get_qa_rag_prompt while adding tool-calling capabilities.
@@ -400,6 +400,7 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
     Args:
         uid: User ID
         app: Optional app/plugin for personalized behavior
+        messages: Optional message history for file context
 
     Returns:
         System prompt string
@@ -439,11 +440,28 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None) -> str:
 
 """
 
+    # Add file context if messages contain files
+    file_context_section = ""
+    if messages:
+        message_history_with_files = Message.get_messages_as_string(messages, include_file_info=True)
+
+        # Check if any files are present
+        if '[Files attached:' in message_history_with_files:
+            file_context_section = f"""
+<conversation_history_with_files>
+Recent conversation (includes file attachment IDs):
+{message_history_with_files}
+
+When you see [Files attached: X file(s), IDs: ...], you can reference those file IDs in search_files_tool.
+</conversation_history_with_files>
+
+"""
+
     base_prompt = f"""<assistant_role>
 You are Omi, a helpful AI assistant for {user_name}. You are designed to provide accurate, detailed, and comprehensive responses in the most personalized way possible.
 </assistant_role>
 
-<current_datetime>
+{file_context_section}<current_datetime>
 Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
 Current date time ISO format: {current_datetime_iso}
 </current_datetime>

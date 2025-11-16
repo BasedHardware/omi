@@ -32,6 +32,7 @@ from utils.retrieval.tools import (
     update_action_item_tool,
     get_omi_product_info_tool,
     perplexity_search_tool,
+    search_files_tool,
 )
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
@@ -126,6 +127,7 @@ def execute_agentic_chat(
         update_action_item_tool,
         get_omi_product_info_tool,
         perplexity_search_tool,
+        search_files_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
@@ -185,8 +187,8 @@ async def execute_agentic_chat_stream(
     Yields:
         Formatted chunks with "data: " or "think: " prefixes
     """
-    # Build system prompt
-    system_prompt = _get_agentic_qa_prompt(uid, app)
+    # Build system prompt with file context
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages)
 
     # Get all tools
     tools = [
@@ -198,6 +200,7 @@ async def execute_agentic_chat_stream(
         update_action_item_tool,
         get_omi_product_info_tool,
         perplexity_search_tool,
+        search_files_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
@@ -225,6 +228,7 @@ async def execute_agentic_chat_stream(
             "thread_id": str(uuid.uuid4()),
             "conversations_collected": conversations_collected,
             "safety_guard": safety_guard,
+            "chat_session_id": chat_session.id if chat_session else None,
         }
     }
 
