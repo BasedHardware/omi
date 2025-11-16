@@ -163,7 +163,6 @@ class FileChatTool:
                 # Continue anyway - IDs will be recreated next time
 
     def _fill_question(self, uid, question, file_ids: List[str], thread_id: str):
-
         # OpenAI has a limit of 10 items in content array (1 text + max 9 images)
         files = chat_db.get_chat_files_desc(uid, files_id=file_ids, limit=9)
 
