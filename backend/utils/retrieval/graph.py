@@ -132,9 +132,7 @@ def determine_conversation_type(
     "agentic_context_dependent_conversation",
     "persona_question",
 ]:
-    # chat with files by attachments on the last message
     print("determine_conversation_type")
-    messages = state.get("messages", [])
 
     # persona
     app: App = state.get("plugin_selected")
