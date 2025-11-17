@@ -36,12 +36,14 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         Answer based on the file contents
     """
     if config is None:
+        print(f"❌ Configuration error: missing config")
         return "Configuration error: missing config"
 
     uid = config['configurable']['user_id']
     chat_session_id = config['configurable'].get('chat_session_id')
 
     if not chat_session_id:
+        print(f"❌ No active chat session")
         return "No active chat session. Files are not available."
 
     try:
@@ -49,6 +51,7 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         session_data = chat_db.get_chat_session_by_id(uid, chat_session_id)
 
         if not session_data:
+            print(f"❌ Chat session not found")
             return "Chat session not found."
 
         chat_session = ChatSession(**session_data)
@@ -61,12 +64,14 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
             file_ids_to_search = [fid for fid in file_ids if fid in session_file_ids]
 
             if not file_ids_to_search:
+                print(f"❌ No valid files found in session")
                 return "The specified files are not available in this chat session."
         else:
             # Use all session files
             file_ids_to_search = chat_session.file_ids if chat_session.file_ids else []
 
             if not file_ids_to_search:
+                print(f"❌ No files uploaded to session")
                 return "No files have been uploaded to this chat session yet. Ask the user to upload files first."
 
         # Use FileChatTool to query files
@@ -76,6 +81,13 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         return answer
 
     except ValueError as e:
+        print(f"❌ ValueError: {str(e)}")
         return f"Session error: {str(e)}"
     except Exception as e:
-        return f"I encountered an error while searching the files. Please try again or rephrase your question."
+        print(f"❌ Exception in search_files_tool: {str(e)}")
+        import traceback
+
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        return (
+            f"I encountered an error while searching the files: {str(e)}. Please try again or rephrase your question."
+        )
