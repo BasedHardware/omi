@@ -171,51 +171,46 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     (() async {
       final provider = context.read<MemoriesProvider>();
       await provider.init();
+      if (!mounted) return;
 
       // Apply the date-based default filter
       _applyFilter(_currentFilter);
 
-      // Mark initial load as complete
-      if (mounted) {
-        setState(() {
-          _isInitialLoad = false;
-        });
-      }
+      setState(() {
+        _isInitialLoad = false;
+      });
 
-      if (!mounted) return;
-      final unreviewedMemories = provider.unreviewed;
+      final unreviewed = provider.unreviewed;
       final home = context.read<HomeProvider>();
-      if (unreviewedMemories.isNotEmpty && home.selectedIndex == 2) {
-        _showReviewSheet(context, unreviewedMemories, provider);
+
+      if (unreviewed.isNotEmpty && home.selectedIndex == 2) {
+        _showReviewSheet(context, unreviewed, provider);
       }
     }).withPostFrameCallback();
   }
 
   void _applyFilter(FilterOption option) {
-    setState(() {
-      _currentFilter = option;
-
-      switch (option) {
-        case FilterOption.interesting:
-          _filterByCategory(MemoryCategory.interesting);
-          MixpanelManager().memoriesFiltered('interesting');
-          break;
-        case FilterOption.system:
-          _filterByCategory(MemoryCategory.system);
-          MixpanelManager().memoriesFiltered('system');
-          break;
-        case FilterOption.all:
-          _filterByCategory(null); // null means no category filter
-          MixpanelManager().memoriesFiltered('all');
-          break;
-      }
-    });
-  }
-
-  void _filterByCategory(MemoryCategory? category) {
     if (!mounted) return;
 
+    MemoryCategory? category;
+    switch (option) {
+      case FilterOption.interesting:
+        category = MemoryCategory.interesting;
+        MixpanelManager().memoriesFiltered('interesting');
+        break;
+      case FilterOption.system:
+        category = MemoryCategory.system;
+        MixpanelManager().memoriesFiltered('system');
+        break;
+      case FilterOption.all:
+        category = null; // null means no category filter
+        MixpanelManager().memoriesFiltered('all');
+        break;
+    }
+
+    if (!mounted) return;
     setState(() {
+      _currentFilter = option;
       _selectedCategory = category;
     });
 
