@@ -18,6 +18,9 @@ class ConversationProvider extends ChangeNotifier {
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
   DateTime? selectedDate;
+  bool isSelectionMode = false;
+  bool isMerging = false;
+  final Set<String> selectedConversationIds = {};
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -62,6 +65,11 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> searchConversations(String query, {bool showShimmer = false}) async {
+    // Exit selection mode when searching to avoid stale selections
+    if (isSelectionMode) {
+      disableSelectionMode();
+    }
+
     if (query.isEmpty) {
       previousQuery = "";
       currentSearchPage = 0;
@@ -537,6 +545,158 @@ class ConversationProvider extends ChangeNotifier {
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
+
+  /////////////////////////////////////////////////////////////////
+  ////////// Merge Conversations Functionality ///////////////
+
+  void enableSelectionMode() {
+    isSelectionMode = true;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  void disableSelectionMode() {
+    isSelectionMode = false;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  void toggleConversationSelection(String conversationId) {
+    if (selectedConversationIds.contains(conversationId)) {
+      selectedConversationIds.remove(conversationId);
+      // Keep selection mode active until user explicitly cancels
+    } else {
+      selectedConversationIds.add(conversationId);
+    }
+    notifyListeners();
+  }
+
+  bool isConversationSelected(String conversationId) {
+    return selectedConversationIds.contains(conversationId);
+  }
+
+  bool canMergeSelectedConversations() {
+    if (selectedConversationIds.length < 2) return false;
+
+    // Get selected conversations
+    List<ServerConversation> selectedConvos = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+
+    // Check if any are locked or discarded
+    if (selectedConvos.any((c) => c.isLocked || c.discarded)) {
+      return false;
+    }
+
+    // Sort all conversations by time to find actual positions
+    List<ServerConversation> sortedAllConvos = List.from(conversations);
+    sortedAllConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+
+    // Find indices of selected conversations in the sorted list
+    List<int> selectedIndices = [];
+    for (var selectedConvo in selectedConvos) {
+      int index = sortedAllConvos.indexWhere((c) => c.id == selectedConvo.id);
+      if (index != -1) {
+        selectedIndices.add(index);
+      }
+    }
+
+    // Sort indices to check for contiguity
+    selectedIndices.sort();
+
+    // Check that selected conversations are contiguous (no gaps in indices)
+    for (int i = 0; i < selectedIndices.length - 1; i++) {
+      if (selectedIndices[i + 1] - selectedIndices[i] != 1) {
+        debugPrint(
+            'Merge blocked: non-adjacent conversations. Gap between indices ${selectedIndices[i]} and ${selectedIndices[i + 1]}');
+        return false;
+      }
+    }
+
+    // Now check time-based adjacency (within 1 hour)
+    selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+    for (int i = 0; i < selectedConvos.length - 1; i++) {
+      DateTime currentEnd = selectedConvos[i].finishedAt ?? selectedConvos[i].createdAt;
+      DateTime nextStart = selectedConvos[i + 1].startedAt ?? selectedConvos[i + 1].createdAt;
+
+      Duration gap = nextStart.difference(currentEnd);
+      if (gap.inHours > 1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /// Merges selected conversations
+  /// Returns (success, errorMessage) tuple
+  Future<(bool, String?)> mergeSelectedConversations() async {
+    if (selectedConversationIds.length < 2) return (false, 'Please select at least 2 conversations to merge');
+    if (!canMergeSelectedConversations()) {
+      return (false, 'Selected conversations must be adjacent with no conversations in between and within 1 hour of each other');
+    }
+
+    isMerging = true;
+    notifyListeners();
+
+    try {
+      // Sort conversation IDs by timestamp
+      List<ServerConversation> selectedConvos = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+      selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+      List<String> sortedIds = selectedConvos.map((c) => c.id).toList();
+
+      // Track merge attempt
+      MixpanelManager().track('Conversations Merge Initiated', properties: {
+        'conversation_count': sortedIds.length,
+        'conversation_ids': sortedIds,
+      });
+
+      // Call API to merge conversations
+      var (mergedConversation, errorMessage) = await mergeConversations(sortedIds);
+
+      if (mergedConversation != null) {
+        // Remove merged conversations from local lists
+        for (var id in sortedIds) {
+          conversations.removeWhere((element) => element.id == id);
+        }
+
+        // Add the new merged conversation
+        conversations.insert(0, mergedConversation);
+        conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // Update grouped conversations
+        _groupConversationsByDateWithoutNotify();
+
+        // Track success
+        MixpanelManager().track('Conversations Merge Successful', properties: {
+          'merged_conversation_id': mergedConversation.id,
+          'source_conversation_count': selectedConversationIds.length,
+        });
+
+        // Clear selection
+        disableSelectionMode();
+
+        isMerging = false;
+        notifyListeners();
+        return (true, null);
+      } else {
+        MixpanelManager().track('Conversations Merge Failed', properties: {
+          'error': errorMessage ?? 'Unknown error',
+        });
+        isMerging = false;
+        notifyListeners();
+        return (false, errorMessage ?? 'Failed to merge conversations. Please try again.');
+      }
+    } catch (e) {
+      debugPrint('Error merging conversations: $e');
+      MixpanelManager().track('Conversations Merge Failed', properties: {
+        'error': e.toString(),
+      });
+      isMerging = false;
+      notifyListeners();
+      return (false, 'An error occurred while merging. Please try again.');
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////
 
   @override
   void dispose() {

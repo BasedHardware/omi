@@ -23,6 +23,10 @@ class ConversationListItem extends StatefulWidget {
   final DateTime date;
   final int conversationIdx;
   final ServerConversation conversation;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSelectionToggle;
 
   const ConversationListItem({
     super.key,
@@ -30,6 +34,10 @@ class ConversationListItem extends StatefulWidget {
     required this.date,
     required this.conversationIdx,
     this.isFromOnboarding = false,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onLongPress,
+    this.onSelectionToggle,
   });
 
   @override
@@ -68,6 +76,37 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
+          // Handle selection mode tap
+          if (widget.isSelectionMode) {
+            // Allow deselecting already selected items without extra checks
+            if (widget.isSelected) {
+              widget.onSelectionToggle?.call();
+              return;
+            }
+            // Prevent selecting locked conversations
+            if (widget.conversation.isLocked) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cannot select locked conversations'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+            // Prevent selecting discarded conversations
+            if (widget.conversation.discarded) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cannot select discarded conversations'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+            widget.onSelectionToggle?.call();
+            return;
+          }
+
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
@@ -111,72 +150,123 @@ class _ConversationListItemState extends State<ConversationListItem> {
             }
           }
         },
+        onLongPress: () {
+          if (!widget.isSelectionMode) {
+            // Don't allow selecting locked or discarded conversations
+            if (widget.conversation.isLocked || widget.conversation.discarded) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cannot select locked or discarded conversations'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+            HapticFeedback.mediumImpact();
+            widget.onLongPress?.call();
+          }
+        },
         child: Padding(
           padding:
               EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
-          child: Container(
-            width: double.maxFinite,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(16.0),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16.0),
-              child: Dismissible(
-                key: UniqueKey(),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                confirmDismiss: (direction) async {
-                  HapticFeedback.mediumImpact();
-                  bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
-                  if (!showDeleteConfirmation) return Future.value(true);
-                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                  if (connectivityProvider.isConnected) {
-                    return await showDialog(
-                      context: context,
-                      builder: (ctx) => getDialog(
-                        context,
-                        () => Navigator.of(context).pop(false),
-                        () => Navigator.of(context).pop(true),
-                        'Delete Conversation?',
-                        'Are you sure you want to delete this conversation? This action cannot be undone.',
-                        okButtonText: 'Confirm',
+          child: Opacity(
+            opacity: widget.isSelectionMode && (widget.conversation.isLocked || widget.conversation.discarded) ? 0.5 : 1.0,
+            child: Stack(
+              children: [
+                Container(
+                  width: double.maxFinite,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: widget.isSelectionMode && widget.isSelected
+                        ? Border.all(color: Colors.deepPurple, width: 2)
+                        : null,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16.0),
+                    child: Dismissible(
+                    key: UniqueKey(),
+                    direction: widget.isSelectionMode ? DismissDirection.none : DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20.0),
+                      color: Colors.red,
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    confirmDismiss: (direction) async {
+                      HapticFeedback.mediumImpact();
+                      bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+                      if (!showDeleteConfirmation) return Future.value(true);
+                      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                      if (connectivityProvider.isConnected) {
+                        return await showDialog(
+                          context: context,
+                          builder: (ctx) => getDialog(
+                            context,
+                            () => Navigator.of(context).pop(false),
+                            () => Navigator.of(context).pop(true),
+                            'Delete Conversation?',
+                            'Are you sure you want to delete this conversation? This action cannot be undone.',
+                            okButtonText: 'Confirm',
+                          ),
+                        );
+                      } else {
+                        return showDialog(
+                          builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                              'Unable to Delete Conversation', 'Please check your internet connection and try again.',
+                              singleButton: true, okButtonText: 'OK'),
+                          context: context,
+                        );
+                      }
+                    },
+                    onDismissed: (direction) async {
+                      var conversation = widget.conversation;
+                      var conversationIdx = widget.conversationIdx;
+                      MixpanelManager().conversationSwipedToDelete(conversation);
+                      provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.max,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _getConversationHeader(),
+                          const SizedBox(height: 16),
+                          _buildConversationBody(context),
+                        ],
                       ),
-                    );
-                  } else {
-                    return showDialog(
-                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
-                          singleButton: true, okButtonText: 'OK'),
-                      context: context,
-                    );
-                  }
-                },
-                onDismissed: (direction) async {
-                  var conversation = widget.conversation;
-                  var conversationIdx = widget.conversationIdx;
-                  MixpanelManager().conversationSwipedToDelete(conversation);
-                  provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                },
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _getConversationHeader(),
-                      const SizedBox(height: 16),
-                      _buildConversationBody(context),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              ),
+              // Checkbox indicator for selection mode
+              if (widget.isSelectionMode)
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.isSelected ? Colors.deepPurple : Colors.grey.shade800,
+                      border: Border.all(
+                        color: widget.isSelected ? Colors.deepPurple : Colors.grey.shade600,
+                        width: 2,
+                      ),
+                    ),
+                    child: widget.isSelected
+                        ? const Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 18,
+                          )
+                        : null,
+                  ),
+                ),
+            ],
           ),
         ),
       );

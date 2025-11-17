@@ -701,6 +701,190 @@ def get_public_conversations(data: List[Tuple[str, str]]):
     return conversations
 
 
+def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional[dict], Optional[str]]:
+    """
+    Merges multiple conversations into a single conversation.
+
+    Validation:
+    - All conversations must exist
+    - Conversations must be chronologically consecutive (no gaps between them)
+    - At least 2 conversations must be provided
+
+    Process:
+    - Combines transcript segments from all conversations, sorted by timestamp
+    - Merges photos, action items, and events
+    - Uses the earliest started_at and latest finished_at
+    - Creates a new conversation with merged data
+    - Returns the merged conversation data for LLM processing
+
+    Args:
+        uid: User ID
+        conversation_ids: List of conversation IDs to merge (in any order)
+
+    Returns:
+        Tuple of (merged_conversation_data, error_message)
+        - If successful: (conversation_data_dict, None)
+        - If failed: (None, error_message)
+    """
+    if len(conversation_ids) < 2:
+        return None, "At least 2 conversations are required to merge"
+
+    # Fetch all conversations
+    conversations = []
+    for conv_id in conversation_ids:
+        conv = get_conversation(uid, conv_id)
+        if not conv:
+            return None, f"Conversation {conv_id} not found"
+        if conv.get('is_locked', False):
+            return None, "Cannot merge locked conversations. Please unlock them first."
+        if conv.get('discarded', False):
+            return None, "Cannot merge discarded conversations."
+        conversations.append(conv)
+
+    # Sort conversations by created_at timestamp
+    conversations.sort(key=lambda c: c['created_at'])
+
+    # Validate that conversations are consecutive (chronologically adjacent)
+    # Check if there are any conversations between the selected ones
+    first_conv = conversations[0]
+    last_conv = conversations[-1]
+
+    # Get all conversations between first and last using pagination
+    all_convs_in_range = []
+    batch_size = 1000
+    last_created_at = first_conv['created_at']
+    while True:
+        batch = get_conversations(
+            uid=uid,
+            start_date=last_created_at,
+            end_date=last_conv['created_at'],
+            include_discarded=False,
+            limit=batch_size
+        )
+        # Remove the first conversation if it's the same as last_created_at (to avoid duplicates)
+        if all_convs_in_range:
+            batch = [c for c in batch if c['created_at'] > last_created_at]
+        all_convs_in_range.extend(batch)
+        if len(batch) < batch_size:
+            break
+        # Prepare for next batch
+        last_created_at = batch[-1]['created_at']
+
+    # Sort by created_at
+    all_convs_in_range.sort(key=lambda c: c['created_at'])
+
+    # Filter out conversations that are not in our merge list
+    non_selected = [c for c in all_convs_in_range if c['id'] not in conversation_ids]
+
+    # Check if there are any conversations in between
+    if non_selected:
+        # Check if any non-selected conversation falls between our selected conversations
+        for conv in non_selected:
+            conv_time = conv['created_at']
+            # If this conversation is between first and last, they are not consecutive
+            if first_conv['created_at'] < conv_time < last_conv['created_at']:
+                return None, "Selected conversations are not consecutive. There are other conversations between them."
+
+    # Merge transcript segments
+    all_segments = []
+    for conv in conversations:
+        segments = conv.get('transcript_segments', [])
+        if segments:
+            all_segments.extend(segments)
+
+    # Sort segments by timestamp
+    all_segments.sort(key=lambda s: s.get('start', 0))
+
+    # Merge photos
+    all_photos = []
+    for conv in conversations:
+        photos = conv.get('photos', [])
+        if photos:
+            all_photos.extend(photos)
+
+    # Sort photos by timestamp if available
+    all_photos.sort(key=lambda p: p.get('timestamp', 0))
+
+    # Merge action items
+    all_action_items = []
+    for conv in conversations:
+        action_items = conv.get('structured', {}).get('action_items', [])
+        if action_items:
+            all_action_items.extend(action_items)
+
+    # Merge events
+    all_events = []
+    for conv in conversations:
+        events = conv.get('structured', {}).get('events', [])
+        if events:
+            all_events.extend(events)
+
+    # Merge audio files
+    all_audio_files = []
+    for conv in conversations:
+        audio_files = conv.get('audio_files', [])
+        if audio_files:
+            all_audio_files.extend(audio_files)
+
+    # Sort audio files by started_at
+    if all_audio_files:
+        all_audio_files.sort(key=lambda a: a.get('started_at', datetime.min.replace(tzinfo=timezone.utc)))
+
+    # Determine merged conversation timestamps
+    started_at = min((c.get('started_at') or c.get('created_at') for c in conversations), default=first_conv['created_at'])
+    finished_at = max((c.get('finished_at') or c.get('created_at') for c in conversations), default=last_conv.get('finished_at') or last_conv['created_at'])
+    created_at = first_conv['created_at']
+
+    # Use the most common source or first conversation's source
+    source = first_conv.get('source', 'omi')
+
+    # Use first conversation's language or default
+    language = first_conv.get('language')
+
+    # Get data protection level from first conversation
+    data_protection_level = first_conv.get('data_protection_level', 'standard')
+
+    # Create merged conversation data structure
+    merged_id = str(uuid.uuid4())
+    merged_conversation = {
+        'id': merged_id,
+        'created_at': created_at,
+        'started_at': started_at,
+        'finished_at': finished_at,
+        'source': source,
+        'language': language,
+        'transcript_segments': all_segments,
+        'transcript_segments_compressed': False,  # Will be set during write
+        'photos': all_photos,
+        'audio_files': all_audio_files,
+        'geolocation': first_conv.get('geolocation'),  # Use first conversation's location
+        'structured': {
+            'title': 'Merged Conversation',  # Placeholder, will be updated by LLM
+            'overview': '',
+            'emoji': '🔗',
+            'category': first_conv.get('structured', {}).get('category', 'other'),
+            'action_items': all_action_items,
+            'events': all_events,
+        },
+        'apps_results': [],
+        'suggested_summarization_apps': [],
+        'external_data': None,
+        'app_id': None,
+        'discarded': False,
+        'visibility': 'private',
+        'status': 'completed',
+        'is_locked': False,
+        'data_protection_level': data_protection_level,
+    }
+
+    # Return the merged conversation data for further processing
+    # The caller should:
+    # 1. Generate new title/overview/emoji using LLM
+    # 2. Save the merged conversation
+    # 3. Delete the original conversations
+    return merged_conversation, None
+
+
 # ****************************************
 # ********** POSTPROCESSING **************
 # ****************************************

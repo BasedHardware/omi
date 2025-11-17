@@ -140,7 +140,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     print('delete_conversation', conversation_id, uid)
     conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(conversation_id)
+    delete_vector(uid, conversation_id)
     return {"status": "Ok"}
 
 
@@ -615,3 +615,90 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     summary = generate_summary_with_prompt(full_transcript, request.prompt)
 
     return {"summary": summary}
+
+
+@router.post("/v1/conversations/merge", response_model=Conversation, tags=['conversations'])
+def merge_conversations_endpoint(
+    request: MergeConversationsRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Merges multiple conversations into a single conversation.
+
+    Requirements:
+    - At least 2 conversation IDs must be provided
+    - Conversations must be chronologically consecutive (no other conversations between them)
+    - All conversations must exist and belong to the user
+
+    Process:
+    - Validates and merges transcript segments, photos, action items, and events
+    - Generates new title, overview, and category using LLM
+    - Deletes original conversations
+    - Returns the newly created merged conversation
+    """
+    from utils.llm.conversation_processing import get_transcript_structure
+    from database import users as users_db
+
+    # Validate and merge conversations
+    merged_data, error = conversations_db.merge_conversations(uid, request.conversation_ids)
+
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+    # Get user timezone for LLM processing
+    user_data = users_db.get_user(uid)
+    tz = user_data.get('timezone', 'UTC') if user_data else 'UTC'
+
+    # Generate full transcript from segments
+    full_transcript = "\n".join([seg.get('text', '') for seg in merged_data['transcript_segments'] if seg.get('text')])
+
+    # Get language from merged data
+    language_code = merged_data.get('language', 'en')
+
+    # Use LLM to generate new title, overview, emoji, and category
+    try:
+        photos = [ConversationPhoto(**photo) for photo in merged_data.get('photos', [])]
+        structured = get_transcript_structure(
+            transcript=full_transcript,
+            started_at=merged_data['started_at'],
+            language_code=language_code,
+            tz=tz,
+            photos=photos if photos else None,
+            existing_action_items=merged_data['structured']['action_items']
+        )
+
+        # Update merged conversation with LLM-generated structured data
+        merged_data['structured']['title'] = structured.title
+        merged_data['structured']['overview'] = structured.overview
+        merged_data['structured']['emoji'] = structured.emoji
+        merged_data['structured']['category'] = structured.category
+
+        # Merge events from LLM with existing events, avoiding duplicates
+        existing_event_titles = {event.get('title', '') for event in merged_data['structured']['events']}
+        for new_event in (structured.events or []):
+            event_dict = new_event.dict() if hasattr(new_event, 'dict') else new_event
+            if event_dict.get('title', '') not in existing_event_titles:
+                merged_data['structured']['events'].append(event_dict)
+
+    except Exception as e:
+        print(f"Error generating structured data for merged conversation: {e}")
+        # Continue with placeholder title if LLM fails
+        merged_data['structured']['title'] = 'Merged Conversation'
+        merged_data['structured']['overview'] = full_transcript[:500] if full_transcript else 'Combined conversation'
+
+    # Save the merged conversation
+    conversations_db.upsert_conversation(uid, merged_data)
+
+    # Delete original conversations
+    for conv_id in request.conversation_ids:
+        try:
+            conversations_db.delete_conversation(uid, conv_id)
+            # Delete from vector DB if applicable
+            delete_vector(uid, conv_id)
+        except Exception as e:
+            print(f"Error deleting conversation {conv_id}: {e}")
+            # Continue even if deletion fails
+
+    # Retrieve and return the newly created merged conversation
+    merged_conversation = conversations_db.get_conversation(uid, merged_data['id'])
+
+    return Conversation(**merged_conversation)
