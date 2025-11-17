@@ -220,8 +220,7 @@ async def execute_agentic_chat_stream(
     conversations_collected = []
 
     # Initialize safety guard
-    # gpt-5 // 400k
-    safety_guard = AgentSafetyGuard(max_tool_calls=10, max_context_tokens=400000)
+    safety_guard = AgentSafetyGuard(max_tool_calls=10, max_context_tokens=500000)
 
     config = {
         "configurable": {
