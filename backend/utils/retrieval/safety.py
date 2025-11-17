@@ -23,7 +23,8 @@ class AgentSafetyGuard:
     - Suspicious parameter patterns
     """
 
-    def __init__(self, max_tool_calls: int = 10, max_context_tokens: int = 500000):
+    # gpt-5 // 400k
+    def __init__(self, max_tool_calls: int = 10, max_context_tokens: int = 400000):
         self.max_tool_calls = max_tool_calls
         self.max_context_tokens = max_context_tokens
 

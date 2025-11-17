@@ -9,19 +9,19 @@ from models.conversation import Structured
 
 
 # Base models for general use
-llm_mini = ChatOpenAI(model='gpt-4o-mini')
-llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
+llm_mini = ChatOpenAI(model='gpt-5-mini')
+llm_mini_stream = ChatOpenAI(model='gpt-5-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
 llm_high = ChatOpenAI(model='o4-mini')
 llm_high_stream = ChatOpenAI(model='o4-mini', streaming=True, temperature=1)
-llm_medium = ChatOpenAI(model='gpt-4o')
-llm_medium_experiment = ChatOpenAI(model='gpt-4.1')
-llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
+llm_medium = ChatOpenAI(model='gpt-5')
+llm_medium_experiment = ChatOpenAI(model='gpt-5')
+llm_medium_stream = ChatOpenAI(model='gpt-5', streaming=True)
 
 # Specialized models for agentic workflows
-llm_agent = ChatOpenAI(model='gpt-4.1')
-llm_agent_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
+llm_agent = ChatOpenAI(model='gpt-5')
+llm_agent_stream = ChatOpenAI(model='gpt-5', streaming=True)
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
     model="google/gemini-flash-1.5-8b",
