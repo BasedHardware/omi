@@ -142,7 +142,7 @@ class FileChatTool:
                 assistant = openai.beta.assistants.create(
                     name="File Reader",
                     instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
-                    model="gpt-4o",
+                    model="gpt-5",
                     tools=[{"type": "file_search"}],
                     timeout=timeout,
                 )
