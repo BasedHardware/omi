@@ -899,6 +899,10 @@ void pusher(void)
 
 int transport_off()
 {
+    // Stop pusher thread when transport is turned off
+    k_thread_abort(&pusher_thread);
+    k_msleep(100);
+
     // First disconnect any active connections
     if (current_connection != NULL) {
         bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
