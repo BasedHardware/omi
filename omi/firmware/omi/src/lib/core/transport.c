@@ -42,6 +42,8 @@ extern bool storage_is_on;
 #endif
 
 extern bool is_connected;
+static atomic_t pusher_stop_flag;
+extern bool is_off;
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
@@ -388,15 +390,17 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 // Battery Service Handlers
 //
 
-#define BATTERY_REFRESH_INTERVAL 60000 // 60 seconds
-
 #ifdef CONFIG_OMI_ENABLE_BATTERY
+#define BATTERY_REFRESH_INTERVAL        10000 // 10 seconds
+#define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
+
 void broadcast_battery_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item)
 {
+    static uint8_t notify_counter = 6;
     uint16_t battery_millivolt;
     uint8_t battery_percentage;
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
@@ -404,10 +408,34 @@ void broadcast_battery_level(struct k_work *work_item)
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
-        // Use the Zephyr BAS function to set (and notify) the battery level
-        int err = bt_bas_set_battery_level(battery_percentage);
-        if (err) {
-            LOG_ERR("Error updating battery level: %d", err);
+        if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
+            LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
+
+            // Immediate feedback: LED off and haptic
+            led_off();
+            // Set is_off immediately so set_led_state() keeps LEDs off
+            is_off = true;
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+            haptic_off();
+#endif
+
+            // Delays for stability
+            k_msleep(1000);
+
+            // // Enter the low power mode
+            transport_off();
+            k_msleep(300);
+            turnoff_all();
+        } else {
+            notify_counter++;
+            if (notify_counter >= 6) {
+                // Use the Zephyr BAS function to set (and notify) the battery level
+                int err = bt_bas_set_battery_level(battery_percentage);
+                if (err) {
+                    LOG_ERR("Error updating battery level: %d", err);
+                }
+                notify_counter = 0;
+            }
         }
     } else {
         LOG_ERR("Failed to read battery level");
@@ -458,10 +486,6 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     k_sleep(K_MSEC(1000));
     update_data_length(current_connection);
     update_mtu(current_connection);
-
-#ifdef CONFIG_OMI_ENABLE_BATTERY
-    k_work_schedule(&battery_work, K_MSEC(3000));
-#endif
 
     is_connected = true;
 }
@@ -827,7 +851,7 @@ void test_pusher(void)
 void pusher(void)
 {
     k_msleep(500);
-    while (1) {
+    while (!atomic_get(&pusher_stop_flag)) {
         //
         // Load current connection
         //
@@ -899,6 +923,13 @@ void pusher(void)
 
 int transport_off()
 {
+    // Stop pusher thread when transport is turned off
+    atomic_set(&pusher_stop_flag, 1);
+    int ret = k_thread_join(&pusher_thread, K_MSEC(500));
+    if (ret != 0) {
+        LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
+    }
+
     // First disconnect any active connections
     if (current_connection != NULL) {
         bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
@@ -1028,6 +1059,8 @@ int transport_start()
     } else {
         LOG_INF("Battery initialized");
     }
+
+    k_work_schedule(&battery_work, K_MSEC(3000));
 #endif
 
     // Start pusher
