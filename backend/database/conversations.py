@@ -744,7 +744,16 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional
     # Sort conversations by created_at timestamp
     conversations.sort(key=lambda c: c['created_at'])
 
-    # Validate that conversations are consecutive (chronologically adjacent)
+    # Sort conversations by created_at timestamp
+    conversations.sort(key=lambda c: c['created_at'])
+
+    # Validate time gap between conversations
+    for i in range(len(conversations) - 1):
+        current_end = conversations[i].get('finished_at') or conversations[i]['created_at']
+        next_start = conversations[i+1].get('started_at') or conversations[i+1]['created_at']
+        if (next_start - current_end).total_seconds() > 3600:
+            return None, "Selected conversations must be within 1 hour of each other."
+
     # Check if there are any conversations between the selected ones
     first_conv = conversations[0]
     last_conv = conversations[-1]
