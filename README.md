@@ -81,6 +81,7 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 - [Build the device](https://docs.omi.me/doc/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/doc/get_started/Flash_device/)
 - [Create your own app in 1 minute](https://docs.omi.me/doc/developer/apps/Introduction).
+- [Integrate your own wearable with omi](https://docs.omi.me/doc/integrations)
 
 ## Contributions
 
