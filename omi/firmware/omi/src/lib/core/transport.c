@@ -42,6 +42,7 @@ extern bool storage_is_on;
 #endif
 
 extern bool is_connected;
+static atomic_t pusher_stop_flag;
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
@@ -827,7 +828,7 @@ void test_pusher(void)
 void pusher(void)
 {
     k_msleep(500);
-    while (1) {
+    while (!atomic_get(&pusher_stop_flag)) {
         //
         // Load current connection
         //
@@ -900,8 +901,11 @@ void pusher(void)
 int transport_off()
 {
     // Stop pusher thread when transport is turned off
-    k_thread_abort(&pusher_thread);
-    k_msleep(100);
+    atomic_set(&pusher_stop_flag, 1);
+    int ret = k_thread_join(&pusher_thread, K_MSEC(500));
+    if (ret != 0) {
+        LOG_WRN("Pusher thread did not terminate in time (err %d)", ret);
+    }
 
     // First disconnect any active connections
     if (current_connection != NULL) {
