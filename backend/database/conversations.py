@@ -805,13 +805,19 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional
     # Sort photos by timestamp if available
     all_photos.sort(key=lambda p: p.get('timestamp', 0))
 
-    # Merge action items
+    # Merge action items with deduplication
+    seen_action_items = set()
     all_action_items = []
     for conv in conversations:
         action_items = conv.get('structured', {}).get('action_items', [])
-        if action_items:
-            all_action_items.extend(action_items)
-
+        for item in action_items:
+            item_key = item.get('description', '')
+            if item_key and item_key not in seen_action_items:
+                seen_action_items.add(item_key)
+                all_action_items.append(item)
+            elif not item_key:
+                # Include items without description (shouldn't happen but be safe)
+                all_action_items.append(item)
     # Merge events
     all_events = []
     for conv in conversations:
