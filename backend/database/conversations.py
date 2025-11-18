@@ -828,11 +828,18 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional
                 # Include items without description (shouldn't happen but be safe)
                 all_action_items.append(item)
     # Merge events
+    # Merge events with deduplication
+    seen_events = set()
     all_events = []
     for conv in conversations:
         events = conv.get('structured', {}).get('events', [])
         if events:
-            all_events.extend(events)
+            for event in events:
+                # Use a tuple of title and start time for uniqueness
+                event_key = (event.get('title'), event.get('start'))
+                if event_key not in seen_events:
+                    seen_events.add(event_key)
+                    all_events.append(event)
 
     # Merge audio files
     all_audio_files = []
