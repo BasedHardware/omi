@@ -266,6 +266,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         const Spacer(),
                         TextButton(
                           onPressed: convoProvider.disableSelectionMode,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                          ),
                           child: const Text('Cancel'),
                         ),
                         const SizedBox(width: 8),
