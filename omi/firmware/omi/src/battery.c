@@ -31,7 +31,6 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 static uint8_t battery_percentage_ema = 0;
 static bool ema_initialized = false;
 static uint8_t ema_init_counter = 0;
-static uint8_t last_percentage = 0;
 
 static const struct device *const adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
 static const struct gpio_dt_spec power_pin = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(power_pin), gpios, {0});
@@ -115,7 +114,11 @@ uint8_t update_ema_filter(uint32_t current_ema, uint8_t new_value)
 {
     // handle edge case transitions directly
     if ((!is_charging && (current_ema <= 5)) || (is_charging && (current_ema >= 95))) {
-        return new_value;
+        if (is_charging) {
+            return (new_value > current_ema) ? current_ema + 1 : current_ema;
+        } else {
+            return (new_value < current_ema) ? current_ema - 1 : current_ema;
+        }
     }
 
     // Constant coefficient Alpha for EMA calculation, scaled to 16 bit.
@@ -123,15 +126,11 @@ uint8_t update_ema_filter(uint32_t current_ema, uint8_t new_value)
     const uint32_t alpha = BATTERY_FILTER_ALPHA_U16;
     const uint32_t alpha_complement = UINT16_MAX - BATTERY_FILTER_ALPHA_U16;
 
-    // Calculate new EMA: combines scaled new value and current EMA.
-    // Formula: new_ema = (alpha * new_value + alpha_complement * current_ema) / 65535
-    uint64_t new_ema_64_bit = (alpha * new_value) + (alpha_complement * current_ema);
+    // Calculate new EMA: new_ema = (alpha * new_value + alpha_complement * current_ema) / 65535
+    uint64_t new_ema = (alpha * new_value) + (alpha_complement * current_ema);
 
-    // Scale result back to 8-bit, with rounding
-    // Add 32768 (half of 65536) for rounding, then shift right by 16 bits (divide by 65536)
-    uint32_t new_ema_32_bit = (uint32_t)((new_ema_64_bit + 32768) >> 16);
-
-    return (uint8_t)new_ema_32_bit;
+    // Scale result back to 8-bit, with rounding up
+    return (uint8_t)((new_ema + 32768) >> 16);
 }
 
 static void battery_charging_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -299,15 +298,13 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
     }
 
     // Prevent sudden jumps in percentage
-    if (last_percentage != 0) {
-        if (is_charging && raw_percentage < last_percentage) {
-            raw_percentage = last_percentage;
-        } else if (!is_charging && raw_percentage > last_percentage) {
-            raw_percentage = last_percentage;
+    if (battery_percentage_ema != 0) {
+        if (is_charging && raw_percentage < battery_percentage_ema) {
+            raw_percentage = battery_percentage_ema;
+        } else if (!is_charging && raw_percentage > battery_percentage_ema) {
+            raw_percentage = battery_percentage_ema;
         }
     }
-
-    last_percentage = raw_percentage;
 
     // Initialize EMA with first reading
     if (!ema_initialized) {
