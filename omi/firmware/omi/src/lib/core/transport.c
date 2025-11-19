@@ -43,7 +43,6 @@ extern bool storage_is_on;
 
 extern bool is_connected;
 static atomic_t pusher_stop_flag;
-extern bool is_off;
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
