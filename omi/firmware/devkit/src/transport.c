@@ -502,7 +502,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     if(size <= CODEC_OUTPUT_MAX_BYTES) {
         size_t remained_space = ring_buf_space_get(&ring_buf);
 
-        if(remained_space >= size) {
+        if(remained_space >= (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)) {
             // Copy data (TODO: Avoid this copy)
             tx_buffer_2[0] = size & 0xFF;
             tx_buffer_2[1] = (size >> 8) & 0xFF;
@@ -536,6 +536,7 @@ static bool read_from_tx_queue() {
                         (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
         if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)) {
             LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
+            return false;
         }
 
         // Adjust size
@@ -598,7 +599,8 @@ static bool push_to_gatt(struct bt_conn *conn)
     }
 
     uint8_t *payload = tx_buffer + RING_BUFFER_HEADER_SIZE;
-    uint32_t payload_len = tx_buffer_size - RING_BUFFER_HEADER_SIZE;
+    // Actual len already update so we don't need subtract with HEADER
+    uint32_t payload_len = tx_buffer_size;
     uint32_t max_payload = current_mtu - NET_BUFFER_HEADER_SIZE;
 
     // If incoming chunk does not fit, flush what we have now
