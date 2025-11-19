@@ -15,5 +15,8 @@
         LOG_ERR("Error at %s:%d:%d", __FILE__, __LINE__, result);                                                      \
         return -1;                                                                                                     \
     }
-
+#define ASSERT_DEV(result)                                                                                             \
+    if (!result) {                                                                                                     \
+        __asm("bkpt");                                                                                                 \
+    }
 #endif
