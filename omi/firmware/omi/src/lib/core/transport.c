@@ -410,21 +410,6 @@ void broadcast_battery_level(struct k_work *work_item)
 
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
-
-            // Immediate feedback: LED off and haptic
-            led_off();
-            // Set is_off immediately so set_led_state() keeps LEDs off
-            is_off = true;
-#ifdef CONFIG_OMI_ENABLE_HAPTIC
-            haptic_off();
-#endif
-
-            // Delays for stability
-            k_msleep(1000);
-
-            // // Enter the low power mode
-            transport_off();
-            k_msleep(300);
             turnoff_all();
         } else {
             notify_counter++;
