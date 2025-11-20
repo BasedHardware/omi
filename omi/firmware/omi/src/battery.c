@@ -245,6 +245,7 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     if (is_first_measurement) {
         LOG_INF("First measurement, skipping to allow voltage to stabilize");
         is_first_measurement = false;
+        k_mutex_unlock(&battery_mut);
         return -EAGAIN; // Skip first measurement to allow voltage to stabilize
     }
 
