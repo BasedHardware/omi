@@ -128,11 +128,31 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20.0),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
+                  color: widget.conversation.status == ConversationStatus.discarded ? Colors.green : Colors.red,
+                  child: Icon(
+                    widget.conversation.status == ConversationStatus.discarded ? Icons.restore : Icons.delete,
+                    color: Colors.white,
+                  ),
                 ),
                 confirmDismiss: (direction) async {
                   HapticFeedback.mediumImpact();
+
+                  // Handle restore for discarded conversations
+                  if (widget.conversation.status == ConversationStatus.discarded) {
+                    return await showDialog(
+                      context: context,
+                      builder: (ctx) => getDialog(
+                        context,
+                        () => Navigator.of(context).pop(false),
+                        () => Navigator.of(context).pop(true),
+                        'Restore Conversation?',
+                        'Do you want to restore this conversation?',
+                        okButtonText: 'Restore',
+                      ),
+                    );
+                  }
+
+                  // Handle delete for active conversations
                   bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
                   if (!showDeleteConfirmation) return Future.value(true);
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
@@ -160,8 +180,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 onDismissed: (direction) async {
                   var conversation = widget.conversation;
                   var conversationIdx = widget.conversationIdx;
-                  MixpanelManager().conversationSwipedToDelete(conversation);
-                  provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+
+                  // Handle restore
+                  if (conversation.status == ConversationStatus.discarded) {
+                    provider.restoreConversationLocally(conversation, conversationIdx, widget.date);
+                  } else {
+                    // Handle delete
+                    MixpanelManager().conversationSwipedToDelete(conversation);
+                    provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                  }
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.all(16),

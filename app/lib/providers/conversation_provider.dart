@@ -506,6 +506,36 @@ class ConversationProvider extends ChangeNotifier {
     });
   }
 
+  Future<void> restoreConversationLocally(ServerConversation conversation, int index, DateTime date) async {
+    // Call the API to restore the conversation
+    final restoredConversation = await restoreConversation(conversation.id);
+
+    if (restoredConversation != null) {
+      // Update the local conversation status
+      conversation.status = ConversationStatus.completed;
+      conversation.discarded = false;
+
+      // Update in conversations list
+      int globalIndex = conversations.indexWhere((c) => c.id == conversation.id);
+      if (globalIndex != -1) {
+        conversations[globalIndex] = restoredConversation;
+      }
+
+      // Update in grouped conversations
+      if (groupedConversations.containsKey(date) && index < groupedConversations[date]!.length) {
+        groupedConversations[date]![index] = restoredConversation;
+      }
+
+      // Show success message
+      MixpanelManager().track('Conversation Restored', properties: {
+        'conversationId': conversation.id,
+        'discardedReason': conversation.discardedReason ?? 'unknown',
+      });
+
+      notifyListeners();
+    }
+  }
+
   void deleteConversationOnServer(String conversationId) {
     deleteConversationServer(conversationId);
     memoriesToDelete.remove(conversationId);

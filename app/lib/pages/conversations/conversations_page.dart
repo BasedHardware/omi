@@ -43,6 +43,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (mounted && conversationProvider.conversations.isNotEmpty) {
         await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
       }
+
+      // For frontend testing purposes, uncomment the following line to simulate a scenario
+      // where conversations are empty and trigger the empty state UI.
+      // conversationProvider.conversations = []; // flutter test --plain-name "Conversations Page - Empty State"
     });
     super.initState();
   }
@@ -156,6 +160,32 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
             const SliverToBoxAdapter(child: SizedBox(height: 12)), // above search widget
             const SliverToBoxAdapter(child: SearchWidget()),
+            SliverToBoxAdapter(
+              child: Consumer<ConversationProvider>(
+                builder: (context, provider, child) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Show Discarded',
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                        const SizedBox(width: 8),
+                        Switch(
+                          value: provider.showDiscardedConversations,
+                          onChanged: (value) {
+                            provider.toggleDiscardConversations();
+                            provider.getInitialConversations();
+                          },
+                          activeColor: Colors.green,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
             const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),

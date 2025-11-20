@@ -451,3 +451,37 @@ Future<bool> updateActionItemStateByMetadata(
 ) async {
   return await setConversationActionItemState(conversationId, [itemIndex], [newState]);
 }
+
+// *********************************
+// ******** DISCARD/RESTORE ********
+// *********************************
+
+Future<ServerConversation?> discardConversation(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/discard',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('discardConversation: ${response.body}');
+  if (response.statusCode == 200) {
+    return ServerConversation.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<ServerConversation?> restoreConversation(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/restore',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('restoreConversation: ${response.body}');
+  if (response.statusCode == 200) {
+    return ServerConversation.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}

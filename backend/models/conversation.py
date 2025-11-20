@@ -249,6 +249,7 @@ class ConversationStatus(str, Enum):
     processing = 'processing'
     completed = 'completed'
     failed = 'failed'
+    discarded = 'discarded'
 
 
 class PostProcessingModel(str, Enum):
@@ -266,6 +267,7 @@ class Conversation(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    duration: Optional[float] = 0  # Duration in seconds
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
@@ -298,6 +300,11 @@ class Conversation(BaseModel):
     status: Optional[ConversationStatus] = ConversationStatus.completed
     is_locked: bool = False
     data_protection_level: Optional[str] = None
+
+    # Discard-related fields
+    discarded_reason: Optional[str] = None
+    discarded_at: Optional[datetime] = None
+    restored_at: Optional[datetime] = None
 
     def __init__(self, **data):
         super().__init__(**data)

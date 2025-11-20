@@ -39,13 +39,12 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
     redis_db.remove_in_progress_conversation_id(uid)
 
-    conversation = Conversation(**conversation)
-    conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    from utils.conversation_discard import check_and_auto_discard
+    conversation = check_and_auto_discard(uid, conversation)
+    
     messages = trigger_external_integrations(uid, conversation)
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
-
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
@@ -66,9 +65,8 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
-    processed_conversation = process_conversation(
-        uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id
-    )
+    from utils.conversation_discard import check_and_auto_discard
+    processed_conversation = check_and_auto_discard(uid, conversation)
 
     return processed_conversation
 
@@ -615,3 +613,207 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     summary = generate_summary_with_prompt(full_transcript, request.prompt)
 
     return {"summary": summary}
+
+
+@router.get('/v1/conversations/discarded/list', response_model=List[Conversation], tags=['conversations'])
+def get_discarded_conversations(
+    limit: int = 100,
+    offset: int = 0,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Get all discarded conversations for the user"""
+    conversations = conversations_db.get_conversations(
+        uid,
+        limit,
+        offset,
+        include_discarded=True,
+        statuses=["discarded"]
+    )
+    return conversations
+
+
+@router.post('/v1/conversations/{conversation_id}/discard', response_model=Conversation, tags=['conversations'])
+def discard_conversation(
+    conversation_id: str,
+    reason: str = "manual",
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Manually discard a conversation"""
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    
+    # Update conversation status to discarded
+    from utils.conversation_discard import discard_conversation_helper
+    updated_conversation = discard_conversation_helper(uid, conversation_id, reason)
+    
+    return updated_conversation
+
+
+@router.post('/v1/conversations/{conversation_id}/restore', response_model=Conversation, tags=['conversations'])
+def restore_conversation(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Restore a discarded conversation"""
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    # Update conversation status back to completed
+    from utils.conversation_discard import restore_conversation_helper
+    updated_conversation = restore_conversation_helper(uid, conversation_id)
+    
+    return updated_conversation
+
+
+@router.delete('/v1/conversations/discarded/bulk-delete', status_code=204, tags=['conversations'])
+def bulk_delete_discarded(
+    conversation_ids: Optional[List[str]] = None,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Permanently delete discarded conversations (specific IDs or all)"""
+    if conversation_ids:
+        # Delete specific conversations
+        for conv_id in conversation_ids:
+            conversation = conversations_db.get_conversation(uid, conv_id)
+            if conversation and conversation.get('status') == 'discarded':
+                conversations_db.delete_conversation(uid, conv_id)
+                delete_vector(conv_id)
+    else:
+        # Delete all discarded conversations
+        discarded = conversations_db.get_conversations(
+            uid, limit=1000, offset=0, include_discarded=True, statuses=["discarded"]
+        )
+        for conv in discarded:
+            conversations_db.delete_conversation(uid, conv['id'])
+            delete_vector(conv['id'])
+    
+    return {"status": "Ok"}
+
+
+@router.get('/v1/conversations/statistics/summary', response_model=dict, tags=['conversations'])
+def get_conversation_statistics(uid: str = Depends(auth.get_current_user_uid)):
+    """Get conversation statistics including discard counts"""
+    # Get all conversations
+    all_convos = conversations_db.get_conversations(uid, limit=10000, offset=0, include_discarded=True)
+    
+    stats = {
+        'total_conversations': len(all_convos),
+        'active_count': sum(1 for c in all_convos if c.get('status') == 'completed'),
+        'discarded_count': sum(1 for c in all_convos if c.get('status') == 'discarded'),
+        'processing_count': sum(1 for c in all_convos if c.get('status') == 'processing'),
+        'auto_discarded_count': sum(1 for c in all_convos if c.get('status') == 'discarded' and c.get('discarded_reason') == 'auto_short_duration'),
+        'average_duration': sum(c.get('duration', 0) for c in all_convos) / len(all_convos) if all_convos else 0
+    }
+    
+    return stats
+
+@router.get('/v1/test/discarded', tags=['testing'])
+def test_get_discarded_no_auth():
+    """Test endpoint - Get discarded conversations without auth"""
+    uid = "test-user-123"
+    conversations = conversations_db.get_conversations(
+        uid, 100, 0, include_discarded=True, statuses=["discarded"]
+    )
+    return {"count": len(conversations), "conversations": conversations}
+
+
+@router.get('/v1/test/stats', tags=['testing'])
+def test_get_stats_no_auth():
+    """Test endpoint - Get statistics without auth"""
+    uid = "test-user-123"
+    all_convos = conversations_db.get_conversations(uid, limit=10000, offset=0, include_discarded=True)
+    
+    stats = {
+        'total_conversations': len(all_convos),
+        'active_count': sum(1 for c in all_convos if c.get('status') == 'completed'),
+        'discarded_count': sum(1 for c in all_convos if c.get('status') == 'discarded'),
+        'processing_count': sum(1 for c in all_convos if c.get('status') == 'processing'),
+        'auto_discarded_count': sum(1 for c in all_convos if c.get('status') == 'discarded' and c.get('discarded_reason') == 'auto_short_duration'),
+        'average_duration': sum(c.get('duration', 0) for c in all_convos) / len(all_convos) if all_convos else 0
+    }
+    return stats
+
+
+@router.post('/v1/test/create-mock', tags=['testing'])
+def test_create_mock_conversation(duration: int = 25):
+    """Test endpoint - Create mock conversation without auth"""
+    from datetime import datetime, timedelta, timezone
+    import uuid
+    
+    uid = "test-user-123"
+    conv_id = f"test-{uuid.uuid4().hex[:8]}"
+    started = datetime.now(timezone.utc)
+    finished = started + timedelta(seconds=duration)
+    
+    conversation_data = {
+        "id": conv_id,
+        "user_id": uid,
+        "created_at": started,
+        "started_at": started,
+        "finished_at": finished,
+        "duration": duration,
+        "status": "completed",
+        "transcript": f"Mock test conversation with {duration} seconds duration",
+        "language": "en",
+        "structured": {
+            "title": f"Test Conversation ({duration}s)",
+            "overview": "Auto-generated test conversation",
+            "action_items": [],
+            "events": []
+        },
+        "transcript_segments": [],
+        "apps_results": [],
+        "plugins_results": []
+    }
+    
+    # Save to database
+    try:
+        conversations_db.upsert_conversation(uid, conversation_data)
+        
+        # Trigger auto-discard check
+        from utils.conversation_discard import check_and_auto_discard
+        conv = Conversation(**conversation_data)
+        result = check_and_auto_discard(uid, conv)
+        
+        return {
+            "success": True,
+            "id": conv_id,
+            "duration": duration,
+            "status": result.status,
+            "was_auto_discarded": result.status == "discarded",
+            "message": f"Created conversation {conv_id} with {duration}s duration"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to create conversation"
+        }
+
+
+@router.post('/v1/test/discard/{conversation_id}', tags=['testing'])
+def test_discard_conversation(conversation_id: str):
+    """Test endpoint - Manually discard a conversation without auth"""
+    uid = "test-user-123"
+    try:
+        from utils.conversation_discard import discard_conversation_helper
+        result = discard_conversation_helper(uid, conversation_id, 'manual')
+        return {"success": True, "conversation": result.dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post('/v1/test/restore/{conversation_id}', tags=['testing'])
+def test_restore_conversation(conversation_id: str):
+    """Test endpoint - Restore a conversation without auth"""
+    uid = "test-user-123"
+    try:
+        from utils.conversation_discard import restore_conversation_helper
+        result = restore_conversation_helper(uid, conversation_id)
+        return {"success": True, "conversation": result.dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+
+
