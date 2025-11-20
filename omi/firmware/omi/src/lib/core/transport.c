@@ -45,11 +45,6 @@ static atomic_t pusher_stop_flag;
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
-//
-// Internal
-//
-
-struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
@@ -872,11 +867,9 @@ void pusher(void)
         if (!valid && !storage_is_on) {
             bool result = false;
             if (file_num_array[1] < MAX_STORAGE_BYTES) {
-                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
                 if (is_sd_on()) {
                     result = write_to_storage();
                 }
-                k_mutex_unlock(&write_sdcard_mutex);
             }
             if (result) {
                 heartbeat_count++;
@@ -953,8 +946,6 @@ int transport_off()
 // periodic advertising
 int transport_start()
 {
-    k_mutex_init(&write_sdcard_mutex);
-
     int err = 0;
 
     // Pull the nfsw control high
