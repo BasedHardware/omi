@@ -36,6 +36,7 @@ static bool sd_enabled = false;
 static const struct device *const sd_dev = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
 static const struct gpio_dt_spec sd_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sdcard_en_pin), gpios, {0});
 
+struct k_mutex sd_audio_mutex;
 // Audio file management globals
 uint8_t file_count = 0;
 uint32_t file_num_array[MAX_AUDIO_FILES];
@@ -179,6 +180,8 @@ static int get_file_contents(struct fs_dir_t *zdp, struct fs_dirent *entry)
 
 int app_sd_init(void)
 {
+    k_mutex_init(&sd_audio_mutex);
+    
     int ret = sd_mount();
     if (ret != 0) {
         return ret;
@@ -304,8 +307,10 @@ int initialize_audio_file(uint8_t num)
 
 uint32_t get_file_size(uint8_t num)
 {
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     char *ptr = generate_new_audio_header(num);
     if (ptr == NULL) {
+        k_mutex_unlock(&sd_audio_mutex);
         return 0;
     }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
@@ -314,8 +319,10 @@ uint32_t get_file_size(uint8_t num)
     int res = fs_stat(current_full_path, &entry);
     if (res) {
         LOG_ERR("invalid file in get file size");
+        k_mutex_unlock(&sd_audio_mutex);
         return 0;
     }
+    k_mutex_unlock(&sd_audio_mutex);
     return (uint32_t) entry.size;
 }
 
@@ -325,21 +332,26 @@ int move_read_pointer(uint8_t num)
     if (read_ptr == NULL) {
         return -1;
     }
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     snprintf(read_buffer, sizeof(read_buffer), "%s%s", disk_mount_pt, read_ptr);
     k_free(read_ptr);
     struct fs_dirent entry;
     int res = fs_stat(read_buffer, &entry);
     if (res) {
         LOG_ERR("invalid file in move read ptr");
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
+    k_mutex_unlock(&sd_audio_mutex);
     return 0;
 }
 
 int move_write_pointer(uint8_t num)
 {
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     char *write_ptr = generate_new_audio_header(num);
     if (write_ptr == NULL) {
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, write_ptr);
@@ -348,13 +360,16 @@ int move_write_pointer(uint8_t num)
     int res = fs_stat(write_buffer, &entry);
     if (res) {
         LOG_ERR("invalid file in move write pointer");
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
+    k_mutex_unlock(&sd_audio_mutex);
     return 0;
 }
 
 int read_audio_data(uint8_t *buf, int amount, int offset)
 {
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
     uint8_t *temp_ptr = buf;
@@ -362,39 +377,46 @@ int read_audio_data(uint8_t *buf, int amount, int offset)
     int rc = fs_open(&read_file, read_buffer, FS_O_READ | FS_O_RDWR);
     if (rc < 0) {
         LOG_ERR("Failed to open file for reading: %d", rc);
+        k_mutex_unlock(&sd_audio_mutex);
         return rc;
     }
     rc = fs_seek(&read_file, offset, FS_SEEK_SET);
     if (rc < 0) {
         LOG_ERR("Failed to seek file: %d", rc);
         fs_close(&read_file);
+        k_mutex_unlock(&sd_audio_mutex);
         return rc;
     }
     rc = fs_read(&read_file, temp_ptr, amount);
     fs_close(&read_file);
-
+    k_mutex_unlock(&sd_audio_mutex);
     return rc;
 }
 
 int write_to_file(uint8_t *data, uint32_t length)
 {
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     struct fs_file_t write_file;
     fs_file_t_init(&write_file);
     uint8_t *write_ptr = data;
     int ret = fs_open(&write_file, write_buffer, FS_O_WRITE | FS_O_APPEND);
     if (ret < 0) {
         LOG_ERR("Failed to open file for writing: %d", ret);
+        k_mutex_unlock(&sd_audio_mutex);
         return ret;
     }
     ret = fs_write(&write_file, write_ptr, length);
     fs_close(&write_file);
+    k_mutex_unlock(&sd_audio_mutex);
     return ret;
 }
 
 int clear_audio_file(uint8_t num)
 {
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     char *clear_header = generate_new_audio_header(num);
     if (clear_header == NULL) {
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, clear_header);
@@ -402,11 +424,13 @@ int clear_audio_file(uint8_t num)
     int res = fs_unlink(current_full_path);
     if (res) {
         LOG_ERR("error deleting file");
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
 
     char *create_file_header = generate_new_audio_header(num);
     if (create_file_header == NULL) {
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     k_msleep(10);
@@ -414,9 +438,10 @@ int clear_audio_file(uint8_t num)
     k_free(create_file_header);
     if (res) {
         LOG_ERR("error creating file");
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
-
+    k_mutex_unlock(&sd_audio_mutex);
     return 0;
 }
 
@@ -442,86 +467,116 @@ int clear_audio_directory(void)
     if (file_count == 1) {
         return 0;
     }
-
+    
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     int res = 0;
     for (uint8_t i = file_count; i > 0; i--) {
         res = delete_audio_file(i);
         k_msleep(10);
         if (res) {
             LOG_PRINTK("error on %d\n", i);
+            k_mutex_unlock(&sd_audio_mutex);
             return -1;
         }
     }
     res = fs_unlink("/SD:/audio");
     if (res) {
         LOG_ERR("error deleting directory");
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     res = fs_mkdir("/SD:/audio");
     if (res) {
         LOG_ERR("failed to make directory");
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     res = create_file("audio/a01.txt");
     if (res) {
         LOG_ERR("failed to make new file in directory files");
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     LOG_INF("done with clearing");
 
     file_count = 1;
+    k_mutex_unlock(&sd_audio_mutex);
     move_write_pointer(1);
     return 0;
 }
 
 int save_offset(uint32_t offset)
 {
+    // Validate offset (max 480MB)
+    if (offset > MAX_STORAGE_BYTES) {
+        LOG_WRN("Invalid offset %u, resetting to 0", offset);
+        offset = 0;
+    }
+
     uint8_t buf[4] = {offset & 0xFF, (offset >> 8) & 0xFF, (offset >> 16) & 0xFF, (offset >> 24) & 0xFF};
 
+    LOG_INF("save offset is %u", offset);
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     struct fs_file_t write_file;
     fs_file_t_init(&write_file);
     int res = fs_open(&write_file, "/SD:/info.txt", FS_O_WRITE | FS_O_CREATE);
     if (res) {
         LOG_ERR("error opening file %d", res);
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     res = fs_write(&write_file, &buf, 4);
     if (res < 0) {
         LOG_ERR("error writing file %d", res);
         fs_close(&write_file);
+        k_mutex_unlock(&sd_audio_mutex);
         return -1;
     }
     fs_close(&write_file);
+    k_mutex_unlock(&sd_audio_mutex);
     return 0;
 }
 
-int get_offset(void)
+uint32_t get_offset(void)
 {
-    uint8_t buf[4];
+    uint8_t buf[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+    k_mutex_lock(&sd_audio_mutex, K_FOREVER);
     struct fs_file_t read_file;
     fs_file_t_init(&read_file);
     int rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
     if (rc < 0) {
         LOG_ERR("error opening file %d", rc);
-        return -1;
+        k_mutex_unlock(&sd_audio_mutex);
+        return 0;
     }
     rc = fs_seek(&read_file, 0, FS_SEEK_SET);
     if (rc < 0) {
         LOG_ERR("error seeking file %d", rc);
+        k_mutex_unlock(&sd_audio_mutex);
         fs_close(&read_file);
-        return -1;
+        return 0;
     }
     rc = fs_read(&read_file, &buf, 4);
     if (rc < 0) {
         LOG_ERR("error reading file %d", rc);
+        k_mutex_unlock(&sd_audio_mutex);
         fs_close(&read_file);
-        return -1;
+        return 0;
     }
     fs_close(&read_file);
-    uint32_t *offset_ptr = (uint32_t *) buf;
-    LOG_INF("get offset is %d", offset_ptr[0]);
+    k_mutex_unlock(&sd_audio_mutex);
+    uint32_t offset = buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
+    
+    // Validate offset
+    if (offset > MAX_STORAGE_BYTES) {
+        LOG_WRN("Invalid offset read %u, resetting to 0", offset);
+        offset = 0;
+        save_offset(0);
+    }
+    
+    LOG_INF("get offset is %u", offset);
 
-    return offset_ptr[0];
+    return offset;
 }
 
 int app_sd_off(void)
