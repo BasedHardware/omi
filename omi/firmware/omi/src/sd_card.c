@@ -552,15 +552,15 @@ uint32_t get_offset(void)
     rc = fs_seek(&read_file, 0, FS_SEEK_SET);
     if (rc < 0) {
         LOG_ERR("error seeking file %d", rc);
-        k_mutex_unlock(&sd_audio_mutex);
         fs_close(&read_file);
+        k_mutex_unlock(&sd_audio_mutex);
         return 0;
     }
     rc = fs_read(&read_file, &buf, 4);
     if (rc < 0) {
         LOG_ERR("error reading file %d", rc);
-        k_mutex_unlock(&sd_audio_mutex);
         fs_close(&read_file);
+        k_mutex_unlock(&sd_audio_mutex);
         return 0;
     }
     fs_close(&read_file);
