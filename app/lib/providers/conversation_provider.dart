@@ -505,31 +505,37 @@ class ConversationProvider extends ChangeNotifier {
       }
     });
   }
-
-  Future<void> restoreConversationLocally(ServerConversation conversation, int index, DateTime date) async {
-    // Call the API to restore the conversation
+Future<void> restoreConversationLocally(ServerConversation conversation, int index, DateTime date) async {
+    // 1. Call API first. Do not mutate local state yet.
     final restoredConversation = await restoreConversation(conversation.id);
 
     if (restoredConversation != null) {
-      // Update the local conversation status
-      conversation.status = ConversationStatus.completed;
-      conversation.discarded = false;
-
-      // Update in conversations list
+      // 2. Update Global List
+      // Find the index dynamically in case the list shifted during the async call
       int globalIndex = conversations.indexWhere((c) => c.id == conversation.id);
       if (globalIndex != -1) {
         conversations[globalIndex] = restoredConversation;
       }
 
-      // Update in grouped conversations
-      if (groupedConversations.containsKey(date) && index < groupedConversations[date]!.length) {
-        groupedConversations[date]![index] = restoredConversation;
+      // 3. Update Grouped List
+      if (groupedConversations.containsKey(date)) {
+        // We check if the index still points to the correct ID to be safe against race conditions
+        if (index < groupedConversations[date]!.length && 
+            groupedConversations[date]![index].id == conversation.id) {
+          groupedConversations[date]![index] = restoredConversation;
+        } else {
+          // Fallback: Find the new index if the list order changed
+          int groupIndex = groupedConversations[date]!.indexWhere((c) => c.id == conversation.id);
+          if (groupIndex != -1) {
+            groupedConversations[date]![groupIndex] = restoredConversation;
+          }
+        }
       }
 
-      // Show success message
+      // 4. Track Analytics
       MixpanelManager().track('Conversation Restored', properties: {
-        'conversationId': conversation.id,
-        'discardedReason': conversation.discardedReason ?? 'unknown',
+        'conversationId': restoredConversation.id,
+        'discardedReason': restoredConversation.discardedReason ?? 'unknown',
       });
 
       notifyListeners();

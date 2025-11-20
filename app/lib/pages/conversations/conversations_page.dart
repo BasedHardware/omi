@@ -176,7 +176,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           value: provider.showDiscardedConversations,
                           onChanged: (value) {
                             provider.toggleDiscardConversations();
-                            provider.getInitialConversations();
+                            provider.getInitialConversations(forceRefresh: true);
                           },
                           activeColor: Colors.green,
                         ),
@@ -231,7 +231,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       );
                     } else {
                       var date = convoProvider.groupedConversations.keys.elementAt(index);
-                      List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
+                      List<ServerConversation> memoriesForDate =
+                          convoProvider.groupedConversations[date] ??
+                              []; // Handle potential null if key somehow disappears
+                      if (memoriesForDate.isEmpty) return const SizedBox.shrink();
+
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
