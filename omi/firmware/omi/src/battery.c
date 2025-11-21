@@ -30,6 +30,7 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 // Static variable to store previous EMA value for battery percentage
 static uint8_t battery_percentage_ema = 0;
 static bool ema_initialized = false;
+static bool is_first_measurement = true;
 static uint8_t ema_init_counter = 0;
 
 static const struct device *const adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
@@ -78,11 +79,6 @@ BatteryState battery_charging_states[BATTERY_STATES_COUNT] = {
 };
 
 extern bool is_charging;
-
-// Moving average filter for voltage smoothing
-static uint16_t voltage_history[5];
-static uint8_t history_index = 0;
-static bool history_initialized = false;
 
 static const struct adc_channel_cfg m_1st_channel_cfg = {
     .gain = ADC_GAIN,
@@ -235,35 +231,22 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     }
 
     // Calculate battery voltage using the voltage divider formula
-    uint16_t raw_battery_millivolt = (uint16_t) (adc_raw_val * ((float) (R1 + R2) / R2));
-
-    // Apply moving average filter for smoother readings
-    voltage_history[history_index] = raw_battery_millivolt;
-    history_index = (history_index + 1) % 5;
-
-    // Fill all history slots with the first reading
-    if (!history_initialized) {
-        for (int i = 0; i < 5; i++) {
-            voltage_history[i] = raw_battery_millivolt;
-        }
-        history_initialized = true;
-    }
-
-    // Calculate moving average
-    uint32_t sum = 0;
-    for (int i = 0; i < 5; i++) {
-        sum += voltage_history[i];
-    }
-    *battery_millivolt = (uint16_t) (sum / 5);
-
-    LOG_INF("Raw battery millivolt: %u mV, Filtered: %u mV", raw_battery_millivolt, *battery_millivolt);
-
+    *battery_millivolt = (uint16_t) (adc_raw_val * ((float) (R1 + R2) / R2));
+    LOG_INF("Battery voltage (mV): %d", *battery_millivolt);
+    
     // Restore bat_read_pin to INPUT state to save power/avoid affecting other circuits
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
     if (err < 0) {
         LOG_ERR("Failed to configure bat_read_pin to input: %d", err);
         k_mutex_unlock(&battery_mut);
         return err;
+    }
+    
+    if (is_first_measurement) {
+        LOG_INF("First measurement, skipping to allow voltage to stabilize");
+        is_first_measurement = false;
+        k_mutex_unlock(&battery_mut);
+        return -EAGAIN; // Skip first measurement to allow voltage to stabilize
     }
 
     k_mutex_unlock(&battery_mut);
