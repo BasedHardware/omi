@@ -539,18 +539,23 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _initiateDeviceAudioStreaming() async {
-    if (_recordingDevice == null) {
+    final device = _recordingDevice;
+    if (device == null) {
       return;
     }
-    final deviceId = _recordingDevice!.id;
+    final deviceId = device.id;
+    if (deviceId.isEmpty) {
+      return;
+    }
     BleAudioCodec codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
 
     // Set device info for WAL creation
-    var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
-    var pd = await _recordingDevice!.getDeviceInfo(connection);
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+    var pd = await device.getDeviceInfo(connection);
     String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
-    _wal.getSyncs().phone.setDeviceInfo(_recordingDevice!.id, deviceModel);
+    _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
     await streamButton(deviceId);
     await streamAudioToWs(deviceId, codec);
