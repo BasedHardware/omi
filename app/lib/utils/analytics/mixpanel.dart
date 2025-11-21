@@ -932,9 +932,4 @@ class MixpanelManager {
     });
   }
 
-  void conversationsMerged(int conversationCount) {
-    track('Conversations Merged', properties: {
-      'conversation_count': conversationCount,
-    });
-  }
 }
