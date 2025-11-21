@@ -393,6 +393,7 @@ abstract class ISystemAudioRecorderService {
     Function(String deviceName, double micLevel, double systemAudioLevel)? onMicrophoneStatus,
   });
   void stop();
+  void setOnRecordingStartedFromNub(Function() callback);
   // TODO: Add status property
 }
 
@@ -412,6 +413,9 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   Function(String reason)? _onDisplaySetupInvalid;
   Function()? _onMicrophoneDeviceChanged;
   Function(String deviceName, double micLevel, double systemAudioLevel)? _onMicrophoneStatus;
+
+  // Callback for when recording is started from nub (registered early, before start() is called)
+  Function()? _onRecordingStartedFromNub;
 
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
@@ -480,6 +484,21 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
           final systemAudioLevel = (args['systemAudioLevel'] as num? ?? 0.0).toDouble();
           _onMicrophoneStatus!(deviceName, micLevel, systemAudioLevel);
         }
+        break;
+      case 'recordingStartedFromNub':
+        // Recording was started from the meeting detection nub
+        if (_onRecordingStartedFromNub != null) {
+          _onRecordingStartedFromNub!();
+        } else {
+          debugPrint('DesktopSystemAudioRecorderService: WARNING - No callback registered for recordingStartedFromNub');
+        }
+        break;
+      case 'recordingStoppedAutomatically':
+        _isRecording = false;
+        if (_onStop != null) {
+          _onStop!();
+        }
+        _clearCallbacks();
         break;
       default:
         debugPrint('DesktopSystemAudioRecorderService: Unhandled method call: ${call.method}');
@@ -603,6 +622,13 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         _onRecording = onRecording;
         _onStop = onStop;
         _onError = onError;
+        _onSystemWillSleep = onSystemWillSleep;
+        _onSystemDidWake = onSystemDidWake;
+        _onScreenDidLock = onScreenDidLock;
+        _onScreenDidUnlock = onScreenDidUnlock;
+        _onDisplaySetupInvalid = onDisplaySetupInvalid;
+        _onMicrophoneDeviceChanged = onMicrophoneDeviceChanged;
+        _onMicrophoneStatus = onMicrophoneStatus;
 
         // Notify that recording is active
         if (_onRecording != null) {
@@ -654,6 +680,11 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
       }
       _clearCallbacks();
     }
+  }
+
+  @override
+  void setOnRecordingStartedFromNub(Function() callback) {
+    _onRecordingStartedFromNub = callback;
   }
 
   @override

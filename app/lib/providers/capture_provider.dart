@@ -109,6 +109,12 @@ class CaptureProvider extends ChangeNotifier
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _controlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
       });
+
+      // Register callback for when recording is started from nub (before start() is called)
+      ServiceManager.instance().systemAudio.setOnRecordingStartedFromNub(() {
+        debugPrint('CaptureProvider: Recording started from nub - initializing Flutter state');
+        streamSystemAudioRecording();
+      });
     }
   }
 
