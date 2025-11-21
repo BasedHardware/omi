@@ -479,7 +479,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                             style: TextStyle(
                               fontSize: isFullScreen ? 16 : 12,
                               color: ResponsiveHelper.textTertiary,
-                              fontStyle: FontStyle.italic,
                             ),
                             textAlign: TextAlign.center,
                           ),

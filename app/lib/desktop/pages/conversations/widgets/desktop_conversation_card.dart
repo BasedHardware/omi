@@ -142,7 +142,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       OmiContextMenuItem(
         id: 'copy_link',
         title: _isSharing ? 'Generating link...' : 'Copy link',
-        subtitle: '',
         icon: _isSharing ? Icons.hourglass_empty : Icons.link_outlined,
         iconColor: _isSharing ? ResponsiveHelper.textTertiary : ResponsiveHelper.purplePrimary,
         backgroundColor: _isSharing
@@ -153,7 +152,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       OmiContextMenuItem(
         id: 'copy',
         title: 'Copy transcript',
-        subtitle: '',
         icon: Icons.copy_outlined,
         iconColor: ResponsiveHelper.infoColor,
         backgroundColor: ResponsiveHelper.infoColor.withValues(alpha: 0.1),
@@ -161,7 +159,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       OmiContextMenuItem(
         id: 'edit',
         title: 'Edit conversation',
-        subtitle: '',
         icon: Icons.edit_outlined,
         iconColor: ResponsiveHelper.warningColor,
         backgroundColor: ResponsiveHelper.warningColor.withValues(alpha: 0.1),
@@ -169,7 +166,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       OmiContextMenuItem(
         id: 'delete',
         title: 'Delete conversation',
-        subtitle: '',
         icon: Icons.delete_outline_rounded,
         iconColor: ResponsiveHelper.errorColor,
         backgroundColor: ResponsiveHelper.errorColor.withValues(alpha: 0.1),

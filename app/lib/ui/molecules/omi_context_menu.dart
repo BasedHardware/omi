@@ -4,7 +4,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 class OmiContextMenuItem {
   final String id;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final IconData icon;
   final Color iconColor;
   final Color backgroundColor;
@@ -14,10 +14,10 @@ class OmiContextMenuItem {
   const OmiContextMenuItem({
     required this.id,
     required this.title,
-    required this.subtitle,
     required this.icon,
     required this.iconColor,
     required this.backgroundColor,
+    this.subtitle,
     this.enabled = true,
     this.onTap,
   });
@@ -113,6 +113,7 @@ class OmiContextMenu {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       item.title,
@@ -122,13 +123,14 @@ class OmiContextMenu {
                         color: item.enabled ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
                       ),
                     ),
-                    Text(
-                      item.subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: ResponsiveHelper.textTertiary,
+                    if (item.subtitle != null)
+                      Text(
+                        item.subtitle!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: ResponsiveHelper.textTertiary,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
