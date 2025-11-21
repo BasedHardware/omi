@@ -618,7 +618,7 @@ class ConversationProvider extends ChangeNotifier {
       DateTime nextStart = selectedConvos[i + 1].startedAt ?? selectedConvos[i + 1].createdAt;
 
       Duration gap = nextStart.difference(currentEnd);
-      if (gap.inHours > 1) {
+      if (gap.inMinutes > 60) {
         return false;
       }
     }
