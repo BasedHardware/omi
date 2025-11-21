@@ -744,7 +744,16 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional
     # Sort conversations by created_at timestamp
     conversations.sort(key=lambda c: c['created_at'])
 
-    # Validate that conversations are consecutive (chronologically adjacent)
+    # Sort conversations by created_at timestamp
+    conversations.sort(key=lambda c: c['created_at'])
+
+    # Validate time gap between conversations
+    for i in range(len(conversations) - 1):
+        current_end = conversations[i].get('finished_at') or conversations[i]['created_at']
+        next_start = conversations[i+1].get('started_at') or conversations[i+1]['created_at']
+        if (next_start - current_end).total_seconds() > 3600:
+            return None, "Selected conversations must be within 1 hour of each other."
+
     # Check if there are any conversations between the selected ones
     first_conv = conversations[0]
     last_conv = conversations[-1]
@@ -805,19 +814,32 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional
     # Sort photos by timestamp if available
     all_photos.sort(key=lambda p: p.get('timestamp', 0))
 
-    # Merge action items
+    # Merge action items with deduplication
+    seen_action_items = set()
     all_action_items = []
     for conv in conversations:
         action_items = conv.get('structured', {}).get('action_items', [])
-        if action_items:
-            all_action_items.extend(action_items)
-
+        for item in action_items:
+            item_key = item.get('description', '')
+            if item_key and item_key not in seen_action_items:
+                seen_action_items.add(item_key)
+                all_action_items.append(item)
+            elif not item_key:
+                # Include items without description (shouldn't happen but be safe)
+                all_action_items.append(item)
     # Merge events
+    # Merge events with deduplication
+    seen_events = set()
     all_events = []
     for conv in conversations:
         events = conv.get('structured', {}).get('events', [])
         if events:
-            all_events.extend(events)
+            for event in events:
+                # Use a tuple of title and start time for uniqueness
+                event_key = (event.get('title'), event.get('start'))
+                if event_key not in seen_events:
+                    seen_events.add(event_key)
+                    all_events.append(event)
 
     # Merge audio files
     all_audio_files = []

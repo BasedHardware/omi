@@ -689,14 +689,23 @@ def merge_conversations_endpoint(
     conversations_db.upsert_conversation(uid, merged_data)
 
     # Delete original conversations
-    for conv_id in request.conversation_ids:
-        try:
-            conversations_db.delete_conversation(uid, conv_id)
-            # Delete from vector DB if applicable
-            delete_vector(uid, conv_id)
-        except Exception as e:
-            print(f"Error deleting conversation {conv_id}: {e}")
-            # Continue even if deletion fails
+    try:
+        conv_ids_to_delete = request.conversation_ids
+        if conv_ids_to_delete:
+            # Batch delete from Firestore
+            batch = conversations_db.db.batch()
+            for conv_id in conv_ids_to_delete:
+                doc_ref = conversations_db.db.collection('users').document(uid).collection('conversations').document(conv_id)
+                batch.delete(doc_ref)
+            batch.commit()
+
+            # Batch delete from vector DB
+            vector_ids_to_delete = [f'{uid}-{conv_id}' for conv_id in conv_ids_to_delete]
+            from database.vector_db import index
+            index.delete(ids=vector_ids_to_delete, namespace="ns1")
+    except Exception as e:
+        print(f"Error batch deleting conversations {conv_ids_to_delete}: {e}")
+        # Continue even if deletion fails
 
     # Retrieve and return the newly created merged conversation
     merged_conversation = conversations_db.get_conversation(uid, merged_data['id'])
