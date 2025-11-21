@@ -33,8 +33,6 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
 #endif
 
-#define MAX_STORAGE_BYTES 0x1E000000 // 480MB
-
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
 extern uint32_t file_num_array[MAX_AUDIO_FILES];
@@ -47,11 +45,6 @@ static atomic_t pusher_stop_flag;
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
-//
-// Internal
-//
-
-struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
@@ -874,11 +867,9 @@ void pusher(void)
         if (!valid && !storage_is_on) {
             bool result = false;
             if (file_num_array[1] < MAX_STORAGE_BYTES) {
-                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
                 if (is_sd_on()) {
                     result = write_to_storage();
                 }
-                k_mutex_unlock(&write_sdcard_mutex);
             }
             if (result) {
                 heartbeat_count++;
@@ -955,8 +946,6 @@ int transport_off()
 // periodic advertising
 int transport_start()
 {
-    k_mutex_init(&write_sdcard_mutex);
-
     int err = 0;
 
     // Pull the nfsw control high
