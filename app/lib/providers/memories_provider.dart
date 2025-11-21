@@ -186,7 +186,7 @@ class MemoriesProvider extends ChangeNotifier {
       visibility: visibility,
     );
 
-    await createMemoryServer(content, visibility.name);
+    await createMemoryServer(content, visibility.name, category.name);
     _memories.add(newMemory);
     _setCategories();
   }

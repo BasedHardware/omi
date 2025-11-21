@@ -247,6 +247,8 @@ class DesktopMemoryItem extends StatelessWidget {
         return ResponsiveHelper.purplePrimary;
       case MemoryCategory.system:
         return Colors.orange;
+      case MemoryCategory.manual:
+        return Colors.purple;
     }
   }
 
@@ -256,6 +258,8 @@ class DesktopMemoryItem extends StatelessWidget {
         return Icons.lightbulb_outline;
       case MemoryCategory.system:
         return Icons.settings_outlined;
+      case MemoryCategory.manual:
+        return Icons.edit_outlined;
     }
   }
 }
