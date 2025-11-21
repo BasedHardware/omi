@@ -455,6 +455,26 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 self.screenCaptureChannel.invokeMethod("recordingStoppedAutomatically", arguments: nil)
             }
         }
+        
+        // Handle showing nub - ONLY if not already recording
+        meetingDetector?.onShowNub = { [weak self] appName in
+            guard let self = self else { return }
+            
+            // Check if we are already recording
+            if self.audioManager.isRecording() {
+                print("MainFlutterWindow: NOT showing nub for \(appName) because recording is already active")
+                return
+            }
+            
+            print("MainFlutterWindow: Showing nub for \(appName)")
+            NubManager.shared.showNub(for: appName)
+        }
+        
+        // Handle hiding nub
+        meetingDetector?.onHideNub = {
+            print("MainFlutterWindow: Hiding nub")
+            NubManager.shared.hideNub()
+        }
     }
 
     @objc private func handleNubStartRecording() {

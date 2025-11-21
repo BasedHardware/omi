@@ -10,6 +10,7 @@ class MeetingDetector: NSObject {
     private var activeMicApps = Set<String>()
     private var eventChannel: FlutterEventChannel?
     private var eventSink: FlutterEventSink?
+    private var wasInMeeting = false  // Track previous meeting state
     
     // Callback for when meeting ends
     var onMeetingEnded: (() -> Void)?
@@ -162,6 +163,7 @@ class MeetingDetector: NSObject {
         logProcess = nil
         activeMicApps.removeAll()
         buffer = ""
+        wasInMeeting = false
 
         print("MeetingDetector: Stopped")
     }
@@ -409,6 +411,10 @@ class MeetingDetector: NSObject {
         return bundleIdMap[appName]
     }
 
+    // Callbacks for controlling the Nub
+    var onShowNub: ((String) -> Void)?
+    var onHideNub: (() -> Void)?
+
     private func notifyMeetingStateChanged() {
         let isInMeeting = !activeMicApps.isEmpty
         let apps = Array(activeMicApps)
@@ -426,21 +432,33 @@ class MeetingDetector: NSObject {
 
         print("MeetingDetector: Meeting state changed - isInMeeting: \(isInMeeting), apps: \(apps)")
 
-        // Directly control the nub from native side
-        DispatchQueue.main.async {
-            if isInMeeting {
+        // Control the nub via callbacks - ONLY on state transitions
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Detect transition from no meeting -> meeting
+            if isInMeeting && !self.wasInMeeting {
                 let appName = apps.first ?? "Meeting"
                 // Convert bundle ID to friendly name
                 let friendlyName = self.getFriendlyAppName(from: appName)
-                print("MeetingDetector: Showing nub for \(friendlyName)")
-                NubManager.shared.showNub(for: friendlyName)
-            } else {
-                print("MeetingDetector: Hiding nub - meeting ended")
-                NubManager.shared.hideNub()
+                print("MeetingDetector: 🟢 Transition to meeting detected - showing nub for \(friendlyName)")
+                self.onShowNub?(friendlyName)
+            } 
+            // Detect transition from meeting -> no meeting
+            else if !isInMeeting && self.wasInMeeting {
+                print("MeetingDetector: 🔴 Transition to no meeting detected - hiding nub")
+                self.onHideNub?()
 
                 // Stop recording when meeting ends
                 self.stopRecordingIfActive()
             }
+            // Already in meeting state - do nothing
+            else if isInMeeting && self.wasInMeeting {
+                print("MeetingDetector: ⚪ Still in meeting - not showing nub again")
+            }
+            
+            // Update state tracker
+            self.wasInMeeting = isInMeeting
         }
     }
 
