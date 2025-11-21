@@ -23,8 +23,6 @@ class MemoryDialog extends StatefulWidget {
 
 class _MemoryDialogState extends State<MemoryDialog> {
   late TextEditingController contentController;
-  late MemoryCategory selectedCategory;
-  late MemoryVisibility selectedVisibility;
 
   @override
   void initState() {
@@ -33,8 +31,6 @@ class _MemoryDialogState extends State<MemoryDialog> {
     contentController.selection = TextSelection.fromPosition(
       TextPosition(offset: contentController.text.length),
     );
-    selectedCategory = widget.memory?.category ?? MemoryCategory.values.first;
-    selectedVisibility = widget.memory?.visibility ?? MemoryVisibility.public;
   }
 
   @override
@@ -88,9 +84,11 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: TextField(
                   controller: contentController,
-                  textInputAction: TextInputAction.done,
+                  textInputAction: TextInputAction.newline,
                   autofocus: true,
                   maxLines: null,
+                  minLines: 3,
+                  keyboardType: TextInputType.multiline,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -103,95 +101,41 @@ class _MemoryDialogState extends State<MemoryDialog> {
                     contentPadding: EdgeInsets.zero,
                     isDense: true,
                   ),
-                  onSubmitted: (value) => _saveMemory(value),
                 ),
               ),
-              if (widget.memory == null || !widget.memory!.manuallyAdded) ...[
-                const SizedBox(height: 20),
-                Text(
-                  'Visibility',
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: MemoryVisibility.values.map((visibility) {
-                    final isSelected = visibility == selectedVisibility;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,
-                              size: 16,
-                              color: isSelected ? Colors.black : Colors.white70,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              visibility == MemoryVisibility.private ? 'Private' : 'Public',
-                              style: TextStyle(
-                                color: isSelected ? Colors.black : Colors.white70,
-                                fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                        selected: isSelected,
-                        showCheckmark: false,
-                        backgroundColor: Color(0xFF35343B),
-                        selectedColor: Colors.white,
-                        onSelected: (bool selected) {
-                          if (selected) {
-                            setState(() => selectedVisibility = visibility);
-                          }
-                        },
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (contentController.text.trim().isNotEmpty) {
+                      if (widget.memory != null) {
+                        widget.provider.editMemory(widget.memory!, contentController.text);
+                        MixpanelManager().memoriesPageEditedMemory();
+                      } else {
+                        widget.provider
+                            .createMemory(contentController.text, MemoryVisibility.private, MemoryCategory.manual);
+                        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.manual);
+                      }
+                      Navigator.pop(context);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurpleAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.keyboard_return,
-                          size: 13,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Press done to save',
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
+                  ),
+                  child: Text(
+                    widget.memory != null ? 'Update Memory' : 'Save Memory',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Text(
-                    '${contentController.text.length}/200',
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+                ),
               ),
               const SizedBox(height: 16),
               if (widget.memory != null)
@@ -211,22 +155,6 @@ class _MemoryDialogState extends State<MemoryDialog> {
         ),
       ),
     );
-  }
-
-  void _saveMemory(String value) {
-    if (value.trim().isNotEmpty) {
-      if (widget.memory != null) {
-        widget.provider.editMemory(widget.memory!, value);
-        if (widget.memory!.visibility != selectedVisibility) {
-          widget.provider.updateMemoryVisibility(widget.memory!, selectedVisibility);
-        }
-        MixpanelManager().memoriesPageEditedMemory();
-      } else {
-        widget.provider.createMemory(value, selectedVisibility, MemoryCategory.interesting);
-        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.interesting);
-      }
-      Navigator.pop(context);
-    }
   }
 
   Future<void> _showDeleteConfirmation(BuildContext context) async {

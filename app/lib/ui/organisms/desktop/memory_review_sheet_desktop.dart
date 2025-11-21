@@ -655,6 +655,8 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return 'Interesting';
       case MemoryCategory.system:
         return 'System';
+      case MemoryCategory.manual:
+        return 'Manual';
     }
   }
 
@@ -664,6 +666,8 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return ResponsiveHelper.purplePrimary;
       case MemoryCategory.system:
         return Colors.orange;
+      case MemoryCategory.manual:
+        return Colors.purple;
     }
   }
 
@@ -673,6 +677,8 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return FontAwesomeIcons.lightbulb;
       case MemoryCategory.system:
         return FontAwesomeIcons.gear;
+      case MemoryCategory.manual:
+        return FontAwesomeIcons.penToSquare;
     }
   }
 }
