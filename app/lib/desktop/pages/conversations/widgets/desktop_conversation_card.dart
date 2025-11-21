@@ -37,52 +37,9 @@ class DesktopConversationCard extends StatefulWidget {
   State<DesktopConversationCard> createState() => _DesktopConversationCardState();
 }
 
-class _DesktopConversationCardState extends State<DesktopConversationCard> with SingleTickerProviderStateMixin {
-  bool _isHovered = false;
+class _DesktopConversationCardState extends State<DesktopConversationCard> {
   bool _isSharing = false;
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _elevationAnimation;
-  late Animation<double> _actionBarAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 250),
-      vsync: this,
-    );
-
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.01,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _elevationAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _actionBarAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutQuart,
-    ));
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
+  bool _isHovered = false;
 
   void _showDeleteConfirmation() async {
     final confirmed = await OmiConfirmDialog.show(
@@ -138,167 +95,42 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) {
-        setState(() => _isHovered = true);
-        _animationController.forward();
-      },
-      onExit: (_) {
-        setState(() => _isHovered = false);
-        _animationController.reverse();
-      },
-      child: Focus(
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.delete) {
-              _showDeleteConfirmation();
-              return KeyEventResult.handled;
-            }
-          }
-          return KeyEventResult.ignored;
-        },
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onSecondaryTapDown: _showContextMenu,
         child: GestureDetector(
-          onSecondaryTapDown: _showContextMenu,
-          child: AnimatedBuilder(
-            animation: _animationController,
-            builder: (context, child) {
-              return Transform.scale(
-                scale: _scaleAnimation.value,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      if (widget.conversation.isLocked) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => const UsagePage(showUpgradeDialog: true),
-                          ),
-                        );
-                        return;
-                      }
-                      widget.onTap();
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      width: double.maxFinite,
-                      margin: const EdgeInsets.only(bottom: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: _isHovered
-                              ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.4)
-                              : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08 + (_elevationAnimation.value * 0.12)),
-                            blurRadius: 12 + (_elevationAnimation.value * 8),
-                            offset: Offset(0, 4 + (_elevationAnimation.value * 4)),
-                            spreadRadius: _elevationAnimation.value * 2,
-                          ),
-                          if (_isHovered)
-                            BoxShadow(
-                              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.01),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Column(
-                          children: [
-                            // Main card content
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Modern header with integrated action area
-                                  _buildModernHeader(),
-
-                                  const SizedBox(height: 16),
-
-                                  // Content section with improved layout
-                                  _buildContentSection(),
-
-                                  const SizedBox(height: 14),
-
-                                  // Footer with metadata
-                                  _buildFooter(),
-                                ],
-                              ),
-                            ),
-
-                            // Action bar that slides up on hover
-                            if (_isHovered)
-                              SizeTransition(
-                                sizeFactor: _actionBarAnimation,
-                                axisAlignment: -1.0,
-                                child: Container(
-                                  width: double.infinity,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
-                                    border: Border(
-                                      top: BorderSide(
-                                        color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.5),
-                                        width: 1,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const SizedBox(width: 16),
-
-                                      // Delete action using OmiButton
-                                      Tooltip(
-                                        message: 'Delete conversation (Del)',
-                                        decoration: BoxDecoration(
-                                          color: ResponsiveHelper.backgroundTertiary,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        textStyle: const TextStyle(
-                                          color: ResponsiveHelper.textPrimary,
-                                          fontSize: 12,
-                                        ),
-                                        child: OmiButton(
-                                          label: 'Delete',
-                                          icon: Icons.delete_outline_rounded,
-                                          type: OmiButtonType.neutral,
-                                          color: ResponsiveHelper.errorColor,
-                                          onPressed: () {
-                                            HapticFeedback.lightImpact();
-                                            _showDeleteConfirmation();
-                                          },
-                                        ),
-                                      ),
-
-                                      const Spacer(),
-
-                                      // Additional actions hint
-                                      const Text(
-                                        'Right-click for more options',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: ResponsiveHelper.textTertiary,
-                                        ),
-                                      ),
-
-                                      const SizedBox(width: 16),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+          onTap: () {
+            if (widget.conversation.isLocked) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const UsagePage(showUpgradeDialog: true),
                 ),
               );
-            },
+              return;
+            }
+            widget.onTap();
+          },
+          child: Container(
+            width: double.maxFinite,
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isHovered ? Colors.white.withOpacity(0.3) : Colors.white.withOpacity(0.05),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 12),
+                _buildContent(),
+              ],
+            ),
           ),
         ),
       ),
@@ -307,17 +139,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
 
   void _showContextMenu(TapDownDetails details) async {
     final menuItems = [
-      OmiContextMenuItem(
-        id: 'share',
-        title: _isSharing ? 'Sharing...' : 'Share conversation',
-        subtitle: _isSharing ? '' : 'Create shareable link',
-        icon: _isSharing ? Icons.hourglass_empty : Icons.share_outlined,
-        iconColor: _isSharing ? ResponsiveHelper.textTertiary : ResponsiveHelper.purplePrimary,
-        backgroundColor: _isSharing
-            ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3)
-            : ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
-        enabled: !_isSharing,
-      ),
       OmiContextMenuItem(
         id: 'copy_link',
         title: _isSharing ? 'Generating link...' : 'Copy link',
@@ -569,74 +390,54 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
     }
   }
 
-  Widget _buildModernHeader() {
+  Widget _buildHeader() {
     return Row(
       children: [
-        // Avatar with emoji fallback
-        OmiAvatar(
-          size: 40,
-          fallback: Center(
-            child: Text(
-              widget.conversation.structured.getEmoji(),
-              style: const TextStyle(fontSize: 18),
-            ),
-          ),
+        Text(
+          widget.conversation.structured.getEmoji(),
+          style: const TextStyle(fontSize: 20),
         ),
-
         const SizedBox(width: 12),
-
-        // Title section
         Expanded(
-          child: Text(
-            widget.conversation.discarded
-                ? 'Discarded Conversation'
-                : (widget.conversation.structured.title.isNotEmpty
-                    ? widget.conversation.structured.title.decodeString
-                    : 'Untitled Conversation'),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: ResponsiveHelper.textPrimary,
-              height: 1.3,
-              letterSpacing: -0.2,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.conversation.discarded
+                    ? 'Discarded Conversation'
+                    : (widget.conversation.structured.title.isNotEmpty
+                        ? widget.conversation.structured.title.decodeString
+                        : 'Untitled Conversation'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: ResponsiveHelper.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                dateTimeFormat(
+                  'MMM d, h:mm a',
+                  widget.conversation.startedAt ?? widget.conversation.createdAt,
+                ),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: ResponsiveHelper.textTertiary,
+                ),
+              ),
+            ],
           ),
         ),
-
-        const SizedBox(width: 8),
-
-        // Status indicators (keep existing badges)
-        _buildStatusIndicators(),
-      ],
-    );
-  }
-
-  Widget _buildStatusIndicators() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Category chip
-        if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded) ...[
-          OmiBadge(label: widget.conversation.getTag()),
+        if (_getConversationDuration().isNotEmpty) ...[
           const SizedBox(width: 8),
-        ],
-
-        // Duration indicator
-        if (widget.conversation.transcriptSegments.isNotEmpty && _getConversationDuration().isNotEmpty) ...[
-          OmiBadge(
-            label: _getConversationDuration(),
-            color: ResponsiveHelper.textTertiary,
-          ),
-          const SizedBox(width: 8),
-        ],
-
-        // Action items indicator
-        if (widget.conversation.structured.actionItems.isNotEmpty) ...[
-          OmiBadge(
-            label: '${widget.conversation.structured.actionItems.length}',
-            color: ResponsiveHelper.purplePrimary,
+          Text(
+            _getConversationDuration(),
+            style: const TextStyle(
+              fontSize: 12,
+              color: ResponsiveHelper.textTertiary,
+            ),
           ),
         ],
       ],
@@ -668,16 +469,16 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
     );
   }
 
-  Widget _buildContentSection() {
+  Widget _buildContent() {
     if (widget.conversation.discarded) {
       return Text(
         widget.conversation.getTranscript(maxCount: 150),
         style: const TextStyle(
-          fontSize: 14,
+          fontSize: 13,
           color: ResponsiveHelper.textSecondary,
           height: 1.5,
         ),
-        maxLines: 3,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
       );
     }
@@ -687,7 +488,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
         Text(
           widget.conversation.structured.overview.decodeString,
           style: const TextStyle(
-            fontSize: 14,
+            fontSize: 13,
             color: ResponsiveHelper.textSecondary,
             height: 1.5,
           ),
@@ -695,32 +496,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
           overflow: TextOverflow.ellipsis,
         ),
         if (widget.conversation.isLocked) _buildLockedOverlay(context),
-      ],
-    );
-  }
-
-  Widget _buildFooter() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Timestamp
-        OmiBadge(
-          label: dateTimeFormat(
-            'MMM d, h:mm a',
-            widget.conversation.startedAt ?? widget.conversation.createdAt,
-          ),
-          color: ResponsiveHelper.textTertiary,
-        ),
-
-        const Spacer(),
-
-        // Additional metadata
-        if (widget.conversation.transcriptSegments.isNotEmpty) ...[
-          OmiBadge(
-            label: '${widget.conversation.transcriptSegments.length} segments',
-            color: ResponsiveHelper.textTertiary,
-          ),
-        ],
       ],
     );
   }
