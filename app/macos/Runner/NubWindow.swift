@@ -4,11 +4,14 @@ import QuartzCore
 class NubWindow: NSPanel {
 
     // MARK: - Constants
-    static let NUB_WIDTH: CGFloat = 500
-    static let NUB_HEIGHT: CGFloat = 70
+    static let NUB_WIDTH: CGFloat = 400
+    static let NUB_HEIGHT: CGFloat = 74
     static let PADDING: CGFloat = 16
     static let BUTTON_WIDTH: CGFloat = 140
     static let AUTO_DISMISS_DURATION: TimeInterval = 15.0
+    
+    // Offset for the main pill content to allow close button to hang off the left
+    static let CONTENT_X_OFFSET: CGFloat = 20.0
 
     // MARK: - Properties
     private var containerView: NSView!
@@ -17,6 +20,7 @@ class NubWindow: NSPanel {
     private var titleLabel: NSTextField!
     private var appLabel: NSTextField!
     private var actionButton: NSButton!
+    private var closeButton: NSButton!
     private var appIconView: NSImageView!
     private var progressBar: ProgressBarView!
     private var meetingApp: String = "Meeting"
@@ -66,27 +70,32 @@ class NubWindow: NSPanel {
         containerView = NSView(frame: NSRect(x: 0, y: 0, width: Self.NUB_WIDTH, height: Self.NUB_HEIGHT))
         containerView.wantsLayer = true
         containerView.layer?.backgroundColor = NSColor.clear.cgColor
-        
+
         // Add shadow to container
         containerView.layer?.shadowColor = NSColor.black.cgColor
-        containerView.layer?.shadowOpacity = 0.5
-        containerView.layer?.shadowOffset = CGSize(width: 0, height: -4)
-        containerView.layer?.shadowRadius = 12
+        containerView.layer?.shadowOpacity = 0.3
+        containerView.layer?.shadowOffset = CGSize(width: 0, height: -2)
+        containerView.layer?.shadowRadius = 8
 
-        // Create pill-shaped background view (horizontal now)
-        pillView = PillShapeView(frame: NSRect(x: 0, y: 8, width: Self.NUB_WIDTH, height: 54))
+        // Shifted right by CONTENT_X_OFFSET to make room for close button
+        let visualEffectView = NSVisualEffectView(frame: NSRect(x: Self.CONTENT_X_OFFSET, y: 8, width: 380, height: 54))
+        visualEffectView.material = .menu
+        visualEffectView.blendingMode = .withinWindow
+        visualEffectView.state = .active
+        visualEffectView.wantsLayer = true
+        visualEffectView.layer?.cornerRadius = 18
+        visualEffectView.layer?.masksToBounds = true
+
+        // Add subtle border for glass effect
+        visualEffectView.layer?.borderWidth = 0.5
+        visualEffectView.layer?.borderColor = NSColor.white.withAlphaComponent(0.15).cgColor
+
+        // Create pill view container that sits on top of visual effect
+        pillView = PillShapeView(frame: visualEffectView.bounds)
         pillView.wantsLayer = true
-        pillView.layer?.backgroundColor = NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.95).cgColor
-        pillView.layer?.cornerRadius = 18  // Reduced from 27 for less roundness
-        pillView.layer?.masksToBounds = true  // Changed to true to clip progress bar properly
-        pillView.layer?.shadowColor = NSColor.black.cgColor
-        pillView.layer?.shadowOpacity = 0.5
-        pillView.layer?.shadowOffset = CGSize(width: 0, height: -2)
-        pillView.layer?.shadowRadius = 8
+        pillView.layer?.backgroundColor = NSColor.clear.cgColor
 
-        // Add subtle border
-        pillView.layer?.borderWidth = 1.0
-        pillView.layer?.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+        visualEffectView.addSubview(pillView)
 
         // Create microphone icon
         appIconView = NSImageView(frame: NSRect(x: Self.PADDING, y: 15, width: 24, height: 24))
@@ -115,7 +124,8 @@ class NubWindow: NSPanel {
         appLabel.alignment = .left
 
         // Create "Start Recording" button
-        actionButton = NSButton(frame: NSRect(x: Self.NUB_WIDTH - Self.BUTTON_WIDTH - Self.PADDING, y: 11, width: Self.BUTTON_WIDTH, height: 32))
+        // Note: Button position is relative to pillView, so it stays correct
+        actionButton = NSButton(frame: NSRect(x: 380 - Self.BUTTON_WIDTH - Self.PADDING, y: 11, width: Self.BUTTON_WIDTH, height: 32))
         actionButton.title = "Start Recording"
         actionButton.bezelStyle = .rounded
         actionButton.wantsLayer = true
@@ -138,16 +148,16 @@ class NubWindow: NSPanel {
         actionButton.attributedTitle = NSAttributedString(string: "Start Recording", attributes: attributes)
 
         // Add hover effect for button
-        let trackingArea = NSTrackingArea(
+        let buttonTrackingArea = NSTrackingArea(
             rect: actionButton.bounds,
             options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: ["element": "button"]
         )
-        actionButton.addTrackingArea(trackingArea)
+        actionButton.addTrackingArea(buttonTrackingArea)
 
         // Create progress bar at the bottom (inside the pill view, so relative to pillView)
-        progressBar = ProgressBarView(frame: NSRect(x: 0, y: 0, width: Self.NUB_WIDTH, height: 3), cornerRadius: 18)
+        progressBar = ProgressBarView(frame: NSRect(x: 0, y: 0, width: 380, height: 3), cornerRadius: 18)
         
         // Add all views to pill
         pillView.addSubview(appIconView)
@@ -156,7 +166,42 @@ class NubWindow: NSPanel {
         pillView.addSubview(appLabel)
         pillView.addSubview(actionButton)
         pillView.addSubview(progressBar)
-        containerView.addSubview(pillView)
+
+        // Add visual effect view to container
+        containerView.addSubview(visualEffectView)
+        
+        // --- Close Button Setup ---
+        // Positioned relative to container. 
+        // Pill starts at x=20. We want button at x=10 (overlapping left edge by 10px).
+        closeButton = NSButton(frame: NSRect(x: 10, y: 45, width: 24, height: 24))
+        closeButton.bezelStyle = .circular
+        closeButton.isBordered = false
+        closeButton.wantsLayer = true
+        closeButton.layer?.backgroundColor = NSColor.white.cgColor
+        closeButton.layer?.cornerRadius = 12
+        closeButton.layer?.shadowColor = NSColor.black.cgColor
+        closeButton.layer?.shadowOpacity = 0.2
+        closeButton.layer?.shadowOffset = CGSize(width: 0, height: -1)
+        closeButton.layer?.shadowRadius = 2
+        
+        let closeConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold)
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")?.withSymbolConfiguration(closeConfig)
+        closeButton.contentTintColor = .black
+        closeButton.target = self
+        closeButton.action = #selector(closeClicked)
+        closeButton.alphaValue = 0.0 // Initially hidden
+        
+        containerView.addSubview(closeButton)
+        
+        // Tracking area for the entire container to show/hide close button
+        let containerTrackingArea = NSTrackingArea(
+            rect: containerView.bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: ["element": "container"]
+        )
+        containerView.addTrackingArea(containerTrackingArea)
+
         self.contentView = containerView
 
         print("NubWindow: Content view setup complete")
@@ -264,41 +309,66 @@ class NubWindow: NSPanel {
 
     override func mouseEntered(with event: NSEvent) {
         guard let userInfo = event.trackingArea?.userInfo,
-              let element = userInfo["element"] as? String,
-              element == "button" else {
+              let element = userInfo["element"] as? String else {
             return
         }
         
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.15
-            self.actionButton.animator().layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
-            self.actionButton.animator().layer?.transform = CATransform3DMakeScale(1.02, 1.02, 1.0)
-        })
+        if element == "button" {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.15
+                self.actionButton.animator().layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
+                self.actionButton.animator().layer?.transform = CATransform3DMakeScale(1.02, 1.02, 1.0)
+            })
+        } else if element == "container" {
+            // Show close button
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.2
+                self.closeButton.animator().alphaValue = 1.0
+            })
+            
+            // Pause auto-dismiss when hovering
+            cancelTimers()
+        }
     }
 
     override func mouseExited(with event: NSEvent) {
         guard let userInfo = event.trackingArea?.userInfo,
-              let element = userInfo["element"] as? String,
-              element == "button" else {
+              let element = userInfo["element"] as? String else {
             return
         }
         
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.15
-            self.actionButton.animator().layer?.backgroundColor = NSColor.systemGreen.cgColor
-            self.actionButton.animator().layer?.transform = CATransform3DIdentity
-        })
+        if element == "button" {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.15
+                self.actionButton.animator().layer?.backgroundColor = NSColor.systemGreen.cgColor
+                self.actionButton.animator().layer?.transform = CATransform3DIdentity
+            })
+        } else if element == "container" {
+            // Hide close button
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.2
+                self.closeButton.animator().alphaValue = 0.0
+            })
+            
+            // Restart auto-dismiss when leaving
+            startAutoDismissTimer()
+        }
     }
 
     @objc private func startRecordingClicked() {
-        print("NubWindow: Start Recording clicked - opening main app")
+        print("NubWindow: Start Recording clicked - hiding nub immediately")
         cancelTimers() // Stop auto-dismiss when user interacts
+
+        // Hide immediately when clicked
+        self.hide()
+
+        // Post notification after hiding to start recording
         NotificationCenter.default.post(name: .nubClicked, object: nil)
-        
-        // Hide the pill after clicking
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            self?.hide()
-        }
+    }
+    
+    @objc private func closeClicked() {
+        print("NubWindow: Close clicked")
+        self.hide()
     }
     
     // MARK: - Public Update Methods

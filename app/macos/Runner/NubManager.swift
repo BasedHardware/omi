@@ -18,12 +18,6 @@ class NubManager {
     // MARK: - Setup
 
     private func setupNotifications() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleNubClicked),
-            name: .nubClicked,
-            object: nil
-        )
     }
 
     // MARK: - Configuration
@@ -75,34 +69,6 @@ class NubManager {
         return nubWindow?.isVisible ?? false
     }
 
-    // MARK: - Event Handlers
-
-    @objc private func handleNubClicked() {
-        print("NubManager: Nub clicked - opening main window")
-        openMainWindow()
-    }
-
-    private func openMainWindow() {
-        guard let mainWindow = mainFlutterWindow else {
-            print("NubManager: Main window not available")
-            return
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            // Bring app to front
-            NSApp.activate(ignoringOtherApps: true)
-
-            // Show and focus the main window
-            mainWindow.makeKeyAndOrderFront(nil)
-            mainWindow.orderFrontRegardless()
-
-            // Optionally hide the nub when main window opens
-            // Uncomment if you want this behavior
-            // self?.hideNub()
-
-            print("NubManager: Main window opened and focused")
-        }
-    }
 
     // MARK: - Cleanup
 

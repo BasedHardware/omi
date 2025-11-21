@@ -10,7 +10,7 @@ import UserNotifications
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
     private var screenCaptureChannel: FlutterMethodChannel!
-    
+
     // Audio manager
     private let audioManager = AudioManager()
 
@@ -24,6 +24,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     private var floatingControlBar: FloatingControlBar?
     private var floatingControlBarChannel: FlutterMethodChannel!
     private var askAIChannel: FlutterMethodChannel!
+
+    // Meeting detection
+    private var meetingDetector: MeetingDetector?
+    private var meetingDetectorChannel: FlutterMethodChannel!
+    private var meetingDetectorEventChannel: FlutterEventChannel!
 
 
     override func awakeFromNib() {
@@ -46,7 +51,16 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         askAIChannel = FlutterMethodChannel(
             name: "com.omi/ask_ai",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
-        
+
+        // Setup meeting detection channels
+        meetingDetectorChannel = FlutterMethodChannel(
+            name: "com.omi/meeting_detector",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        meetingDetectorEventChannel = FlutterEventChannel(
+            name: "com.omi/meeting_detector_events",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
         // Configure the shared window manager
         FloatingChatWindowManager.shared.configure(flutterEngine: flutterViewController.engine, askAIChannel: askAIChannel)
         
@@ -94,6 +108,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         // Setup audio manager with Flutter channel
         audioManager.setFlutterChannel(screenCaptureChannel)
+
+        // Setup meeting detection
+        setupMeetingDetection()
 
         floatingControlBarChannel.setMethodCallHandler { [weak self] (call, result) in
             guard let self = self else { return }
@@ -344,14 +361,162 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
 
     // MARK: - Menu Bar Setup
-    
+
     private func setupMenuBar() {
         menuBarManager = MenuBarManager.shared
         menuBarManager?.configure(mainWindow: self)
         menuBarManager?.setupMenuBarItem()
-        
+
         // Setup notification observers for menu actions
         setupMenuBarObservers()
+    }
+
+    // MARK: - Meeting Detection Setup
+
+    private func setupMeetingDetection() {
+        // Initialize meeting detector
+        meetingDetector = MeetingDetector()
+
+        // Configure event channel
+        meetingDetector?.configure(eventChannel: meetingDetectorEventChannel)
+
+        // Set main window reference in NubManager
+        NubManager.shared.setMainWindow(self)
+
+        // Setup method channel handler
+        meetingDetectorChannel.setMethodCallHandler { [weak self] (call, result) in
+            guard let self = self else { return }
+
+            switch call.method {
+            case "startDetection":
+                self.meetingDetector?.start()
+                result(nil)
+
+            case "stopDetection":
+                self.meetingDetector?.stop()
+                result(nil)
+
+            case "getActiveMeetingApps":
+                let apps = self.meetingDetector?.getActiveMeetingApps() ?? []
+                result(apps)
+
+            case "showNub":
+                NubManager.shared.showNub()
+                result(nil)
+
+            case "hideNub":
+                NubManager.shared.hideNub()
+                result(nil)
+
+            case "isNubVisible":
+                let isVisible = NubManager.shared.isNubVisible()
+                result(isVisible)
+
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        // Start meeting detection after 10 seconds warmup
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+            print("MainFlutterWindow: Starting meeting detection after warmup")
+            self?.meetingDetector?.start()
+        }
+
+        // Setup observer for meeting state changes to control nub
+        setupMeetingStateObserver()
+    }
+
+    private func setupMeetingStateObserver() {
+        NubManager.shared.setMainWindow(self)
+
+        // Listen for nub clicks to start recording
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNubStartRecording),
+            name: .nubClicked,
+            object: nil
+        )
+
+        // Handle auto-stop when meeting ends
+        meetingDetector?.onMeetingEnded = { [weak self] in
+            guard let self = self else { return }
+            
+            if self.audioManager.isRecording() {
+                print("MainFlutterWindow: Auto-stopping recording because meeting ended")
+                
+                // Stop recording
+                self.audioManager.stopCapture()
+                
+                // Hide floating control bar
+                self.hideFloatingControlBar()
+                
+                // Notify Flutter to update UI
+                self.screenCaptureChannel.invokeMethod("recordingStoppedAutomatically", arguments: nil)
+            }
+        }
+    }
+
+    @objc private func handleNubStartRecording() {
+        print("MainFlutterWindow: Nub clicked - starting recording and showing floating control bar")
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            // 1. Start recording
+            Task {
+                do {
+                    // Check permissions first
+                    let micStatus = self.permissionManager.checkMicrophonePermission()
+                    if micStatus != "granted" {
+                        print("MainFlutterWindow: Microphone permission required")
+                        // Open main window to show permission request
+                        self.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                        return
+                    }
+
+                    let screenStatus = await self.permissionManager.checkScreenCapturePermission()
+                    if screenStatus != "granted" {
+                        print("MainFlutterWindow: Screen capture permission required")
+                        // Open main window to show permission request
+                        self.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                        return
+                    }
+
+                    // Start audio capture
+                    try await self.audioManager.startCapture()
+                    print("MainFlutterWindow: Recording started via nub")
+
+                    // 2. Show floating control bar
+                    DispatchQueue.main.async {
+                        self.showFloatingControlBar()
+
+                        // Manually update the floating control bar state since recording was started from native
+                        self.floatingControlBar?.updateRecordingState(
+                            isRecording: true,
+                            isPaused: false,
+                            duration: 0,
+                            isInitialising: false
+                        )
+                        print("MainFlutterWindow: Floating control bar shown and state updated")
+                    }
+
+                    // 3. Notify Flutter that recording started (will trigger UI update in Flutter)
+                    self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: nil)
+
+                } catch {
+                    print("MainFlutterWindow: Error starting recording from nub: \(error.localizedDescription)")
+
+                    // Show main window if there's an error
+                    DispatchQueue.main.async {
+                        self.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                }
+            }
+        }
     }
     
     private func setupMenuBarObservers() {

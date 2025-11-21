@@ -10,6 +10,27 @@ class MeetingDetector: NSObject {
     private var activeMicApps = Set<String>()
     private var eventChannel: FlutterEventChannel?
     private var eventSink: FlutterEventSink?
+    
+    // Callback for when meeting ends
+    var onMeetingEnded: (() -> Void)?
+
+    // Bundle IDs to exclude from meeting detection
+    private lazy var excludedBundleIds: Set<String> = {
+        var excluded = Set<String>()
+
+        // Exclude our own app
+        if let ownBundleId = Bundle.main.bundleIdentifier {
+            excluded.insert(ownBundleId)
+            print("MeetingDetector: Excluding own bundle ID: \(ownBundleId)")
+        }
+
+        // Exclude system apps and utilities that aren't meeting apps
+        excluded.insert("com.apple.controlcenter")
+        excluded.insert("com.apple.systemuiserver")
+        excluded.insert("com.apple.finder")
+
+        return excluded
+    }()
 
     // MARK: - Bundle ID Mapping
     private let bundleIdMap: [String: String] = [
@@ -183,9 +204,42 @@ class MeetingDetector: NSObject {
         let message = logEntry["eventMessage"] as? String ?? ""
         let processPath = logEntry["processImagePath"] as? String ?? ""
         let category = logEntry["category"] as? String ?? ""
-        
-        // Debug: Print ALL events to see what Control Center is logging
-        // print("MeetingDetector: category: \(category) | message: \(message) | path: \(processPath)")
+        var changed = false
+
+        // Special handling for "Active activity attributions changed" messages
+        // These are authoritative lists of what's currently using the mic
+        if message.contains("Active activity attributions changed to") || 
+           message.contains("Sorted active attributions") {
+            
+            let currentBundleIds = extractAllBundleIds(from: message)
+            
+            // 1. Identify apps that stopped (in activeMicApps but not in new list)
+            for app in activeMicApps {
+                if !currentBundleIds.contains(app) {
+                    activeMicApps.remove(app)
+                    changed = true
+                    print("MeetingDetector: Microphone session ended (removed from list): \(app)")
+                }
+            }
+            
+            // 2. Identify apps that started (in new list but not in activeMicApps)
+            for app in currentBundleIds {
+                // Filter excluded/unknown apps
+                if excludedBundleIds.contains(app) { continue }
+                if !isKnownMeetingApp(app) { continue }
+                
+                if !activeMicApps.contains(app) {
+                    activeMicApps.insert(app)
+                    changed = true
+                    print("MeetingDetector: Microphone session started (found in list): \(app)")
+                }
+            }
+            
+            if changed {
+                notifyMeetingStateChanged()
+            }
+            return
+        }
 
         // Only process microphone-related events
         let messageLower = message.lowercased()
@@ -198,13 +252,10 @@ class MeetingDetector: NSObject {
         
        // print("MeetingDetector: *** MICROPHONE EVENT DETECTED *** category: \(category) | message: \(message)")
 
-        var changed = false
-
         // Check for session start events - try to detect any positive/active language
         if messageLower.contains("session_active") ||
            messageLower.contains("new_session") ||
            messageLower.contains("microphone in use") ||
-           messageLower.contains("attribution") ||
            messageLower.contains("active") ||
            messageLower.contains("client") ||
            messageLower.contains("start") ||
@@ -212,10 +263,20 @@ class MeetingDetector: NSObject {
            messageLower.contains("using") {
 
             if let bundleId = extractBundleId(from: logEntry, processPath: processPath) {
+                // Filter out excluded apps (our own app, system apps)
+                if excludedBundleIds.contains(bundleId) {
+                    return
+                }
+
+                // Filter out unknown apps - only allow known meeting apps
+                if !isKnownMeetingApp(bundleId) {
+                    return
+                }
+
                 if !activeMicApps.contains(bundleId) {
                     activeMicApps.insert(bundleId)
                     changed = true
-                    print("MeetingDetector: ✅ Microphone session started: \(bundleId)")
+                    print("MeetingDetector: Microphone session started: \(bundleId)")
                 }
             }
         }
@@ -233,7 +294,7 @@ class MeetingDetector: NSObject {
                 if activeMicApps.contains(bundleId) {
                     activeMicApps.remove(bundleId)
                     changed = true
-                    print("MeetingDetector: ❌ Microphone session ended: \(bundleId)")
+                    print("MeetingDetector: Microphone session ended: \(bundleId)")
                 }
             }
         }
@@ -242,6 +303,37 @@ class MeetingDetector: NSObject {
         if changed {
             notifyMeetingStateChanged()
         }
+    }
+
+    private func extractAllBundleIds(from message: String) -> Set<String> {
+        var foundIds = Set<String>()
+        
+        // Regex for "mic:bundle.id" or "[mic] ... (bundle.id)"
+        // Matches: mic:us.zoom.xos
+        let pattern1 = #"(?:mic:|mic\])\s*([a-zA-Z0-9._-]+)"#
+        if let regex = try? NSRegularExpression(pattern: pattern1) {
+            let results = regex.matches(in: message, range: NSRange(message.startIndex..., in: message))
+            for result in results {
+                if let range = Range(result.range(at: 1), in: message) {
+                    let id = String(message[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if id.contains(".") { foundIds.insert(id) }
+                }
+            }
+        }
+        
+        // Matches: (us.zoom.xos)
+        let pattern2 = #"\(([a-z0-9._-]+\.[a-z0-9._-]+)\)"#
+        if let regex = try? NSRegularExpression(pattern: pattern2) {
+            let results = regex.matches(in: message, range: NSRange(message.startIndex..., in: message))
+            for result in results {
+                if let range = Range(result.range(at: 1), in: message) {
+                    let id = String(message[range])
+                    if !id.isEmpty { foundIds.insert(id) }
+                }
+            }
+        }
+        
+        return foundIds
     }
 
     private func extractBundleId(from logEntry: [String: Any], processPath: String) -> String? {
@@ -333,7 +425,7 @@ class MeetingDetector: NSObject {
         }
 
         print("MeetingDetector: Meeting state changed - isInMeeting: \(isInMeeting), apps: \(apps)")
-        
+
         // Directly control the nub from native side
         DispatchQueue.main.async {
             if isInMeeting {
@@ -345,8 +437,65 @@ class MeetingDetector: NSObject {
             } else {
                 print("MeetingDetector: Hiding nub - meeting ended")
                 NubManager.shared.hideNub()
+
+                // Stop recording when meeting ends
+                self.stopRecordingIfActive()
             }
         }
+    }
+
+    // Known meeting/collaboration app bundle IDs
+    private let knownMeetingApps: Set<String> = [
+        // Video conferencing
+        "us.zoom.xos", "com.zoom.us", "zoom.us",
+        "com.microsoft.teams", "com.microsoft.teams2",
+        "com.google.Chrome",
+        "com.webex.meetingmanager", "com.cisco.webexmeetings", "com.cisco.webexmeetingsapp",
+        "com.goto.meeting", "com.citrixonline.GoToMeeting",
+        "com.bluejeans.app",
+
+        // Collaboration
+        "com.tinyspeck.slackmacgap",
+        "com.hnc.Discord", "com.discord",
+        "com.skype.skype",
+
+        // Browsers (can be used for Google Meet, etc)
+        "com.apple.Safari",
+        "com.brave.Browser",
+        "org.mozilla.firefox",
+        "company.thebrowser.Browser",
+        "com.microsoft.edgemac",
+
+        // Other
+        "com.apple.FaceTime",
+        "com.ringcentral.ringcentral",
+        "com.8x8.8x8-work",
+        "com.whereby.desktop", "com.whereby.app",
+        "com.around.Around", "com.around.app",
+        "com.jam.desktop",
+        "app.tuple.app",
+        "net.whatsapp.WhatsApp",
+        "org.jitsi.jitsi-meet"
+    ]
+
+    private func isKnownMeetingApp(_ bundleId: String) -> Bool {
+        // Direct match
+        if knownMeetingApps.contains(bundleId) {
+            return true
+        }
+
+        // Check if bundle ID contains any known meeting app identifier
+        let bundleIdLower = bundleId.lowercased()
+        let meetingKeywords = ["zoom", "teams", "webex", "meet", "slack", "discord",
+                               "skype", "facetime", "whereby", "around", "tuple"]
+
+        for keyword in meetingKeywords {
+            if bundleIdLower.contains(keyword) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func getFriendlyAppName(from bundleId: String) -> String {
@@ -355,27 +504,35 @@ class MeetingDetector: NSObject {
             // Video conferencing
             "us.zoom.xos": "Zoom",
             "com.zoom.us": "Zoom",
+            "zoom.us": "Zoom",
             "com.microsoft.teams": "Microsoft Teams",
             "com.microsoft.teams2": "Microsoft Teams",
             "com.google.Chrome": "Google Meet",
             "com.webex.meetingmanager": "Webex",
             "com.cisco.webexmeetings": "Webex",
+            "com.cisco.webexmeetingsapp": "Webex",
             "com.goto.meeting": "GoToMeeting",
+            "com.citrixonline.GoToMeeting": "GoToMeeting",
             "com.bluejeans.app": "BlueJeans",
-            
+
             // Collaboration
             "com.tinyspeck.slackmacgap": "Slack",
             "com.hnc.Discord": "Discord",
             "com.discord": "Discord",
             "com.skype.skype": "Skype",
-            
+
             // Other
             "com.apple.FaceTime": "FaceTime",
             "com.ringcentral.ringcentral": "RingCentral",
             "com.8x8.8x8-work": "8x8",
             "com.whereby.desktop": "Whereby",
+            "com.whereby.app": "Whereby",
             "com.around.Around": "Around",
-            "com.jam.desktop": "Jam"
+            "com.around.app": "Around",
+            "com.jam.desktop": "Jam",
+            "app.tuple.app": "Tuple",
+            "net.whatsapp.WhatsApp": "WhatsApp",
+            "org.jitsi.jitsi-meet": "Jitsi Meet"
         ]
         
         // Check for exact match
@@ -439,5 +596,10 @@ extension MeetingDetector: FlutterStreamHandler {
         print("MeetingDetector: EventSink disconnected")
         self.eventSink = nil
         return nil
+    }
+
+    private func stopRecordingIfActive() {
+        print("MeetingDetector: Triggering auto-stop recording because meeting ended")
+        onMeetingEnded?()
     }
 }
