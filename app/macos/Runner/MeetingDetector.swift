@@ -441,12 +441,12 @@ class MeetingDetector: NSObject {
                 let appName = apps.first ?? "Meeting"
                 // Convert bundle ID to friendly name
                 let friendlyName = self.getFriendlyAppName(from: appName)
-                print("MeetingDetector: 🟢 Transition to meeting detected - showing nub for \(friendlyName)")
+                print("MeetingDetector: Transition to meeting detected - showing nub for \(friendlyName)")
                 self.onShowNub?(friendlyName)
             } 
             // Detect transition from meeting -> no meeting
             else if !isInMeeting && self.wasInMeeting {
-                print("MeetingDetector: 🔴 Transition to no meeting detected - hiding nub")
+                print("MeetingDetector: Transition to no meeting detected - hiding nub")
                 self.onHideNub?()
 
                 // Stop recording when meeting ends
@@ -454,7 +454,7 @@ class MeetingDetector: NSObject {
             }
             // Already in meeting state - do nothing
             else if isInMeeting && self.wasInMeeting {
-                print("MeetingDetector: ⚪ Still in meeting - not showing nub again")
+                print("MeetingDetector: Still in meeting - not showing nub again")
             }
             
             // Update state tracker
