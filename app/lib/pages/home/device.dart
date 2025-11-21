@@ -22,6 +22,8 @@ class ConnectedDevice extends StatefulWidget {
 }
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
+  String? _customDeviceName;
+
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -33,10 +35,38 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   void initState() {
+    super.initState();
+
+    final deviceProvider = context.read<DeviceProvider>();
+    if (deviceProvider.pairedDevice != null) {
+      final customName = SharedPreferencesUtil().getCustomDeviceName(deviceProvider.pairedDevice!.id);
+      if (customName.isNotEmpty) {
+        _customDeviceName = customName;
+      }
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<DeviceProvider>().getDeviceInfo();
+      await _loadCustomDeviceName();
     });
-    super.initState();
+  }
+
+  Future<void> _loadCustomDeviceName() async {
+    final deviceProvider = context.read<DeviceProvider>();
+    if (deviceProvider.pairedDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+      if (connection != null) {
+        String? customName = await connection.getDeviceName();
+        if (mounted && customName != null && customName.isNotEmpty) {
+          if (customName != _customDeviceName) {
+            setState(() {
+              _customDeviceName = customName;
+            });
+          }
+          SharedPreferencesUtil().setCustomDeviceName(deviceProvider.pairedDevice!.id, customName);
+        }
+      }
+    }
   }
 
   IconData _getBatteryIcon(int batteryLevel) {
@@ -62,7 +92,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     VoidCallback? onTap,
     bool isRedBackground = false,
   }) {
-    final bool isDisabled = onTap == null && !hasArrow && value.isNotEmpty;
     final bool canCopy = value.isNotEmpty && !value.contains('Device must be connected');
 
     return GestureDetector(
@@ -159,7 +188,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   Column(
                     children: [
                       Text(
-                        provider.pairedDevice?.name ?? 'Unknown Device',
+                        _customDeviceName ?? provider.pairedDevice?.name ?? 'Unknown Device',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 32,
@@ -340,8 +369,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                           child: Column(
                             children: [
                               _buildSectionRow(
-                                'Product Name',
-                                provider.pairedDevice?.name ?? 'Unknown Device',
+                                'Device Name',
+                                _customDeviceName ?? provider.pairedDevice?.name ?? 'Unknown Device',
                                 hasArrow: false,
                                 isFirst: true,
                               ),

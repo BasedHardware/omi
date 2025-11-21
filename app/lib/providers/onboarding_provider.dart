@@ -408,16 +408,18 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
       connectingToDeviceId = device.id;
       notifyListeners();
-      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       debugPrint('Connected to device: ${device.name}');
       deviceId = device.id;
-      await SharedPreferencesUtil().btDeviceSet(device);
-      deviceName = device.name;
+
+      // Try to get custom device name
+      String? customName = await connection?.getDeviceName();
+      deviceName = (customName != null && customName.isNotEmpty) ? customName : device.name;
       deviceType = device.type;
+
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         deviceProvider!.setConnectedDevice(cDevice);
-        SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
       await deviceProvider?.scanAndConnectToDevice();
@@ -428,8 +430,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().btDevice = connectedDevice!;
-      SharedPreferencesUtil().deviceName = connectedDevice.name;
+
+      if (connectedDevice != null) {
+        await SharedPreferencesUtil().btDeviceSet(connectedDevice);
+        SharedPreferencesUtil().deviceName = customName ?? connectedDevice.name;
+        SharedPreferencesUtil().setCustomDeviceName(connectedDevice.id, customName ?? connectedDevice.name);
+      }
+
       foundDevicesMap.clear();
       deviceList.clear();
       if (isFromOnboarding) {
@@ -512,8 +519,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // Update foundDevicesMap with new devices and remove the ones not found anymore
     Map<String, BtDevice> updatedDevicesMap = {};
     for (final device in foundDevices) {
-      // If it's a new device, add it to the map. If it already exists, this will just update the entry.
-      updatedDevicesMap[device.id] = device;
+      // Check if the device has a custom name stored
+      final customName = SharedPreferencesUtil().getCustomDeviceName(device.id);
+
+      final deviceToAdd = customName.isNotEmpty ? device.copyWith(name: customName) : device;
+
+      updatedDevicesMap[device.id] = deviceToAdd;
     }
 
     // Remove devices that are no longer found
