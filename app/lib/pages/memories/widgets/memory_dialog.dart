@@ -114,8 +114,8 @@ class _MemoryDialogState extends State<MemoryDialog> {
                         MixpanelManager().memoriesPageEditedMemory();
                       } else {
                         widget.provider
-                            .createMemory(contentController.text, MemoryVisibility.private, MemoryCategory.interesting);
-                        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.interesting);
+                            .createMemory(contentController.text, MemoryVisibility.private, MemoryCategory.manual);
+                        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.manual);
                       }
                       Navigator.pop(context);
                     }

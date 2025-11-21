@@ -19,7 +19,7 @@ import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 
-enum FilterOption { interesting, system, all }
+enum FilterOption { interesting, system, manual, all }
 
 class DesktopMemoriesPage extends StatefulWidget {
   const DesktopMemoriesPage({super.key});
@@ -166,6 +166,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         case FilterOption.system:
           _filterByCategory(MemoryCategory.system);
           MixpanelManager().memoriesFiltered('system');
+          break;
+        case FilterOption.manual:
+          _filterByCategory(MemoryCategory.manual);
+          MixpanelManager().memoriesFiltered('manual');
           break;
         case FilterOption.all:
           _filterByCategory(null);
@@ -451,6 +455,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
           _buildFilterItem(FilterOption.all, 'All Memories'),
           _buildFilterItem(FilterOption.interesting, 'Interesting'),
           _buildFilterItem(FilterOption.system, 'System'),
+          _buildFilterItem(FilterOption.manual, 'Manual'),
         ],
         onSelected: _applyFilter,
         child: Container(
@@ -515,6 +520,8 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         return 'Interesting';
       case FilterOption.system:
         return 'System';
+      case FilterOption.manual:
+        return 'Manual';
       case FilterOption.all:
         return 'All';
     }
