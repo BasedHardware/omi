@@ -47,7 +47,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
 
   bool _animationsInitialized = false;
 
-  FilterOption _currentFilter = FilterOption.interesting;
+  FilterOption _currentFilter = FilterOption.all;
 
   // Memory review panel state
   final ValueNotifier<List<Memory>?> _reviewMemoriesNotifier = ValueNotifier<List<Memory>?>(null);
