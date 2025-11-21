@@ -547,20 +547,20 @@ class CaptureProvider extends ChangeNotifier
     if (deviceId.isEmpty) {
       return;
     }
-    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+    final codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
 
     // Set device info for WAL creation
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) return;
-    var pd = await device.getDeviceInfo(connection);
-    String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
+    final pd = await device.getDeviceInfo(connection);
+    final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
     _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
     await streamButton(deviceId);
     await streamAudioToWs(deviceId, codec);
 
-    // Set recording state to deviceRecord when device streaming starts
+    // Update state
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
