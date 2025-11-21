@@ -232,7 +232,7 @@ class BleTransport extends DeviceTransport {
   bool _isRetryable(Object e) {
     if (e is FlutterBluePlusException && e.code == 201) return true;
     final msg = e.toString().toLowerCase();
-    return msg.contains("busy") || msg.contains("201");
+    return msg.contains("busy") || RegExp(r'\b201\b').hasMatch(msg);
   }
 
   @override
