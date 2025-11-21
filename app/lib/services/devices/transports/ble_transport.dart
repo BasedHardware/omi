@@ -13,6 +13,7 @@ class BleTransport extends DeviceTransport {
   final StreamController<DeviceTransportState> _connectionStateController;
   final Map<String, StreamController<List<int>>> _streamControllers = {};
   final Map<String, StreamSubscription> _characteristicSubscriptions = {};
+  Future<void> _writeQueue = Future.value();
 
   List<BluetoothService> _services = [];
   DeviceTransportState _state = DeviceTransportState.disconnected;
@@ -187,12 +188,31 @@ class BleTransport extends DeviceTransport {
       throw Exception('Characteristic not found: $serviceUuid:$characteristicUuid');
     }
 
-    try {
-      await characteristic.write(data);
-    } catch (e) {
-      debugPrint('BLE Transport: Failed to write characteristic: $e');
-      rethrow;
-    }
+    final task = _writeQueue.then((_) async {
+      int retries = 0;
+      while (true) {
+        if (!await isConnected()) throw Exception("Device disconnected");
+
+        try {
+          await characteristic
+              .write(
+                data,
+                withoutResponse: characteristic.properties.writeWithoutResponse,
+                allowLongWrite: true,
+              )
+              .timeout(const Duration(seconds: 3));
+          return;
+        } catch (e) {
+          if (retries >= 3 || !_isRetryable(e)) rethrow;
+
+          await Future.delayed(Duration(milliseconds: 120 * (1 << retries)));
+          retries++;
+        }
+      }
+    });
+
+    _writeQueue = task.catchError((_) {});
+    await task;
   }
 
   Future<BluetoothCharacteristic?> _getCharacteristic(String serviceUuid, String characteristicUuid) async {
@@ -207,6 +227,12 @@ class BleTransport extends DeviceTransport {
     return service.characteristics.firstWhereOrNull(
       (characteristic) => characteristic.uuid.str128.toLowerCase() == characteristicUuid.toLowerCase(),
     );
+  }
+
+  bool _isRetryable(Object e) {
+    if (e is FlutterBluePlusException && e.code == 201) return true;
+    final msg = e.toString().toLowerCase();
+    return msg.contains("busy") || msg.contains("201");
   }
 
   @override
