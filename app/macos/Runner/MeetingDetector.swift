@@ -256,17 +256,16 @@ class MeetingDetector: NSObject {
 
     private func processLogEntry(_ logEntry: [String: Any]) {
         let message = logEntry["eventMessage"] as? String ?? ""
-        let processPath = logEntry["processImagePath"] as? String ?? ""
-        let category = logEntry["category"] as? String ?? ""
         var changed = false
 
-        // Special handling for "Active activity attributions changed" messages
-        // These are authoritative lists of what's currently using the mic
-        if message.contains("Active activity attributions changed to") || 
+        // ONLY process authoritative "Active activity attributions changed" messages
+        // These are the definitive source of truth for what's currently using the mic
+        // start using the microphone (joining a meeting), not on permission checks
+        if message.contains("Active activity attributions changed to") ||
            message.contains("Sorted active attributions") {
-            
+
             let currentBundleIds = extractAllBundleIds(from: message)
-            
+
             // 1. Identify apps that stopped (in activeMicApps but not in new list)
             for app in activeMicApps {
                 if !currentBundleIds.contains(app) {
@@ -275,88 +274,25 @@ class MeetingDetector: NSObject {
                     print("MeetingDetector: Microphone session ended (removed from list): \(app)")
                 }
             }
-            
+
             // 2. Identify apps that started (in new list but not in activeMicApps)
             for app in currentBundleIds {
                 // Filter excluded/unknown apps
                 if excludedBundleIds.contains(app) { continue }
                 if !isKnownMeetingApp(app) { continue }
-                
+
                 if !activeMicApps.contains(app) {
                     activeMicApps.insert(app)
                     changed = true
                     print("MeetingDetector: Microphone session started (found in list): \(app)")
                 }
             }
-            
+
             if changed {
                 notifyMeetingStateChanged()
             }
-            return
         }
 
-        // Only process microphone-related events
-        let messageLower = message.lowercased()
-        guard messageLower.contains("microphone") || 
-              messageLower.contains("mic") ||
-              category.contains("Microphone") ||
-              category.contains("Attribution") else {
-            return
-        }
-        
-       // print("MeetingDetector: *** MICROPHONE EVENT DETECTED *** category: \(category) | message: \(message)")
-
-        // Check for session start events - try to detect any positive/active language
-        if messageLower.contains("session_active") ||
-           messageLower.contains("new_session") ||
-           messageLower.contains("microphone in use") ||
-           messageLower.contains("active") ||
-           messageLower.contains("client") ||
-           messageLower.contains("start") ||
-           messageLower.contains("begin") ||
-           messageLower.contains("using") {
-
-            if let bundleId = extractBundleId(from: logEntry, processPath: processPath) {
-                // Filter out excluded apps (our own app, system apps)
-                if excludedBundleIds.contains(bundleId) {
-                    return
-                }
-
-                // Filter out unknown apps - only allow known meeting apps
-                if !isKnownMeetingApp(bundleId) {
-                    return
-                }
-
-                if !activeMicApps.contains(bundleId) {
-                    activeMicApps.insert(bundleId)
-                    changed = true
-                    print("MeetingDetector: Microphone session started: \(bundleId)")
-                }
-            }
-        }
-
-        // Check for session end events
-        if messageLower.contains("session_inactive") ||
-           messageLower.contains("session_expired") ||
-           messageLower.contains("microphone released") ||
-           messageLower.contains("inactive") ||
-           messageLower.contains("stop") ||
-           messageLower.contains("end") ||
-           messageLower.contains("released") {
-
-            if let bundleId = extractBundleId(from: logEntry, processPath: processPath) {
-                if activeMicApps.contains(bundleId) {
-                    activeMicApps.remove(bundleId)
-                    changed = true
-                    print("MeetingDetector: Microphone session ended: \(bundleId)")
-                }
-            }
-        }
-
-        // Notify Flutter if apps changed
-        if changed {
-            notifyMeetingStateChanged()
-        }
     }
 
     private func extractAllBundleIds(from message: String) -> Set<String> {
