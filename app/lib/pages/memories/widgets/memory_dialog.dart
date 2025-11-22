@@ -41,117 +41,121 @@ class _MemoryDialogState extends State<MemoryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return StatefulBuilder(
-      builder: (context, setState) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    widget.memory != null ? 'Edit Memory' : 'New Memory',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+    final isEditing = widget.memory != null;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      color: Colors.grey.shade400,
-                      size: 22,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isEditing ? Icons.label_outline : Icons.add_circle_outline,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isEditing ? widget.memory!.category.toString().split('.').last : 'New Memory',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Container(
-                decoration: BoxDecoration(
-                  color: Color(0xFF35343B),
-                  borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                if (isEditing)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _showDeleteConfirmation(context),
+                  )
+                else
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey.shade400),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
+              child: SingleChildScrollView(
                 child: TextField(
                   controller: contentController,
-                  textInputAction: TextInputAction.newline,
                   autofocus: true,
                   maxLines: null,
                   minLines: 3,
+                  textInputAction: TextInputAction.newline,
                   keyboardType: TextInputType.multiline,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     height: 1.4,
                   ),
-                  decoration: const InputDecoration(
-                    hintText: 'I like to eat ice cream...',
-                    hintStyle: TextStyle(color: Colors.grey),
+                  decoration: InputDecoration(
+                    hintText: isEditing ? null : 'I like to eat ice cream...',
+                    hintStyle: const TextStyle(color: Colors.grey),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
                     isDense: true,
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (contentController.text.trim().isNotEmpty) {
-                      if (widget.memory != null) {
-                        widget.provider.editMemory(widget.memory!, contentController.text);
-                        MixpanelManager().memoriesPageEditedMemory();
-                      } else {
-                        widget.provider
-                            .createMemory(contentController.text, MemoryVisibility.private, MemoryCategory.manual);
-                        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.manual);
-                      }
-                      Navigator.pop(context);
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (contentController.text.trim().isNotEmpty) {
+                    if (isEditing) {
+                      widget.provider.editMemory(widget.memory!, contentController.text);
+                      MixpanelManager().memoriesPageEditedMemory();
+                    } else {
+                      widget.provider
+                          .createMemory(contentController.text, MemoryVisibility.private, MemoryCategory.manual);
+                      MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.manual);
                     }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurpleAccent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    Navigator.pop(context);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurpleAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(
-                    widget.memory != null ? 'Update Memory' : 'Save Memory',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                ),
+                child: const Text(
+                  'Save Memory',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              if (widget.memory != null)
-                TextButton.icon(
-                  onPressed: () => _showDeleteConfirmation(context),
-                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                  label: const Text(
-                    'Delete Memory',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -163,7 +167,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
       widget.provider.deleteMemory(widget.memory!);
-      Navigator.pop(context); // Close edit sheet
+      Navigator.pop(context);
     }
   }
 }
