@@ -66,8 +66,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
     Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
+      bool isSelected = provider.isConversationSelected(widget.conversation.id);
+
       return GestureDetector(
         onTap: () async {
+          // If in selection mode, toggle selection instead of opening detail
+          if (provider.isSelectionMode) {
+            // Don't allow selecting locked or discarded conversations
+            if (!widget.conversation.isLocked && !widget.conversation.discarded) {
+              provider.toggleConversationSelection(widget.conversation.id);
+            }
+            return;
+          }
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
@@ -111,10 +121,26 @@ class _ConversationListItemState extends State<ConversationListItem> {
             }
           }
         },
+        onLongPress: () {
+          // Don't allow selecting locked or discarded conversations
+          if (widget.conversation.isLocked || widget.conversation.discarded) {
+            return;
+          }
+          // Enable selection mode and select this conversation
+          HapticFeedback.mediumImpact();
+          provider.enableSelectionMode();
+          provider.toggleConversationSelection(widget.conversation.id);
+        },
         child: Padding(
           padding:
               EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
-          child: Container(
+          child: Opacity(
+            opacity: (provider.isSelectionMode && (widget.conversation.isLocked || widget.conversation.discarded))
+                ? 0.5
+                : 1.0,
+            child: Stack(
+            children: [
+              Container(
             width: double.maxFinite,
             decoration: BoxDecoration(
               color: const Color(0xFF1F1F25),
@@ -124,7 +150,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
                 key: UniqueKey(),
-                direction: DismissDirection.endToStart,
+                direction: provider.isSelectionMode ? DismissDirection.none : DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20.0),
@@ -176,6 +202,43 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   ),
                 ),
               ),
+            ),
+          ),
+              // Checkbox overlay for selection mode
+              if (provider.isSelectionMode)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue : Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? Colors.blue : Colors.grey,
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.check,
+                      color: isSelected ? Colors.white : Colors.transparent,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              // Selection mode highlight
+              if (provider.isSelectionMode && isSelected)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16.0),
+                      border: Border.all(
+                        color: Colors.blue,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
             ),
           ),
         ),
