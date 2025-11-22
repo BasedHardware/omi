@@ -827,7 +827,6 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional
             elif not item_key:
                 # Include items without description (shouldn't happen but be safe)
                 all_action_items.append(item)
-    # Merge events
     # Merge events with deduplication
     seen_events = set()
     all_events = []
