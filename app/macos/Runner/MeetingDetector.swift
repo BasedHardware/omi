@@ -2,6 +2,68 @@ import Foundation
 import Cocoa
 import FlutterMacOS
 
+// MARK: - Meeting App Configuration
+
+/// Represents a known meeting/collaboration application
+struct MeetingApp {
+    let bundleIds: [String]  // All possible bundle IDs for this app
+    let displayName: String  // User-friendly name
+
+    init(_ displayName: String, bundleIds: String...) {
+        self.displayName = displayName
+        self.bundleIds = bundleIds
+    }
+}
+
+/// Centralized configuration for all known meeting apps
+struct MeetingApps {
+    // Video conferencing apps
+    static let zoom = MeetingApp("Zoom", bundleIds: "us.zoom.xos", "com.zoom.us", "zoom.us")
+    static let teams = MeetingApp("Microsoft Teams", bundleIds: "com.microsoft.teams", "com.microsoft.teams2")
+    static let googleMeet = MeetingApp("Google Meet", bundleIds: "com.google.Chrome")
+    static let webex = MeetingApp("Webex", bundleIds: "com.webex.meetingmanager", "com.cisco.webexmeetings", "com.cisco.webexmeetingsapp")
+    static let gotoMeeting = MeetingApp("GoToMeeting", bundleIds: "com.goto.meeting", "com.citrixonline.GoToMeeting")
+    static let blueJeans = MeetingApp("BlueJeans", bundleIds: "com.bluejeans.app")
+
+    // Collaboration apps
+    static let slack = MeetingApp("Slack", bundleIds: "com.tinyspeck.slackmacgap")
+    static let discord = MeetingApp("Discord", bundleIds: "com.hnc.Discord", "com.discord")
+    static let skype = MeetingApp("Skype", bundleIds: "com.skype.skype")
+
+    // Browsers
+    static let safari = MeetingApp("Safari", bundleIds: "com.apple.Safari")
+    static let chrome = MeetingApp("Chrome", bundleIds: "com.google.Chrome")
+    static let brave = MeetingApp("Brave", bundleIds: "com.brave.Browser")
+    static let firefox = MeetingApp("Firefox", bundleIds: "org.mozilla.firefox")
+    static let arc = MeetingApp("Arc", bundleIds: "company.thebrowser.Browser")
+    static let edge = MeetingApp("Edge", bundleIds: "com.microsoft.edgemac")
+
+    // Other apps
+    static let facetime = MeetingApp("FaceTime", bundleIds: "com.apple.FaceTime")
+    static let ringCentral = MeetingApp("RingCentral", bundleIds: "com.ringcentral.ringcentral")
+    static let eightByEight = MeetingApp("8x8", bundleIds: "com.8x8.8x8-work")
+    static let whereby = MeetingApp("Whereby", bundleIds: "com.whereby.desktop", "com.whereby.app")
+    static let around = MeetingApp("Around", bundleIds: "com.around.Around", "com.around.app")
+    static let jam = MeetingApp("Jam", bundleIds: "com.jam.desktop")
+    static let tuple = MeetingApp("Tuple", bundleIds: "app.tuple.app")
+    static let whatsapp = MeetingApp("WhatsApp", bundleIds: "net.whatsapp.WhatsApp")
+    static let jitsi = MeetingApp("Jitsi Meet", bundleIds: "org.jitsi.jitsi-meet")
+
+    /// All known meeting apps
+    static let all: [MeetingApp] = [
+        zoom, teams, googleMeet, webex, gotoMeeting, blueJeans,
+        slack, discord, skype,
+        safari, chrome, brave, firefox, arc, edge,
+        facetime, ringCentral, eightByEight, whereby, around, jam, tuple, whatsapp, jitsi
+    ]
+
+    /// Keywords to search for in unknown bundle IDs
+    static let meetingKeywords = [
+        "zoom", "teams", "webex", "meet", "slack", "discord",
+        "skype", "facetime", "whereby", "around", "tuple"
+    ]
+}
+
 class MeetingDetector: NSObject {
 
     // MARK: - Properties
@@ -11,7 +73,7 @@ class MeetingDetector: NSObject {
     private var eventChannel: FlutterEventChannel?
     private var eventSink: FlutterEventSink?
     private var wasInMeeting = false  // Track previous meeting state
-    
+
     // Callback for when meeting ends
     var onMeetingEnded: (() -> Void)?
 
@@ -22,7 +84,6 @@ class MeetingDetector: NSObject {
         // Exclude our own app
         if let ownBundleId = Bundle.main.bundleIdentifier {
             excluded.insert(ownBundleId)
-            print("MeetingDetector: Excluding own bundle ID: \(ownBundleId)")
         }
 
         // Exclude system apps and utilities that aren't meeting apps
@@ -61,7 +122,6 @@ class MeetingDetector: NSObject {
     // MARK: - Initialization
     override init() {
         super.init()
-        print("MeetingDetector initialized")
     }
 
     // MARK: - Public Methods
@@ -69,7 +129,6 @@ class MeetingDetector: NSObject {
     func configure(eventChannel: FlutterEventChannel) {
         self.eventChannel = eventChannel
         eventChannel.setStreamHandler(self)
-        print("MeetingDetector: EventChannel configured")
     }
 
     func start() {
@@ -78,7 +137,6 @@ class MeetingDetector: NSObject {
             return
         }
 
-        print("MeetingDetector: Starting log stream monitoring...")
 
         // Build predicate for filtering Control Center microphone events
         // Start with broader filter - just subsystem
@@ -95,7 +153,6 @@ class MeetingDetector: NSObject {
             "--style", "ndjson"
         ]
         
-        print("MeetingDetector: Using predicate: \(predicate)")
 
         // Setup output pipe
         let outputPipe = Pipe()
@@ -123,7 +180,6 @@ class MeetingDetector: NSObject {
             guard !data.isEmpty else { return }
 
             if let errorOutput = String(data: data, encoding: .utf8) {
-                print("MeetingDetector: log stream stderr: \(errorOutput)")
             }
         }
 
@@ -136,7 +192,6 @@ class MeetingDetector: NSObject {
         // Start the process
         do {
             try logProcess?.run()
-            print("MeetingDetector: log stream started successfully")
         } catch {
             print("MeetingDetector: Failed to start log stream: \(error.localizedDescription)")
             logProcess = nil
@@ -145,11 +200,9 @@ class MeetingDetector: NSObject {
 
     func stop() {
         guard let process = logProcess else {
-            print("MeetingDetector: Not running")
             return
         }
 
-        print("MeetingDetector: Stopping log stream...")
 
         // Clear handlers to prevent memory leaks
         if let outputPipe = process.standardOutput as? Pipe {
@@ -165,7 +218,6 @@ class MeetingDetector: NSObject {
         buffer = ""
         wasInMeeting = false
 
-        print("MeetingDetector: Stopped")
     }
 
     func getActiveMeetingApps() -> [String] {
@@ -462,52 +514,20 @@ class MeetingDetector: NSObject {
         }
     }
 
-    // Known meeting/collaboration app bundle IDs
-    private let knownMeetingApps: Set<String> = [
-        // Video conferencing
-        "us.zoom.xos", "com.zoom.us", "zoom.us",
-        "com.microsoft.teams", "com.microsoft.teams2",
-        "com.google.Chrome",
-        "com.webex.meetingmanager", "com.cisco.webexmeetings", "com.cisco.webexmeetingsapp",
-        "com.goto.meeting", "com.citrixonline.GoToMeeting",
-        "com.bluejeans.app",
-
-        // Collaboration
-        "com.tinyspeck.slackmacgap",
-        "com.hnc.Discord", "com.discord",
-        "com.skype.skype",
-
-        // Browsers (can be used for Google Meet, etc)
-        "com.apple.Safari",
-        "com.brave.Browser",
-        "org.mozilla.firefox",
-        "company.thebrowser.Browser",
-        "com.microsoft.edgemac",
-
-        // Other
-        "com.apple.FaceTime",
-        "com.ringcentral.ringcentral",
-        "com.8x8.8x8-work",
-        "com.whereby.desktop", "com.whereby.app",
-        "com.around.Around", "com.around.app",
-        "com.jam.desktop",
-        "app.tuple.app",
-        "net.whatsapp.WhatsApp",
-        "org.jitsi.jitsi-meet"
-    ]
+    // Cached set of all known bundle IDs for fast lookup
+    private lazy var knownMeetingBundleIds: Set<String> = {
+        Set(MeetingApps.all.flatMap { $0.bundleIds })
+    }()
 
     private func isKnownMeetingApp(_ bundleId: String) -> Bool {
-        // Direct match
-        if knownMeetingApps.contains(bundleId) {
+        // Direct match against known bundle IDs
+        if knownMeetingBundleIds.contains(bundleId) {
             return true
         }
 
-        // Check if bundle ID contains any known meeting app identifier
+        // Check if bundle ID contains any known meeting app keyword
         let bundleIdLower = bundleId.lowercased()
-        let meetingKeywords = ["zoom", "teams", "webex", "meet", "slack", "discord",
-                               "skype", "facetime", "whereby", "around", "tuple"]
-
-        for keyword in meetingKeywords {
+        for keyword in MeetingApps.meetingKeywords {
             if bundleIdLower.contains(keyword) {
                 return true
             }
@@ -517,57 +537,16 @@ class MeetingDetector: NSObject {
     }
 
     private func getFriendlyAppName(from bundleId: String) -> String {
-        // Map common bundle IDs to friendly names (based on Granola's app list)
-        let appNameMap: [String: String] = [
-            // Video conferencing
-            "us.zoom.xos": "Zoom",
-            "com.zoom.us": "Zoom",
-            "zoom.us": "Zoom",
-            "com.microsoft.teams": "Microsoft Teams",
-            "com.microsoft.teams2": "Microsoft Teams",
-            "com.google.Chrome": "Google Meet",
-            "com.webex.meetingmanager": "Webex",
-            "com.cisco.webexmeetings": "Webex",
-            "com.cisco.webexmeetingsapp": "Webex",
-            "com.goto.meeting": "GoToMeeting",
-            "com.citrixonline.GoToMeeting": "GoToMeeting",
-            "com.bluejeans.app": "BlueJeans",
-
-            // Collaboration
-            "com.tinyspeck.slackmacgap": "Slack",
-            "com.hnc.Discord": "Discord",
-            "com.discord": "Discord",
-            "com.skype.skype": "Skype",
-
-            // Other
-            "com.apple.FaceTime": "FaceTime",
-            "com.ringcentral.ringcentral": "RingCentral",
-            "com.8x8.8x8-work": "8x8",
-            "com.whereby.desktop": "Whereby",
-            "com.whereby.app": "Whereby",
-            "com.around.Around": "Around",
-            "com.around.app": "Around",
-            "com.jam.desktop": "Jam",
-            "app.tuple.app": "Tuple",
-            "net.whatsapp.WhatsApp": "WhatsApp",
-            "org.jitsi.jitsi-meet": "Jitsi Meet"
-        ]
-        
-        // Check for exact match
-        if let name = appNameMap[bundleId] {
-            return name
-        }
-        
-        // Check if bundle ID contains any known app name
-        for (key, value) in appNameMap {
-            if bundleId.lowercased().contains(key.lowercased()) {
-                return value
+        // Find the app by checking if the bundle ID matches any known app
+        for app in MeetingApps.all {
+            if app.bundleIds.contains(bundleId) {
+                return app.displayName
             }
         }
-        
-        // Try to extract meaningful name from bundle ID
+
+        // Try to extract meaningful name from bundle ID if not found
         let components = bundleId.components(separatedBy: ".")
-        
+
         // For reversed domain names like "us.zoom.xos", check middle component
         if components.count >= 2 {
             let middleComponent = components[components.count - 2]
@@ -575,12 +554,12 @@ class MeetingDetector: NSObject {
                 return middleComponent.capitalized
             }
         }
-        
+
         // Fallback to last component
         if let lastComponent = components.last, lastComponent.count > 2 {
             return lastComponent.capitalized
         }
-        
+
         return bundleId
     }
     

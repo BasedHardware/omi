@@ -823,6 +823,9 @@ class CaptureProvider extends ChangeNotifier
           },
           onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
           onMicrophoneStatus: _onMicrophoneStatus,
+          onStoppedAutomatically: () {
+            forceProcessingCurrentConversation();
+          },
         );
   }
 
