@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from datetime import datetime, timezone
+from google.cloud import firestore
 
 import database.conversations as conversations_db
 import database.action_items as action_items_db
@@ -140,7 +141,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     print('delete_conversation', conversation_id, uid)
     conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(conversation_id)
+    delete_vector(uid, conversation_id)
     return {"status": "Ok"}
 
 
@@ -615,3 +616,128 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     summary = generate_summary_with_prompt(full_transcript, request.prompt)
 
     return {"summary": summary}
+
+
+@router.post("/v1/conversations/merge", response_model=Conversation, tags=['conversations'])
+def merge_conversations_endpoint(
+    request: MergeConversationsRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Merges multiple conversations into a single conversation.
+
+    Requirements:
+    - At least 2 conversation IDs must be provided
+    - Conversations must be chronologically consecutive (no other conversations between them)
+    - All conversations must exist and belong to the user
+
+    Process:
+    - Validates and merges transcript segments, photos, action items, and events
+    - Generates new title, overview, and category using LLM
+    - Deletes original conversations
+    - Returns the newly created merged conversation
+    """
+    from utils.llm.conversation_processing import get_transcript_structure
+    from database import users as users_db
+
+    # Validate and merge conversations
+    merged_data, error = conversations_db.merge_conversations(uid, request.conversation_ids)
+
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+    # Get user timezone for LLM processing
+    user_data = users_db.get_user(uid)
+    tz = user_data.get('timezone', 'UTC') if user_data else 'UTC'
+
+    # Generate full transcript from segments
+    full_transcript = "\n".join([seg.get('text', '') for seg in merged_data['transcript_segments'] if seg.get('text')])
+
+    # Get language from merged data
+    language_code = merged_data.get('language', 'en')
+
+    # Parse photos once for LLM + storage
+    photos: List[ConversationPhoto] = []
+    try:
+        photos = [ConversationPhoto(**photo) for photo in merged_data.get('photos', [])]
+    except Exception as e:
+        print(f"Error parsing photos for merged conversation {merged_data.get('id')}: {e}")
+
+    # Use LLM to generate new title, overview, emoji, and category
+    try:
+        structured = get_transcript_structure(
+            transcript=full_transcript,
+            started_at=merged_data['started_at'],
+            language_code=language_code,
+            tz=tz,
+            photos=photos if photos else None,
+            existing_action_items=merged_data['structured']['action_items']
+        )
+
+        # Update merged conversation with LLM-generated structured data
+        merged_data['structured']['title'] = structured.title
+        merged_data['structured']['overview'] = structured.overview
+        merged_data['structured']['emoji'] = structured.emoji
+        merged_data['structured']['category'] = structured.category
+
+        # Merge events from LLM with existing events, avoiding duplicates
+        existing_event_keys = {
+            (event.get('title', ''), event.get('start')) for event in merged_data['structured']['events']
+        }
+        for new_event in (structured.events or []):
+            event_dict = new_event.dict() if hasattr(new_event, 'dict') else new_event
+            event_key = (event_dict.get('title', ''), event_dict.get('start'))
+            if event_key not in existing_event_keys:
+                merged_data['structured']['events'].append(event_dict)
+                existing_event_keys.add(event_key)
+
+    except Exception as e:
+        print(f"Error generating structured data for merged conversation: {e}")
+        # Continue with placeholder title if LLM fails
+        merged_data['structured']['title'] = 'Merged Conversation'
+        merged_data['structured']['overview'] = full_transcript[:500] if full_transcript else 'Combined conversation'
+
+    # Save the merged conversation
+    conversations_db.upsert_conversation(uid, merged_data)
+
+    # Store merged photos (conversation upsert strips them out)
+    if photos:
+        try:
+            conversations_db.store_conversation_photos(uid, merged_data['id'], photos)
+        except Exception as e:
+            print(f"Error saving merged conversation photos for {merged_data['id']}: {e}")
+
+    # Mark original conversations as merged using soft delete pattern
+    # This ensures data consistency even if deletion partially fails
+    # Uses existing 'discarded' flag so conversations are automatically filtered from user views
+    try:
+        conv_ids_to_delete = request.conversation_ids
+        if conv_ids_to_delete:
+            # Soft delete: mark as discarded with merge metadata
+            batch = conversations_db.db.batch()
+            for conv_id in conv_ids_to_delete:
+                doc_ref = conversations_db.db.collection('users').document(uid).collection('conversations').document(conv_id)
+                batch.update(doc_ref, {
+                    'discarded': True,
+                    'merged_into_id': merged_data['id'],
+                    'merge_timestamp': firestore.SERVER_TIMESTAMP
+                })
+            batch.commit()
+
+            # Delete vectors from Pinecone (safe to hard-delete as they're not directly user-visible)
+            vector_ids_to_delete = [f'{uid}-{conv_id}' for conv_id in conv_ids_to_delete]
+            from database.vector_db import index
+            index.delete(ids=vector_ids_to_delete, namespace="ns1")
+    except Exception as e:
+        print(f"Error marking conversations as merged {conv_ids_to_delete}: {e}")
+        # Rollback: delete the newly created merged conversation to maintain consistency
+        # This prevents showing a merged conversation when original conversations are still visible
+        try:
+            conversations_db.db.collection('users').document(uid).collection('conversations').document(merged_data['id']).delete()
+        except Exception as rollback_error:
+            print(f"Error rolling back merged conversation {merged_data['id']}: {rollback_error}")
+        raise HTTPException(status_code=500, detail="Failed to complete merge operation. Please try again.")
+
+    # Retrieve and return the newly created merged conversation
+    merged_conversation = conversations_db.get_conversation(uid, merged_data['id'])
+
+    return Conversation(**merged_conversation)
