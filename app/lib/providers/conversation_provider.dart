@@ -368,6 +368,80 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<ServerConversation> _getAllAvailableConversations() {
+    final Map<String, ServerConversation> map = {};
+    for (final convo in conversations) {
+      map[convo.id] = convo;
+    }
+    for (final convo in searchedConversations) {
+      map.putIfAbsent(convo.id, () => convo);
+    }
+    return map.values.toList();
+  }
+
+  (bool, String?) validateMergeSelection() {
+    if (selectedConversationIds.length < 2) {
+      return (false, 'Select at least 2 conversations to merge.');
+    }
+
+    final allConversations = _getAllAvailableConversations();
+
+    // Get selected conversations
+    List<ServerConversation> selectedConvos =
+        allConversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+
+    // If any selected conversations aren't loaded, block merge to avoid invalid requests
+    if (selectedConvos.length < selectedConversationIds.length) {
+      return (false, 'Some selected conversations are still loading. Please refresh and try again.');
+    }
+
+    // Check if any are locked or discarded
+    if (selectedConvos.any((c) => c.isLocked || c.discarded)) {
+      return (false, 'Locked or discarded conversations cannot be merged.');
+    }
+
+    // Sort all conversations by time to find actual positions
+    List<ServerConversation> sortedAllConvos = List.from(allConversations);
+    sortedAllConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+
+    // Optimize index lookup using map-based approach (O(N) vs O(N*M))
+    // This prevents UI unresponsiveness when validating merge with large conversation lists
+    final idToIndexMap = {
+      for (var i = 0; i < sortedAllConvos.length; i++) 
+        sortedAllConvos[i].id: i
+    };
+    final List<int> selectedIndices = selectedConversationIds
+        .map((id) => idToIndexMap[id])
+        .whereType<int>()
+        .toList();
+
+    // Sort indices to check for contiguity
+    selectedIndices.sort();
+
+    // Check that selected conversations are contiguous (no gaps in indices)
+    for (int i = 0; i < selectedIndices.length - 1; i++) {
+      if (selectedIndices[i + 1] - selectedIndices[i] != 1) {
+        debugPrint(
+            'Merge blocked: non-adjacent conversations. Gap between indices ${selectedIndices[i]} and ${selectedIndices[i + 1]}');
+        return (false, 'Select conversations that sit next to each other in time—no gaps allowed.');
+      }
+    }
+
+    // Now check time-based adjacency (within 1 hour)
+    selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+    for (int i = 0; i < selectedConvos.length - 1; i++) {
+      DateTime currentEnd = selectedConvos[i].finishedAt ?? selectedConvos[i].createdAt;
+      DateTime nextStart = selectedConvos[i + 1].startedAt ?? selectedConvos[i + 1].createdAt;
+
+      Duration gap = nextStart.difference(currentEnd);
+      if (gap.inMinutes > 60) {
+        return (false, 'Conversations must be within 1 hour of each other.');
+      }
+    }
+
+    return (true, null);
+  }
+
   Future _getConversationsFromServer() async {
     return await getConversations(includeDiscarded: showDiscardedConversations);
   }
@@ -576,62 +650,16 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   bool canMergeSelectedConversations() {
-    if (selectedConversationIds.length < 2) return false;
-
-    // Get selected conversations
-    List<ServerConversation> selectedConvos = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
-
-    // Check if any are locked or discarded
-    if (selectedConvos.any((c) => c.isLocked || c.discarded)) {
-      return false;
-    }
-
-    // Sort all conversations by time to find actual positions
-    List<ServerConversation> sortedAllConvos = List.from(conversations);
-    sortedAllConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
-
-    // Find indices of selected conversations in the sorted list
-    List<int> selectedIndices = [];
-    for (var selectedConvo in selectedConvos) {
-      int index = sortedAllConvos.indexWhere((c) => c.id == selectedConvo.id);
-      if (index != -1) {
-        selectedIndices.add(index);
-      }
-    }
-
-    // Sort indices to check for contiguity
-    selectedIndices.sort();
-
-    // Check that selected conversations are contiguous (no gaps in indices)
-    for (int i = 0; i < selectedIndices.length - 1; i++) {
-      if (selectedIndices[i + 1] - selectedIndices[i] != 1) {
-        debugPrint(
-            'Merge blocked: non-adjacent conversations. Gap between indices ${selectedIndices[i]} and ${selectedIndices[i + 1]}');
-        return false;
-      }
-    }
-
-    // Now check time-based adjacency (within 1 hour)
-    selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
-    for (int i = 0; i < selectedConvos.length - 1; i++) {
-      DateTime currentEnd = selectedConvos[i].finishedAt ?? selectedConvos[i].createdAt;
-      DateTime nextStart = selectedConvos[i + 1].startedAt ?? selectedConvos[i + 1].createdAt;
-
-      Duration gap = nextStart.difference(currentEnd);
-      if (gap.inMinutes > 60) {
-        return false;
-      }
-    }
-
-    return true;
+    final (isValid, _) = validateMergeSelection();
+    return isValid;
   }
 
   /// Merges selected conversations
   /// Returns (success, errorMessage) tuple
   Future<(bool, String?)> mergeSelectedConversations() async {
-    if (selectedConversationIds.length < 2) return (false, 'Please select at least 2 conversations to merge');
-    if (!canMergeSelectedConversations()) {
-      return (false, 'Selected conversations must be adjacent with no conversations in between and within 1 hour of each other');
+    final (isValid, validationMessage) = validateMergeSelection();
+    if (!isValid) {
+      return (false, validationMessage);
     }
 
     isMerging = true;
@@ -639,7 +667,9 @@ class ConversationProvider extends ChangeNotifier {
 
     try {
       // Sort conversation IDs by timestamp
-      List<ServerConversation> selectedConvos = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+      final allConversations = _getAllAvailableConversations();
+      List<ServerConversation> selectedConvos =
+          allConversations.where((c) => selectedConversationIds.contains(c.id)).toList();
       selectedConvos.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
       List<String> sortedIds = selectedConvos.map((c) => c.id).toList();
 
@@ -656,6 +686,7 @@ class ConversationProvider extends ChangeNotifier {
         // Remove merged conversations from local lists
         for (var id in sortedIds) {
           conversations.removeWhere((element) => element.id == id);
+          searchedConversations.removeWhere((element) => element.id == id);
         }
 
         // Add the new merged conversation
@@ -663,7 +694,11 @@ class ConversationProvider extends ChangeNotifier {
         conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         // Update grouped conversations
-        _groupConversationsByDateWithoutNotify();
+        if (previousQuery.isNotEmpty) {
+          _groupSearchConvosByDateWithoutNotify();
+        } else {
+          _groupConversationsByDateWithoutNotify();
+        }
 
         // Track success
         MixpanelManager().track('Conversations Merge Successful', properties: {
