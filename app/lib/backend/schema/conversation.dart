@@ -57,7 +57,7 @@ enum ConversationPostProcessingStatus { not_started, in_progress, completed, can
 
 enum ConversationPostProcessingModel { fal_whisperx, custom_whisperx }
 
-enum ConversationStatus { in_progress, processing, completed, failed }
+enum ConversationStatus { in_progress, processing, completed, failed, discarded }
 
 class ConversationPostProcessing {
   final ConversationPostProcessingStatus status;
@@ -130,6 +130,7 @@ class ServerConversation {
   final DateTime createdAt;
   final DateTime? startedAt;
   final DateTime? finishedAt;
+  final double? duration; // Duration in seconds
 
   final Structured structured;
   final List<TranscriptSegment> transcriptSegments;
@@ -148,6 +149,11 @@ class ServerConversation {
   final bool deleted;
   final bool isLocked;
 
+  // Discard-related fields
+  final String? discardedReason;
+  final DateTime? discardedAt;
+  final DateTime? restoredAt;
+
   // local label
   bool isNew = false;
 
@@ -157,6 +163,7 @@ class ServerConversation {
     required this.structured,
     this.startedAt,
     this.finishedAt,
+    this.duration,
     this.transcriptSegments = const [],
     this.appResults = const [],
     this.suggestedSummarizationApps = const [],
@@ -169,6 +176,9 @@ class ServerConversation {
     this.externalIntegration,
     this.status = ConversationStatus.completed,
     this.isLocked = false,
+    this.discardedReason,
+    this.discardedAt,
+    this.restoredAt,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -178,6 +188,7 @@ class ServerConversation {
       structured: Structured.fromJson(json['structured']),
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
       finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']).toLocal() : null,
+      duration: json['duration'] != null ? (json['duration'] as num).toDouble() : null,
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
@@ -199,6 +210,9 @@ class ServerConversation {
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
       isLocked: json['is_locked'] ?? false,
+      discardedReason: json['discarded_reason'],
+      discardedAt: json['discarded_at'] != null ? DateTime.parse(json['discarded_at']).toLocal() : null,
+      restoredAt: json['restored_at'] != null ? DateTime.parse(json['restored_at']).toLocal() : null,
     );
   }
 
@@ -247,7 +261,10 @@ class ServerConversation {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'OmiGlass';
     if (source == ConversationSource.sdcard) return 'SD Card';
-    if (discarded) return 'Discarded';
+    if (status == ConversationStatus.discarded) {
+      if (discardedReason == 'auto_short_duration') return 'Auto-discarded';
+      return 'Discarded';
+    }
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }
 

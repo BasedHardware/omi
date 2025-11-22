@@ -60,7 +60,7 @@ def set_app_cache_by_id(app_id: str, app: dict):
     r.set(f'apps:{app_id}', json.dumps(app, default=str), ex=60 * 10)  # 10 minutes cached
 
 
-def get_app_cache_by_id(app_id: str) -> dict | None:
+def get_app_cache_by_id(app_id: str) -> Optional[dict]:
     app = r.get(f'apps:{app_id}')
     app = json.loads(app) if app else None
     return app
@@ -83,7 +83,7 @@ def is_username_taken(username: str) -> bool:
     return True
 
 
-def get_uid_by_username(username: str) -> str | None:
+def get_uid_by_username(username: str) -> Optional[str]:
     """Get the UID that owns this username"""
     uid = r.get(f'username:{username}:uid')
     return uid.decode() if uid else None
@@ -123,7 +123,7 @@ def set_app_usage_count_cache(app_id: str, count: int):
     r.set(f'apps:{app_id}:usage_count', count, ex=60 * 15)  # 15 minutes
 
 
-def get_app_usage_count_cache(app_id: str) -> int | None:
+def get_app_usage_count_cache(app_id: str) -> Optional[int]:
     count = r.get(f'apps:{app_id}:usage_count')
     if not count:
         return None
@@ -134,7 +134,7 @@ def set_app_money_made_amount_cache(app_id: str, amount: float):
     r.set(f'apps:{app_id}:money_made', amount, ex=60 * 15)  # 15 minutes
 
 
-def get_app_money_made_amount_cache(app_id: str) -> float | None:
+def get_app_money_made_amount_cache(app_id: str) -> Optional[float]:
     amount = r.get(f'apps:{app_id}:money_made')
     if not amount:
         return None
