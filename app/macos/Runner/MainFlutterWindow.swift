@@ -444,15 +444,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             
             if self.audioManager.isRecording() {
                 print("MainFlutterWindow: Auto-stopping recording because meeting ended")
-                
-                // Stop recording
+                self.screenCaptureChannel.invokeMethod("recordingStoppedAutomatically", arguments: nil)
+
                 self.audioManager.stopCapture()
-                
+
                 // Hide floating control bar
                 self.hideFloatingControlBar()
-                
-                // Notify Flutter to update UI
-                self.screenCaptureChannel.invokeMethod("recordingStoppedAutomatically", arguments: nil)
             }
         }
         
@@ -478,7 +475,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
 
     @objc private func handleNubStartRecording() {
-        print("MainFlutterWindow: Nub clicked - starting recording and showing floating control bar")
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -489,7 +485,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     // Check permissions first
                     let micStatus = self.permissionManager.checkMicrophonePermission()
                     if micStatus != "granted" {
-                        print("MainFlutterWindow: Microphone permission required")
                         // Open main window to show permission request
                         self.makeKeyAndOrderFront(nil)
                         NSApp.activate(ignoringOtherApps: true)
@@ -498,7 +493,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
                     let screenStatus = await self.permissionManager.checkScreenCapturePermission()
                     if screenStatus != "granted" {
-                        print("MainFlutterWindow: Screen capture permission required")
                         // Open main window to show permission request
                         self.makeKeyAndOrderFront(nil)
                         NSApp.activate(ignoringOtherApps: true)
@@ -507,7 +501,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
                     // Start audio capture
                     try await self.audioManager.startCapture()
-                    print("MainFlutterWindow: Recording started via nub")
 
                     // 2. Show floating control bar
                     DispatchQueue.main.async {

@@ -16,7 +16,6 @@ class NubWindow: NSPanel {
     // MARK: - Properties
     private var containerView: NSView!
     private var pillView: PillShapeView!
-    private var recordingIndicator: RecordingIndicator!
     private var titleLabel: NSTextField!
     private var appLabel: NSTextField!
     private var actionButton: NSButton!
@@ -27,6 +26,7 @@ class NubWindow: NSPanel {
     private var dismissTimer: Timer?
     private var progressUpdateTimer: Timer?
     private var startTime: Date?
+    private var pausedElapsedTime: TimeInterval = 0
 
     // MARK: - Initialization
 
@@ -49,20 +49,19 @@ class NubWindow: NSPanel {
         // Window behavior
         self.isOpaque = false
         self.backgroundColor = .clear
-        self.level = .floating  // Changed from .statusBar to .floating for better visibility
+        self.level = .floating
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         self.hidesOnDeactivate = false
-        self.hasShadow = true  // Changed to true for visibility
+        self.hasShadow = true
         self.isMovable = false
         self.styleMask.insert(.fullSizeContentView)
-        self.ignoresMouseEvents = false  // Make sure it can receive mouse events
-        self.alphaValue = 1.0  // Ensure full opacity
+        self.ignoresMouseEvents = false
+        self.alphaValue = 1.0
 
         // Make visible on all workspaces
         self.setIsVisible(false)
         self.isReleasedWhenClosed = false
 
-        print("NubWindow: Window setup complete")
     }
 
     private func setupContentView() {
@@ -97,28 +96,33 @@ class NubWindow: NSPanel {
 
         visualEffectView.addSubview(pillView)
 
-        // Create microphone icon
-        appIconView = NSImageView(frame: NSRect(x: Self.PADDING, y: 15, width: 24, height: 24))
+        // Create Omi logo icon
+        appIconView = NSImageView(frame: NSRect(x: Self.PADDING, y: 11, width: 32, height: 32))
         appIconView.wantsLayer = true
-        
-        // Simple microphone symbol
-        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-        appIconView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Microphone")?.withSymbolConfiguration(config)
-        appIconView.contentTintColor = .white
 
-        // Create recording indicator (red dot next to icon)
-        recordingIndicator = RecordingIndicator(frame: NSRect(x: 38, y: 36, width: 8, height: 8))
+        // Use the same Omi logo as the menu bar
+        if let customIcon = NSImage(named: "app_launcher_icon") {
+            customIcon.size = NSSize(width: 32, height: 32)
+            appIconView.image = customIcon
+            appIconView.contentTintColor = .white
+        } else {
+            // Fallback to microphone icon if custom icon fails to load
+            let config = NSImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+            appIconView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Omi")?.withSymbolConfiguration(config)
+            appIconView.contentTintColor = .white
+        }
+
 
         // Create "Meeting detected" label
         titleLabel = NSTextField(labelWithString: "Meeting detected")
-        titleLabel.frame = NSRect(x: 54, y: 28, width: 140, height: 18)
+        titleLabel.frame = NSRect(x: 60, y: 28, width: 140, height: 18)
         titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         titleLabel.textColor = NSColor.white
         titleLabel.alignment = .left
 
         // Create app name label (e.g., "Zoom")
         appLabel = NSTextField(labelWithString: meetingApp)
-        appLabel.frame = NSRect(x: 54, y: 12, width: 140, height: 16)
+        appLabel.frame = NSRect(x: 60, y: 12, width: 140, height: 16)
         appLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
         appLabel.textColor = NSColor.white.withAlphaComponent(0.7)
         appLabel.alignment = .left
@@ -129,7 +133,7 @@ class NubWindow: NSPanel {
         actionButton.title = "Start Recording"
         actionButton.bezelStyle = .rounded
         actionButton.wantsLayer = true
-        actionButton.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        actionButton.layer?.backgroundColor = NSColor(red: 0x8B/255.0, green: 0x5C/255.0, blue: 0xF6/255.0, alpha: 1.0).cgColor
         actionButton.layer?.cornerRadius = 16
         actionButton.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         actionButton.contentTintColor = .white
@@ -158,10 +162,9 @@ class NubWindow: NSPanel {
 
         // Create progress bar at the bottom (inside the pill view, so relative to pillView)
         progressBar = ProgressBarView(frame: NSRect(x: 0, y: 0, width: 380, height: 3), cornerRadius: 18)
-        
+
         // Add all views to pill
         pillView.addSubview(appIconView)
-        pillView.addSubview(recordingIndicator)
         pillView.addSubview(titleLabel)
         pillView.addSubview(appLabel)
         pillView.addSubview(actionButton)
@@ -189,7 +192,7 @@ class NubWindow: NSPanel {
         closeButton.contentTintColor = .black
         closeButton.target = self
         closeButton.action = #selector(closeClicked)
-        closeButton.alphaValue = 0.0 // Initially hidden
+        closeButton.alphaValue = 0.0
         
         containerView.addSubview(closeButton)
         
@@ -204,7 +207,6 @@ class NubWindow: NSPanel {
 
         self.contentView = containerView
 
-        print("NubWindow: Content view setup complete")
     }
 
     // MARK: - Positioning
@@ -224,39 +226,28 @@ class NubWindow: NSPanel {
     func show() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { 
-                print("NubWindow: Self is nil, cannot show")
                 return 
             }
             
             // Position off-screen to the right
             guard let screen = NSScreen.main else { 
-                print("NubWindow: No main screen found")
                 return 
             }
             
             let screenFrame = screen.visibleFrame
-            print("NubWindow: Screen frame: \(screenFrame)")
             
             let finalX = screenFrame.maxX - Self.NUB_WIDTH - 20
             let finalY = screenFrame.maxY - Self.NUB_HEIGHT - 20
             
-            print("NubWindow: Final position: (\(finalX), \(finalY))")
-            
-            // Position directly at final location (skip animation for now to debug)
+            // Position directly at final location
             self.setFrameOrigin(NSPoint(x: finalX, y: finalY))
             self.alphaValue = 1.0
             self.isOpaque = false
             self.orderFrontRegardless()
             self.orderFront(nil)
             
-            print("NubWindow: Window ordered front, visible: \(self.isVisible), alpha: \(self.alphaValue), frame: \(self.frame)")
-            print("NubWindow: containerView frame: \(self.containerView?.frame ?? .zero)")
-            print("NubWindow: pillView frame: \(self.pillView?.frame ?? .zero)")
-            
             // Start timer immediately
             self.startAutoDismissTimer()
-            
-            print("NubWindow: Shown with slide-in animation")
         }
     }
 
@@ -266,43 +257,66 @@ class NubWindow: NSPanel {
             self.cancelTimers()
             self.orderOut(nil)
             self.setIsVisible(false)
-            print("NubWindow: Hidden")
         }
     }
     
     // MARK: - Auto-dismiss Timer
-    
-    private func startAutoDismissTimer() {
-        cancelTimers()
-        
+
+    private func startAutoDismissTimer(reset: Bool = true) {
+        // Cancel any existing timers without resetting pausedElapsedTime
+        dismissTimer?.invalidate()
+        dismissTimer = nil
+        progressUpdateTimer?.invalidate()
+        progressUpdateTimer = nil
+
+        // Only reset if explicitly requested (starting fresh, not resuming)
+        if reset {
+            pausedElapsedTime = 0
+            progressBar.setProgress(0.0)
+        }
+
         startTime = Date()
-        progressBar.setProgress(0.0)
-        
+
         // Update progress every 0.1 seconds
         progressUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self, let startTime = self.startTime else { return }
-            
-            let elapsed = Date().timeIntervalSince(startTime)
+
+            let elapsed = self.pausedElapsedTime + Date().timeIntervalSince(startTime)
             let progress = min(elapsed / Self.AUTO_DISMISS_DURATION, 1.0)
-            
+
             DispatchQueue.main.async {
                 self.progressBar.setProgress(progress)
             }
         }
-        
-        // Dismiss after 30 seconds
-        dismissTimer = Timer.scheduledTimer(withTimeInterval: Self.AUTO_DISMISS_DURATION, repeats: false) { [weak self] _ in
-            print("NubWindow: Auto-dismissing after \(Self.AUTO_DISMISS_DURATION) seconds")
+
+        // Dismiss after specified duration
+        let remainingTime = Self.AUTO_DISMISS_DURATION - pausedElapsedTime
+        dismissTimer = Timer.scheduledTimer(withTimeInterval: remainingTime, repeats: false) { [weak self] _ in
             self?.hide()
         }
     }
-    
+
+    private func pauseTimers() {
+        // Store elapsed time before pausing
+        if let startTime = startTime {
+            pausedElapsedTime += Date().timeIntervalSince(startTime)
+        }
+
+        // Invalidate timers but don't reset elapsed time
+        dismissTimer?.invalidate()
+        dismissTimer = nil
+        progressUpdateTimer?.invalidate()
+        progressUpdateTimer = nil
+        startTime = nil
+    }
+
     private func cancelTimers() {
         dismissTimer?.invalidate()
         dismissTimer = nil
         progressUpdateTimer?.invalidate()
         progressUpdateTimer = nil
         startTime = nil
+        pausedElapsedTime = 0
     }
 
     // MARK: - Mouse Events
@@ -316,7 +330,7 @@ class NubWindow: NSPanel {
         if element == "button" {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.15
-                self.actionButton.animator().layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
+                self.actionButton.animator().layer?.backgroundColor = NSColor(red: 0x8B/255.0, green: 0x5C/255.0, blue: 0xF6/255.0, alpha: 0.85).cgColor
                 self.actionButton.animator().layer?.transform = CATransform3DMakeScale(1.02, 1.02, 1.0)
             })
         } else if element == "container" {
@@ -325,9 +339,9 @@ class NubWindow: NSPanel {
                 context.duration = 0.2
                 self.closeButton.animator().alphaValue = 1.0
             })
-            
-            // Pause auto-dismiss when hovering
-            cancelTimers()
+
+            // Pause auto-dismiss when hovering (preserves elapsed time)
+            pauseTimers()
         }
     }
 
@@ -340,7 +354,7 @@ class NubWindow: NSPanel {
         if element == "button" {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.15
-                self.actionButton.animator().layer?.backgroundColor = NSColor.systemGreen.cgColor
+                self.actionButton.animator().layer?.backgroundColor = NSColor(red: 0x8B/255.0, green: 0x5C/255.0, blue: 0xF6/255.0, alpha: 1.0).cgColor
                 self.actionButton.animator().layer?.transform = CATransform3DIdentity
             })
         } else if element == "container" {
@@ -349,14 +363,13 @@ class NubWindow: NSPanel {
                 context.duration = 0.2
                 self.closeButton.animator().alphaValue = 0.0
             })
-            
-            // Restart auto-dismiss when leaving
-            startAutoDismissTimer()
+
+            // Resume auto-dismiss when leaving (continues from where it paused)
+            startAutoDismissTimer(reset: false)
         }
     }
 
     @objc private func startRecordingClicked() {
-        print("NubWindow: Start Recording clicked - hiding nub immediately")
         cancelTimers() // Stop auto-dismiss when user interacts
 
         // Hide immediately when clicked
@@ -367,7 +380,6 @@ class NubWindow: NSPanel {
     }
     
     @objc private func closeClicked() {
-        print("NubWindow: Close clicked")
         self.hide()
     }
     
@@ -423,97 +435,41 @@ class RecordingIndicator: NSView {
 
 class ProgressBarView: NSView {
     private var progressLayer: CALayer!
-    private var pillCornerRadius: CGFloat
-    
+
     init(frame frameRect: NSRect, cornerRadius: CGFloat) {
-        self.pillCornerRadius = cornerRadius
         super.init(frame: frameRect)
         self.wantsLayer = true
-        
+
         // Background (empty state) - semi-transparent
         self.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
-        
+
         // Progress layer (fills from left to right)
         progressLayer = CALayer()
-        progressLayer.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.9).cgColor
+        progressLayer.backgroundColor = NSColor(red: 0x8B/255.0, green: 0x5C/255.0, blue: 0xF6/255.0, alpha: 0.9).cgColor
         progressLayer.frame = CGRect(x: 0, y: 0, width: 0, height: frameRect.height)
-        progressLayer.masksToBounds = true
-        
-        // Create a mask for rounded corners on the left side
-        let maskLayer = CAShapeLayer()
-        progressLayer.mask = maskLayer
-        
+        progressLayer.cornerRadius = cornerRadius
+        progressLayer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner] // Only left corners
+
         self.layer?.addSublayer(progressLayer)
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     func setProgress(_ progress: Double) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        
+
         let width = self.bounds.width * CGFloat(progress)
         progressLayer.frame = CGRect(x: 0, y: 0, width: width, height: self.bounds.height)
-        
-        // Update mask to apply rounded corners
-        if let maskLayer = progressLayer.mask as? CAShapeLayer {
-            let path = CGMutablePath()
-            
-            if progress < 1.0 {
-                // Progress bar not complete - round only bottom-left corner
-                let rect = CGRect(x: 0, y: 0, width: width, height: self.bounds.height)
-                
-                path.move(to: CGPoint(x: pillCornerRadius, y: 0))
-                path.addLine(to: CGPoint(x: width, y: 0))
-                path.addLine(to: CGPoint(x: width, y: self.bounds.height))
-                path.addLine(to: CGPoint(x: pillCornerRadius, y: self.bounds.height))
-                path.addArc(
-                    center: CGPoint(x: pillCornerRadius, y: self.bounds.height - pillCornerRadius),
-                    radius: pillCornerRadius,
-                    startAngle: .pi / 2,
-                    endAngle: .pi,
-                    clockwise: false
-                )
-                path.addLine(to: CGPoint(x: 0, y: pillCornerRadius))
-                path.addArc(
-                    center: CGPoint(x: pillCornerRadius, y: pillCornerRadius),
-                    radius: pillCornerRadius,
-                    startAngle: .pi,
-                    endAngle: -.pi / 2,
-                    clockwise: false
-                )
-                path.closeSubpath()
-            } else {
-                // Progress bar complete - round both bottom corners to match pill
-                let rect = CGRect(x: 0, y: 0, width: width, height: self.bounds.height)
-                
-                path.move(to: CGPoint(x: pillCornerRadius, y: 0))
-                path.addLine(to: CGPoint(x: width - pillCornerRadius, y: 0))
-                path.addLine(to: CGPoint(x: width - pillCornerRadius, y: self.bounds.height))
-                path.addArc(
-                    center: CGPoint(x: width - pillCornerRadius, y: self.bounds.height - pillCornerRadius),
-                    radius: pillCornerRadius,
-                    startAngle: .pi / 2,
-                    endAngle: 0,
-                    clockwise: true
-                )
-                path.addLine(to: CGPoint(x: width, y: pillCornerRadius))
-                path.addLine(to: CGPoint(x: 0, y: pillCornerRadius))
-                path.addArc(
-                    center: CGPoint(x: pillCornerRadius, y: pillCornerRadius),
-                    radius: pillCornerRadius,
-                    startAngle: .pi,
-                    endAngle: -.pi / 2,
-                    clockwise: false
-                )
-                path.closeSubpath()
-            }
-            
-            maskLayer.path = path
+
+        if progress >= 1.0 {
+            progressLayer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        } else {
+            progressLayer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner] // Only left corners
         }
-        
+
         CATransaction.commit()
     }
 }
