@@ -31,6 +31,8 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
+
+  pod 'Mixpanel-swift', :git => 'git@github.com:beastoin/mixpanel-swift.git', :commit => '5fd6584'
 end
 
 post_install do |installer|
