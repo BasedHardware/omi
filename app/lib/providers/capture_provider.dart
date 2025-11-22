@@ -153,6 +153,31 @@ class CaptureProvider extends ChangeNotifier
   }
 
   BtDevice? _recordingDevice;
+
+  String? _getConversationSourceFromDevice() {
+    if (_recordingDevice == null) {
+      return null;
+    }
+    switch (_recordingDevice!.type) {
+      case DeviceType.friendPendant:
+        return 'friend_com';
+      case DeviceType.omi:
+        return 'omi';
+      case DeviceType.openglass:
+        return 'openglass';
+      case DeviceType.fieldy:
+        return 'fieldy';
+      case DeviceType.bee:
+        return 'bee';
+      case DeviceType.plaud:
+        return 'plaud';
+      case DeviceType.frame:
+        return 'frame';
+      case DeviceType.appleWatch:
+        return 'apple_watch';
+    }
+  }
+
   ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
@@ -169,6 +194,7 @@ class CaptureProvider extends ChangeNotifier
   StreamSubscription? _bleButtonStream;
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
+  bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
 
   StreamSubscription? _storageStream;
 
@@ -231,9 +257,11 @@ class CaptureProvider extends ChangeNotifier
     int? sampleRate,
     int? channels,
     bool? isPcm,
+    String? source,
   }) async {
     await _resetState();
-    await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm);
+    await _initiateWebsocket(
+        audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm, source: source);
   }
 
   Future<void> _initiateWebsocket({
@@ -242,6 +270,7 @@ class CaptureProvider extends ChangeNotifier
     int? channels,
     bool? isPcm,
     bool force = false,
+    String? source,
   }) async {
     Logger.debug('initiateWebsocket in capture_provider');
 
@@ -258,7 +287,7 @@ class CaptureProvider extends ChangeNotifier
 
     _socket = await ServiceManager.instance()
         .socket
-        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
+        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force, source: source);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -322,7 +351,44 @@ class CaptureProvider extends ChangeNotifier
       var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("device button $buttonState");
 
-      // start long press
+      // double tap
+      if (buttonState == 2) {
+        debugPrint("Double tap detected");
+
+        // Guard: ignore if already processing a button event
+        if (_isProcessingButtonEvent) {
+          debugPrint("Double tap: already processing, ignoring");
+          return;
+        }
+
+        if (SharedPreferencesUtil().doubleTapPausesMuting) {
+          // Pause/resume recording
+          debugPrint("Double tap: toggling pause/mute");
+          _isProcessingButtonEvent = true;
+          if (_isPaused) {
+            resumeDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              debugPrint("Error resuming device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
+          } else {
+            pauseDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              debugPrint("Error pausing device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
+          }
+        } else {
+          // End conversation and process (default)
+          debugPrint("Double tap: processing conversation");
+          forceProcessingCurrentConversation();
+        }
+        return;
+      }
+
+      // start long press (for voice commands)
       if (buttonState == 3 && _voiceCommandSession == null) {
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
@@ -330,7 +396,7 @@ class CaptureProvider extends ChangeNotifier
         _playSpeakerHaptic(deviceId, 1);
       }
 
-      // release
+      // release (end voice command)
       if (buttonState == 5 && _voiceCommandSession != null) {
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
@@ -468,7 +534,7 @@ class CaptureProvider extends ChangeNotifier
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
-      await _initiateWebsocket(audioCodec: codec, force: true);
+      await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }
 
@@ -859,6 +925,7 @@ class CaptureProvider extends ChangeNotifier
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
     }
+
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
     notifyListeners();
@@ -869,6 +936,7 @@ class CaptureProvider extends ChangeNotifier
     if (!PlatformService.isDesktop) return;
     _isPaused = false; // Clear paused state
     await streamSystemAudioRecording(); // Re-trigger the recording flow
+
     _broadcastRecordingState();
   }
 
@@ -924,16 +992,18 @@ class CaptureProvider extends ChangeNotifier
 
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-        await _initiateWebsocket(audioCodec: codec);
+        await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
         return;
       }
       if (recordingState == RecordingState.record) {
-        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+        await _initiateWebsocket(
+            audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: ConversationSource.phone.name);
         return;
       }
       if (recordingState == RecordingState.systemAudioRecord && PlatformService.isDesktop) {
         debugPrint("System audio socket disconnected, reconnecting...");
-        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+        await _initiateWebsocket(
+            audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, source: ConversationSource.desktop.name);
         return;
       }
     });
@@ -1257,9 +1327,9 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
+
     // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
-    await _bleButtonStream?.cancel();
     _isPaused = true;
     updateRecordingState(RecordingState.pause);
     notifyListeners();
@@ -1270,6 +1340,13 @@ class CaptureProvider extends ChangeNotifier
     _isPaused = false;
     // Resume streaming from the device
     await _initiateDeviceAudioStreaming();
+
+    final deviceId = _recordingDevice!.id;
+    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+
+    await streamAudioToWs(deviceId, codec);
+
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }

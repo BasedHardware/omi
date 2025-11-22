@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:in_app_review/in_app_review.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,9 +11,7 @@ class AppReviewService {
   factory AppReviewService() => _instance;
   AppReviewService._internal();
 
-  final InAppReview _inAppReview = InAppReview.instance;
-
-  static const String _appStoreId = '6651027111';
+  static final Uri _appStoreReviewUrl = Uri.parse('https://apps.apple.com/app/id6502156163?action=write-review');
   static final Uri _playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=com.friend.ios');
   static const String _hasCompletedFirstActionItemKey = 'has_completed_first_action_item';
   static const String _hasShownReviewPromptKey = 'has_shown_review_prompt';
@@ -162,25 +159,14 @@ class AppReviewService {
                         HapticFeedback.mediumImpact();
                         Navigator.of(context).pop();
 
-                        try {
-                          if (Platform.isIOS) {
-                            // Use in-app review for iOS
-                            if (await _inAppReview.isAvailable()) {
-                              await _inAppReview.requestReview();
-                              MixpanelManager().track('App Review Requested');
-                            } else {
-                              await _inAppReview.openStoreListing(appStoreId: _appStoreId);
-                              MixpanelManager().track('App Store Opened');
-                            }
-                          } else {
-                            // Open Play Store
-                            if (await canLaunchUrl(_playStoreUrl)) {
-                              await launchUrl(_playStoreUrl, mode: LaunchMode.externalApplication);
-                              MixpanelManager().track('Play Store Opened');
-                            }
-                          }
-                        } catch (e) {
-                          debugPrint('Error requesting review: $e');
+                        final Uri reviewUrl = Platform.isIOS ? _appStoreReviewUrl : _playStoreUrl;
+
+                        if (await canLaunchUrl(reviewUrl)) {
+                          await launchUrl(reviewUrl, mode: LaunchMode.externalApplication);
+                          MixpanelManager().track('App Review Opened');
+                          await Future.delayed(const Duration(milliseconds: 500));
+                        } else {
+                          debugPrint('Could not launch review URL');
                         }
                       },
                       style: ElevatedButton.styleFrom(

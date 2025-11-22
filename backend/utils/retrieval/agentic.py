@@ -46,6 +46,7 @@ from utils.retrieval.tools import (
     get_whoop_workout_tool,
     search_notion_pages_tool,
     get_twitter_tweets_tool,
+    search_files_tool,
 )
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
@@ -207,6 +208,7 @@ def execute_agentic_chat(
         get_whoop_workout_tool,
         search_notion_pages_tool,
         get_twitter_tweets_tool,
+        search_files_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
@@ -269,8 +271,8 @@ async def execute_agentic_chat_stream(
     Yields:
         Formatted chunks with "data: " or "think: " prefixes
     """
-    # Build system prompt
-    system_prompt = _get_agentic_qa_prompt(uid, app)
+    # Build system prompt with file context
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages)
 
     # Get all tools
     tools = [
@@ -292,6 +294,7 @@ async def execute_agentic_chat_stream(
         get_whoop_workout_tool,
         search_notion_pages_tool,
         get_twitter_tweets_tool,
+        search_files_tool,
     ]
 
     # Convert messages to LangChain format and prepend system message
@@ -319,6 +322,7 @@ async def execute_agentic_chat_stream(
             "thread_id": str(uuid.uuid4()),
             "conversations_collected": conversations_collected,
             "safety_guard": safety_guard,
+            "chat_session_id": chat_session.id if chat_session else None,
         }
     }
 

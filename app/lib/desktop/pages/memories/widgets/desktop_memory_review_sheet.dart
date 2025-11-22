@@ -409,8 +409,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
                   color: ResponsiveHelper.textPrimary,
                   height: 1.4,
                 ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
 
@@ -496,6 +494,8 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return 'Interesting';
       case MemoryCategory.system:
         return 'System';
+      case MemoryCategory.manual:
+        return 'Manual';
     }
   }
 
@@ -505,6 +505,8 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return ResponsiveHelper.purplePrimary;
       case MemoryCategory.system:
         return Colors.orange;
+      case MemoryCategory.manual:
+        return Colors.purple;
     }
   }
 
@@ -514,6 +516,8 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return FontAwesomeIcons.lightbulb;
       case MemoryCategory.system:
         return FontAwesomeIcons.gear;
+      case MemoryCategory.manual:
+        return FontAwesomeIcons.penToSquare;
     }
   }
 }

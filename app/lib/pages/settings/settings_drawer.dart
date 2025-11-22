@@ -108,6 +108,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     required Widget icon,
     required VoidCallback onTap,
     bool showBetaTag = false,
+    bool showNewTag = false,
     Widget? trailingChip,
   }) {
     return GestureDetector(
@@ -155,6 +156,25 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           'BETA',
                           style: TextStyle(
                             color: Colors.orange,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (showNewTag) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'NEW',
+                          style: TextStyle(
+                            color: Colors.green,
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.5,
@@ -405,26 +425,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               _buildSettingsItem(
                 title: 'Referral Program',
                 icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
-                trailingChip: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFFB8860B),
-                        Color(0xFFCD853F),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'New',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+                showNewTag: true,
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(

@@ -64,7 +64,7 @@ class DeviceUtils {
           return Assets.images.omiDevkitWithoutRope.path;
         case DeviceType.appleWatch:
           return Assets.images.appleWatch.path;
-        case DeviceType.xor:
+        case DeviceType.plaud:
           return Assets.images.plaudNotePin.path;
         case DeviceType.fieldy:
           return Assets.images.fieldy.path;

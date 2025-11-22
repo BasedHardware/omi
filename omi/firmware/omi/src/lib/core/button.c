@@ -12,10 +12,12 @@
 #include <zephyr/pm/device_runtime.h>
 #include <zephyr/sys/poweroff.h>
 
+#include "haptic.h"
 #include "led.h"
 #include "mic.h"
 #include "speaker.h"
 #include "transport.h"
+#include "wdog_facade.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -216,12 +218,6 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("single tap detected\n");
         btn_last_event = event;
         notify_tap();
-        k_msleep(1000);
-
-        // // Enter the low power mode
-        is_off = true;
-        transport_off();
-        k_msleep(300);
 
         turnoff_all();
     }
@@ -352,6 +348,24 @@ void turnoff_all()
 {
     int rc;
 
+    // Immediate feedback: LED off and haptic
+    led_off();
+    // Set is_off immediately so set_led_state() keeps LEDs off
+    is_off = true;
+
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    play_haptic_milli(100);
+    k_msleep(300);
+    haptic_off();
+#endif
+
+    // Delays for stability
+    k_msleep(1000);
+
+    // // Enter the low power mode
+    transport_off();
+    k_msleep(300);
+
     // Always turn off microphone
     mic_off();
     k_msleep(100);
@@ -372,16 +386,6 @@ void turnoff_all()
         app_sd_off();
     }
     k_msleep(300);
-
-    // Play haptic feedback if enabled
-#ifdef CONFIG_OMI_ENABLE_HAPTIC
-    play_haptic_milli(100);
-    k_msleep(300);
-    haptic_off();
-#endif
-
-    led_off();
-    k_msleep(100);
 
     // Put the buttons device to sleep if button is enabled
 #ifdef CONFIG_OMI_ENABLE_BUTTON
@@ -407,6 +411,12 @@ void turnoff_all()
     rc = gpio_pin_interrupt_configure_dt(&usr_btn, GPIO_INT_LEVEL_LOW);
     if (rc < 0) {
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
+        return;
+    }
+
+    rc = watchdog_deinit();
+    if (rc < 0) {
+        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
         return;
     }
 

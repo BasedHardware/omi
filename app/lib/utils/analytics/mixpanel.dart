@@ -1,10 +1,10 @@
+import 'package:mixpanel_analytics/mixpanel_analytics.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:mixpanel_flutter/mixpanel_flutter.dart';
-import 'package:mixpanel_analytics/mixpanel_analytics.dart';
 
 class MixpanelManager {
   static final MixpanelManager _instance = MixpanelManager._internal();
@@ -17,8 +17,7 @@ class MixpanelManager {
     return PlatformService.executeIfSupportedAsync(
       PlatformService.isMixpanelSupported,
       () async {
-        if (PlatformService.isMobile) {
-          // Use mixpanel_flutter for mobile platforms
+        if (PlatformService.isMixpanelNativelySupported) {
           if (_mixpanel == null) {
             _mixpanel = await Mixpanel.init(
               Env.mixpanelProjectToken!,
@@ -27,7 +26,7 @@ class MixpanelManager {
             );
             _mixpanel?.setLoggingEnabled(false);
           }
-        } else if (PlatformService.isDesktop) {
+        } else {
           // Use mixpanel_analytics for desktop platforms
           _mixpanelAnalytics ??= MixpanelAnalytics.batch(
             token: Env.mixpanelProjectToken!,
@@ -66,9 +65,9 @@ class MixpanelManager {
   setUserProperty(String key, dynamic value) => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
         () {
-          if (PlatformService.isMobile) {
+          if (PlatformService.isMixpanelNativelySupported) {
             _mixpanel?.getPeople().set(key, value);
-          } else if (PlatformService.isDesktop) {
+          } else {
             _mixpanelAnalytics?.engage(
               operation: MixpanelUpdateOperations.$set,
               value: {key: value},
@@ -81,7 +80,7 @@ class MixpanelManager {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        if (PlatformService.isMobile) {
+        if (PlatformService.isMixpanelNativelySupported) {
           _mixpanel?.optInTracking();
         }
         // Note: mixpanel_analytics doesn't have built-in opt-in/opt-out, but we can still identify
@@ -94,10 +93,10 @@ class MixpanelManager {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        if (PlatformService.isMobile) {
+        if (PlatformService.isMixpanelNativelySupported) {
           _mixpanel?.optOutTracking();
           _mixpanel?.reset();
-        } else if (PlatformService.isDesktop) {
+        } else {
           // Note: mixpanel_analytics doesn't have built-in opt-out,
           // but we can set userId to null to stop tracking
           _mixpanelAnalytics?.userId = null;
@@ -110,9 +109,9 @@ class MixpanelManager {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        if (PlatformService.isMobile) {
+        if (PlatformService.isMixpanelNativelySupported) {
           _mixpanel?.identify(_preferences.uid);
-        } else if (PlatformService.isDesktop) {
+        } else {
           _mixpanelAnalytics?.userId = _preferences.uid;
         }
         _instance.setPeopleValues();
@@ -125,10 +124,10 @@ class MixpanelManager {
     PlatformService.executeIfSupported(
       PlatformService.isMixpanelSupported,
       () {
-        if (PlatformService.isMobile) {
+        if (PlatformService.isMixpanelNativelySupported) {
           _mixpanel?.alias(newUid, _preferences.uid);
           _mixpanel?.identify(newUid);
-        } else if (PlatformService.isDesktop) {
+        } else {
           // Note: mixpanel_analytics doesn't have built-in alias,
           // but we can just set the new userId
           _mixpanelAnalytics?.userId = newUid;
@@ -146,9 +145,9 @@ class MixpanelManager {
   void track(String eventName, {Map<String, dynamic>? properties}) => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
         () {
-          if (PlatformService.isMobile) {
+          if (PlatformService.isMixpanelNativelySupported) {
             _mixpanel?.track(eventName, properties: properties);
-          } else if (PlatformService.isDesktop) {
+          } else {
             _mixpanelAnalytics?.track(
               event: eventName,
               properties: properties ?? {},
@@ -160,9 +159,9 @@ class MixpanelManager {
   void startTimingEvent(String eventName) => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
         () {
-          if (PlatformService.isMobile) {
+          if (PlatformService.isMixpanelNativelySupported) {
             _mixpanel?.timeEvent(eventName);
-          } else if (PlatformService.isDesktop) {
+          } else {
             // Note: mixpanel_analytics doesn't have built-in timing events,
             // but we can track the start time manually in properties
             _mixpanelAnalytics?.track(
@@ -349,6 +348,20 @@ class MixpanelManager {
     properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = conversation.structured.actionItems.length;
     properties['transcript_language'] = _preferences.userPrimaryLanguage;
+
+    // Additional properties for conversation creation
+    properties['conversation_source'] = conversation.source?.toString().split('.').last ?? 'unknown';
+    properties['duration_seconds'] = conversation.getDurationInSeconds();
+    properties['timestamp'] = conversation.createdAt.toIso8601String();
+
+    // Get the summarized app info if available
+    if (conversation.appResults.isNotEmpty) {
+      var summarizedApp = conversation.appResults.firstOrNull;
+      if (summarizedApp != null && summarizedApp.appId != null) {
+        properties['summary_app_id'] = summarizedApp.appId!;
+      }
+    }
+
     track('Memory Created', properties: properties);
   }
 
@@ -486,9 +499,9 @@ class MixpanelManager {
   void deleteUser() => PlatformService.executeIfSupported(
         PlatformService.isMixpanelSupported,
         () {
-          if (PlatformService.isMobile) {
+          if (PlatformService.isMixpanelNativelySupported) {
             _mixpanel?.getPeople().deleteUser();
-          } else if (PlatformService.isDesktop) {
+          } else {
             _mixpanelAnalytics?.engage(
               operation: MixpanelUpdateOperations.$delete,
               value: {},
@@ -748,5 +761,173 @@ class MixpanelManager {
   void trainingDataOptInApproved() {
     track('Training Data Opt-In Approved');
     setUserProperty('Training Data Status', 'approved');
+  }
+
+  // Homepage Events
+  void recordingMuteToggled({required bool isMuted, required String recordingType}) {
+    track('Recording Mute Toggled', properties: {
+      'is_muted': isMuted,
+      'recording_type': recordingType,
+    });
+  }
+
+  void deletedConversationsFilterToggled(bool showDeleted) {
+    track('Deleted Conversations Filter Toggled', properties: {'show_deleted': showDeleted});
+  }
+
+  void calendarFilterApplied(DateTime selectedDate) {
+    track('Calendar Filter Applied', properties: {
+      'selected_date': selectedDate.toIso8601String(),
+      'days_ago': DateTime.now().difference(selectedDate).inDays,
+    });
+  }
+
+  void calendarFilterCleared() {
+    track('Calendar Filter Cleared');
+  }
+
+  void searchBarFocused() {
+    track('Search Bar Focused');
+  }
+
+  void searchQueryEntered(String query, int resultsCount) {
+    track('Search Query Entered', properties: {
+      'query_length': query.length,
+      'query_word_count': query.split(' ').length,
+      'results_count': resultsCount,
+    });
+  }
+
+  void searchQueryCleared() {
+    track('Search Query Cleared');
+  }
+
+  void conversationOpenedFromSearch({
+    required ServerConversation conversation,
+    required String searchQuery,
+    required int conversationIndexInResults,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['search_query'] = searchQuery;
+    properties['search_query_length'] = searchQuery.length;
+    properties['conversation_index_in_results'] = conversationIndexInResults;
+    track('Conversation Opened From Search', properties: properties);
+  }
+
+  void liveTranscriptCardClicked({
+    required bool hasSegments,
+    required bool hasPhotos,
+    required int segmentCount,
+    required int photoCount,
+  }) {
+    track('Live Transcript Card Clicked', properties: {
+      'has_segments': hasSegments,
+      'has_photos': hasPhotos,
+      'segment_count': segmentCount,
+      'photo_count': photoCount,
+    });
+  }
+
+  void deviceInfoButtonClicked({String? deviceId, String? deviceName, int? batteryLevel}) {
+    track('Device Info Button Clicked', properties: {
+      if (deviceId != null) 'device_id': deviceId,
+      if (deviceName != null) 'device_name': deviceName,
+      if (batteryLevel != null) 'battery_level': batteryLevel,
+    });
+  }
+
+  void conversationListItemClickedWithTimeDifference({
+    required ServerConversation conversation,
+    required int conversationIndex,
+    required int hoursSinceConversation,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['conversation_index'] = conversationIndex;
+    properties['hours_since_conversation'] = hoursSinceConversation;
+    track('Conversation List Item Clicked', properties: properties);
+  }
+
+  void conversationSwipedToDelete(ServerConversation conversation) {
+    var properties = getConversationEventProperties(conversation);
+    track('Conversation Swiped To Delete', properties: properties);
+  }
+
+  // Conversation Detail Page Events
+  void conversationDetailTabChanged(String tabName) {
+    track('Conversation Detail Tab Changed', properties: {'tab_name': tabName});
+  }
+
+  void speakerEdited({
+    required String conversationId,
+    required int oldSpeakerCount,
+    required int newSpeakerCount,
+  }) {
+    track('Speaker Edited', properties: {
+      'conversation_id': conversationId,
+      'old_speaker_count': oldSpeakerCount,
+      'new_speaker_count': newSpeakerCount,
+      'speaker_count_changed': oldSpeakerCount != newSpeakerCount,
+    });
+  }
+
+  void conversationDetailSearchClicked({required String conversationId}) {
+    track('Conversation Detail Search Clicked', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
+  void conversationDetailSearchQueryEntered({
+    required String conversationId,
+    required String query,
+    required int resultsCount,
+    required String activeTab,
+  }) {
+    track('Conversation Detail Search Query Entered', properties: {
+      'conversation_id': conversationId,
+      'query_length': query.length,
+      'results_count': resultsCount,
+      'active_tab': activeTab,
+    });
+  }
+
+  void conversationReprocessedWithApp({
+    required String conversationId,
+    required String appId,
+    required String appName,
+    required bool isOwnApp,
+    required bool wasAutoSelected,
+  }) {
+    track('Conversation Reprocessed', properties: {
+      'conversation_id': conversationId,
+      'app_id': appId,
+      'app_name': appName,
+      'is_own_app': isOwnApp,
+      'was_auto_selected': wasAutoSelected,
+    });
+  }
+
+  void conversationShared({
+    required ServerConversation conversation,
+    required String shareMethod,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['share_method'] = shareMethod;
+    track('Conversation Shared', properties: properties);
+  }
+
+  void conversationThreeDotsMenuOpened({required String conversationId}) {
+    track('Conversation Three Dots Menu Opened', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
+  void conversationThreeDotsMenuActionSelected({
+    required String conversationId,
+    required String action,
+  }) {
+    track('Conversation Three Dots Menu Action Selected', properties: {
+      'conversation_id': conversationId,
+      'action': action,
+    });
   }
 }

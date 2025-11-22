@@ -19,12 +19,38 @@
 #endif
 #include "lib/core/sd_card.h"
 #include "spi_flash.h"
+#include "wdog_facade.h"
+#include <hal/nrf_reset.h>
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
+
+static void print_reset_reason(void)
+{
+    uint32_t reas;
+
+    reas = nrf_reset_resetreas_get(NRF_RESET);
+    nrf_reset_resetreas_clear(NRF_RESET, reas);
+    
+    if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
+        printk("Reset by WATCHDOG\n");
+    } else if (reas & NRF_RESET_RESETREAS_NFC_MASK) {
+        printk("Wake up by NFC field detect\n");
+    } else if (reas & NRF_RESET_RESETREAS_RESETPIN_MASK) {
+        printk("Reset by pin-reset\n");
+    } else if (reas & NRF_RESET_RESETREAS_SREQ_MASK) {
+        printk("Reset by soft-reset\n");
+    } else if (reas & NRF_RESET_RESETREAS_LOCKUP_MASK) {
+        printk("Reset by CPU LOCKUP\n");
+    } else if (reas) {
+        printk("Reset by a different source (0x%08X)\n", reas);
+    } else {
+        printk("Power-on-reset\n");
+    }
+}
 
 static void codec_handler(uint8_t *data, size_t len)
 {
@@ -87,18 +113,17 @@ static void boot_ready_sequence(void)
 
 void set_led_state()
 {
+    // If device is off, turn off all LEDs immediately
+    if (is_off) {
+        led_off();
+        return;
+    }
+
     // Set LED state based on connection and charging status
     if (is_charging) {
         set_led_green(true);
     } else {
         set_led_green(false);
-    }
-
-    // If device is off, turn off all status LEDs except charging indicator
-    if (is_off) {
-        set_led_red(false);
-        set_led_blue(false);
-        return;
     }
 
     if (is_connected) {
@@ -107,7 +132,6 @@ void set_led_state()
         return;
     }
 
-    // Not connected - RED
     if (!is_connected) {
         set_led_red(true);
         set_led_blue(false);
@@ -128,8 +152,40 @@ static int suspend_unused_modules(void)
 int main(void)
 {
     int ret;
-
     printk("Starting omi ...\n");
+
+    // print reset reason at startup
+    print_reset_reason();
+
+    // Initialize watchdog first to catch any early freezes
+    ret = watchdog_init();
+    if (ret) {
+        LOG_WRN("Watchdog init failed (err %d), continuing without watchdog", ret);
+    }
+
+    // Initialize Haptic driver first; this is building up for future of omi turn on sequence - long press to turn on
+    // instead of short press
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    ret = haptic_init();
+    if (ret) {
+        LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
+        error_haptic();
+        // Non-critical, continue boot
+    } else {
+        LOG_INF("Haptic driver initialized");
+        play_haptic_milli(100);
+    }
+#endif
+
+    // Initialize LEDs
+    LOG_INF("Initializing LEDs...\n");
+
+    ret = led_start();
+    if (ret) {
+        LOG_ERR("Failed to initialize LEDs (err %d)", ret);
+        error_led_driver();
+        return ret;
+    }
 
     // Suspend unused modules
     LOG_PRINTK("\n");
@@ -153,19 +209,6 @@ int main(void)
     if (ret) {
         LOG_ERR("Failed to initialize monitoring system (err %d)", ret);
     }
-
-    // Initialize LEDs
-    LOG_INF("Initializing LEDs...\n");
-
-    ret = led_start();
-    if (ret) {
-        LOG_ERR("Failed to initialize LEDs (err %d)", ret);
-        error_led_driver();
-        return ret;
-    }
-
-    // Run the boot LED sequence
-    boot_led_sequence();
 
     if (setting_ret) {
         error_settings();
@@ -200,19 +243,6 @@ int main(void)
     }
     LOG_INF("Button initialized");
     activate_button_work();
-#endif
-
-    // Initialize Haptic driver
-#ifdef CONFIG_OMI_ENABLE_HAPTIC
-    ret = haptic_init();
-    if (ret) {
-        LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
-        error_haptic();
-        // Non-critical, continue boot
-    } else {
-        LOG_INF("Haptic driver initialized");
-        play_haptic_milli(50);
-    }
 #endif
 
     // SD Card
@@ -272,10 +302,8 @@ int main(void)
 
     LOG_INF("Device initialized successfully\n");
 
-    // Show ready sequence
-    boot_ready_sequence();
-
     while (1) {
+        watchdog_feed();
         monitor_log_metrics();
 
         set_led_state();

@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <zephyr/kernel.h>
 
+#define MAX_STORAGE_BYTES 0x1E000000 // 480MB
+
 /**
  * @brief Initialize the SD card module interface.
  *
@@ -128,7 +130,7 @@ int save_offset(uint32_t offset);
  *
  * @return offset value, or negative errno code if error
  */
-int get_offset(void);
+uint32_t get_offset(void);
 
 /**
  * @brief Turn on SD card power
