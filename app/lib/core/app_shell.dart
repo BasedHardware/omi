@@ -135,55 +135,30 @@ class _AppShellState extends State<AppShell> {
         debugPrint('ClickUp callback received but no success flag');
       }
     } else if (uri.host == 'notion' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
-      // Handle Notion OAuth callback
-      final error = uri.queryParameters['error'];
-      if (error != null) {
-        debugPrint('Notion OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to Notion: $error');
-        return;
-      }
-
-      final success = uri.queryParameters['success'];
-      if (success == 'true') {
-        debugPrint('Notion OAuth successful (tokens in Firebase)');
-        _handleNotionCallback();
-      } else {
-        debugPrint('Notion callback received but no success flag');
-      }
+      await _handleOAuthCallback(uri, 'Notion', 'Notion', _handleNotionCallback);
     } else if (uri.host == 'google_calendar' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
-      // Handle Google Calendar OAuth callback
-      final error = uri.queryParameters['error'];
-      if (error != null) {
-        debugPrint('Google Calendar OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to Google: $error');
-        return;
-      }
-
-      final success = uri.queryParameters['success'];
-      if (success == 'true') {
-        debugPrint('Google Calendar OAuth successful (tokens in Firebase)');
-        _handleGoogleCalendarCallback();
-      } else {
-        debugPrint('Google Calendar callback received but no success flag');
-      }
+      await _handleOAuthCallback(uri, 'Google', 'Google Calendar', _handleGoogleCalendarCallback);
     } else if (uri.host == 'whoop' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
-      // Handle Whoop OAuth callback
-      final error = uri.queryParameters['error'];
-      if (error != null) {
-        debugPrint('Whoop OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to Whoop: $error');
-        return;
-      }
-
-      final success = uri.queryParameters['success'];
-      if (success == 'true') {
-        debugPrint('Whoop OAuth successful (tokens in Firebase)');
-        _handleWhoopCallback();
-      } else {
-        debugPrint('Whoop callback received but no success flag');
-      }
+      await _handleOAuthCallback(uri, 'Whoop', 'Whoop', _handleWhoopCallback);
     } else {
       debugPrint('Unknown link: $uri');
+    }
+  }
+
+  Future<void> _handleOAuthCallback(Uri uri, String errorDisplayName, String oauthLogName, Future<void> Function() onSuccess) async {
+    final error = uri.queryParameters['error'];
+    if (error != null) {
+      debugPrint('$oauthLogName OAuth error: $error');
+      AppSnackbar.showSnackbarError('Failed to connect to $errorDisplayName: $error');
+      return;
+    }
+
+    final success = uri.queryParameters['success'];
+    if (success == 'true') {
+      debugPrint('$oauthLogName OAuth successful (tokens in Firebase)');
+      await onSuccess();
+    } else {
+      debugPrint('$oauthLogName callback received but no success flag');
     }
   }
 
