@@ -65,6 +65,7 @@ from utils.stt.streaming import (
     process_audio_dg,
     process_audio_soniox,
     process_audio_speechmatics,
+    process_audio_elevenlabs,
     send_initial_file_path,
 )
 from utils.subscription import has_transcription_credits
@@ -565,6 +566,8 @@ async def _listen(
         return
 
     # Process STT
+    elevenlabs_socket = None
+    elevenlabs_socket2 = None
     soniox_socket = None
     soniox_socket2 = None
     speechmatics_socket = None
@@ -581,6 +584,8 @@ async def _listen(
 
     async def _process_stt():
         nonlocal websocket_close_code
+        nonlocal elevenlabs_socket
+        nonlocal elevenlabs_socket2
         nonlocal soniox_socket
         nonlocal soniox_socket2
         nonlocal speechmatics_socket
@@ -658,6 +663,21 @@ async def _listen(
 
                     safe_create_task(send_initial_file_path(file_path, soniox_socket.send))
                     print('speech_profile soniox duration', speech_profile_duration, uid, session_id)
+            # ELEVENLABS SCRIBE
+            elif stt_service == STTService.elevenlabs:
+                elevenlabs_socket = await process_audio_elevenlabs(
+                    stream_transcript, sample_rate, stt_language, preseconds=speech_profile_duration, model=stt_model
+                )
+                if speech_profile_duration and file_path:
+                    elevenlabs_socket2 = await process_audio_elevenlabs(
+                        stream_transcript, sample_rate, stt_language, preseconds=0, model=stt_model
+                    )
+                    
+                    async def elevenlabs_socket_send(data):
+                        return await elevenlabs_socket.send(data)
+                    
+                    safe_create_task(send_initial_file_path(file_path, elevenlabs_socket_send))
+                    print('speech_profile elevenlabs duration', speech_profile_duration, uid, session_id)
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
                 speechmatics_socket = await process_audio_speechmatics(
@@ -1102,7 +1122,7 @@ async def _listen(
     elif codec == 'lc3':
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
-    async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
+    async def receive_data(dg_socket1, dg_socket2, elevenlabs_socket1, elevenlabs_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
         nonlocal realtime_photo_buffers, speech_profile_processed, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
 
@@ -1159,6 +1179,18 @@ async def _listen(
                                 session_id,
                             )
                             continue
+
+                    if elevenlabs_socket1 is not None:
+                        elapsed_seconds = time.time() - timer_start
+                        if elapsed_seconds > speech_profile_duration or not elevenlabs_socket2:
+                            await elevenlabs_socket1.send(data)
+                            if elevenlabs_socket2:
+                                print('Killing elevenlabs_socket2', uid, session_id)
+                                await elevenlabs_socket2.close()
+                                elevenlabs_socket2 = None
+                                speech_profile_processed = True
+                        else:
+                            await elevenlabs_socket2.send(data)
 
                     if soniox_socket is not None:
                         elapsed_seconds = time.time() - timer_start
@@ -1262,7 +1294,7 @@ async def _listen(
 
         # Tasks
         data_process_task = asyncio.create_task(
-            receive_data(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
+            receive_data(deepgram_socket, deepgram_socket2, elevenlabs_socket, elevenlabs_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
@@ -1295,6 +1327,10 @@ async def _listen(
                 deepgram_socket.finish()
             if deepgram_socket2:
                 deepgram_socket2.finish()
+            if elevenlabs_socket:
+                await elevenlabs_socket.close()
+            if elevenlabs_socket2:
+                await elevenlabs_socket2.close()
             if soniox_socket:
                 await soniox_socket.close()
             if soniox_socket2:
