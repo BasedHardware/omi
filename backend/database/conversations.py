@@ -744,9 +744,6 @@ def merge_conversations(uid: str, conversation_ids: List[str]) -> Tuple[Optional
     # Sort conversations by created_at timestamp
     conversations.sort(key=lambda c: c['created_at'])
 
-    # Sort conversations by created_at timestamp
-    conversations.sort(key=lambda c: c['created_at'])
-
     # Validate time gap between conversations
     for i in range(len(conversations) - 1):
         current_end = conversations[i].get('finished_at') or conversations[i]['created_at']
