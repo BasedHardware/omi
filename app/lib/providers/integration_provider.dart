@@ -9,37 +9,17 @@ class IntegrationProvider extends ChangeNotifier {
 
   Future<void> loadFromBackend() async {
     try {
-      // Check Google Calendar connection
-      final googleCalendarResponse = await getIntegration('google_calendar');
-      if (googleCalendarResponse != null) {
-        _integrations['google_calendar'] = googleCalendarResponse.connected;
-      } else {
-        _integrations['google_calendar'] = false;
-      }
+      final responses = await Future.wait([
+        getIntegration('google_calendar'),
+        getIntegration('whoop'),
+        getIntegration('notion'),
+        getIntegration('twitter'),
+      ]);
 
-      // Check Whoop connection
-      final whoopResponse = await getIntegration('whoop');
-      if (whoopResponse != null) {
-        _integrations['whoop'] = whoopResponse.connected;
-      } else {
-        _integrations['whoop'] = false;
-      }
-
-      // Check Notion connection
-      final notionResponse = await getIntegration('notion');
-      if (notionResponse != null) {
-        _integrations['notion'] = notionResponse.connected;
-      } else {
-        _integrations['notion'] = false;
-      }
-
-      // Check Twitter connection
-      final twitterResponse = await getIntegration('twitter');
-      if (twitterResponse != null) {
-        _integrations['twitter'] = twitterResponse.connected;
-      } else {
-        _integrations['twitter'] = false;
-      }
+      _integrations['google_calendar'] = responses[0]?.connected ?? false;
+      _integrations['whoop'] = responses[1]?.connected ?? false;
+      _integrations['notion'] = responses[2]?.connected ?? false;
+      _integrations['twitter'] = responses[3]?.connected ?? false;
 
       notifyListeners();
     } catch (e) {
