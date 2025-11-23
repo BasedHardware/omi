@@ -1,6 +1,15 @@
 import Cocoa
 import QuartzCore
 
+// MARK: - Nub State
+
+enum NubState {
+    case upcomingMeeting(title: String, minutesUntil: Int, platform: String)
+    case meetingStarted(title: String, platform: String)
+    case microphoneActive(platform: String)
+    case recording(title: String?, platform: String)
+}
+
 class NubWindow: NSPanel {
 
     // MARK: - Constants
@@ -9,7 +18,7 @@ class NubWindow: NSPanel {
     static let PADDING: CGFloat = 16
     static let BUTTON_WIDTH: CGFloat = 140
     static let AUTO_DISMISS_DURATION: TimeInterval = 15.0
-    
+
     // Offset for the main pill content to allow close button to hang off the left
     static let CONTENT_X_OFFSET: CGFloat = 20.0
 
@@ -27,6 +36,8 @@ class NubWindow: NSPanel {
     private var progressUpdateTimer: Timer?
     private var startTime: Date?
     private var pausedElapsedTime: TimeInterval = 0
+    private var currentState: NubState?
+    private var snoozeButton: NSButton?
 
     // MARK: - Initialization
 
@@ -384,11 +395,97 @@ class NubWindow: NSPanel {
     }
     
     // MARK: - Public Update Methods
-    
+
     func updateMeetingApp(_ appName: String) {
         self.meetingApp = appName
         DispatchQueue.main.async { [weak self] in
             self?.appLabel.stringValue = appName
+        }
+    }
+
+    /// Update nub with new state (calendar or mic-based)
+    func updateState(_ state: NubState) {
+        self.currentState = state
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            switch state {
+            case .upcomingMeeting(let title, let minutesUntil, let platform):
+                // Update for upcoming meeting (calendar-based)
+                self.titleLabel.stringValue = truncateTitle(title, maxLength: 30)
+                self.appLabel.stringValue = "in \(minutesUntil) min • \(platform)"
+                self.actionButton.title = "Prepare"
+                self.updateButtonAttributes(title: "Prepare")
+                self.updateIcon(for: platform, isUpcoming: true)
+
+            case .meetingStarted(let title, let platform):
+                // Update for meeting that just started (calendar-based)
+                self.titleLabel.stringValue = truncateTitle(title, maxLength: 30)
+                self.appLabel.stringValue = "started • \(platform)"
+                self.actionButton.title = "Join & Record"
+                self.updateButtonAttributes(title: "Join & Record")
+                self.updateIcon(for: platform, isUpcoming: false)
+
+            case .microphoneActive(let platform):
+                // Update for mic-only detection (existing behavior)
+                self.titleLabel.stringValue = "Meeting detected"
+                self.appLabel.stringValue = platform
+                self.actionButton.title = "Start Recording"
+                self.updateButtonAttributes(title: "Start Recording")
+                self.updateIcon(for: platform, isUpcoming: false)
+
+            case .recording(let title, let platform):
+                // Update for active recording (calendar + mic)
+                if let meetingTitle = title {
+                    self.titleLabel.stringValue = truncateTitle(meetingTitle, maxLength: 30)
+                } else {
+                    self.titleLabel.stringValue = "Recording"
+                }
+                self.appLabel.stringValue = platform
+                self.actionButton.title = "Stop Recording"
+                self.updateButtonAttributes(title: "Stop Recording")
+                self.updateIcon(for: platform, isUpcoming: false)
+            }
+        }
+    }
+
+    private func truncateTitle(_ title: String, maxLength: Int) -> String {
+        if title.count > maxLength {
+            return String(title.prefix(maxLength - 3)) + "..."
+        }
+        return title
+    }
+
+    private func updateButtonAttributes(title: String) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .paragraphStyle: paragraphStyle
+        ]
+        self.actionButton.attributedTitle = NSAttributedString(string: title, attributes: attributes)
+    }
+
+    private func updateIcon(for platform: String, isUpcoming: Bool) {
+        // For upcoming meetings, show clock icon
+        if isUpcoming {
+            let config = NSImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+            appIconView.image = NSImage(systemSymbolName: "clock.fill", accessibilityDescription: "Upcoming")?.withSymbolConfiguration(config)
+            appIconView.contentTintColor = .systemOrange
+            return
+        }
+
+        // Otherwise use Omi logo (existing behavior)
+        if let customIcon = NSImage(named: "app_launcher_icon") {
+            customIcon.size = NSSize(width: 32, height: 32)
+            appIconView.image = customIcon
+            appIconView.contentTintColor = .white
+        } else {
+            let config = NSImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+            appIconView.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Omi")?.withSymbolConfiguration(config)
+            appIconView.contentTintColor = .white
         }
     }
 }

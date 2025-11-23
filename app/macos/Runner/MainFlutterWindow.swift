@@ -30,6 +30,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     private var meetingDetectorChannel: FlutterMethodChannel!
     private var meetingDetectorEventChannel: FlutterEventChannel!
 
+    // Calendar monitoring
+    private var calendarMonitor: CalendarMonitor?
+    private var calendarChannel: FlutterMethodChannel!
+    private var calendarEventChannel: FlutterEventChannel!
+
 
     override func awakeFromNib() {
         let flutterViewController = FlutterViewController()
@@ -59,6 +64,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         meetingDetectorEventChannel = FlutterEventChannel(
             name: "com.omi/meeting_detector_events",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        // Setup calendar monitoring channels
+        calendarChannel = FlutterMethodChannel(
+            name: "com.omi/calendar",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        calendarEventChannel = FlutterEventChannel(
+            name: "com.omi/calendar/events",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
         // Configure the shared window manager
@@ -111,6 +125,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         // Setup meeting detection
         setupMeetingDetection()
+
+        // Setup calendar monitoring
+        setupCalendarMonitoring()
 
         floatingControlBarChannel.setMethodCallHandler { [weak self] (call, result) in
             guard let self = self else { return }
@@ -474,6 +491,85 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         }
     }
 
+    // MARK: - Calendar Monitoring Setup
+
+    private func setupCalendarMonitoring() {
+        // Initialize calendar monitor
+        calendarMonitor = CalendarMonitor()
+
+        // Configure event channel
+        calendarEventChannel.setStreamHandler(calendarMonitor)
+
+        // Setup method channel handler
+        calendarChannel.setMethodCallHandler { [weak self] (call, result) in
+            guard let self = self else { return }
+
+            switch call.method {
+            case "requestPermission":
+                self.calendarMonitor?.requestAccess { granted in
+                    if granted {
+                        result("authorized")
+                    } else {
+                        result("denied")
+                    }
+                }
+
+            case "checkPermissionStatus":
+                let isAuthorized = self.calendarMonitor?.checkAuthorizationStatus() ?? false
+                result(isAuthorized ? "authorized" : "denied")
+
+            case "startMonitoring":
+                self.calendarMonitor?.startMonitoring()
+                result(nil)
+
+            case "stopMonitoring":
+                self.calendarMonitor?.stopMonitoring()
+                result(nil)
+
+            case "getUpcomingMeetings":
+                let meetings = self.calendarMonitor?.getUpcomingMeetings() ?? []
+                result(meetings)
+                
+            case "getAvailableCalendars":
+                let calendars = self.calendarMonitor?.getAvailableCalendars() ?? []
+                result(calendars)
+                
+            case "updateCalendarSettings":
+                if let args = call.arguments as? [String: Any],
+                   let showEventsWithNoParticipants = args["showEventsWithNoParticipants"] as? Bool {
+                    self.calendarMonitor?.updateSettings(showEventsWithNoParticipants: showEventsWithNoParticipants)
+                    result(nil)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Settings required", details: nil))
+                }
+
+            case "snoozeMeeting":
+                if let args = call.arguments as? [String: Any],
+                   let eventId = args["eventId"] as? String,
+                   let minutes = args["minutes"] as? Int {
+                    let duration = TimeInterval(minutes * 60)
+                    self.calendarMonitor?.snoozeMeeting(eventId: eventId, duration: duration)
+                    result(nil)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Event ID and minutes required", details: nil))
+                }
+
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        // Start calendar monitoring after 10 seconds warmup
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+            guard let self = self else { return }
+            
+            // Only start monitoring if already authorized (user enabled it previously)
+            if self.calendarMonitor?.checkAuthorizationStatus() == true {
+                self.calendarMonitor?.startMonitoring()
+            }
+        }
+    }
+
     @objc private func handleNubStartRecording() {
 
         DispatchQueue.main.async { [weak self] in
@@ -513,7 +609,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                             duration: 0,
                             isInitialising: false
                         )
-                        print("MainFlutterWindow: Floating control bar shown and state updated")
                     }
 
                     // 3. Notify Flutter that recording started (will trigger UI update in Flutter)
