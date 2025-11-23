@@ -558,7 +558,7 @@ def get_integration(uid: str, app_key: str) -> Optional[dict]:
         Connection details or None if not found
     """
     user_ref = db.collection('users').document(uid)
-    integration_ref = user_ref.collection('calendar_integrations').document(app_key)
+    integration_ref = user_ref.collection('integrations').document(app_key)
     doc = integration_ref.get()
 
     if doc.exists:
@@ -576,7 +576,7 @@ def set_integration(uid: str, app_key: str, data: dict) -> None:
         data: Connection details to save
     """
     user_ref = db.collection('users').document(uid)
-    integration_ref = user_ref.collection('calendar_integrations').document(app_key)
+    integration_ref = user_ref.collection('integrations').document(app_key)
 
     # Add timestamp
     data['updated_at'] = datetime.now(timezone.utc)
@@ -598,7 +598,7 @@ def delete_integration(uid: str, app_key: str) -> bool:
         True if deleted, False if not found
     """
     user_ref = db.collection('users').document(uid)
-    integration_ref = user_ref.collection('calendar_integrations').document(app_key)
+    integration_ref = user_ref.collection('integrations').document(app_key)
 
     if not integration_ref.get().exists:
         return False

@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 import os
 import secrets
-import ast
+import json
 import base64
 from datetime import datetime, timedelta, timezone
 import httpx
@@ -120,7 +120,7 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
     redis_db.r.delete(state_key)
 
     try:
-        state_data = ast.literal_eval(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
+        state_data = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
         return state_data
     except Exception as e:
         print(f"Error parsing state data: {e}")
@@ -211,7 +211,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     try:
         state_key = f"oauth_state:{state_token}"
         state_data = {'uid': uid, 'app_key': app_key, 'created_at': datetime.now(timezone.utc).isoformat()}
-        redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, str(state_data))
+        redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, json.dumps(state_data))
     except Exception as e:
         print(f'ERROR: Failed to store OAuth state in Redis: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to initialize OAuth flow: {str(e)}")
