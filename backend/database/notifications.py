@@ -13,6 +13,7 @@ import asyncio
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
+from google.cloud.firestore import DELETE_FIELD
 from ._client import db
 
 
@@ -21,13 +22,47 @@ def save_token(uid: str, data: dict):
     Store token in subcollection with device key as document ID
     Structure: users/{uid}/fcm_tokens/{device_key}
     Also maintains time_zone in main user document for backward compatibility
+    Migrates legacy fcm_token to subcollection
     """
     device_key = data.get('device_key', 'unknown_default')
     token = data.get('fcm_token')
     time_zone = data.get('time_zone')
     
-    # Save to subcollection
-    db.collection('users').document(uid).collection('fcm_tokens').document(device_key).set({
+    user_ref = db.collection('users').document(uid)
+    
+    # Step 1: Migrate legacy token if exists
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        legacy_token = user_data.get('fcm_token')
+        
+        if legacy_token:
+            # Check if legacy token already exists in subcollection
+            existing_tokens = [doc.to_dict().get('token') for doc in user_ref.collection('fcm_tokens').stream()]
+            
+            if legacy_token not in existing_tokens:
+                # Migrate to unknown_default
+                user_ref.collection('fcm_tokens').document('unknown_default').set({
+                    'token': legacy_token,
+                    'time_zone': user_data.get('time_zone'),
+                    'created_at': firestore.SERVER_TIMESTAMP
+                }, merge=True)
+            
+            # Remove legacy field
+            user_ref.update({'fcm_token': DELETE_FIELD})
+    
+    # Step 2: If new token has proper device_key, replace unknown_default
+    if device_key != 'unknown_default':
+        unknown_ref = user_ref.collection('fcm_tokens').document('unknown_default')
+        unknown_doc = unknown_ref.get()
+        if unknown_doc.exists:
+            unknown_token = unknown_doc.to_dict().get('token')
+            # Only delete if it's the same token being migrated to proper device_key
+            if unknown_token == token:
+                unknown_ref.delete()
+    
+    # Step 3: Save new token to subcollection
+    user_ref.collection('fcm_tokens').document(device_key).set({
         'token': token,
         'time_zone': time_zone,
         'created_at': firestore.SERVER_TIMESTAMP
@@ -35,7 +70,7 @@ def save_token(uid: str, data: dict):
     
     # Also update time_zone in main user document (for backward compatibility and efficient queries)
     if time_zone:
-        db.collection('users').document(uid).set({
+        user_ref.set({
             'time_zone': time_zone
         }, merge=True)
 
