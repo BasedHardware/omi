@@ -2,10 +2,12 @@
 Pytest configuration for integration tests.
 """
 
-import pytest
-import sys
 import os
+import sys
+
 import firebase_admin
+import pytest
+from dotenv import load_dotenv
 from firebase_admin import credentials
 
 # Add project root to path (go up from integration -> tests -> backend -> root)
@@ -17,37 +19,30 @@ backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+env_file = os.path.join(backend_dir, '.env')
+if os.path.exists(env_file):
+    load_dotenv(env_file)
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = backend_dir + "/" + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+
 
 @pytest.fixture(scope="session", autouse=True)
 def initialize_firebase():
     """Initialize Firebase Admin SDK before running tests"""
     try:
-        # Check if already initialized
-        firebase_admin.get_app()
-        print("Firebase already initialized")
-    except ValueError:
-        # Initialize Firebase using default credentials
-        # This expects GOOGLE_APPLICATION_CREDENTIALS env var to be set
-        try:
-            cred = credentials.ApplicationDefault()
-            firebase_admin.initialize_app(cred)
-            print("✅ Firebase initialized successfully")
-        except Exception as e:
-            print(f"❌ Failed to initialize Firebase: {e}")
-            print("Make sure GOOGLE_APPLICATION_CREDENTIALS is set")
-            raise
-    
+        cred = credentials.ApplicationDefault()
+        firebase_admin.initialize_app(cred)
+        print("✅ Firebase initialized successfully")
+    except Exception as e:
+        print(f"❌ Failed to initialize Firebase: {e}")
+        print("Make sure GOOGLE_APPLICATION_CREDENTIALS is set")
+        raise
+
     yield
-    
-    # Cleanup (optional)
-    # firebase_admin.delete_app(firebase_admin.get_app())
 
 
 def pytest_configure(config):
     """Configure pytest with custom markers"""
-    config.addinivalue_line(
-        "markers", "integration: mark test as an integration test"
-    )
+    config.addinivalue_line("markers", "integration: mark test as an integration test")
 
 
 def pytest_collection_modifyitems(config, items):
