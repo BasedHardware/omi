@@ -369,9 +369,24 @@ class SharedPreferencesUtil {
 
   String get calendarId => getString('calendarId') ?? '';
 
-  set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
-
   String get calendarType => getString('calendarType2') ?? 'manual';
+
+  set calendarIntegrationEnabled(bool value) => saveBool('calendarIntegrationEnabled', value);
+
+  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled') ?? false;
+
+  // Calendar UI Settings
+  set showEventsWithNoParticipants(bool value) => saveBool('showEventsWithNoParticipants', value);
+
+  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants') ?? false;
+
+  set showMeetingsInMenuBar(bool value) => saveBool('showMeetingsInMenuBar', value);
+
+  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar') ?? true;
+
+  set enabledCalendarIds(List<String> value) => saveStringList('enabledCalendarIds', value);
+
+  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds') ?? [];
 
   //--------------------------------- Auth ------------------------------------//
 
