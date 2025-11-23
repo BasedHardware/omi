@@ -191,7 +191,10 @@ class BleTransport extends DeviceTransport {
     final task = _writeQueue.then((_) async {
       int retries = 0;
       while (true) {
-        if (!await isConnected()) throw Exception("Device disconnected");
+        if (_state != DeviceTransportState.connected || !_bleDevice.isConnected) {
+          debugPrint('Skipping write: Device is disconnected');
+          return;
+        }
 
         try {
           await characteristic
@@ -200,12 +203,28 @@ class BleTransport extends DeviceTransport {
                 withoutResponse: characteristic.properties.writeWithoutResponse,
                 allowLongWrite: true,
               )
-              .timeout(const Duration(seconds: 3));
+              .timeout(const Duration(seconds: 2));
           return;
         } catch (e) {
-          if (retries >= 3 || !_isRetryable(e)) rethrow;
+          if (_isDisconnectionError(e)) {
+            debugPrint('Device Disconnected');
+            _updateState(DeviceTransportState.disconnected);
+            return;
+          }
 
-          await Future.delayed(Duration(milliseconds: 120 * (1 << retries)));
+          if (!_bleDevice.isConnected) {
+            _updateState(DeviceTransportState.disconnected);
+            return;
+          }
+
+          final retryable = _isRetryable(e);
+          if (!retryable || retries >= 3) {
+            debugPrint('BLE write failed (stop retry) $serviceUuid:$characteristicUuid → $e');
+            rethrow;
+          }
+
+          final delay = 80 * (1 << retries);
+          await Future.delayed(Duration(milliseconds: delay));
           retries++;
         }
       }
@@ -229,8 +248,24 @@ class BleTransport extends DeviceTransport {
     );
   }
 
+  bool _isDisconnectionError(Object e) {
+    final msg = e.toString().toLowerCase();
+    final is133 = RegExp(r'\b133\b').hasMatch(msg);
+
+    return is133 ||
+        msg.contains("gatt_error") ||
+        msg.contains("unknown_ble_error") ||
+        msg.contains("device is disconnected") ||
+        msg.contains("the device is disconnected");
+  }
+
   bool _isRetryable(Object e) {
-    if (e is FlutterBluePlusException && e.code == 201) return true;
+    if (e is FlutterBluePlusException) {
+      final desc = (e.description ?? "").toLowerCase();
+      if (e.code == 201 || desc.contains("busy")) return true;
+      return false;
+    }
+
     final msg = e.toString().toLowerCase();
     return msg.contains("busy") || RegExp(r'\b201\b').hasMatch(msg);
   }
