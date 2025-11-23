@@ -236,101 +236,40 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     if (confirmed == true) {
       if (app == IntegrationApp.googleCalendar) {
-        final googleCalendarService = GoogleCalendarService();
-        final success = await googleCalendarService.disconnect();
-        if (success) {
-          await context.read<IntegrationProvider>().deleteConnection(app.key);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Disconnected from ${app.displayName}'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Failed to disconnect'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
+        await _handleDisconnect(app, GoogleCalendarService().disconnect);
       } else if (app == IntegrationApp.whoop) {
-        final whoopService = WhoopService();
-        final success = await whoopService.disconnect();
-        if (success) {
-          await context.read<IntegrationProvider>().deleteConnection(app.key);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Disconnected from ${app.displayName}'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Failed to disconnect'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
+        await _handleDisconnect(app, WhoopService().disconnect);
       } else if (app == IntegrationApp.notion) {
-        final notionService = NotionService();
-        final success = await notionService.disconnect();
-        if (success) {
-          await context.read<IntegrationProvider>().deleteConnection(app.key);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Disconnected from ${app.displayName}'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Failed to disconnect'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
+        await _handleDisconnect(app, NotionService().disconnect);
       } else if (app == IntegrationApp.twitter) {
-        final twitterService = TwitterService();
-        final success = await twitterService.disconnect();
-        if (success) {
-          await context.read<IntegrationProvider>().deleteConnection(app.key);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Disconnected from ${app.displayName}'),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Failed to disconnect'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
+        await _handleDisconnect(app, TwitterService().disconnect);
+      }
+    }
+  }
+
+  Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
+    final success = await disconnect();
+    if (success) {
+      if (mounted) {
+        await context.read<IntegrationProvider>().deleteConnection(app.key);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Disconnected from ${app.displayName}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to disconnect'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
