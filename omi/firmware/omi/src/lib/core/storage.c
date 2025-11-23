@@ -302,8 +302,7 @@ void storage_write(void)
                 } else {
                     LOG_PRINTK("done. attempting to download more files\n");
                     uint8_t stop_result[1] = {100};
-                    // TBD: why is this sleep needed?
-                    k_msleep(500);
+
                     int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
                     k_msleep(10);
                 }

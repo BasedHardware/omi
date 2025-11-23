@@ -66,6 +66,9 @@ static int sd_enable_power(bool enable)
 
 static int sd_unmount()
 {
+    // Ensure files are closed before unmounting
+    fs_close(&fil_data);
+    fs_close(&fil_info);
     int ret;
     ret = fs_unmount(&mp);
     if (ret) {
