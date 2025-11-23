@@ -140,145 +140,61 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       return;
     }
 
-    // Check if Google Calendar requires authentication
     if (app == IntegrationApp.googleCalendar) {
-      final googleCalendarService = GoogleCalendarService();
-      if (!googleCalendarService.isAuthenticated) {
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
-          final success = await googleCalendarService.authenticate();
-          if (success) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
-                ),
-              );
-            }
-            // Refresh connection status
-            await _loadFromBackend();
-            debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Google authentication'),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-            }
-          }
-        }
-        return;
-      }
+      final service = GoogleCalendarService();
+      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      if (handled) return;
     }
 
-    // Check if Whoop requires authentication
     if (app == IntegrationApp.whoop) {
-      final whoopService = WhoopService();
-      if (!whoopService.isAuthenticated) {
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
-          final success = await whoopService.authenticate();
-          if (success) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
-                ),
-              );
-            }
-            // Refresh connection status
-            await _loadFromBackend();
-            debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Whoop authentication'),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-            }
-          }
-        }
-        return;
-      }
+      final service = WhoopService();
+      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      if (handled) return;
     }
 
-    // Check if Notion requires authentication
     if (app == IntegrationApp.notion) {
-      final notionService = NotionService();
-      if (!notionService.isAuthenticated) {
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
-          final success = await notionService.authenticate();
-          if (success) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
-                ),
-              );
-            }
-            // Refresh connection status
-            await _loadFromBackend();
-            debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Notion authentication'),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-            }
-          }
-        }
-        return;
-      }
+      final service = NotionService();
+      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      if (handled) return;
     }
 
-    // Check if Twitter requires authentication
     if (app == IntegrationApp.twitter) {
-      final twitterService = TwitterService();
-      if (!twitterService.isAuthenticated) {
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
-          final success = await twitterService.authenticate();
-          if (success) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
-                ),
-              );
-            }
-            // Refresh connection status
-            await _loadFromBackend();
-            debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Twitter authentication'),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-            }
-          }
+      final service = TwitterService();
+      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      if (handled) return;
+    }
+  }
+
+  Future<bool> _handleAuthFlow(IntegrationApp app, bool isAuthenticated, Future<bool> Function() authenticate) async {
+    if (isAuthenticated) return false;
+
+    final shouldAuth = await _showAuthDialog(app);
+    if (shouldAuth == true) {
+      final success = await authenticate();
+      if (success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please complete authentication in your browser. Once done, return to the app.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
         }
-        return;
+        await _loadFromBackend();
+        debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to start ${app.displayName} authentication'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
+    return true;
   }
 
   Future<void> _disconnectApp(IntegrationApp app) async {
@@ -651,10 +567,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                       size: 20,
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
+                    const Expanded(
                       child: Text(
                         'Connect your apps to view data and metrics in chat.',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Color(0xFF8E8E93),
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
