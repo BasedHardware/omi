@@ -1,3 +1,12 @@
+"""
+Notifications database module
+
+DEPRECATION NOTICE (Nov 23, 2025):
+- The 'fcm_token' field is DEPRECATED and will be removed after Feb 23, 2026
+- Use 'fcm_tokens' dict structure instead for multi-device support
+- Backward compatibility maintained until Feb 23, 2026
+"""
+
 import asyncio
 
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -14,14 +23,33 @@ def save_token(uid: str, data: dict):
         'android_xyz456': 'token_2'
       }
     }
+    
+    NOTE: Legacy 'fcm_token' field will be DEPRECATED after Feb 23, 2026
     """
-    device_key = data.get('device_key', 'unknown')
+    device_key = data.get('device_key', 'unknown_default')
     token = data.get('fcm_token')
     
-    db.collection('users').document(uid).set({
+    # Migrate legacy token if exists
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    user_data = user_doc.to_dict() if user_doc.exists else {}
+    
+    updates = {
         f'fcm_tokens.{device_key}': token,
         'time_zone': data.get('time_zone'),
-    }, merge=True)
+    }
+    
+    # Migrate old token value to new structure before deleting
+    if 'fcm_token' in user_data and user_data['fcm_token']:
+        old_token = user_data['fcm_token']
+        # Only migrate if it's not already in the new structure
+        existing_tokens = user_data.get('fcm_tokens', {}).values()
+        if old_token not in existing_tokens:
+            updates['fcm_tokens.unknown_default'] = old_token
+        # Now remove the old field
+        updates['fcm_token'] = DELETE_FIELD
+    
+    user_ref.set(updates, merge=True)
 
 
 def get_user_time_zone(uid: str):
@@ -34,16 +62,28 @@ def get_user_time_zone(uid: str):
 
 
 def get_all_tokens(uid: str) -> list[str]:
-    """Get all device tokens for a user"""
+    """
+    Get all device tokens for a user
+    
+    NOTE: Support for legacy 'fcm_token' field will be REMOVED after Feb 23, 2026
+    """
     user_ref = db.collection('users').document(uid).get()
     if not user_ref.exists:
         return []
     
     user_data = user_ref.to_dict()
-    tokens_dict = user_data.get('fcm_tokens', {})
+    tokens = []
     
-    # Return list of all tokens
-    return [token for token in tokens_dict.values() if token]
+    # Get new format tokens
+    tokens_dict = user_data.get('fcm_tokens', {})
+    tokens.extend([token for token in tokens_dict.values() if token])
+    
+    # Backward compatibility: Get legacy token if exists (DEPRECATED - remove after Feb 23, 2026)
+    legacy_token = user_data.get('fcm_token')
+    if legacy_token and legacy_token not in tokens:
+        tokens.append(legacy_token)
+    
+    return tokens
 
 
 def remove_token(token: str):
@@ -78,6 +118,9 @@ async def get_users_id_in_timezones(timezones: list[str]):
 
 
 async def get_users_in_timezones(timezones: list[str], filter: str):
+    """
+    NOTE: Support for legacy 'fcm_token' field will be REMOVED after Feb 23, 2026
+    """
     users = []
     users_ref = db.collection('users')
 
@@ -90,14 +133,29 @@ async def get_users_in_timezones(timezones: list[str], filter: str):
             try:
                 query = users_ref.where(filter=FieldFilter('time_zone', 'in', chunk))
                 for doc in query.stream():
-                    if 'fcm_token' not in doc.to_dict():
+                    doc_data = doc.to_dict()
+                    
+                    # Check both new and old format (backward compatibility until Feb 23, 2026)
+                    if 'fcm_tokens' not in doc_data and 'fcm_token' not in doc_data:
                         continue
+                    
                     if filter == 'fcm_token':
-                        token = doc.get('fcm_token')
+                        # Get all tokens (new + legacy)
+                        tokens = []
+                        if 'fcm_tokens' in doc_data:
+                            tokens.extend([t for t in doc_data['fcm_tokens'].values() if t])
+                        if 'fcm_token' in doc_data and doc_data['fcm_token'] not in tokens:
+                            tokens.append(doc_data['fcm_token'])
+                        chunk_users.extend(tokens)
                     else:
-                        token = doc.id, doc.get('fcm_token')
-                    if token:
-                        chunk_users.append(token)
+                        # Return user ID with all tokens
+                        tokens = []
+                        if 'fcm_tokens' in doc_data:
+                            tokens.extend([t for t in doc_data['fcm_tokens'].values() if t])
+                        if 'fcm_token' in doc_data and doc_data['fcm_token'] not in tokens:
+                            tokens.append(doc_data['fcm_token'])
+                        if tokens:
+                            chunk_users.append((doc.id, tokens))
 
             except Exception as e:
                 print(f"Error querying chunk {chunk}: {e}")
