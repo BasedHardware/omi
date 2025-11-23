@@ -155,7 +155,7 @@ static int sd_mount()
 }
 
 #define SD_WORKER_STACK_SIZE 4096
-#define SD_WORKER_PRIORITY 6
+#define SD_WORKER_PRIORITY 7
 K_THREAD_STACK_DEFINE(sd_worker_stack, SD_WORKER_STACK_SIZE);
 static struct k_thread sd_worker_thread_data;
 static k_tid_t sd_worker_tid = NULL;
