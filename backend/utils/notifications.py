@@ -180,8 +180,6 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
                     if error_code in PERMANENT_FAILURE_CODES:
                         invalid_tokens.append(batch_users[idx])
                         print(f"Invalid token found - Error: {error_code}")
-                    elif error_code in TEMPORARY_FAILURE_CODES:
-                        print(f"Temporary failure (keeping token) - Error: {error_code}")
 
             return response, invalid_tokens
 
@@ -195,15 +193,14 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
 
         results = await asyncio.gather(*tasks)
 
-        # Remove all invalid tokens
-        all_invalid_tokens = []
-        for response, invalid_tokens in results:
-            all_invalid_tokens.extend(invalid_tokens)
+        # Remove invalid tokens
+        invalid_tokens = []
+        for response, batch_invalid_tokens in results:
+            invalid_tokens.extend(batch_invalid_tokens)
 
-        if all_invalid_tokens:
-            print(f"Removing {len(all_invalid_tokens)} invalid tokens")
-            for token in all_invalid_tokens:
-                notification_db.remove_invalid_token(token)
+        if invalid_tokens:
+            print(f"Removing {len(invalid_tokens)} invalid tokens")
+            notification_db.remove_bulk_tokens(invalid_tokens)
 
     except Exception as e:
         print("Error sending message:", e)
