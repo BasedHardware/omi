@@ -32,7 +32,7 @@ def _handle_send_error(e: Exception, token: str) -> None:
         notification_db.remove_invalid_token(token)
         print(f'Removed invalid token - Error: {error_code}')
     else:
-        print(f'FCM send failed: {e}')
+        print(f'FCM send failed: {e}({error_code})')
 
 
 def send_notification(user_id: str, title: str, body: str, data: dict = None):
