@@ -6,7 +6,22 @@ from ._client import db
 
 
 def save_token(uid: str, data: dict):
-    db.collection('users').document(uid).set(data, merge=True)
+    """
+    Store token with device key (e.g., ios_abc123, android_xyz456)
+    Structure: {
+      'fcm_tokens': {
+        'ios_abc123': 'token_1',
+        'android_xyz456': 'token_2'
+      }
+    }
+    """
+    device_key = data.get('device_key', 'unknown')
+    token = data.get('fcm_token')
+    
+    db.collection('users').document(uid).set({
+        f'fcm_tokens.{device_key}': token,
+        'time_zone': data.get('time_zone'),
+    }, merge=True)
 
 
 def get_user_time_zone(uid: str):
@@ -18,28 +33,40 @@ def get_user_time_zone(uid: str):
     return None
 
 
-def get_token_only(uid: str):
-    user_ref = db.collection('users').document(uid)
-    user_ref = user_ref.get()
-    if user_ref.exists:
-        user_ref = user_ref.to_dict()
-        return user_ref.get('fcm_token')
-    return None
+def get_all_tokens(uid: str) -> list[str]:
+    """Get all device tokens for a user"""
+    user_ref = db.collection('users').document(uid).get()
+    if not user_ref.exists:
+        return []
+    
+    user_data = user_ref.to_dict()
+    tokens_dict = user_data.get('fcm_tokens', {})
+    
+    # Return list of all tokens
+    return [token for token in tokens_dict.values() if token]
 
 
 def remove_token(token: str):
-    token = db.collection('users').where(filter=FieldFilter('fcm_token', '==', token)).get()
-    for doc in token:
-        doc.reference.update({'fcm_token': DELETE_FIELD, 'time_zone': DELETE_FIELD})
+    """Deprecated: Use remove_invalid_token instead"""
+    remove_invalid_token(token)
 
 
-def get_token(uid: str):
-    user_ref = db.collection('users').document(uid)
-    user_ref = user_ref.get()
-    if user_ref.exists:
-        user_ref = user_ref.to_dict()
-        return user_ref.get('fcm_token'), user_ref.get('time_zone')
-    return None
+def remove_invalid_token(token: str):
+    """Remove invalid token from any user's device list"""
+    users_ref = db.collection('users')
+    
+    # Stream through all users to find and remove the invalid token
+    for user_doc in users_ref.stream():
+        user_data = user_doc.to_dict()
+        tokens_dict = user_data.get('fcm_tokens', {})
+        
+        # Find and remove the invalid token
+        for device_key, stored_token in tokens_dict.items():
+            if stored_token == token:
+                user_doc.reference.update({
+                    f'fcm_tokens.{device_key}': DELETE_FIELD
+                })
+                return
 
 
 async def get_users_token_in_timezones(timezones: list[str]):

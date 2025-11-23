@@ -147,9 +147,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
     print("trigger_realtime_integrations", uid)
     """REALTIME STREAMING"""
-    # TODO: don't retrieve token before knowing if to notify
-    token = notification_db.get_token_only(uid)
-    _trigger_realtime_integrations(uid, token, segments, conversation_id)
+    _trigger_realtime_integrations(uid, segments, conversation_id)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -199,7 +197,7 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
-def _process_proactive_notification(uid: str, token: str, app: App, data):
+def _process_proactive_notification(uid: str, app: App, data):
     if not app.has_capability("proactive_notification") or not data:
         print(f"App {app.id} is not proactive_notification or data invalid", uid)
         return None
@@ -215,7 +213,7 @@ def _process_proactive_notification(uid: str, token: str, app: App, data):
     prompt = data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
-            token,
+            uid,
             app.name,
             app.id,
             f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.",
@@ -246,7 +244,7 @@ def _process_proactive_notification(uid: str, token: str, app: App, data):
         return None
 
     # send notification
-    send_app_notification(token, app.name, app.id, message)
+    send_app_notification(uid, app.name, app.id, message)
 
     # set rate
     _set_proactive_noti_sent_at(uid, app)
@@ -284,7 +282,7 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     return results
 
 
-def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], conversation_id: str | None) -> dict:
+def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
@@ -332,14 +330,14 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
             message = response_data.get('message', '')
             # print('Plugin', plugin.id, 'response message:', message)
             if message and len(message) > 5:
-                send_app_notification(token, app.name, app.id, message)
+                send_app_notification(uid, app.name, app.id, message)
                 results[app.id] = message
 
             # proactive_notification
             noti = response_data.get('notification', None)
             # print('Plugin', plugin.id, 'response notification:', noti)
             if app.has_capability("proactive_notification"):
-                message = _process_proactive_notification(uid, token, app, noti)
+                message = _process_proactive_notification(uid, app, noti)
                 if message:
                     results[app.id] = message
 
@@ -361,7 +359,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
     return messages
 
 
-def send_app_notification(token: str, app_name: str, app_id: str, message: str):
+def send_app_notification(user_id: str, app_name: str, app_id: str, message: str):
     ai_message = NotificationMessage(
         text=message,
         app_id=app_id,
@@ -371,4 +369,4 @@ def send_app_notification(token: str, app_name: str, app_id: str, message: str):
         navigate_to=f'/chat/{app_id}',
     )
 
-    send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
