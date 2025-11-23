@@ -15,31 +15,47 @@ from .llm.notifications import (
     generate_silent_user_notification,
 )
 
+# Error codes that indicate a token is permanently invalid
+PERMANENT_FAILURE_CODES = frozenset(
+    [
+        'UNREGISTERED',  # App uninstalled
+        'INVALID_REGISTRATION_TOKEN',  # Token format invalid
+    ]
+)
+
+
+def _handle_send_error(e: Exception, token: str) -> None:
+    """Handle FCM send errors and remove permanently invalid tokens."""
+    error_code = getattr(e, 'code', None)
+
+    if error_code in PERMANENT_FAILURE_CODES:
+        notification_db.remove_invalid_token(token)
+        print(f'Removed invalid token - Error: {error_code}')
+    else:
+        print(f'FCM send failed: {e}')
+
 
 def send_notification(user_id: str, title: str, body: str, data: dict = None):
     """Send notification to all user's devices"""
     print(f'send_notification to user {user_id}')
     tokens = notification_db.get_all_tokens(user_id)
-    
+
     if not tokens:
         print(f"No tokens found for user {user_id}")
         return
-    
+
     notification = messaging.Notification(title=title, body=body)
-    
+
     for token in tokens:
         message = messaging.Message(notification=notification, token=token)
         if data:
             message.data = data
-        
+
         try:
             response = messaging.send(message)
             print(f'send_notification success to device: {response}')
         except Exception as e:
-            error_message = str(e)
-            if "Requested entity was not found" in error_message:
-                notification_db.remove_invalid_token(token)
-            print(f'send_notification failed for token: {e}')
+            _handle_send_error(e, token)
 
 
 async def send_subscription_paid_personalized_notification(user_id: str, data: dict = None):
@@ -153,7 +169,21 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
                 messaging.Message(notification=messaging.Notification(title=title, body=body), token=token)
                 for token in batch_users
             ]
-            return messaging.send_each(messages)
+            response = messaging.send_each(messages)
+
+            # Only remove tokens that are definitively invalid (not temporary network issues)
+            invalid_tokens = []
+            for idx, result in enumerate(response.responses):
+                if not result.success and result.exception:
+                    error_code = getattr(result.exception, 'code', None)
+
+                    if error_code in PERMANENT_FAILURE_CODES:
+                        invalid_tokens.append(batch_users[idx])
+                        print(f"Invalid token found - Error: {error_code}")
+                    elif error_code in TEMPORARY_FAILURE_CODES:
+                        print(f"Temporary failure (keeping token) - Error: {error_code}")
+
+            return response, invalid_tokens
 
         tasks = []
         for i in range(num_batches):
@@ -163,7 +193,17 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
             task = asyncio.to_thread(send_batch, batch_users)
             tasks.append(task)
 
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
+
+        # Remove all invalid tokens
+        all_invalid_tokens = []
+        for response, invalid_tokens in results:
+            all_invalid_tokens.extend(invalid_tokens)
+
+        if all_invalid_tokens:
+            print(f"Removing {len(all_invalid_tokens)} invalid tokens")
+            for token in all_invalid_tokens:
+                notification_db.remove_invalid_token(token)
 
     except Exception as e:
         print("Error sending message:", e)
@@ -239,10 +279,7 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
             response = messaging.send(message)
             print(f'Action item data message sent to device: {response}')
         except Exception as e:
-            error_message = str(e)
-            if "Requested entity was not found" in error_message:
-                notification_db.remove_invalid_token(token)
-            print(f'Failed to send action item data message: {e}')
+            _handle_send_error(e, token)
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):
@@ -282,10 +319,7 @@ def send_action_item_update_message(user_id: str, action_item_id: str, descripti
             response = messaging.send(message)
             print(f'Action item update message sent to device: {response}')
         except Exception as e:
-            error_message = str(e)
-            if "Requested entity was not found" in error_message:
-                notification_db.remove_invalid_token(token)
-            print(f'Failed to send action item update message: {e}')
+            _handle_send_error(e, token)
 
 
 def send_action_item_deletion_message(user_id: str, action_item_id: str):
@@ -323,10 +357,7 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
             response = messaging.send(message)
             print(f'Action item deletion message sent to device: {response}')
         except Exception as e:
-            error_message = str(e)
-            if "Requested entity was not found" in error_message:
-                notification_db.remove_invalid_token(token)
-            print(f'Failed to send action item deletion message: {e}')
+            _handle_send_error(e, token)
 
 
 def send_action_item_created_notification(user_id: str, action_item_description: str):
