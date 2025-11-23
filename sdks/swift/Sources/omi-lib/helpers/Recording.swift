@@ -102,20 +102,20 @@ class Recording: Identifiable {
         // Create a new file URL with the new filename
         let newFileURL = self.getDocumentsDirectory().appendingPathComponent(newFilename)
         
-        do {
-            // Copy the contents from the current file URL to the new file URL
-            try FileManager.default.copyItem(at: fileURL, to: newFileURL)
-            
-            // Update the filename property to the new filename
-            self.filename = newFilename
-            
-            // Update the recordingFile with the new file
-            if let audioFormat = audioFormat {
+        // Update the filename property to the new filename
+        self.filename = newFilename
+        
+        // Close current file (ensures all data is flushed)
+        self.recordingFile = nil
+        
+        // Create new recording file WITHOUT copying old one
+        // The old file URL is already captured by the caller before this is called
+        if let audioFormat = audioFormat {
+            do {
                 recordingFile = try AVAudioFile(forWriting: newFileURL, settings: audioFormat.settings, commonFormat: .pcmFormatInt16, interleaved: false)
+            } catch {
+                print("Failed to create new recording file: \(error.localizedDescription)")
             }
-            
-        } catch {
-            print("Failed to update file URL: \(error.localizedDescription)")
         }
     }
     

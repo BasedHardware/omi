@@ -113,7 +113,8 @@ class FriendManager {
     func getRawAudio(device: Friend, completion: @escaping (URL?) -> Void) {
 //        transcriptCompletion = completion
         audioFileTimer?.invalidate()
-        audioFileTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true, block: { timer in
+        // Reduced from 8.0 to 0.2 seconds for real-time streaming (200ms chunks)
+        audioFileTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true, block: { timer in
             if let recording = device.recording {
                 let recordingFileURL = recording.fileURL
                 device.resetRecording()
