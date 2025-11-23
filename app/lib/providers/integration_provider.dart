@@ -3,7 +3,7 @@ import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 
 class IntegrationProvider extends ChangeNotifier {
-  Map<String, bool> _integrations = {};
+  final Map<String, bool> _integrations = {};
 
   Map<String, bool> get integrations => _integrations;
 
