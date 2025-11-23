@@ -447,6 +447,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     private func setupMeetingStateObserver() {
         NubManager.shared.setMainWindow(self)
 
+        // Provide callback to check if recording is active
+        NubManager.shared.isRecordingActive = { [weak self] in
+            return self?.audioManager.isRecording() ?? false
+        }
+
         // Listen for nub clicks to start recording
         NotificationCenter.default.addObserver(
             self,
@@ -473,20 +478,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Handle showing nub - ONLY if not already recording
         meetingDetector?.onShowNub = { [weak self] appName in
             guard let self = self else { return }
-            
-            // Check if we are already recording
             if self.audioManager.isRecording() {
-                print("MainFlutterWindow: NOT showing nub for \(appName) because recording is already active")
                 return
             }
-            
-            print("MainFlutterWindow: Showing nub for \(appName)")
+
             NubManager.shared.showNub(for: appName)
         }
         
         // Handle hiding nub
         meetingDetector?.onHideNub = {
-            print("MainFlutterWindow: Hiding nub")
             NubManager.shared.hideNub()
         }
     }
@@ -570,10 +570,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         }
     }
 
-    @objc private func handleNubStartRecording() {
+    @objc private func handleNubStartRecording(_ notification: Notification) {
+        // Extract calendar event ID if present
+        let calendarEventId = notification.userInfo?["calendarEventId"] as? String
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                return
+            }
 
             // 1. Start recording
             Task {
@@ -611,8 +615,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                         )
                     }
 
-                    // 3. Notify Flutter that recording started (will trigger UI update in Flutter)
-                    self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: nil)
+                    // 3. Notify Flutter that recording started, pass calendar event ID if available
+                    var arguments: [String: Any]? = nil
+                    if let eventId = calendarEventId {
+                        arguments = ["calendarEventId": eventId]
+                    }
+                    self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: arguments)
 
                 } catch {
                     print("MainFlutterWindow: Error starting recording from nub: \(error.localizedDescription)")

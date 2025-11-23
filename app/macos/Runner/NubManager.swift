@@ -18,6 +18,9 @@ class NubManager {
     fileprivate var nubWindow: NubWindow?
     private weak var mainFlutterWindow: NSWindow?
 
+    // Callback to check if recording is active
+    var isRecordingActive: (() -> Bool)?
+
     // Tracking meeting sources
     private var currentCalendarEventId: String?
     private var currentCalendarTitle: String?
@@ -106,7 +109,7 @@ class NubManager {
         currentCalendarPlatform = platform
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else { return}
 
             if self.nubWindow == nil {
                 self.nubWindow = NubWindow(
@@ -116,6 +119,8 @@ class NubManager {
                     defer: false
                 )
             }
+
+            self.nubWindow?.calendarEventId = nil
 
             // Check if microphone is already active for this meeting
             if let micApp = self.currentMicrophoneApp {
@@ -153,6 +158,8 @@ class NubManager {
                     defer: false
                 )
             }
+
+            self.nubWindow?.calendarEventId = nil
 
             // Check if microphone is already active
             if let micApp = self.currentMicrophoneApp {

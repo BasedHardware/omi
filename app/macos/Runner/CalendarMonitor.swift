@@ -6,8 +6,9 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
 
     // MARK: - Configuration Constants
 
-    static let SCAN_INTERVAL: TimeInterval = 120.0             // Check every 120 seconds (2 minutes)
-    static let LOOKAHEAD_WINDOW: TimeInterval = 60 * 60        // Next 60 minutes
+    static let SCAN_INTERVAL: TimeInterval = 60.0              // Check every 60 seconds (1 minute)
+    static let LOOKAHEAD_WINDOW: TimeInterval = 30 * 24 * 60 * 60  // Next 30 days (for syncing to Firestore)
+    static let NUB_WINDOW: TimeInterval = 60 * 60              // Show nubs for meetings in next 60 minutes
     static let NUB_TRIGGER_EARLY: TimeInterval = 5 * 60        // Start showing 5 min before
     static let NUB_TRIGGER_LATE: TimeInterval = 2 * 60         // Stop showing 2 min before
     static let MEETING_START_GRACE: TimeInterval = 5 * 60      // Show 5 min after start (late joins)
@@ -26,7 +27,8 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     // Monitoring
     private var monitoringTimer: Timer?
     private var upcomingMeetings: [String: EKEvent] = [:]      // eventId -> event
-    private var notifiedMeetings: Set<String> = []             // Events we've shown nub for
+    private var notifiedUpcoming: Set<String> = []             // Events we've shown "upcoming" nub for
+    private var notifiedStarted: Set<String> = []              // Events we've shown "started" nub for
     private var snoozedMeetings: [String: Date] = [:]          // eventId -> snooze until time
     
     // Settings
@@ -51,26 +53,26 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         if #available(macOS 14.0, *) {
             eventStore.requestFullAccessToEvents { [weak self] granted, error in
                 if let error = error {
-                    print("CalendarMonitor: ❌ Permission error: \(error.localizedDescription)")
+                    print("CalendarMonitor: Permission error: \(error.localizedDescription)")
                     completion(false)
                     return
                 }
 
                 self?.isAuthorized = granted
-                print("CalendarMonitor: Permission \(granted ? "✅ granted" : "❌ denied")")
+                print("CalendarMonitor: Permission \(granted ? "granted" : "denied")")
                 completion(granted)
             }
         } else {
             // For macOS < 14.0
             eventStore.requestAccess(to: .event) { [weak self] granted, error in
                 if let error = error {
-                    print("CalendarMonitor: ❌ Permission error: \(error.localizedDescription)")
+                    print("CalendarMonitor: Permission error: \(error.localizedDescription)")
                     completion(false)
                     return
                 }
 
                 self?.isAuthorized = granted
-                print("CalendarMonitor: Permission \(granted ? "✅ granted" : "❌ denied")")
+                print("CalendarMonitor: Permission \(granted ? "granted" : "denied")")
                 completion(granted)
             }
         }
@@ -127,7 +129,8 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         monitoringTimer = nil
         isMonitoring = false
         upcomingMeetings.removeAll()
-        notifiedMeetings.removeAll()
+        notifiedUpcoming.removeAll()
+        notifiedStarted.removeAll()
     }
     
     func updateSettings(showEventsWithNoParticipants: Bool) {
@@ -177,12 +180,23 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
 
             // Check if we should show nub for this meeting
             if shouldShowNub(for: meeting) {
-                // Check if we haven't already notified
-                if !notifiedMeetings.contains(eventId) {
-                    // Check if not snoozed
-                    if !isMeetingSnoozed(eventId: eventId) {
-                        notifyUpcomingMeeting(meeting)
-                        notifiedMeetings.insert(eventId)
+                let now = Date()
+                let timeUntilStart = meeting.startDate.timeIntervalSince(now)
+
+                // Check if not snoozed
+                if !isMeetingSnoozed(eventId: eventId) {
+                    if timeUntilStart > 0 {
+                        // Upcoming meeting - show only if we haven't shown "upcoming" nub yet
+                        if !notifiedUpcoming.contains(eventId) {
+                            notifyUpcomingMeeting(meeting)
+                            notifiedUpcoming.insert(eventId)
+                        }
+                    } else {
+                        // Meeting started - show only if we haven't shown "started" nub yet
+                        if !notifiedStarted.contains(eventId) {
+                            notifyUpcomingMeeting(meeting)
+                            notifiedStarted.insert(eventId)
+                        }
                     }
                 }
             }
@@ -197,7 +211,8 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
             if let event = upcomingMeetings[eventId] {
                 notifyMeetingEnded(event)
             }
-            notifiedMeetings.remove(eventId)
+            notifiedUpcoming.remove(eventId)
+            notifiedStarted.remove(eventId)
         }
 
         upcomingMeetings = newUpcomingMeetings
@@ -428,8 +443,9 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
             NubManager.shared.hideNubIfCalendarMeeting(eventId: eventId)
         }
 
-        // Reset notification flag so it can show again after snooze
-        notifiedMeetings.remove(eventId)
+        // Reset notification flags so it can show again after snooze
+        notifiedUpcoming.remove(eventId)
+        notifiedStarted.remove(eventId)
     }
 
     func isMeetingSnoozed(eventId: String) -> Bool {
@@ -470,6 +486,44 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
 
             if let url = event.url?.absoluteString {
                 meetingDict["meetingUrl"] = url
+            }
+
+            // Add participants with names and emails
+            if let attendees = event.attendees {
+                var participantsList: [[String: String]] = []
+
+                for attendee in attendees {
+                    var participantDict: [String: String] = [:]
+
+                    // Add name if available
+                    if let name = attendee.name, !name.isEmpty {
+                        participantDict["name"] = name
+                    }
+
+                    // Add email if available (from URL property which contains mailto: URL)
+                    let url = attendee.url
+                    let urlString = url.absoluteString
+                    if urlString.hasPrefix("mailto:") {
+                        let email = urlString.replacingOccurrences(of: "mailto:", with: "")
+                        if !email.isEmpty {
+                            participantDict["email"] = email
+                        }
+                    }
+
+                    // Only add participant if we have at least name or email
+                    if !participantDict.isEmpty {
+                        participantsList.append(participantDict)
+                    }
+                }
+
+                if !participantsList.isEmpty {
+                    meetingDict["participants"] = participantsList
+                }
+            }
+
+            // Add notes/description if available
+            if let notes = event.notes, !notes.isEmpty {
+                meetingDict["notes"] = notes
             }
 
             result.append(meetingDict)

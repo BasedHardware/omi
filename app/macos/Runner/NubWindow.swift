@@ -38,6 +38,9 @@ class NubWindow: NSPanel {
     private var pausedElapsedTime: TimeInterval = 0
     private var currentState: NubState?
     private var snoozeButton: NSButton?
+    
+    // Calendar event tracking
+    var calendarEventId: String?
 
     // MARK: - Initialization
 
@@ -387,7 +390,12 @@ class NubWindow: NSPanel {
         self.hide()
 
         // Post notification after hiding to start recording
-        NotificationCenter.default.post(name: .nubClicked, object: nil)
+        // Include calendar event ID if available (passed from NubManager)
+        var userInfo: [String: Any] = [:]
+        if let eventId = self.calendarEventId {
+            userInfo["calendarEventId"] = eventId
+        }
+        NotificationCenter.default.post(name: .nubClicked, object: nil, userInfo: userInfo.isEmpty ? nil : userInfo)
     }
     
     @objc private func closeClicked() {
@@ -412,25 +420,26 @@ class NubWindow: NSPanel {
 
             switch state {
             case .upcomingMeeting(let title, let minutesUntil, let platform):
-                // Update for upcoming meeting (calendar-based)
+                // Update for upcoming meeting (calendar-based) - just a reminder, no action button
                 self.titleLabel.stringValue = truncateTitle(title, maxLength: 30)
                 self.appLabel.stringValue = "in \(minutesUntil) min • \(platform)"
-                self.actionButton.title = "Prepare"
-                self.updateButtonAttributes(title: "Prepare")
+                self.actionButton.isHidden = true
                 self.updateIcon(for: platform, isUpcoming: true)
 
             case .meetingStarted(let title, let platform):
-                // Update for meeting that just started (calendar-based)
+                // Update for meeting that just started - show "Start Recording" button
                 self.titleLabel.stringValue = truncateTitle(title, maxLength: 30)
                 self.appLabel.stringValue = "started • \(platform)"
-                self.actionButton.title = "Join & Record"
-                self.updateButtonAttributes(title: "Join & Record")
+                self.actionButton.isHidden = false
+                self.actionButton.title = "Start Recording"
+                self.updateButtonAttributes(title: "Start Recording")
                 self.updateIcon(for: platform, isUpcoming: false)
 
             case .microphoneActive(let platform):
                 // Update for mic-only detection (existing behavior)
                 self.titleLabel.stringValue = "Meeting detected"
                 self.appLabel.stringValue = platform
+                self.actionButton.isHidden = false
                 self.actionButton.title = "Start Recording"
                 self.updateButtonAttributes(title: "Start Recording")
                 self.updateIcon(for: platform, isUpcoming: false)
@@ -443,6 +452,7 @@ class NubWindow: NSPanel {
                     self.titleLabel.stringValue = "Recording"
                 }
                 self.appLabel.stringValue = platform
+                self.actionButton.isHidden = false
                 self.actionButton.title = "Stop Recording"
                 self.updateButtonAttributes(title: "Stop Recording")
                 self.updateIcon(for: platform, isUpcoming: false)
