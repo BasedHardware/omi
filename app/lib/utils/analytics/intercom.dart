@@ -115,4 +115,11 @@ class IntercomManager {
       }),
     );
   }
+
+  Future<void> sendTokenToIntercom(String token) async {
+    return PlatformService.executeIfSupportedAsync(
+      _isIntercomEnabled,
+      () => Intercom.instance.sendTokenToIntercom(token),
+    );
+  }
 }
