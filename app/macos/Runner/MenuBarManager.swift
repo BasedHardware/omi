@@ -179,36 +179,41 @@ class MenuBarManager: NSObject {
               let button = statusBarItem.button else {
             return
         }
-        
-        let minutesUntil = Int(startDate.timeIntervalSinceNow / 60)
-        
+
+        // Calculate seconds until meeting and round up to minutes
+        // This ensures "in 1m" means "less than 1 minute" and "in 0m" only shows when meeting starts
+        let secondsUntil = startDate.timeIntervalSinceNow
+        let minutesUntil = Int(ceil(secondsUntil / 60))
+
         // If meeting has passed, reset to default
         if minutesUntil < 0 {
             resetToDefaultView()
             return
         }
-        
+
         DispatchQueue.main.async {
             // Clear the icon
             button.image = nil
-            
+
             // Format time remaining
             let timeString: String
             if minutesUntil >= 60 {
                 let hours = minutesUntil / 60
                 let minutes = minutesUntil % 60
                 timeString = "in \(hours)h \(minutes)m"
+            } else if minutesUntil == 0 {
+                timeString = "starting now"
             } else {
                 timeString = "in \(minutesUntil)m"
             }
-            
+
             // Truncate title if too long
             let displayTitle = title.count > 20 ? String(title.prefix(17)) + "..." : title
-            
+
             // Set title with meeting info
             button.title = "\(displayTitle) • \(timeString)"
             button.toolTip = "Upcoming meeting: \(title)"
-            
+
             // Adjust width to fit text
             statusBarItem.length = NSStatusItem.variableLength
         }
