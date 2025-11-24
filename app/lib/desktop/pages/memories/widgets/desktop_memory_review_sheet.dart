@@ -409,8 +409,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
                   color: ResponsiveHelper.textPrimary,
                   height: 1.4,
                 ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
 

@@ -85,8 +85,6 @@ class DesktopMemoryItem extends StatelessWidget {
                           fontSize: 15,
                           height: 1.4,
                         ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       if (memory.isLocked) _buildLockedOverlay(context),
                     ],

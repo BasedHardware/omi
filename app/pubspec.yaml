@@ -50,7 +50,10 @@ dependencies:
 
   # Analytics and Support
   intercom_flutter: 9.3.3
-  mixpanel_flutter: ^2.4.4
+  mixpanel_flutter:
+    git:
+      url: https://github.com/beastoin/mixpanel-flutter.git
+      ref: f9234e9
   mixpanel_analytics:
     git:
       url: https://github.com/mdmohsin7/mixpanel_analytics.git

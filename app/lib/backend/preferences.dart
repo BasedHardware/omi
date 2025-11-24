@@ -20,6 +20,9 @@ class SharedPreferencesUtil {
 
   SharedPreferencesUtil._internal();
 
+  String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
+  set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
+
   static Future<void> init() async {
     _preferences = await SharedPreferences.getInstance();
   }
