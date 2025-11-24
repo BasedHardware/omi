@@ -29,7 +29,7 @@ static FATFS fat_fs;
 static struct fs_mount_t mp = {
     .type = FS_FATFS,
     .fs_data = &fat_fs,
-    .flags = FS_MOUNT_FLAG_NO_FORMAT,
+    .flags = FS_MOUNT_FLAG_NO_FORMAT | FS_MOUNT_FLAG_USE_DISK_ACCESS,
     .storage_dev = (void *) DISK_DRIVE_NAME,
     .mnt_point = DISK_MOUNT_PT,
 };
@@ -343,7 +343,7 @@ void sd_worker_thread(void)
 
     /* Open data file (append) */
     fs_file_t_init(&fil_data);
-    res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
+    res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR | FS_O_TRUNC);
     if (res < 0) {
         LOG_ERR("[SD_WORK] open data failed: %d\n", res);
         return;
@@ -395,23 +395,6 @@ void sd_worker_thread(void)
             case REQ_WRITE_DATA:
                 LOG_DBG("[SD_WORK] Buffering %u bytes to batch write\n", (unsigned)req.u.write.len);
 
-                if (req.u.write.len + write_batch_offset > sizeof(write_batch_buffer)) {
-                    LOG_WRN("[SD_WORK] write_batch_buffer overflow! Flushing early.");
-
-                    res = fs_seek(&fil_data, 0, FS_SEEK_END);
-                    if (res < 0) {
-                        LOG_ERR("[SD_WORK] seek end before write failed: %d\n", res);
-                    }
-                    bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
-                    if (bw < 0 || (size_t)bw != write_batch_offset) {
-                        LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)write_batch_offset);
-                    }
-                    bytes_since_sync += bw > 0 ? bw : 0;
-                    current_file_size += bw > 0 ? bw : 0;
-                    write_batch_offset = 0;
-                    write_batch_counter = 0;
-                }
-
                 memcpy(write_batch_buffer + write_batch_offset, req.u.write.buf, req.u.write.len);
                 write_batch_offset += req.u.write.len;
                 write_batch_counter++;
@@ -425,7 +408,22 @@ void sd_worker_thread(void)
                     bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
                     if (bw < 0 || (size_t)bw != write_batch_offset) {
                         LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)write_batch_offset);
+                        if (bw > 0) {
+                            LOG_INF("Attempting to truncate to correct packet position");
+                            uint32_t truncate_offset = current_file_size + bw - bw % MAX_WRITE_SIZE;
+                            int ret = fs_truncate(&fil_data, truncate_offset);
+                            if (ret < 0) {
+                                LOG_ERR("Failed to truncate to next packet position: %d", ret);
+                                break;
+                            }
+                            LOG_INF("Shifted file pointer to correct packet position: %u", truncate_offset);
+                            current_file_size += bw - bw % MAX_WRITE_SIZE;
+                            write_batch_offset = 0;
+                            write_batch_counter = 0;
+                            break;
+                        }
                     }
+
                     bytes_since_sync += bw > 0 ? bw : 0;
                     current_file_size += bw > 0 ? bw : 0;
                     write_batch_offset = 0;
