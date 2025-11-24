@@ -452,8 +452,20 @@ async def _listen(
             # Exactly one meeting found
             detected_meeting_id = meetings[0]['id']
         elif len(meetings) > 1:
-            # Multiple meetings - ambiguous, skip linking
-            print(f"Found {len(meetings)} meetings in ±2min window, skipping linking", uid, session_id)
+            closest_meeting = None
+            smallest_diff = None
+
+            for meeting in meetings:
+                # Calculate absolute time difference between meeting start and now
+                time_diff = abs((meeting['start_time'] - now).total_seconds())
+
+                if smallest_diff is None or time_diff < smallest_diff:
+                    smallest_diff = time_diff
+                    closest_meeting = meeting
+
+            if closest_meeting:
+                detected_meeting_id = closest_meeting['id']
+                print(f"Selected closest meeting: {closest_meeting['title']} (diff: {smallest_diff}s)", uid, session_id)
 
         # Store meeting association if auto-detected
         if detected_meeting_id:
