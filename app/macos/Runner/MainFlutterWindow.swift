@@ -571,9 +571,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
 
     @objc private func handleNubStartRecording(_ notification: Notification) {
-        // Extract calendar event ID if present
-        let calendarEventId = notification.userInfo?["calendarEventId"] as? String
-
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
                 return
@@ -615,12 +612,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                         )
                     }
 
-                    // 3. Notify Flutter that recording started, pass calendar event ID if available
-                    var arguments: [String: Any]? = nil
-                    if let eventId = calendarEventId {
-                        arguments = ["calendarEventId": eventId]
-                    }
-                    self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: arguments)
+                    // 3. Notify Flutter that recording started
+                    self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: nil)
 
                 } catch {
                     print("MainFlutterWindow: Error starting recording from nub: \(error.localizedDescription)")

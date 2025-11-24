@@ -146,15 +146,39 @@ class CalendarService {
   }
 }
 
+/// Participant in a calendar meeting
+class CalendarParticipant {
+  final String? name;
+  final String? email;
+
+  CalendarParticipant({this.name, this.email});
+
+  factory CalendarParticipant.fromMap(Map<dynamic, dynamic> map) {
+    return CalendarParticipant(
+      name: map['name'] as String?,
+      email: map['email'] as String?,
+    );
+  }
+
+  String get displayName {
+    if (name != null && name!.isNotEmpty) return name!;
+    if (email != null && email!.isNotEmpty) return email!;
+    return 'Unknown';
+  }
+}
+
 /// Calendar meeting model
 class CalendarMeeting {
-  final String id;
+  final String id; // Calendar event ID from system (macOS)
   final String title;
   final DateTime startTime;
   final DateTime endTime;
   final String platform;
   final String? meetingUrl;
   final int attendeeCount;
+  final List<CalendarParticipant> participants;
+  final String? notes;
+  final String? meetingId; // Backend meeting ID (synced to backend)
 
   CalendarMeeting({
     required this.id,
@@ -164,9 +188,17 @@ class CalendarMeeting {
     required this.platform,
     this.meetingUrl,
     required this.attendeeCount,
+    this.participants = const [],
+    this.notes,
+    this.meetingId,
   });
 
   factory CalendarMeeting.fromMap(Map<dynamic, dynamic> map) {
+    final participantsList = (map['participants'] as List<dynamic>?)
+            ?.map((p) => CalendarParticipant.fromMap(p as Map<dynamic, dynamic>))
+            .toList() ??
+        [];
+
     return CalendarMeeting(
       id: map['id'] as String,
       title: map['title'] as String,
@@ -175,6 +207,8 @@ class CalendarMeeting {
       platform: map['platform'] as String,
       meetingUrl: map['meetingUrl'] as String?,
       attendeeCount: map['attendeeCount'] as int,
+      participants: participantsList,
+      notes: map['notes'] as String?,
     );
   }
 
@@ -182,12 +216,46 @@ class CalendarMeeting {
     return {
       'id': id,
       'title': title,
-      'startTime': startTime.toIso8601String(),
-      'endTime': endTime.toIso8601String(),
+      'startTime': startTime.toUtc().toIso8601String(),
+      'endTime': endTime.toUtc().toIso8601String(),
       'platform': platform,
       'meetingUrl': meetingUrl,
       'attendeeCount': attendeeCount,
+      'participants': participants
+          .map((p) => {
+                if (p.name != null) 'name': p.name,
+                if (p.email != null) 'email': p.email,
+              })
+          .toList(),
+      if (notes != null) 'notes': notes,
+      if (meetingId != null) 'meetingId': meetingId,
     };
+  }
+
+  CalendarMeeting copyWith({
+    String? id,
+    String? title,
+    DateTime? startTime,
+    DateTime? endTime,
+    String? platform,
+    String? meetingUrl,
+    int? attendeeCount,
+    List<CalendarParticipant>? participants,
+    String? notes,
+    String? meetingId,
+  }) {
+    return CalendarMeeting(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      platform: platform ?? this.platform,
+      meetingUrl: meetingUrl ?? this.meetingUrl,
+      attendeeCount: attendeeCount ?? this.attendeeCount,
+      participants: participants ?? this.participants,
+      notes: notes ?? this.notes,
+      meetingId: meetingId ?? this.meetingId,
+    );
   }
 
   /// Time until meeting starts (negative if already started)

@@ -38,9 +38,6 @@ class NubWindow: NSPanel {
     private var pausedElapsedTime: TimeInterval = 0
     private var currentState: NubState?
     private var snoozeButton: NSButton?
-    
-    // Calendar event tracking
-    var calendarEventId: String?
 
     // MARK: - Initialization
 
@@ -390,12 +387,7 @@ class NubWindow: NSPanel {
         self.hide()
 
         // Post notification after hiding to start recording
-        // Include calendar event ID if available (passed from NubManager)
-        var userInfo: [String: Any] = [:]
-        if let eventId = self.calendarEventId {
-            userInfo["calendarEventId"] = eventId
-        }
-        NotificationCenter.default.post(name: .nubClicked, object: nil, userInfo: userInfo.isEmpty ? nil : userInfo)
+        NotificationCenter.default.post(name: .nubClicked, object: nil, userInfo: nil)
     }
     
     @objc private func closeClicked() {

@@ -24,6 +24,7 @@ from websockets.exceptions import ConnectionClosed
 av.logging.set_level(av.logging.ERROR)
 
 import database.conversations as conversations_db
+import database.calendar_meetings as calendar_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
@@ -436,6 +437,28 @@ async def _listen(
         )
         conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
+
+        detected_meeting_id = None
+
+        now = datetime.now(timezone.utc)
+        # Check ±2 minute window
+        time_window = timedelta(minutes=2)
+        start_range = now - time_window
+        end_range = now + time_window
+
+        meetings = calendar_db.get_meetings_in_time_range(uid, start_range, end_range)
+
+        if len(meetings) == 1:
+            # Exactly one meeting found
+            detected_meeting_id = meetings[0]['id']
+        elif len(meetings) > 1:
+            # Multiple meetings - ambiguous, skip linking
+            print(f"Found {len(meetings)} meetings in ±2min window, skipping linking", uid, session_id)
+
+        # Store meeting association if auto-detected
+        if detected_meeting_id:
+            redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
+
         current_conversation_id = new_conversation_id
         seconds_to_trim = None
         seconds_to_add = None

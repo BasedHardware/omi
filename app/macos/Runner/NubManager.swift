@@ -120,8 +120,6 @@ class NubManager {
                 )
             }
 
-            self.nubWindow?.calendarEventId = nil
-
             // Check if microphone is already active for this meeting
             if let micApp = self.currentMicrophoneApp {
                 // Hybrid: User already joined (mic active) + calendar context
@@ -158,8 +156,6 @@ class NubManager {
                     defer: false
                 )
             }
-
-            self.nubWindow?.calendarEventId = nil
 
             // Check if microphone is already active
             if let micApp = self.currentMicrophoneApp {

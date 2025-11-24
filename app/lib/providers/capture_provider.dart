@@ -15,12 +15,12 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
@@ -40,6 +40,7 @@ class CaptureProvider extends ChangeNotifier
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
   UsageProvider? usageProvider;
+  CalendarProvider? calendarProvider;
 
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
@@ -112,7 +113,7 @@ class CaptureProvider extends ChangeNotifier
 
       // Register callback for when recording is started from nub (before start() is called)
       ServiceManager.instance().systemAudio.setOnRecordingStartedFromNub(() {
-        debugPrint('CaptureProvider: Recording started from nub - initializing Flutter state');
+        debugPrint('CaptureProvider: Recording started from nub');
         streamSystemAudioRecording();
       });
     }
