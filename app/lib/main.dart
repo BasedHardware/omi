@@ -126,7 +126,7 @@ Future _init() async {
   await NotificationService.instance.initialize();
 
   // Register FCM background message handler
-  if (!PlatformService.isDesktop) {
+  if (PlatformManager().isFCMSupported) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
 
