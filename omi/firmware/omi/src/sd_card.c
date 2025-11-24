@@ -222,7 +222,7 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
     if (ret) {
         LOG_ERR("Failed to queue write_to_file request: %d", ret);
-        return ret;
+        return 0;
     }
 
     return length;
