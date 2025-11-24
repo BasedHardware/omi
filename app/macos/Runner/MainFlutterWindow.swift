@@ -521,15 +521,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         meetingDetector?.onShowNub = { [weak self] appName in
             guard let self = self else { return }
 
-            // If already recording from calendar, upgrade to microphoneLinked
-            if self.audioManager.isRecording() && self.recordingSource == .calendar {
-                self.recordingSource = .microphoneLinked
-                // Don't show nub since already recording
-                return
-            }
-
-            // If already recording from any other source, don't show nub
+            // If already recording, check if we need to upgrade the source
             if self.audioManager.isRecording() {
+                // Only upgrade from calendar to microphoneLinked (one-time)
+                if self.recordingSource == .calendar {
+                    self.recordingSource = .microphoneLinked
+                }
+                // Don't show nub if already recording
                 return
             }
 
@@ -614,9 +612,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Start calendar monitoring after 10 seconds warmup
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
             guard let self = self else { return }
-            
+
             // Only start monitoring if already authorized (user enabled it previously)
-            if self.calendarMonitor?.checkAuthorizationStatus() == true {
+            let isAuthorized = self.calendarMonitor?.checkAuthorizationStatus() == true
+
+            if isAuthorized {
                 self.calendarMonitor?.startMonitoring()
             }
         }
@@ -628,12 +628,20 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 return
             }
 
-            // Determine recording source based on nub context
+            // Check if microphone is currently active (user already in meeting)
+            let isMicActive = !(self.meetingDetector?.getActiveMeetingApps().isEmpty ?? true)
+
+            // Determine recording source based on nub context AND current mic state
             if let meetingSource = NubManager.shared.getCurrentMeetingSource() {
                 switch meetingSource {
                 case .calendar:
-                    // User clicked nub for calendar meeting (but no mic activity detected yet)
-                    self.recordingSource = .calendar
+                    // User clicked nub for calendar meeting
+                    // Check if they've already joined (mic active)
+                    if isMicActive {
+                        self.recordingSource = .microphoneLinked
+                    } else {
+                        self.recordingSource = .calendar
+                    }
                 case .microphone:
                     // User clicked nub for mic-only detection
                     self.recordingSource = .microphoneOnly
