@@ -100,6 +100,16 @@ class NubManager {
         return nubWindow?.isVisible ?? false
     }
 
+    /// Get the current meeting source (calendar, microphone, or hybrid)
+    func getCurrentMeetingSource() -> MeetingSource? {
+        return meetingSource
+    }
+
+    /// Check if there's an active calendar context
+    func hasCalendarContext() -> Bool {
+        return currentCalendarEventId != nil
+    }
+
     // MARK: - Calendar-based Methods (new)
 
     func showNubForCalendarMeeting(eventId: String, title: String, platform: String, minutesUntilStart: Int) {

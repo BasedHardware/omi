@@ -375,14 +375,20 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         if minutesUntilStart > 0 {
             print("CalendarMonitor: 📅 Upcoming meeting in \(minutesUntilStart) min: \(title) • \(platform)")
 
-            // Show nub via NubManager
-            DispatchQueue.main.async {
-                NubManager.shared.showNubForCalendarMeeting(
-                    eventId: eventId,
-                    title: title,
-                    platform: platform,
-                    minutesUntilStart: minutesUntilStart
-                )
+            // Check if recording is already active via NubManager callback
+            let isRecordingActive = NubManager.shared.isRecordingActive?() ?? false
+
+            // Only show nub if not already recording
+            if !isRecordingActive {
+                // Show nub via NubManager
+                DispatchQueue.main.async {
+                    NubManager.shared.showNubForCalendarMeeting(
+                        eventId: eventId,
+                        title: title,
+                        platform: platform,
+                        minutesUntilStart: minutesUntilStart
+                    )
+                }
             }
 
             // Send event to Flutter
@@ -395,13 +401,19 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
                 "startTime": ISO8601DateFormatter().string(from: startTime)
             ])
         } else {
-            // Show "started" nub
-            DispatchQueue.main.async {
-                NubManager.shared.showNubForCalendarMeetingStarted(
-                    eventId: eventId,
-                    title: title,
-                    platform: platform
-                )
+            // Check if recording is already active
+            let isRecordingActive = NubManager.shared.isRecordingActive?() ?? false
+
+            // Only show nub if not already recording
+            if !isRecordingActive {
+                // Show "started" nub
+                DispatchQueue.main.async {
+                    NubManager.shared.showNubForCalendarMeetingStarted(
+                        eventId: eventId,
+                        title: title,
+                        platform: platform
+                    )
+                }
             }
 
             // Send event to Flutter

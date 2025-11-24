@@ -35,6 +35,16 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     private var calendarChannel: FlutterMethodChannel!
     private var calendarEventChannel: FlutterEventChannel!
 
+    // Recording source tracking - determines auto-stop behavior
+    private enum RecordingSource {
+        case none
+        case calendar      // Started from calendar meeting nub (before user joined)
+        case microphoneLinked  // Started from calendar, then mic activity detected (user joined)
+        case microphoneOnly    // Started from mic detection nub (no calendar context)
+        case manual        // Started manually from app UI
+    }
+    private var recordingSource: RecordingSource = .none
+
 
     override func awakeFromNib() {
         let flutterViewController = FlutterViewController()
@@ -219,6 +229,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 result(nil)
                 
             case "start":
+                // Track that recording was started manually from the app
+                self.recordingSource = .manual
+
                 Task {
                     // Check permissions before starting
                     let micStatus = self.permissionManager.checkMicrophonePermission()
@@ -247,6 +260,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 }
             case "stop":
                 self.audioManager.stopCapture()
+                self.recordingSource = .none
                 result(nil)
                 
             case "isRecording":
@@ -460,31 +474,69 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             object: nil
         )
 
-        // Handle auto-stop when meeting ends
+        // Handle when meeting ends (mic activity stopped)
         meetingDetector?.onMeetingEnded = { [weak self] in
             guard let self = self else { return }
-            
-            if self.audioManager.isRecording() {
-                print("MainFlutterWindow: Auto-stopping recording because meeting ended")
+
+            guard self.audioManager.isRecording() else {
+                return
+            }
+
+            // Decide whether to auto-stop based on recording source
+            let shouldAutoStop: Bool
+            let reason: String
+
+            switch self.recordingSource {
+            case .microphoneOnly:
+                // Recording started from mic nub -> auto-stop when mic ends
+                shouldAutoStop = true
+                reason = "mic-only recording ended"
+            case .microphoneLinked:
+                // Recording started from calendar, user joined meeting, now left -> auto-stop
+                shouldAutoStop = true
+                reason = "user left meeting (calendar + mic)"
+            case .calendar:
+                // Recording started from calendar but user never joined -> DON'T auto-stop
+                shouldAutoStop = false
+                reason = "calendar recording (user never joined)"
+            case .manual:
+                // Recording started manually -> DON'T auto-stop
+                shouldAutoStop = false
+                reason = "manual recording"
+            case .none:
+                // Unknown source -> DON'T auto-stop
+                shouldAutoStop = false
+                reason = "unknown source"
+            }
+
+            if shouldAutoStop {
                 self.screenCaptureChannel.invokeMethod("recordingStoppedAutomatically", arguments: nil)
-
                 self.audioManager.stopCapture()
-
-                // Hide floating control bar
                 self.hideFloatingControlBar()
+                self.recordingSource = .none
             }
         }
         
-        // Handle showing nub - ONLY if not already recording
+        // Handle when meeting starts (mic activity detected)
         meetingDetector?.onShowNub = { [weak self] appName in
             guard let self = self else { return }
+
+            // If already recording from calendar, upgrade to microphoneLinked
+            if self.audioManager.isRecording() && self.recordingSource == .calendar {
+                self.recordingSource = .microphoneLinked
+                // Don't show nub since already recording
+                return
+            }
+
+            // If already recording from any other source, don't show nub
             if self.audioManager.isRecording() {
                 return
             }
 
+            // Not recording yet, show nub to let user start
             NubManager.shared.showNub(for: appName)
         }
-        
+
         // Handle hiding nub
         meetingDetector?.onHideNub = {
             NubManager.shared.hideNub()
@@ -574,6 +626,23 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
                 return
+            }
+
+            // Determine recording source based on nub context
+            if let meetingSource = NubManager.shared.getCurrentMeetingSource() {
+                switch meetingSource {
+                case .calendar:
+                    // User clicked nub for calendar meeting (but no mic activity detected yet)
+                    self.recordingSource = .calendar
+                case .microphone:
+                    // User clicked nub for mic-only detection
+                    self.recordingSource = .microphoneOnly
+                case .hybrid:
+                    // User clicked nub for calendar meeting where they already joined
+                    self.recordingSource = .microphoneLinked
+                }
+            } else {
+                self.recordingSource = .manual
             }
 
             // 1. Start recording
