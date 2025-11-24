@@ -17,7 +17,12 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define DISK_DRIVE_NAME "SD"
 #define DISK_MOUNT_PT "/SD:"
 #define FS_RET_OK 0
-#define SD_REQ_QUEUE_MSGS 100
+#define SD_REQ_QUEUE_MSGS  100
+#define SD_FSYNC_THRESHOLD 20000
+#define WRITE_BATCH_COUNT 10
+static uint8_t write_batch_buffer[WRITE_BATCH_COUNT * MAX_WRITE_SIZE];
+static size_t write_batch_offset = 0;
+static int write_batch_counter = 0;
 
 static FATFS fat_fs;
 
@@ -39,6 +44,7 @@ static struct fs_file_t fil_info;
 static bool is_mounted = false;
 static bool sd_enabled = false;
 static uint32_t current_file_size = 0;
+static size_t bytes_since_sync = 0;
 
 // Get the device pointer for the SDHC SPI slot from the device tree
 static const struct device *const sd_dev = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
@@ -209,28 +215,14 @@ int read_audio_data(uint8_t *buf, int amount, int offset)
 uint32_t write_to_file(uint8_t *data, uint32_t length)
 {
     sd_req_t req = {0};
-    struct read_resp resp;
-    k_sem_init(&resp.sem, 0, 1);
-
     req.type = REQ_WRITE_DATA;
     memcpy(req.u.write.buf, data, length);
     req.u.write.len = length;
-    req.u.write.resp = &resp;
 
     int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
     if (ret) {
         LOG_ERR("Failed to queue write_to_file request: %d", ret);
         return ret;
-    }
-
-    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
-        LOG_ERR("Timeout waiting for write_to_file response");
-        return 0;
-    }
-
-    if (resp.res) {
-        LOG_ERR("Failed to write to audio directory: %d", resp.res);
-        return 0;
     }
 
     return length;
@@ -401,35 +393,54 @@ void sd_worker_thread(void)
         if (k_msgq_get(&sd_msgq, &req, K_FOREVER) == 0) {
             switch (req.type) {
             case REQ_WRITE_DATA:
-                LOG_DBG("[SD_WORK] Writing %u bytes to data file\n", (unsigned)req.u.write.len);
+                LOG_DBG("[SD_WORK] Buffering %u bytes to batch write\n", (unsigned)req.u.write.len);
 
-                /* Write chunk and flush periodically or immediately */
-                /* Always seek to end before write to ensure append */
-                res = fs_seek(&fil_data, 0, FS_SEEK_END);
-                if (res < 0) {
-                    LOG_ERR("[SD_WORK] seek end before write failed: %d\n", res);
-                }
-                bw = fs_write(&fil_data, req.u.write.buf, req.u.write.len);
-                if (bw < 0 || bw != req.u.write.len) {
-                    LOG_ERR("[SD_WORK] write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)req.u.write.len);
-                }
+                if (req.u.write.len + write_batch_offset > sizeof(write_batch_buffer)) {
+                    LOG_WRN("[SD_WORK] write_batch_buffer overflow! Flushing early.");
 
-                res = fs_sync(&fil_data);
-                if (res < 0) {
-                    LOG_ERR("[SD_WORK] fs_sync data failed: %d\n", res);
-                }
-                current_file_size += (bw > 0) ? bw : 0;
-
-                if (req.u.write.resp) {
-                    if (bw < 0) {
-                        req.u.write.resp->res = (int)bw;
-                    } else if (bw != req.u.write.len) {
-                        req.u.write.resp->res = -EIO;
-                    } else {
-                        req.u.write.resp->res = res;
+                    res = fs_seek(&fil_data, 0, FS_SEEK_END);
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] seek end before write failed: %d\n", res);
                     }
-                    k_sem_give(&req.u.write.resp->sem);
+                    bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
+                    if (bw < 0 || (size_t)bw != write_batch_offset) {
+                        LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)write_batch_offset);
+                    }
+                    bytes_since_sync += bw > 0 ? bw : 0;
+                    current_file_size += bw > 0 ? bw : 0;
+                    write_batch_offset = 0;
+                    write_batch_counter = 0;
                 }
+
+                memcpy(write_batch_buffer + write_batch_offset, req.u.write.buf, req.u.write.len);
+                write_batch_offset += req.u.write.len;
+                write_batch_counter++;
+
+                if (write_batch_counter >= WRITE_BATCH_COUNT) {
+                    LOG_INF("[SD_WORK] WRITE_BATCH_COUNT reached. Flushing batch write.");
+                    res = fs_seek(&fil_data, 0, FS_SEEK_END);
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] seek end before write failed: %d\n", res);
+                    }
+                    bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
+                    if (bw < 0 || (size_t)bw != write_batch_offset) {
+                        LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)write_batch_offset);
+                    }
+                    bytes_since_sync += bw > 0 ? bw : 0;
+                    current_file_size += bw > 0 ? bw : 0;
+                    write_batch_offset = 0;
+                    write_batch_counter = 0;
+                }
+
+                if (bytes_since_sync >= SD_FSYNC_THRESHOLD) {
+                    LOG_INF("[SD_WORK] fs_sync triggered after %u bytes\n", (unsigned)bytes_since_sync);
+                    res = fs_sync(&fil_data);
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] fs_sync data failed: %d\n", res);
+                    }
+                    bytes_since_sync = 0;
+                }
+
                 break;
 
             case REQ_READ_DATA:
