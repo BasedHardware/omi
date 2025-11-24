@@ -133,7 +133,11 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     
     func resetRecording() {
         flushRecordingBuffer()
-        recording?.updateFileURL()
+        do {
+            try recording?.updateFileURL()
+        } catch {
+            print("Failed to reset recording: \(error.localizedDescription)")
+        }
     }
     
     func flushRecordingBuffer() {

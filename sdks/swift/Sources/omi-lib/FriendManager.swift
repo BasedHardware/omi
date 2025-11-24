@@ -115,13 +115,19 @@ class FriendManager {
         audioFileTimer?.invalidate()
         // Reduced from 8.0 to 0.2 seconds for real-time streaming (200ms chunks)
         audioFileTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true, block: { timer in
-            if let recording = device.recording {
-                let recordingFileURL = recording.fileURL
-                device.resetRecording()
-                completion(recordingFileURL)
-            }
-            else {
-                completion(nil)
+            DispatchQueue.global(qos: .userInitiated).async {
+                if let recording = device.recording {
+                    let recordingFileURL = recording.fileURL
+                    device.resetRecording()
+                    DispatchQueue.main.async {
+                        completion(recordingFileURL)
+                    }
+                }
+                else {
+                    DispatchQueue.main.async {
+                        completion(nil)
+                    }
+                }
             }
         })
     }
