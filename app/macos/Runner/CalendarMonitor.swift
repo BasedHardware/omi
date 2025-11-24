@@ -93,7 +93,6 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     func startMonitoring() {
         // Update isAuthorized property from actual status
         isAuthorized = checkAuthorizationStatus()
-        
         guard isAuthorized else {
             return
         }
@@ -159,14 +158,6 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         )
 
         let events = eventStore.events(matching: predicate)
-
-        
-        // Log each event for debugging
-        for event in events {
-            let title = event.title ?? "Untitled"
-            let startTime = event.startDate ?? Date()
-            let minutesUntil = Int(startTime.timeIntervalSinceNow / 60)
-        }
 
         // Filter to only meetings
         let meetings = events.filter { isMeetingEvent($0) }

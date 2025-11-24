@@ -5,6 +5,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/calendar_meetings.dart' as calendar_api;
 import 'package:omi/backend/schema/calendar_meeting_context.dart';
 import 'package:omi/services/calendar_service.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class CalendarProvider extends ChangeNotifier {
   final CalendarService _service = CalendarService();
@@ -55,10 +56,17 @@ class CalendarProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
+    // Calendar integration is only supported on macOS
+    if (!PlatformService.isMacOS) {
+      return;
+    }
+
     await checkPermissionStatus();
 
     // Only auto-start if user has explicitly enabled calendar integration
-    if (isAuthorized && SharedPreferencesUtil().calendarIntegrationEnabled) {
+    final calendarEnabled = SharedPreferencesUtil().calendarIntegrationEnabled;
+
+    if (isAuthorized && calendarEnabled) {
       // Apply saved settings FIRST, before starting monitoring
       await _applySavedSettings();
 

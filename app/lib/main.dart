@@ -298,7 +298,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
           ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
-          ChangeNotifierProvider(create: (context) => CalendarProvider()),
+          ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
         ],
         builder: (context, child) {
           return WithForegroundTask(
