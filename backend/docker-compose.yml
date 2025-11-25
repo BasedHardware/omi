@@ -26,24 +26,8 @@ services:
       retries: 5
     restart: unless-stopped
 
-  typesense:
-    image: typesense/typesense:27.1
-    container_name: omi-typesense
-    expose:
-      - "8108"
-    volumes:
-      - omi-typesense-data:/data
-    environment:
-      - TYPESENSE_DATA_DIR=/data
-      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-changeme}
-      - TYPESENSE_ENABLE_CORS=true
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8108/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    restart: unless-stopped
+  # NOTE: Typesense - using external Typesense Cloud
+  # Set TYPESENSE_HOST, TYPESENSE_HOST_PORT, TYPESENSE_API_KEY in Coolify env vars
 
   backend:
     build:
@@ -59,14 +43,10 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      typesense:
-        condition: service_healthy
     environment:
       - REDIS_DB_HOST=redis
       - REDIS_DB_PORT=6379
       - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
-      - TYPESENSE_HOST=typesense
-      - TYPESENSE_HOST_PORT=8108
     volumes:
       # Google credentials - will be populated via Coolify's storage management
       - google-credentials:/app/credentials:ro
@@ -121,8 +101,6 @@ services:
 
 volumes:
   omi-redis-data:
-    driver: local
-  omi-typesense-data:
     driver: local
   omi-temp:
     driver: local
