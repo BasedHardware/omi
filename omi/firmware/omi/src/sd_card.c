@@ -423,8 +423,6 @@ void sd_worker_thread(void)
                             }
                             LOG_INF("Shifted file pointer to correct packet position: %u", truncate_offset);
                             current_file_size += bw - bw % MAX_WRITE_SIZE;
-                            write_batch_offset = 0;
-                            write_batch_counter = 0;
                         }
 
                         if (writing_error_counter >= ERROR_THRESHOLD) {
@@ -440,6 +438,9 @@ void sd_worker_thread(void)
                                 LOG_ERR("[SD_WORK] open new data file failed: %d. Terminating operation", reopen_res);
                             }
                         }
+
+                        write_batch_offset = 0;
+                        write_batch_counter = 0;
                         break;
                     }
 
