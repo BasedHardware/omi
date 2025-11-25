@@ -26,7 +26,7 @@ RUN git clone https://github.com/google/liblc3.git && \
 
 # Install Python requirements
 WORKDIR /opt/venv
-COPY backend/requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
 
 FROM python:3.11-slim
@@ -47,7 +47,12 @@ RUN ldconfig && \
     rm -rf /tmp/wheels
 
 COPY --from=builder /opt/venv /opt/venv
-COPY backend/ .
+COPY . .
 
 EXPOSE 8080
+
+# Health check for Coolify/Docker orchestration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
 CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080"]
