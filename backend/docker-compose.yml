@@ -29,17 +29,13 @@ services:
   typesense:
     image: typesense/typesense:27.1
     container_name: omi-typesense
-    # Ports exposed only for local development
-    # Comment out for Coolify deployment
-    # ports:
-    #   - "8108:8108"
     expose:
       - "8108"
     volumes:
       - omi-typesense-data:/data
     command: >
       --data-dir /data
-      --api-key=$${TYPESENSE_API_KEY}
+      --api-key=$${TYPESENSE_API_KEY:-changeme}
       --enable-cors
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
