@@ -26,7 +26,7 @@ RUN git clone https://github.com/google/liblc3.git && \
 
 # Install Python requirements
 WORKDIR /opt/venv
-COPY backend/requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
 
 FROM python:3.11-slim
@@ -47,7 +47,7 @@ RUN ldconfig && \
     rm -rf /tmp/wheels
 
 COPY --from=builder /opt/venv /opt/venv
-COPY backend/ .
+COPY . .
 
 EXPOSE 8080
 
