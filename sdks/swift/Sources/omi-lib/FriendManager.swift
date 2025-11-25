@@ -111,13 +111,35 @@ class FriendManager {
     }
     
     func getRawAudio(device: Friend, completion: @escaping (URL?) -> Void) {
-//        transcriptCompletion = completion
         audioFileTimer?.invalidate()
         audioFileTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true, block: { timer in
             if let recording = device.recording {
+                // Get the file URL BEFORE reset (this is the file with audio data)
                 let recordingFileURL = recording.fileURL
-                device.resetRecording()
-                completion(recordingFileURL)
+
+                // Check if file exists and has data before proceeding
+                let fileManager = FileManager.default
+                guard fileManager.fileExists(atPath: recordingFileURL.path),
+                      let attributes = try? fileManager.attributesOfItem(atPath: recordingFileURL.path),
+                      let fileSize = attributes[.size] as? UInt64,
+                      fileSize > 44 else { // 44 bytes = WAV header only (no audio data)
+                    completion(nil)
+                    return
+                }
+
+                // Copy the file to a safe temp location BEFORE resetRecording deletes it
+                let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent(UUID().uuidString + ".wav")
+
+                do {
+                    try fileManager.copyItem(at: recordingFileURL, to: tempURL)
+                    device.resetRecording()
+                    completion(tempURL)
+                } catch {
+                    print("Failed to copy audio file: \(error)")
+                    device.resetRecording()
+                    completion(nil)
+                }
             }
             else {
                 completion(nil)
