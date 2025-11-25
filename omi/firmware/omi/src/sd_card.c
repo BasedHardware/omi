@@ -428,7 +428,7 @@ void sd_worker_thread(void)
                             break;
                         }
 
-                        if (writing_error_counter >= 5) {
+                        if (writing_error_counter >= ERROR_THRESHOLD) {
                             writing_error_counter = 0;
                             LOG_ERR("[SD_WORK] Too many write errors (%d). Stopping SD worker.\n", writing_error_counter);
                             fs_close(&fil_data);
