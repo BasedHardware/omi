@@ -1,0 +1,140 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: omi-redis
+    # Ports exposed only for local development
+    # Comment out for Coolify deployment (Traefik handles routing)
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - omi-redis-data:/data
+    command: >
+      sh -c "redis-server
+      --appendonly yes
+      --requirepass $${REDIS_DB_PASSWORD:-}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "$${REDIS_DB_PASSWORD:-}",
+          "ping",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: omi-typesense
+    # Ports exposed only for local development
+    # Comment out for Coolify deployment
+    # ports:
+    #   - "8108:8108"
+    expose:
+      - "8108"
+    volumes:
+      - omi-typesense-data:/data
+    command: >
+      --data-dir /data
+      --api-key=$${TYPESENSE_API_KEY}
+      --enable-cors
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omi-backend
+    # Ports exposed only for local development
+    # Comment out for Coolify deployment (Traefik handles routing)
+    # ports:
+    #   - "8000:8080"
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    environment:
+      - REDIS_DB_HOST=redis
+      - REDIS_DB_PORT=6379
+      - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_HOST_PORT=8108
+    volumes:
+      # Google credentials - will be populated via Coolify's storage management
+      - google-credentials:/app/credentials:ro
+
+      # Persist temporary files across restarts
+      - omi-temp:/app/_temp
+      - omi-samples:/app/_samples
+      - omi-segments:/app/_segments
+      - omi-speech-profiles:/app/_speech_profiles
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    restart: unless-stopped
+
+  pusher:
+    build:
+      context: .
+      dockerfile: pusher/Dockerfile
+    container_name: omi-pusher
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_DB_HOST=redis
+      - REDIS_DB_PORT=6379
+      - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+    volumes:
+      # Google credentials - shared with backend
+      - google-credentials:/app/credentials:ro
+
+      # Persist temporary files
+      - omi-temp:/app/_temp
+      - omi-samples:/app/_samples
+      - omi-segments:/app/_segments
+      - omi-speech-profiles:/app/_speech_profiles
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    restart: unless-stopped
+
+volumes:
+  omi-redis-data:
+    driver: local
+  omi-typesense-data:
+    driver: local
+  omi-temp:
+    driver: local
+  omi-samples:
+    driver: local
+  omi-segments:
+    driver: local
+  omi-speech-profiles:
+    driver: local
+  google-credentials:
+    driver: local

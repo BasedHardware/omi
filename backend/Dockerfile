@@ -50,4 +50,9 @@ COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .
 
 EXPOSE 8080
+
+# Health check for Coolify/Docker orchestration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:8080/v1/health || exit 1
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
