@@ -67,20 +67,19 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     }
     
     private func audioCharacteristicUpdated(data: Data) {
-//        log.debug("Received packet of size \(data.count)")
         guard data.count >= 3 else {
             log.warning("### Received a packet of size \(data.count)")
             return
         }
-        
-        // Starts at 0 on first notification, continues the sequence after a pause but I have seen a small gap
+
+        // Log every 50th packet to avoid spam
         let packetNumber = UInt16(littleEndian: data.withUnsafeBytes { $0.load(as: UInt16.self) })
-        // Starts at 0
         let index = UInt8(littleEndian: data.advanced(by: 2).withUnsafeBytes {$0.load(as: UInt8.self) })
-        
-//        log.debug("Packet number \(packetNumber)")
-//        log.debug("Index \(index)")
-        
+
+        if packetNumber % 50 == 0 {
+            print("🔊 [Friend] Audio packet #\(packetNumber), index: \(index), size: \(data.count) bytes, isRecording: \(isRecording)")
+        }
+
         do {
             try packetCounter.checkPacketNumber(packetNumber)
         } catch {
@@ -112,14 +111,20 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     
     func start(recording: Recording) {
         self.recording = recording
+        print("🎙️ [Friend] start(recording:) called, codec: \(String(describing: codec))")
 
-        guard let audioCodec = try? codec?.codec else { return }
+        guard let audioCodec = try? codec?.codec else {
+            print("🎙️ [Friend] ERROR: No codec available!")
+            return
+        }
         if recording.startRecording(usingCodec: audioCodec) {
             isRecording = true
+            print("🎙️ [Friend] Recording started, enabling audio notifications...")
             bleManager.setNotify(enabled: true, forCharacteristics: Friend.audioCharacteristicUUID)
+            print("🎙️ [Friend] Audio notifications enabled for \(Friend.audioCharacteristicUUID)")
         }
         else {
-            print("failed to start recording")
+            print("🎙️ [Friend] ERROR: failed to start recording")
         }
     }
     
@@ -140,7 +145,9 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
         if packetsBuffer.isEmpty {
             return
         }
+        let packetCount = packetsBuffer.count
         recording?.append(packets: packetsBuffer)
+        print("🔊 [Friend] Flushed \(packetCount) packets to recording")
         packetsBuffer.removeAll()
     }
     

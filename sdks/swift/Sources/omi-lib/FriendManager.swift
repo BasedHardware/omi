@@ -113,16 +113,22 @@ class FriendManager {
     func getRawAudio(device: Friend, completion: @escaping (URL?) -> Void) {
         audioFileTimer?.invalidate()
         audioFileTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true, block: { timer in
+            print("🎤 [getRawAudio] Timer fired - isRecording: \(device.isRecording)")
+
             if let recording = device.recording {
                 // Get the file URL BEFORE reset (this is the file with audio data)
                 let recordingFileURL = recording.fileURL
 
                 // Check if file exists and has data before proceeding
                 let fileManager = FileManager.default
-                guard fileManager.fileExists(atPath: recordingFileURL.path),
-                      let attributes = try? fileManager.attributesOfItem(atPath: recordingFileURL.path),
-                      let fileSize = attributes[.size] as? UInt64,
-                      fileSize > 44 else { // 44 bytes = WAV header only (no audio data)
+                let fileExists = fileManager.fileExists(atPath: recordingFileURL.path)
+                let attributes = try? fileManager.attributesOfItem(atPath: recordingFileURL.path)
+                let fileSize = attributes?[.size] as? UInt64 ?? 0
+
+                print("🎤 [getRawAudio] File: \(recordingFileURL.lastPathComponent), exists: \(fileExists), size: \(fileSize) bytes")
+
+                guard fileExists, fileSize > 44 else { // 44 bytes = WAV header only (no audio data)
+                    print("🎤 [getRawAudio] Skipping - file empty or doesn't exist")
                     completion(nil)
                     return
                 }
@@ -134,6 +140,7 @@ class FriendManager {
                 do {
                     try fileManager.copyItem(at: recordingFileURL, to: tempURL)
                     device.resetRecording()
+                    print("🎤 [getRawAudio] Copied \(fileSize) bytes to temp file")
                     completion(tempURL)
                 } catch {
                     print("Failed to copy audio file: \(error)")
@@ -142,6 +149,7 @@ class FriendManager {
                 }
             }
             else {
+                print("🎤 [getRawAudio] No recording object!")
                 completion(nil)
             }
         })
