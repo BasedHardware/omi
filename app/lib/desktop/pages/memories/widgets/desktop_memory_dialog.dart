@@ -26,6 +26,8 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
   late TextEditingController _textController;
   late MemoryVisibility _selectedVisibility;
   late MemoryCategory _selectedCategory;
+  bool _isSaving = false;
+  bool _saveFailed = false;
 
   @override
   void initState() {
@@ -187,7 +189,42 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
               ],
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // Error message
+            if (_saveFailed) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.red.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      color: Colors.red.shade400,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Failed to save. Please check your connection.',
+                        style: TextStyle(
+                          color: ResponsiveHelper.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Actions
             Row(
@@ -217,8 +254,12 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 ),
                 const SizedBox(width: 12),
                 OmiButton(
-                  label: widget.memory != null ? 'Save Changes' : 'Create Memory',
-                  onPressed: _saveMemory,
+                  label: _isSaving
+                      ? 'Saving...'
+                      : _saveFailed
+                          ? 'Retry'
+                          : (widget.memory != null ? 'Save Changes' : 'Create Memory'),
+                  onPressed: _isSaving ? null : _saveMemory,
                 ),
               ],
             ),
@@ -228,24 +269,49 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
     );
   }
 
-  void _saveMemory() {
+  Future<void> _saveMemory() async {
     final content = _textController.text.trim();
     if (content.isEmpty) return;
 
-    if (widget.memory != null) {
-      // Edit existing memory
-      widget.provider.editMemory(widget.memory!, content);
-      if (widget.memory!.visibility != _selectedVisibility) {
-        widget.provider.updateMemoryVisibility(widget.memory!, _selectedVisibility);
+    setState(() {
+      _isSaving = true;
+      _saveFailed = false;
+    });
+
+    bool success;
+
+    try {
+      if (widget.memory != null) {
+        // Edit existing memory
+        success = await widget.provider.editMemory(widget.memory!, content);
+        if (success && widget.memory!.visibility != _selectedVisibility) {
+          await widget.provider.updateMemoryVisibility(widget.memory!, _selectedVisibility);
+        }
+        if (success) {
+          MixpanelManager().memoriesPageEditedMemory();
+        }
+      } else {
+        // Create new memory
+        success = await widget.provider.createMemory(content, _selectedVisibility, _selectedCategory);
+        if (success) {
+          MixpanelManager().memoriesPageCreatedMemory(_selectedCategory);
+        }
       }
-      MixpanelManager().memoriesPageEditedMemory();
-    } else {
-      // Create new memory
-      widget.provider.createMemory(content, _selectedVisibility, _selectedCategory);
-      MixpanelManager().memoriesPageCreatedMemory(_selectedCategory);
+    } catch (e) {
+      success = false;
+      debugPrint('Error saving memory: $e');
     }
 
-    Navigator.pop(context);
+    if (!mounted) return;
+
+    setState(() {
+      _isSaving = false;
+      _saveFailed = !success;
+    });
+
+    if (success) {
+      Navigator.pop(context);
+    }
   }
 
   void _showDeleteConfirmation() {
