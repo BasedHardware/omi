@@ -51,6 +51,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -216,7 +217,33 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
     }
+
+    // Auto-start macOS recording if enabled
+    if (PlatformService.isDesktop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoStartMacOSRecording();
+      });
+    }
+
     super.initState();
+  }
+
+  Future<void> _autoStartMacOSRecording() async {
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!SharedPreferencesUtil().autoRecordingEnabled) return;
+
+    try {
+      final context = MyApp.navigatorKey.currentContext;
+      if (context == null) return;
+      
+      final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+      if (captureProvider.recordingState == RecordingState.stop) {
+        await captureProvider.streamSystemAudioRecording();
+      }
+    } catch (e) {
+      debugPrint('[AutoRecord] Error: $e');
+    }
   }
 
   void _deinit() {

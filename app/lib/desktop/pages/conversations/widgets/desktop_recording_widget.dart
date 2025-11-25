@@ -526,7 +526,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   }
 
   Widget _buildLiveTranscriptContent(List<TranscriptSegment> segments) {
-    final displaySegments = segments.length > 15 ? segments.sublist(segments.length - 15) : segments;
+    final displaySegments = segments;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
