@@ -3,68 +3,6 @@ import Cocoa
 import FlutterMacOS
 import ApplicationServices
 
-// MARK: - Meeting App Configuration
-
-/// Represents a known meeting/collaboration application
-struct MeetingApp {
-    let bundleIds: [String]  // All possible bundle IDs for this app
-    let displayName: String  // User-friendly name
-
-    init(_ displayName: String, bundleIds: String...) {
-        self.displayName = displayName
-        self.bundleIds = bundleIds
-    }
-}
-
-/// Centralized configuration for all known meeting apps
-struct MeetingApps {
-    // Video conferencing apps
-    static let zoom = MeetingApp("Zoom", bundleIds: "us.zoom.xos", "com.zoom.us", "zoom.us")
-    static let teams = MeetingApp("Microsoft Teams", bundleIds: "com.microsoft.teams", "com.microsoft.teams2")
-    static let googleMeet = MeetingApp("Google Meet", bundleIds: "com.google.Chrome")
-    static let webex = MeetingApp("Webex", bundleIds: "com.webex.meetingmanager", "com.cisco.webexmeetings", "com.cisco.webexmeetingsapp")
-    static let gotoMeeting = MeetingApp("GoToMeeting", bundleIds: "com.goto.meeting", "com.citrixonline.GoToMeeting")
-    static let blueJeans = MeetingApp("BlueJeans", bundleIds: "com.bluejeans.app")
-
-    // Collaboration apps
-    static let slack = MeetingApp("Slack", bundleIds: "com.tinyspeck.slackmacgap")
-    static let discord = MeetingApp("Discord", bundleIds: "com.hnc.Discord", "com.discord")
-    static let skype = MeetingApp("Skype", bundleIds: "com.skype.skype")
-
-    // Browsers
-    static let safari = MeetingApp("Safari", bundleIds: "com.apple.Safari")
-    static let chrome = MeetingApp("Chrome", bundleIds: "com.google.Chrome")
-    static let brave = MeetingApp("Brave", bundleIds: "com.brave.Browser")
-    static let firefox = MeetingApp("Firefox", bundleIds: "org.mozilla.firefox")
-    static let arc = MeetingApp("Arc", bundleIds: "company.thebrowser.Browser")
-    static let edge = MeetingApp("Edge", bundleIds: "com.microsoft.edgemac")
-
-    // Other apps
-    static let facetime = MeetingApp("FaceTime", bundleIds: "com.apple.FaceTime")
-    static let ringCentral = MeetingApp("RingCentral", bundleIds: "com.ringcentral.ringcentral")
-    static let eightByEight = MeetingApp("8x8", bundleIds: "com.8x8.8x8-work")
-    static let whereby = MeetingApp("Whereby", bundleIds: "com.whereby.desktop", "com.whereby.app")
-    static let around = MeetingApp("Around", bundleIds: "com.around.Around", "com.around.app")
-    static let jam = MeetingApp("Jam", bundleIds: "com.jam.desktop")
-    static let tuple = MeetingApp("Tuple", bundleIds: "app.tuple.app")
-    static let whatsapp = MeetingApp("WhatsApp", bundleIds: "net.whatsapp.WhatsApp")
-    static let jitsi = MeetingApp("Jitsi Meet", bundleIds: "org.jitsi.jitsi-meet")
-
-    /// All known meeting apps
-    static let all: [MeetingApp] = [
-        zoom, teams, googleMeet, webex, gotoMeeting, blueJeans,
-        slack, discord, skype,
-        safari, chrome, brave, firefox, arc, edge,
-        facetime, ringCentral, eightByEight, whereby, around, jam, tuple, whatsapp, jitsi
-    ]
-
-    /// Keywords to search for in unknown bundle IDs
-    static let meetingKeywords = [
-        "zoom", "teams", "webex", "meet", "slack", "discord",
-        "skype", "facetime", "whereby", "around", "tuple"
-    ]
-}
-
 class MeetingDetector: NSObject {
 
     // MARK: - Properties
@@ -105,50 +43,6 @@ class MeetingDetector: NSObject {
         return excluded
     }()
 
-    // Browser bundle IDs that require window title checking
-    private let browserBundleIds: Set<String> = [
-        "com.google.Chrome",
-        "com.apple.Safari",
-        "com.brave.Browser",
-        "org.mozilla.firefox",
-        "company.thebrowser.Browser",  // Arc
-        "com.microsoft.edgemac"
-    ]
-
-    // Meeting keywords to look for in browser window titles
-    private let meetingKeywordsInTitle: [String] = [
-        "Meet", "meet.google.com",  // Google Meet
-        "Zoom Meeting", "zoom.us",  // Zoom web
-        "Microsoft Teams", "teams.microsoft.com",  // Teams web
-        "Slack", "slack.com/huddle",  // Slack huddle
-        "Discord",  // Discord voice
-        "Webex", "webex.com"  // Webex meetings
-    ]
-
-    // MARK: - Bundle ID Mapping
-    private let bundleIdMap: [String: String] = [
-        "zoom.us": "us.zoom.xos",
-        "Google Chrome": "com.google.Chrome",
-        "Safari": "com.apple.Safari",
-        "Microsoft Teams": "com.microsoft.teams2",
-        "Microsoft Teams (work or school)": "com.microsoft.teams2",
-        "Slack": "com.tinyspeck.slackmacgap",
-        "Discord": "com.hnc.Discord",
-        "Firefox": "org.mozilla.firefox",
-        "Arc": "company.thebrowser.Browser",
-        "Webex": "com.cisco.webexmeetingsapp",
-        "WhatsApp": "net.whatsapp.WhatsApp",
-        "Tuple": "app.tuple.app",
-        "Brave Browser": "com.brave.Browser",
-        "Microsoft Edge": "com.microsoft.edgemac",
-        "Skype": "com.skype.skype",
-        "FaceTime": "com.apple.FaceTime",
-        "Around": "com.around.app",
-        "Whereby": "com.whereby.app",
-        "Jitsi Meet": "org.jitsi.jitsi-meet",
-        "BlueJeans": "com.bluejeans.app",
-        "GoToMeeting": "com.citrixonline.GoToMeeting"
-    ]
 
     // MARK: - Initialization
     override init() {
@@ -432,7 +326,7 @@ class MeetingDetector: NSObject {
             for app in activeMicApps {
                 if !currentBundleIds.contains(app) {
                     // Only remove when BOTH mic is inactive AND user has switched away from meeting tab
-                    if browserBundleIds.contains(app) {
+                    if MeetingApps.browserBundleIds.contains(app) {
                         // Check if user is still on the meeting tab
                         if let runningApp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == app }) {
                             checkIfMeetingTabClosed(for: runningApp, bundleId: app)
@@ -453,7 +347,7 @@ class MeetingDetector: NSObject {
                 if excludedBundleIds.contains(app) { continue }
 
                 // For browsers, we need to check window title before confirming it's a meeting
-                if browserBundleIds.contains(app) {
+                if MeetingApps.browserBundleIds.contains(app) {
                     if !activeMicApps.contains(app) {
                         // Browser started using mic - check window title
                         trackedBrowserBundleIds.insert(app)
@@ -583,7 +477,7 @@ class MeetingDetector: NSObject {
             .replacingOccurrences(of: ".app", with: "")
 
         // Look up bundle ID from mapping
-        return bundleIdMap[appName]
+        return MeetingApps.bundleIdMap[appName]
     }
 
     // Callbacks for controlling the Nub
@@ -801,7 +695,7 @@ class MeetingDetector: NSObject {
     /// Check if a window title indicates a meeting is happening
     private func isMeetingWindowTitle(_ title: String) -> Bool {
         // Check if title contains any meeting keywords
-        for keyword in meetingKeywordsInTitle {
+        for keyword in MeetingApps.meetingKeywordsInTitle {
             if title.contains(keyword) {
                 return true
             }
