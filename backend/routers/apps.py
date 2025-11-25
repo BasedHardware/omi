@@ -30,7 +30,6 @@ from database.apps import (
     search_apps_db,
 )
 from database.auth import get_user_from_uid
-from database.notifications import get_token_only
 from database.redis_db import (
     delete_generic_cache,
     get_generic_cache,
@@ -1116,13 +1115,11 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     change_app_approval_status(app_id, True)
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
-    token = get_token_only(uid)
-    if token:
-        send_notification(
-            token,
-            'App Approved 🎉',
-            f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳',
-        )
+    send_notification(
+        uid,
+        'App Approved 🎉',
+        f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳',
+    )
     return {'status': 'ok'}
 
 
@@ -1133,14 +1130,12 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     change_app_approval_status(app_id, False)
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
-    token = get_token_only(uid)
-    if token:
-        # TODO: Add reason for rejection in payload and also redirect to the app page
-        send_notification(
-            token,
-            'App Rejected 😔',
-            f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
-        )
+    # TODO: Add reason for rejection in payload and also redirect to the app page
+    send_notification(
+        uid,
+        'App Rejected 😔',
+        f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
+    )
     return {'status': 'ok'}
 
 

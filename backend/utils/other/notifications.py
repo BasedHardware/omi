@@ -51,7 +51,7 @@ async def send_daily_summary_notification():
 
 def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
-    fcm_token = user_data[1]
+    # Note: user_data[1] was fcm_token, no longer needed
     daily_summary_title = "Here is your action plan for tomorrow"  # TODO: maybe include llm a custom message for this
     memories = conversations_db.filter_conversations_by_date(
         uid, datetime.combine(datetime.now().date(), time.min), datetime.now()
@@ -70,7 +70,7 @@ def _send_summary_notification(user_data: tuple):
     )
     chat_db.add_summary_message(summary, uid)
     threading.Thread(target=day_summary_webhook, args=(uid, summary)).start()
-    send_notification(fcm_token, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(uid, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message))
 
 
 async def _send_bulk_summary_notification(users: list):

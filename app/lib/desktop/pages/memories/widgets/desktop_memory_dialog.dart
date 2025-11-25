@@ -31,8 +31,8 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
   void initState() {
     super.initState();
     _textController = TextEditingController(text: widget.memory?.content ?? '');
-    _selectedVisibility = widget.memory?.visibility ?? MemoryVisibility.public;
-    _selectedCategory = widget.memory?.category ?? MemoryCategory.interesting;
+    _selectedVisibility = widget.memory?.visibility ?? MemoryVisibility.private;
+    _selectedCategory = widget.memory?.category ?? MemoryCategory.manual;
   }
 
   @override
