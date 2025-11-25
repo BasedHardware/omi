@@ -33,16 +33,16 @@ services:
       - "8108"
     volumes:
       - omi-typesense-data:/data
-    command: >
-      --data-dir /data
-      --api-key=$${TYPESENSE_API_KEY:-changeme}
-      --enable-cors
+    environment:
+      - TYPESENSE_DATA_DIR=/data
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-changeme}
+      - TYPESENSE_ENABLE_CORS=true
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8108/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
 
   backend:
