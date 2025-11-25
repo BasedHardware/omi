@@ -72,13 +72,8 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
             return
         }
 
-        // Log every 50th packet to avoid spam
         let packetNumber = UInt16(littleEndian: data.withUnsafeBytes { $0.load(as: UInt16.self) })
         let index = UInt8(littleEndian: data.advanced(by: 2).withUnsafeBytes {$0.load(as: UInt8.self) })
-
-        if packetNumber % 50 == 0 {
-            print("🔊 [Friend] Audio packet #\(packetNumber), index: \(index), size: \(data.count) bytes, isRecording: \(isRecording)")
-        }
 
         do {
             try packetCounter.checkPacketNumber(packetNumber)
@@ -111,20 +106,17 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     
     func start(recording: Recording) {
         self.recording = recording
-        print("🎙️ [Friend] start(recording:) called, codec: \(String(describing: codec))")
 
         guard let audioCodec = try? codec?.codec else {
-            print("🎙️ [Friend] ERROR: No codec available!")
+            log.error("No codec available for recording")
             return
         }
         if recording.startRecording(usingCodec: audioCodec) {
             isRecording = true
-            print("🎙️ [Friend] Recording started, enabling audio notifications...")
             bleManager.setNotify(enabled: true, forCharacteristics: Friend.audioCharacteristicUUID)
-            print("🎙️ [Friend] Audio notifications enabled for \(Friend.audioCharacteristicUUID)")
         }
         else {
-            print("🎙️ [Friend] ERROR: failed to start recording")
+            log.error("Failed to start recording")
         }
     }
     
@@ -142,12 +134,8 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     }
     
     func flushRecordingBuffer() {
-        if packetsBuffer.isEmpty {
-            return
-        }
-        let packetCount = packetsBuffer.count
+        guard !packetsBuffer.isEmpty else { return }
         recording?.append(packets: packetsBuffer)
-        print("🔊 [Friend] Flushed \(packetCount) packets to recording")
         packetsBuffer.removeAll()
     }
     
