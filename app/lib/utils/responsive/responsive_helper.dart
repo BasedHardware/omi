@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
+import 'package:omi/providers/theme_provider.dart';
 
 /// Premium responsive utility class with sophisticated dark theme
-/// Inspired by modern productivity apps with purple accent system
+/// Inspired by modern productivity apps with dynamic brand color system
 class ResponsiveHelper {
   final BuildContext context;
   late final Size _screenSize;
@@ -27,28 +29,36 @@ class ResponsiveHelper {
   }
 
   // Premium color system inspired by sophisticated dark interfaces
-  static const Color backgroundPrimary = Color(0xFF0F0F0F); // Deep black
-  static const Color backgroundSecondary = Color(0xFF1A1A1A); // Elevated surface
-  static const Color backgroundTertiary = Color(0xFF252525); // Cards and components
-  static const Color backgroundQuaternary = Color(0xFF2A2A2A); // Hover states
-
-  // Premium purple gradient system
-  static const Color purplePrimary = Color(0xFF8B5CF6); // Main purple
-  static const Color purpleSecondary = Color(0xFFA855F7); // Lighter purple
-  static const Color purpleAccent = Color(0xFF7C3AED); // Darker purple
-  static const Color purpleLight = Color(0xFFD946EF); // Pink-purple
+  static const Color backgroundPrimary = AppColors.backgroundPrimary;
+  static const Color backgroundSecondary = AppColors.backgroundSecondary;
+  static const Color backgroundTertiary = AppColors.backgroundTertiary;
+  static const Color backgroundQuaternary = AppColors.backgroundQuaternary;
 
   // Sophisticated text colors
-  static const Color textPrimary = Color(0xFFFFFFFF); // Pure white for headers
-  static const Color textSecondary = Color(0xFFE5E5E5); // Light gray for body
-  static const Color textTertiary = Color(0xFFB0B0B0); // Medium gray for meta
-  static const Color textQuaternary = Color(0xFF888888); // Dark gray for disabled
+  static const Color textPrimary = AppColors.textPrimary;
+  static const Color textSecondary = AppColors.textSecondary;
+  static const Color textTertiary = AppColors.textTertiary;
+  static const Color textQuaternary = AppColors.textQuaternary;
 
   // Accent colors
-  static const Color successColor = Color(0xFF10B981); // Green
-  static const Color warningColor = Color(0xFFF59E0B); // Amber
-  static const Color errorColor = Color(0xFFEF4444); // Red
-  static const Color infoColor = Color(0xFF3B82F6); // Blue
+  static const Color successColor = AppColors.successColor;
+  static const Color warningColor = AppColors.warningColor;
+  static const Color errorColor = AppColors.errorColor;
+  static const Color infoColor = AppColors.infoColor;
+
+  // Brand colors - static constants (Nooto purple brand colors)
+  // Note: Named "purple" for backward compatibility
+  static const Color purplePrimary = Color(0xFF8B5CF6);    // Purple (Nooto brand color)
+  static const Color purpleSecondary = Color(0xFFA78BFA);  // Lighter purple
+  static const Color purpleAccent = Color(0xFF7C3AED);     // Darker purple
+  static const Color purpleLight = Color(0xFFC4B5FD);      // Light purple
+
+  // Dynamic brand colors (instance getters that use theme provider)
+  // Use these when you have context available for white-label support
+  Color get brandPrimary => ThemeProvider.maybeOf(context)?.primaryColor ?? purplePrimary;
+  Color get brandSecondary => ThemeProvider.maybeOf(context)?.secondaryColor ?? purpleSecondary;
+  Color get brandAccent => ThemeProvider.maybeOf(context)?.accentColor ?? purpleAccent;
+  Color get brandLight => ThemeProvider.maybeOf(context)?.lightColor ?? purpleLight;
 
   // Screen dimension getters
   double get screenWidth => _screenWidth;
@@ -316,20 +326,23 @@ class ResponsiveHelper {
         color: textSecondary,
       );
 
-  // Premium gradient definitions
-  LinearGradient get purpleGradient => const LinearGradient(
+  // Premium gradient definitions (dynamic - uses theme colors)
+  LinearGradient get purpleGradient => ThemeProvider.maybeOf(context)?.primaryGradient ??
+      const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [purplePrimary, purpleAccent],
+        colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
       );
 
-  LinearGradient get purpleLightGradient => const LinearGradient(
+  LinearGradient get purpleLightGradient => ThemeProvider.maybeOf(context)?.lightGradient ??
+      const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [purpleSecondary, purpleLight],
+        colors: [Color(0xFFA855F7), Color(0xFFD946EF)],
       );
 
-  LinearGradient get backgroundGradient => const LinearGradient(
+  LinearGradient get backgroundGradient => ThemeProvider.maybeOf(context)?.backgroundGradient ??
+      const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [backgroundPrimary, backgroundSecondary, backgroundPrimary],
@@ -362,7 +375,7 @@ class ResponsiveHelper {
 
   List<BoxShadow> get glowShadow => [
         BoxShadow(
-          color: purplePrimary.withOpacity(0.3),
+          color: brandPrimary.withOpacity(0.3), // Uses dynamic brand color
           blurRadius: spacing(baseSpacing: 20, minSpacing: 15, maxSpacing: 25),
           offset: Offset(0, spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 10)),
         ),

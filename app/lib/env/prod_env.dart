@@ -9,6 +9,10 @@ final class ProdEnv implements EnvFields {
   ProdEnv();
 
   @override
+  @EnviedField(varName: 'APP_NAME', obfuscate: false, defaultValue: 'Nooto')
+  final String? appName = _ProdEnv.appName;
+
+  @override
   @EnviedField(varName: 'OPENAI_API_KEY', obfuscate: true)
   final String? openAIAPIKey = _ProdEnv.openAIAPIKey;
 
@@ -55,4 +59,8 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _ProdEnv.useAuthCustomToken;
+
+  @override
+  @EnviedField(varName: 'DISABLE_RATE_ON_STORE_ONBOARDING', obfuscate: false, defaultValue: false)
+  final bool? disableRateOnStoreOnboarding = _ProdEnv.disableRateOnStoreOnboarding;
 }

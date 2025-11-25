@@ -15,6 +15,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
+import 'widgets/conversation_list_item.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -132,6 +133,75 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     );
   }
 
+  List<Widget> _buildConversationsWithStickyHeaders(ConversationProvider convoProvider) {
+    List<Widget> slivers = [];
+    int groupIndex = 0;
+
+    for (var entry in convoProvider.groupedConversations.entries) {
+      var date = entry.key;
+      List<ServerConversation> conversations = entry.value;
+      final isFirst = groupIndex == 0;
+
+      // Add sticky header for date
+      slivers.add(
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _StickyDateHeaderDelegate(
+            date: date,
+            isFirst: isFirst,
+          ),
+        ),
+      );
+
+      // Add conversations for this date
+      slivers.add(
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              return ConversationListItem(
+                conversation: conversations[index],
+                conversationIdx: index,
+                date: date,
+              );
+            },
+            childCount: conversations.length,
+          ),
+        ),
+      );
+
+      slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 10)));
+      groupIndex++;
+    }
+
+    // Add load more indicator
+    slivers.add(
+      SliverToBoxAdapter(
+        child: convoProvider.isLoadingConversations
+            ? _buildLoadMoreShimmer()
+            : VisibilityDetector(
+                key: const Key('conversations-key'),
+                onVisibilityChanged: (visibilityInfo) {
+                  var provider = Provider.of<ConversationProvider>(context, listen: false);
+                  if (provider.previousQuery.isNotEmpty) {
+                    if (visibilityInfo.visibleFraction > 0 &&
+                        !provider.isLoadingConversations &&
+                        (provider.totalSearchPages > provider.currentSearchPage)) {
+                      provider.searchMoreConversations();
+                    }
+                  } else {
+                    if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
+                      convoProvider.getMoreConversationsFromServer();
+                    }
+                  }
+                },
+                child: const SizedBox(height: 20, width: double.maxFinite),
+              ),
+      ),
+    );
+
+    return slivers;
+  }
+
   @override
   Widget build(BuildContext context) {
     debugPrint('building conversations page');
@@ -144,8 +214,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           await convoProvider.getInitialConversations();
           return;
         },
-        color: Colors.deepPurpleAccent,
-        backgroundColor: Colors.white,
+        color: const Color(0xFF3B82F6),
+        backgroundColor: Colors.black,
         child: CustomScrollView(
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
@@ -154,7 +224,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 12)), // above search widget
+            const SliverToBoxAdapter(child: SizedBox(height: 0)), // above search widget
             const SliverToBoxAdapter(child: SearchWidget()),
             const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
@@ -171,52 +241,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
               _buildLoadingShimmer()
             else
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  childCount: convoProvider.groupedConversations.length + 1,
-                  (context, index) {
-                    if (index == convoProvider.groupedConversations.length) {
-                      debugPrint('loading more conversations');
-                      if (convoProvider.isLoadingConversations) {
-                        return _buildLoadMoreShimmer();
-                      }
-                      // widget.loadMoreMemories(); // CALL this only when visible
-                      return VisibilityDetector(
-                        key: const Key('conversations-key'),
-                        onVisibilityChanged: (visibilityInfo) {
-                          var provider = Provider.of<ConversationProvider>(context, listen: false);
-                          if (provider.previousQuery.isNotEmpty) {
-                            if (visibilityInfo.visibleFraction > 0 &&
-                                !provider.isLoadingConversations &&
-                                (provider.totalSearchPages > provider.currentSearchPage)) {
-                              provider.searchMoreConversations();
-                            }
-                          } else {
-                            if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
-                              convoProvider.getMoreConversationsFromServer();
-                            }
-                          }
-                        },
-                        child: const SizedBox(height: 20, width: double.maxFinite),
-                      );
-                    } else {
-                      var date = convoProvider.groupedConversations.keys.elementAt(index);
-                      List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (index == 0) const SizedBox(height: 10),
-                          ConversationsGroupWidget(
-                            isFirst: index == 0,
-                            conversations: memoriesForDate,
-                            date: date,
-                          ),
-                        ],
-                      );
-                    }
-                  },
-                ),
-              ),
+              ..._buildConversationsWithStickyHeaders(convoProvider),
             const SliverToBoxAdapter(
               child: SizedBox(height: 80),
             ),
@@ -224,5 +249,84 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         ),
       );
     });
+  }
+}
+
+// Sticky Date Header Delegate
+class _StickyDateHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final DateTime date;
+  final bool isFirst;
+
+  _StickyDateHeaderDelegate({
+    required this.date,
+    required this.isFirst,
+  });
+
+  @override
+  double get minExtent => isFirst ? 20.0 : 32.0;
+
+  @override
+  double get maxExtent => isFirst ? 20.0 : 32.0;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    var now = DateTime.now();
+    var yesterday = now.subtract(const Duration(days: 1));
+    var isToday = date.month == now.month && date.day == now.day && date.year == now.year;
+    var isYesterday = date.month == yesterday.month && date.day == yesterday.day && date.year == yesterday.year;
+
+    // Calculate opacity based on shrink offset to create push effect
+    // When a header is being pushed out, it will fade and be pushed up
+    final opacity = (1.0 - (shrinkOffset / maxExtent)).clamp(0.0, 1.0);
+    final topPadding = isFirst ? 0.0 : 12.0 - (shrinkOffset * 0.5).clamp(0.0, 12.0);
+
+    return SizedBox(
+      height: maxExtent,
+      child: Transform.translate(
+        offset: Offset(0, -shrinkOffset),
+        child: Opacity(
+          opacity: opacity,
+          child: Container(
+            color: const Color(0xFF0F0F12), // Background color matching app theme
+            padding: EdgeInsets.fromLTRB(16, topPadding, 16, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  isToday
+                      ? 'Today'
+                      : isYesterday
+                          ? 'Yesterday'
+                          : _formatDate(date),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Container(
+                    height: 1,
+                    color: const Color(0xFF35343B),
+                  ),
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+
+  @override
+  bool shouldRebuild(_StickyDateHeaderDelegate oldDelegate) {
+    return date != oldDelegate.date || isFirst != oldDelegate.isFirst;
   }
 }

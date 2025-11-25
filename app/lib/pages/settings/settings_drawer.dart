@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/about.dart';
@@ -248,7 +249,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   Future<void> _copyVersionInfo() async {
-    final versionPart = buildVersion != null ? 'Omi AI ${version ?? ""} ($buildVersion)' : 'Omi AI ${version ?? ""}';
+    final versionPart = buildVersion != null ? '${Env.appName} ${version ?? ""} ($buildVersion)' : '${Env.appName} ${version ?? ""}';
     final devicePart = shortDeviceInfo ?? 'Unknown Device';
     final fullVersionInfo = '$versionPart — $devicePart';
 
@@ -358,68 +359,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   );
                 },
               ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Task Integrations',
-                icon: const FaIcon(FontAwesomeIcons.listCheck, color: Color(0xFF8E8E93), size: 20),
-                showBetaTag: true,
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const TaskIntegrationsPage(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-
-          // Share & Get Section
-          _buildSectionContainer(
-            children: [
-              if (PlatformService.isIOS)
-                _buildSettingsItem(
-                  title: 'Share Omi for iPhone',
-                  icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, color: Colors.white, size: 20),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-                  },
-                ),
-              if (PlatformService.isAndroid)
-                _buildSettingsItem(
-                  title: 'Share Omi for Android',
-                  icon: const FaIcon(FontAwesomeIcons.googlePlay, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await Share.share('https://play.google.com/store/apps/details?id=com.friend.ios');
-                  },
-                ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Share Omi for Mac',
-                icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Referral Program',
-                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
-                showNewTag: true,
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const ReferralPage(),
-                    ),
-                  );
-                },
-              ),
+              // const Divider(height: 1, color: Color(0xFF3C3C43)),
+              // _buildSettingsItem(
+              //   title: 'Task Integrations',
+              //   icon: const FaIcon(FontAwesomeIcons.listCheck, color: Color(0xFF8E8E93), size: 20),
+              //   showBetaTag: true,
+              //   onTap: () {
+              //     Navigator.pop(context);
+              //     Navigator.of(context).push(
+              //       MaterialPageRoute(
+              //         builder: (context) => const TaskIntegrationsPage(),
+              //       ),
+              //     );
+              //   },
+              // ),
             ],
           ),
           const SizedBox(height: 32),
@@ -493,7 +446,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'About Omi',
+                title: 'About ${Env.appName}',
                 icon: const FaIcon(FontAwesomeIcons.infoCircle, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   Navigator.pop(context);

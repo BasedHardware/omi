@@ -153,134 +153,125 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              elevation: 0,
+              centerTitle: false,
+              toolbarHeight: 60,
               title: Row(
-                mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  IconButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      return;
-                    },
-                    icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          icon: const Icon(
+                            Icons.arrow_back_rounded,
+                            size: 20,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        "Live Transcription",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Text(provider.photos.isNotEmpty ? "📸" : "🎙️"),
-                  const SizedBox(width: 4),
-                  const Expanded(child: Text("Listening")),
+                  if (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+                    GestureDetector(
+                      onTap: () => _stopConversation(provider),
+                      child: Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.stop_circle, color: Colors.white, size: 16),
+                            SizedBox(width: 6),
+                            Text(
+                              'Stop',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-            body: Column(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 0),
-                    child: TabBarView(
-                      controller: _controller,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        // Transcripts, photos
-                        provider.segments.isEmpty && provider.photos.isEmpty
-                            ? const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.only(top: 50.0),
-                                  child: Text("Waiting for transcript or photos..."),
-                                ),
-                              )
-                            : getTranscriptWidget(
-                                false,
-                                provider.segments,
-                                provider.photos,
-                                deviceProvider.connectedDevice,
-                                bottomMargin: 150,
-                                suggestions: provider.suggestionsBySegmentId,
-                                taggingSegmentIds: provider.taggingSegmentIds,
-                                onAcceptSuggestion: (suggestion) {
-                                  provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
-                                      suggestion.personName, [suggestion.segmentId]);
-                                },
-                                editSegment: (segmentId, speakerId) {
-                                  final connectivityProvider =
-                                      Provider.of<ConnectivityProvider>(context, listen: false);
-                                  if (!connectivityProvider.isConnected) {
-                                    ConnectivityProvider.showNoInternetDialog(context);
-                                    return;
-                                  }
-                                  showModalBottomSheet(
-                                      context: context,
-                                      isScrollControlled: true,
-                                      backgroundColor: Colors.black,
-                                      shape: const RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                      ),
-                                      builder: (context) {
-                                        final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                            (s) => s.speakerId == speakerId,
-                                            orElse: () => SpeakerLabelSuggestionEvent.empty());
-                                        return NameSpeakerBottomSheet(
-                                          speakerId: speakerId,
-                                          segmentId: segmentId,
-                                          segments: provider.segments,
-                                          suggestion: suggestion,
-                                          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                            await provider.assignSpeakerToConversation(
-                                                speakerId, personId, personName, segmentIds);
-                                          },
-                                        );
-                                      });
-                                },
-                              ),
-                        // Summary Tab
-                        Center(
-                          child: Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
-                            child: Text(
-                              provider.segments.isEmpty && provider.photos.isEmpty
-                                  ? "No summary yet"
-                                  : _getTimeoutDisplayText(),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-            floatingActionButton: (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                ? Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.25),
-                          spreadRadius: 2,
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      onPressed: () => _stopConversation(provider),
-                      icon: const FaIcon(
-                        FontAwesomeIcons.stop,
-                        color: Colors.white,
-                        size: 20.0,
-                      ),
-                      padding: EdgeInsets.zero,
+            body: provider.segments.isEmpty && provider.photos.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 50.0),
+                      child: Text("Waiting for transcript or photos..."),
                     ),
                   )
-                : null,
+                : getTranscriptWidget(
+                    false,
+                    provider.segments,
+                    provider.photos,
+                    deviceProvider.connectedDevice,
+                    bottomMargin: 150,
+                    suggestions: provider.suggestionsBySegmentId,
+                    taggingSegmentIds: provider.taggingSegmentIds,
+                    onAcceptSuggestion: (suggestion) {
+                      provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
+                          suggestion.personName, [suggestion.segmentId]);
+                    },
+                    editSegment: (segmentId, speakerId) {
+                      final connectivityProvider =
+                          Provider.of<ConnectivityProvider>(context, listen: false);
+                      if (!connectivityProvider.isConnected) {
+                        ConnectivityProvider.showNoInternetDialog(context);
+                        return;
+                      }
+                      showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.black,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                          ),
+                          builder: (context) {
+                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                (s) => s.speakerId == speakerId,
+                                orElse: () => SpeakerLabelSuggestionEvent.empty());
+                            return NameSpeakerBottomSheet(
+                              speakerId: speakerId,
+                              segmentId: segmentId,
+                              segments: provider.segments,
+                              suggestion: suggestion,
+                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                await provider.assignSpeakerToConversation(
+                                    speakerId, personId, personName, segmentIds);
+                              },
+                            );
+                          });
+                    },
+                  ),
           ),
         );
       },

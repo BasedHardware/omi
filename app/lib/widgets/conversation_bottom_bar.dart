@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -6,6 +7,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/utils/colors.dart';
 import 'package:omi/widgets/conversation_bottom_bar/tab_button.dart';
 import 'package:provider/provider.dart';
 
@@ -46,48 +48,53 @@ class ConversationBottomBar extends StatelessWidget {
   }
 
   Widget _buildBottomBar(BuildContext context) {
-    return Material(
-      elevation: 8,
-      color: Colors.transparent,
+    return ClipRRect(
       borderRadius: BorderRadius.circular(28),
-      child: Container(
-        height: 56,
-        width: mode == ConversationBottomBarMode.recording ? 180 : null,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A0B2E), // Very deep purple
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 2),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 56,
+          width: mode == ConversationBottomBarMode.recording ? 180 : null,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.3), // Soft, semi-transparent background
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.1),
+              width: 1,
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Transcript tab
-            _buildTranscriptTab(),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                spreadRadius: 0,
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Transcript tab
+              _buildTranscriptTab(),
 
-            // Add minimal spacing between tabs
-            const SizedBox(width: 4),
+              // Add minimal spacing between tabs
+              const SizedBox(width: 4),
 
-            // Stop button or Summary/Action Items tabs
-            ...switch (mode) {
-              ConversationBottomBarMode.recording => [_buildStopButton()],
-              ConversationBottomBarMode.detail => [
-                  _buildSummaryTab(context),
-                  if (hasActionItems) ...[
-                    const SizedBox(width: 4),
-                    _buildActionItemsTab(),
+              // Stop button or Summary/Action Items tabs
+              ...switch (mode) {
+                ConversationBottomBarMode.recording => [_buildStopButton()],
+                ConversationBottomBarMode.detail => [
+                    _buildSummaryTab(context),
+                    if (hasActionItems) ...[
+                      const SizedBox(width: 4),
+                      _buildActionItemsTab(),
+                    ],
                   ],
-                ],
-            },
-          ],
+              },
+            ],
+          ),
         ),
       ),
     );

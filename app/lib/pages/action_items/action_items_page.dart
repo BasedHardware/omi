@@ -14,6 +14,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/utils/colors.dart';
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -124,7 +125,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: FloatingActionButton(
                     heroTag: 'action_items_fab',
                     onPressed: _showCreateActionItemSheet,
-                    backgroundColor: Colors.deepPurpleAccent,
+                    backgroundColor: AppColors.primary,
                     child: const Icon(
                       Icons.add,
                       color: Colors.white,
@@ -136,7 +137,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               HapticFeedback.mediumImpact();
               return provider.forceRefreshActionItems();
             },
-            color: Colors.deepPurpleAccent,
+            color: AppColors.primary,
             backgroundColor: Colors.white,
             child: CustomScrollView(
               controller: _scrollController,
@@ -198,7 +199,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Task Integrations Banner
-                          const TaskIntegrationsBanner(),
+                          // const TaskIntegrationsBanner(),
 
                           // Segmented Control - Full width like action items
                           Container(
@@ -329,7 +330,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         child: ElevatedButton(
                           onPressed: () => provider.loadMoreActionItems(),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurpleAccent,
+                            backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                             shape: RoundedRectangleBorder(

@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CreateConversationResponse {
@@ -252,7 +253,7 @@ class ServerConversation {
   }
 
   Color getTagTextColor() {
-    if (source == ConversationSource.screenpipe) return Colors.deepPurple;
+    if (source == ConversationSource.screenpipe) return ResponsiveHelper.purplePrimary;
     return Colors.white;
   }
 

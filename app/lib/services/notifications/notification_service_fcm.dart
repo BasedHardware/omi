@@ -16,6 +16,8 @@ import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/theme/brand_colors.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
@@ -25,12 +27,15 @@ class _FCMNotificationService implements NotificationInterface {
   MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
+  // Use dynamic brand color for notifications
+  static final _notificationColor = BrandColors.getColorsForFlavor().primary;
+
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: 'Omi Notifications',
-    channelDescription: 'Notification channel for Omi',
-    defaultColor: const Color(0xFF9D50DD),
+    channelName: '${Env.appName} Notifications',
+    channelDescription: 'Notification channel for ${Env.appName}',
+    defaultColor: _notificationColor,
     ledColor: Colors.white,
   );
 
@@ -55,7 +60,7 @@ class _FCMNotificationService implements NotificationInterface {
             channelKey: channel.channelKey,
             channelName: channel.channelName,
             channelDescription: channel.channelDescription,
-            defaultColor: const Color(0xFF9D50DD),
+            defaultColor: _notificationColor,
             ledColor: Colors.white,
           )
         ],
@@ -111,8 +116,8 @@ class _FCMNotificationService implements NotificationInterface {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Your Omi Device Disconnected",
-          'description': "Please keep your app opened to continue using your Omi.",
+          'title': "Your ${Env.appName} Device Disconnected",
+          'description': "Please keep your app opened to continue using your ${Env.appName}.",
         },
       );
     } catch (e) {

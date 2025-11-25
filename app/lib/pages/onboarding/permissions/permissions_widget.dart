@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -67,7 +68,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                         _buildPermissionTile(
                           value: provider.hasBackgroundPermission,
                           title: 'Background activity',
-                          subtitle: 'Let Omi run in the background for better stability',
+                          subtitle: 'Let ${Env.appName} run in the background for better stability',
                           onChanged: (s) async {
                             if (s != null) {
                               if (s) {

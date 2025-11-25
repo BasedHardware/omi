@@ -36,6 +36,7 @@ import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/theme/brand_colors.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
 
@@ -613,7 +614,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             height: 80,
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
-                                              color: isRecording ? Colors.red : Colors.deepPurple,
+                                              color: isRecording ? Colors.red : const Color(0xFF3B82F6),
                                               border: Border.all(
                                                 color: Colors.black,
                                                 width: 5,
@@ -685,7 +686,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: const Color(0x00000000),
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -694,48 +695,49 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFB8860B).withValues(alpha: 0.5),
-                      Color(0xFFCD853F).withValues(alpha: 0.5),
-                      Color(0xFFB8860B).withValues(alpha: 0.5),
-                    ],
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.amber.withOpacity(0.15),
-                      blurRadius: 6,
-                      spreadRadius: 0.5,
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    FontAwesomeIcons.gift,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Referral Program');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ReferralPage(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
+              // Referral button hidden
+              // Container(
+              //   width: 36,
+              //   height: 36,
+              //   decoration: BoxDecoration(
+              //     gradient: LinearGradient(
+              //       begin: Alignment.topLeft,
+              //       end: Alignment.bottomRight,
+              //       colors: [
+              //         Color(0xFFB8860B).withValues(alpha: 0.5),
+              //         Color(0xFFCD853F).withValues(alpha: 0.5),
+              //         Color(0xFFB8860B).withValues(alpha: 0.5),
+              //       ],
+              //     ),
+              //     shape: BoxShape.circle,
+              //     boxShadow: [
+              //       BoxShadow(
+              //         color: Colors.amber.withOpacity(0.15),
+              //         blurRadius: 6,
+              //         spreadRadius: 0.5,
+              //       ),
+              //     ],
+              //   ),
+              //   child: IconButton(
+              //     padding: EdgeInsets.zero,
+              //     icon: const Icon(
+              //       FontAwesomeIcons.gift,
+              //       size: 16,
+              //       color: Colors.white,
+              //     ),
+              //     onPressed: () {
+              //       HapticFeedback.mediumImpact();
+              //       MixpanelManager().pageOpened('Referral Program');
+              //       Navigator.push(
+              //         context,
+              //         MaterialPageRoute(
+              //           builder: (context) => const ReferralPage(),
+              //         ),
+              //       );
+              //     },
+              //   ),
+              // ),
+              // const SizedBox(width: 8),
               Container(
                 width: 36,
                 height: 36,
@@ -767,14 +769,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   },
                 ),
               ),
-              // Chat Button - Only show on home page (index 0)
+              // GPT Button - Only show on home page (index 0)
               Consumer<HomeProvider>(
                 builder: (context, provider, child) {
                   if (provider.selectedIndex == 0) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        MixpanelManager().bottomNavigationTabClicked('Chat');
+                        MixpanelManager().bottomNavigationTabClicked('GPT');
                         // Navigate to chat page
                         Navigator.push(
                           context,
@@ -786,50 +788,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       child: Container(
                         height: 36,
                         margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                         decoration: BoxDecoration(
+                          color: const Color(0xFF3b82f6),
                           borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
                         ),
-                        child: Container(
-                          margin: const EdgeInsets.all(0.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(17.5),
-                            border: Border.all(
-                              color: Colors.pink.withValues(alpha: 0.3),
-                              width: 0.5,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: Colors.white,
                             ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.solidComment,
-                                size: 14,
-                                color: Colors.white70,
+                            SizedBox(width: 6),
+                            Text(
+                              'GPT',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
                               ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Chat',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     );

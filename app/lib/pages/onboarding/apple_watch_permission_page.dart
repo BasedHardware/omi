@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -79,7 +80,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
               // Instructions
               Text(
                 _permissionRequested
-                    ? 'Permission granted! Now:\n\nOpen the Omi app on your watch and tap "Continue" below'
+                    ? 'Permission granted! Now:\n\nOpen the ${Env.appName} app on your watch and tap "Continue" below'
                     : 'We need microphone permission.\n\n1. Tap "Grant Permission"\n2. Allow on your iPhone\n3. Watch app will close\n4. Reopen and tap "Continue"',
                 style: responsive.bodyLarge.copyWith(
                   height: 1.6,
@@ -239,8 +240,8 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
         ),
         content: Text(
           'Troubleshooting:\n\n'
-          '1. Ensure Omi is installed on your watch\n'
-          '2. Open the Omi app on your watch\n'
+          '1. Ensure ${Env.appName} is installed on your watch\n'
+          '2. Open the ${Env.appName} app on your watch\n'
           '3. Look for the permission popup\n'
           '4. Tap "Allow" when prompted\n'
           '5. App on your watch will close - reopen it\n'

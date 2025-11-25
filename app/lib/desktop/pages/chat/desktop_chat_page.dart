@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -340,7 +341,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              selectedApp?.name ?? 'Omi',
+                              selectedApp?.name ?? Env.appName,
                               style: const TextStyle(
                                 color: ResponsiveHelper.textPrimary,
                                 fontSize: 14,
@@ -634,7 +635,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ),
           const SizedBox(height: 24),
           Text(
-            isConnected ? '✨ Ready to chat!' : '🌐 Connection needed',
+            isConnected ? 'Ready to chat!' : 'Connection needed',
             style: const TextStyle(
               color: ResponsiveHelper.textPrimary,
               fontSize: 20,
@@ -731,12 +732,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      OmiAvatar(
-                        size: 32,
-                        imageUrl: provider.messageSenderApp(message.appId)?.getImageUrl(),
-                        fallback: Image.asset(Assets.images.herologo.path, height: 24, width: 24),
-                      ),
-                      const SizedBox(width: 12),
                       // AI message bubble
                       Expanded(
                         child: OmiChatBubble(
@@ -747,7 +742,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     ],
                   ),
                   Container(
-                    margin: const EdgeInsets.only(left: 50, top: 6),
+                    margin: const EdgeInsets.only(left: 12, top: 6),
                     child: Text(
                       formatChatTimestamp(message.createdAt),
                       style: TextStyle(
@@ -1393,7 +1388,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('✨ Message copied to clipboard'),
+                content: const Text('Message copied to clipboard'),
                 backgroundColor: ResponsiveHelper.purplePrimary,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1671,7 +1666,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        app?.name ?? 'Omi',
+                        app?.name ?? Env.appName,
                         style: const TextStyle(
                           color: ResponsiveHelper.textPrimary,
                           fontSize: 16,

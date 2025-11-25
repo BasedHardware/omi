@@ -4,5 +4,5 @@
 #include "Custom.xcconfig"
 
 ASSET_PREFIX=dev
-BUNDLE_NAME=Omi Dev
-BUNDLE_DISPLAY_NAME=Omi Dev
+BUNDLE_NAME=Nooto Dev
+BUNDLE_DISPLAY_NAME=Nooto Dev
