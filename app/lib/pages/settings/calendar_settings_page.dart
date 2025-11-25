@@ -428,15 +428,15 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
             width: 1,
           ),
         ),
-        child: Column(
+        child: const Column(
           children: [
             Icon(
               Icons.event_busy,
               color: ResponsiveHelper.textTertiary,
               size: 40,
             ),
-            const SizedBox(height: 12),
-            const Text(
+            SizedBox(height: 12),
+            Text(
               'No upcoming meetings found',
               style: TextStyle(
                 color: ResponsiveHelper.textSecondary,
@@ -444,9 +444,9 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Checking next 60 minutes',
+            SizedBox(height: 6),
+            Text(
+              'Checking next 30 days',
               style: TextStyle(
                 color: ResponsiveHelper.textTertiary,
                 fontSize: 12,
@@ -457,32 +457,84 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: provider.upcomingMeetings.length,
-        separatorBuilder: (context, index) => const Divider(
-          height: 1,
-          thickness: 1,
-          color: ResponsiveHelper.backgroundTertiary,
-          indent: 14,
-          endIndent: 14,
-        ),
-        itemBuilder: (context, index) {
-          final meeting = provider.upcomingMeetings[index];
-          return _buildMeetingCard(meeting);
-        },
-      ),
+    // Sort meetings by start time
+    final sortedMeetings = List<CalendarMeeting>.from(provider.upcomingMeetings)
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    // Group meetings by date
+    final groupedMeetings = <DateTime, List<CalendarMeeting>>{};
+    for (final meeting in sortedMeetings) {
+      final dateKey = DateTime(meeting.startTime.year, meeting.startTime.month, meeting.startTime.day);
+      groupedMeetings.putIfAbsent(dateKey, () => []).add(meeting);
+    }
+
+    // Build list with date headers
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: groupedMeetings.entries.map((entry) {
+        final date = entry.key;
+        final meetings = entry.value;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Date header
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8, top: 12),
+              child: Text(
+                _formatDateHeader(date),
+                style: const TextStyle(
+                  color: ResponsiveHelper.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            // Meetings for this date
+            Container(
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: meetings.length,
+                separatorBuilder: (context, index) => const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: ResponsiveHelper.backgroundTertiary,
+                  indent: 14,
+                  endIndent: 14,
+                ),
+                itemBuilder: (context, index) {
+                  return _buildMeetingCard(meetings[index]);
+                },
+              ),
+            ),
+          ],
+        );
+      }).toList(),
     );
+  }
+
+  String _formatDateHeader(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    if (date == today) {
+      return 'Today';
+    } else if (date == tomorrow) {
+      return 'Tomorrow';
+    } else {
+      // Show full date for other days
+      return DateFormat('EEEE, MMMM d').format(date);
+    }
   }
 
   Widget _buildMeetingCard(CalendarMeeting meeting) {

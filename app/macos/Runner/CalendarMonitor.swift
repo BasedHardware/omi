@@ -30,6 +30,7 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     private var notifiedUpcoming: Set<String> = []             // Events we've shown "upcoming" nub for
     private var notifiedStarted: Set<String> = []              // Events we've shown "started" nub for
     private var snoozedMeetings: [String: Date] = [:]          // eventId -> snooze until time
+    private var scheduledNubTimers: [String: Timer] = [:]      // eventId -> scheduled timer for showing nub at meeting start
     
     // Settings
     private var showEventsWithNoParticipants: Bool = false
@@ -130,6 +131,12 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         upcomingMeetings.removeAll()
         notifiedUpcoming.removeAll()
         notifiedStarted.removeAll()
+
+        // Invalidate all scheduled timers
+        for (_, timer) in scheduledNubTimers {
+            timer.invalidate()
+        }
+        scheduledNubTimers.removeAll()
     }
     
     func updateSettings(showEventsWithNoParticipants: Bool) {
@@ -171,24 +178,20 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
 
             // Check if we should show nub for this meeting
             if shouldShowNub(for: meeting) {
-                let now = Date()
-                let timeUntilStart = meeting.startDate.timeIntervalSince(now)
+                // Check if not snoozed and not already notified
+                if !isMeetingSnoozed(eventId: eventId) && !notifiedUpcoming.contains(eventId) {
+                    // Show "upcoming" nub (2-5 minutes before meeting)
+                    notifyUpcomingMeeting(meeting)
+                    notifiedUpcoming.insert(eventId)
+                }
+            }
 
-                // Check if not snoozed
-                if !isMeetingSnoozed(eventId: eventId) {
-                    if timeUntilStart > 0 {
-                        // Upcoming meeting - show only if we haven't shown "upcoming" nub yet
-                        if !notifiedUpcoming.contains(eventId) {
-                            notifyUpcomingMeeting(meeting)
-                            notifiedUpcoming.insert(eventId)
-                        }
-                    } else {
-                        // Meeting started - show only if we haven't shown "started" nub yet
-                        if !notifiedStarted.contains(eventId) {
-                            notifyUpcomingMeeting(meeting)
-                            notifiedStarted.insert(eventId)
-                        }
-                    }
+            // Schedule timer to show nub at meeting start (if not already scheduled and meeting hasn't started)
+            let timeUntilStart = meeting.startDate.timeIntervalSince(now)
+            if timeUntilStart > 0 && timeUntilStart <= CalendarMonitor.NUB_WINDOW {
+                // Only schedule if we don't have a timer yet
+                if scheduledNubTimers[eventId] == nil {
+                    scheduleNubForMeetingStart(meeting: meeting, eventId: eventId)
                 }
             }
         }
@@ -204,6 +207,12 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
             }
             notifiedUpcoming.remove(eventId)
             notifiedStarted.remove(eventId)
+
+            // Cancel scheduled timer if meeting was removed
+            if let timer = scheduledNubTimers[eventId] {
+                timer.invalidate()
+                scheduledNubTimers.removeValue(forKey: eventId)
+            }
         }
 
         upcomingMeetings = newUpcomingMeetings
@@ -302,29 +311,7 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     }
 
     func getFriendlyPlatformName(_ text: String) -> String? {
-        let lowercased = text.lowercased()
-
-        // Video conferencing platforms
-        if lowercased.contains("zoom.us") { return "Zoom" }
-        if lowercased.contains("teams.microsoft.com") || lowercased.contains("teams.live.com") { return "Teams" }
-        if lowercased.contains("meet.google.com") { return "Google Meet" }
-        if lowercased.contains("webex.com") { return "Webex" }
-        if lowercased.contains("gotomeeting.com") { return "GoToMeeting" }
-        if lowercased.contains("bluejeans.com") { return "BlueJeans" }
-        if lowercased.contains("whereby.com") { return "Whereby" }
-        if lowercased.contains("around.co") { return "Around" }
-        if lowercased.contains("jitsi") { return "Jitsi" }
-        if lowercased.contains("hangouts.google.com") { return "Hangouts" }
-
-        // Communication apps
-        if lowercased.contains("slack.com") { return "Slack" }
-        if lowercased.contains("discord.com") || lowercased.contains("discord.gg") { return "Discord" }
-        if lowercased.contains("skype.com") { return "Skype" }
-        if lowercased.contains("whatsapp.com") { return "WhatsApp" }
-        if lowercased.contains("ringcentral.com") { return "RingCentral" }
-        if lowercased.contains("facetime") { return "FaceTime" }
-
-        return nil
+        return MeetingApps.extractPlatformFromURL(text)
     }
 
     private func shouldShowNub(for event: EKEvent) -> Bool {
@@ -332,7 +319,6 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         guard let startTime = event.startDate, let endTime = event.endDate else { return false }
 
         let timeUntilStart = startTime.timeIntervalSince(now)
-        let timeSinceStart = now.timeIntervalSince(startTime)
 
         // Show if meeting starts in 2-5 minutes (pre-meeting nub)
         if timeUntilStart >= CalendarMonitor.NUB_TRIGGER_LATE &&
@@ -340,15 +326,70 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
             return true
         }
 
-        // Show if meeting started within last 5 minutes (late join / in case user missed pre-meeting nub)
-        if timeSinceStart >= 0 && timeSinceStart <= CalendarMonitor.MEETING_START_GRACE {
-            return true
-        }
-
         return false
     }
 
     // MARK: - Nub Triggering
+
+    private func scheduleNubForMeetingStart(meeting: EKEvent, eventId: String) {
+        let now = Date()
+        let timeUntilStart = meeting.startDate.timeIntervalSince(now)
+
+        // Only schedule if meeting starts in the future
+        guard timeUntilStart > 0 else { return }
+        // Schedule timer to fire at meeting start
+        DispatchQueue.main.async { [weak self] in
+            let timer = Timer.scheduledTimer(withTimeInterval: timeUntilStart, repeats: false) { [weak self] _ in
+                self?.handleScheduledMeetingStart(eventId: eventId)
+            }
+            self?.scheduledNubTimers[eventId] = timer
+        }
+    }
+
+    private func handleScheduledMeetingStart(eventId: String) {
+
+        // Remove timer from tracking
+        scheduledNubTimers.removeValue(forKey: eventId)
+
+        // Check if meeting still exists and hasn't been notified yet
+        guard let meeting = upcomingMeetings[eventId],
+              !notifiedStarted.contains(eventId),
+              !isMeetingSnoozed(eventId: eventId) else {
+            return
+        }
+
+        let title = meeting.title ?? "Meeting"
+        let platform = extractMeetingPlatform(meeting) ?? "Calendar"
+
+        // Check if recording is already active
+        let isRecordingActive = NubManager.shared.isRecordingActive?() ?? false
+
+        // Only show nub if not already recording
+        if !isRecordingActive {
+            // Show "started" nub directly
+            DispatchQueue.main.async {
+                NubManager.shared.showNubForCalendarMeetingStarted(
+                    eventId: eventId,
+                    title: title,
+                    platform: platform
+                )
+            }
+        }
+
+        // Mark as notified
+        notifiedStarted.insert(eventId)
+
+        // Send event to Flutter
+        if let startTime = meeting.startDate {
+            sendEventToFlutter([
+                "type": "started",
+                "eventId": eventId,
+                "title": title,
+                "platform": platform,
+                "startTime": ISO8601DateFormatter().string(from: startTime)
+            ])
+        }
+    }
 
     private func notifyUpcomingMeeting(_ event: EKEvent) {
         guard let startTime = event.startDate,
@@ -444,6 +485,12 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         // Hide nub
         DispatchQueue.main.async {
             NubManager.shared.hideNubIfCalendarMeeting(eventId: eventId)
+        }
+
+        // Cancel scheduled timer since meeting is snoozed
+        if let timer = scheduledNubTimers[eventId] {
+            timer.invalidate()
+            scheduledNubTimers.removeValue(forKey: eventId)
         }
 
         // Reset notification flags so it can show again after snooze
