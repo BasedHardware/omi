@@ -425,24 +425,22 @@ void sd_worker_thread(void)
                             current_file_size += bw - bw % MAX_WRITE_SIZE;
                             write_batch_offset = 0;
                             write_batch_counter = 0;
-                            break;
                         }
 
                         if (writing_error_counter >= ERROR_THRESHOLD) {
                             LOG_ERR("[SD_WORK] Too many write errors (%d). Stopping SD worker.\n", writing_error_counter);
-                            writing_error_counter = 0;
                             fs_close(&fil_data);
                             fs_file_t_init(&fil_data);
                             LOG_INF("[SD_WORK] Re-opening data file after too many errors.\n");
                             int reopen_res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
                             if (reopen_res == 0) {
+                                writing_error_counter = 0;
                                 fs_seek(&fil_data, 0, FS_SEEK_END);
                             } else {
                                 LOG_ERR("[SD_WORK] open new data file failed: %d. Terminating operation", reopen_res);
-                                return;
                             }
-                            break;
                         }
+                        break;
                     }
 
                     bytes_since_sync += bw > 0 ? bw : 0;
