@@ -346,7 +346,7 @@ void sd_worker_thread(void)
 
     /* Open data file (append) */
     fs_file_t_init(&fil_data);
-    res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR | FS_O_TRUNC);
+    res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
     if (res < 0) {
         LOG_ERR("[SD_WORK] open data failed: %d\n", res);
         return;
@@ -429,12 +429,12 @@ void sd_worker_thread(void)
                         }
 
                         if (writing_error_counter >= ERROR_THRESHOLD) {
-                            writing_error_counter = 0;
                             LOG_ERR("[SD_WORK] Too many write errors (%d). Stopping SD worker.\n", writing_error_counter);
+                            writing_error_counter = 0;
                             fs_close(&fil_data);
                             fs_file_t_init(&fil_data);
                             LOG_INF("[SD_WORK] Re-opening data file after too many errors.\n");
-                            int reopen_res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR | FS_O_TRUNC);
+                            int reopen_res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
                             if (reopen_res == 0) {
                                 fs_seek(&fil_data, 0, FS_SEEK_END);
                             } else {
