@@ -14,15 +14,18 @@
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define DISK_DRIVE_NAME "SD"
-#define DISK_MOUNT_PT "/SD:"
-#define FS_RET_OK 0
-#define SD_REQ_QUEUE_MSGS  100
-#define SD_FSYNC_THRESHOLD 20000
-#define WRITE_BATCH_COUNT 10
+#define DISK_DRIVE_NAME "SD"        // Disk drive name
+#define DISK_MOUNT_PT "/SD:"        // Mount point path
+#define SD_REQ_QUEUE_MSGS  100      // Number of messages in the SD request queue
+#define SD_FSYNC_THRESHOLD 20000    // Threshold in bytes to trigger fsync
+#define WRITE_BATCH_COUNT 10        // Number of writes to batch before writing to SD card
+#define ERROR_THRESHOLD 5           // Maximum allowed write errors before taking action
+
+// batch write buffer
 static uint8_t write_batch_buffer[WRITE_BATCH_COUNT * MAX_WRITE_SIZE];
 static size_t write_batch_offset = 0;
 static int write_batch_counter = 0;
+static uint8_t writing_error_counter = 0;
 
 static FATFS fat_fs;
 
@@ -137,7 +140,7 @@ static int sd_mount()
         return 0;
     }
 
-    if (fs_mount(&mp) != FS_RET_OK) {
+    if (fs_mount(&mp)) {
         LOG_INF("File system not found, creating file system...");
         ret = fs_mkfs(FS_FATFS, (uintptr_t) mp.storage_dev, NULL, 0);
         if (ret != 0) {
@@ -147,7 +150,7 @@ static int sd_mount()
         }
 
         ret = fs_mount(&mp);
-        if (ret != FS_RET_OK) {
+        if (ret) {
             LOG_INF("Error mounting disk %d.", ret);
             sd_enable_power(false);
             return ret;
@@ -407,6 +410,8 @@ void sd_worker_thread(void)
                     }
                     bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
                     if (bw < 0 || (size_t)bw != write_batch_offset) {
+                        writing_error_counter++;
+
                         LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)write_batch_offset);
                         if (bw > 0) {
                             LOG_INF("Attempting to truncate to correct packet position");
@@ -420,6 +425,22 @@ void sd_worker_thread(void)
                             current_file_size += bw - bw % MAX_WRITE_SIZE;
                             write_batch_offset = 0;
                             write_batch_counter = 0;
+                            break;
+                        }
+
+                        if (writing_error_counter >= 5) {
+                            writing_error_counter = 0;
+                            LOG_ERR("[SD_WORK] Too many write errors (%d). Stopping SD worker.\n", writing_error_counter);
+                            fs_close(&fil_data);
+                            fs_file_t_init(&fil_data);
+                            LOG_INF("[SD_WORK] Re-opening data file after too many errors.\n");
+                            int reopen_res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR | FS_O_TRUNC);
+                            if (reopen_res == 0) {
+                                fs_seek(&fil_data, 0, FS_SEEK_END);
+                            } else {
+                                LOG_ERR("[SD_WORK] open new data file failed: %d. Terminating operation", reopen_res);
+                                return;
+                            }
                             break;
                         }
                     }
